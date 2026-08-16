@@ -1,0 +1,67 @@
+from dataclasses import replace
+from pathlib import Path
+
+from log_migration.index import build_index
+from log_migration.normalize import (
+    NormalizedPost,
+    NormalizationResult,
+    normalize_project,
+    stable_post_id,
+)
+from log_migration.render import render_site
+from log_migration.scrapbox import load_export
+
+
+FIXTURE = Path(__file__).parent / "fixtures" / "scrapbox" / "minimal.json"
+
+
+def _rendered_site(tmp_path: Path) -> Path:
+    project = load_export(FIXTURE)
+    normalized = normalize_project(project, tmp_path / "normalized")
+    private_post = _private_copy(normalized.posts[0])
+    undated_post = _undated_copy(normalized.posts[0])
+    snapshot = NormalizationResult(
+        posts=normalized.posts + (private_post, undated_post),
+        mapping=normalized.mapping,
+        issues=normalized.issues,
+    )
+    index = build_index(snapshot, tmp_path / "index" / "log.sqlite3")
+    site = tmp_path / "site"
+    render_site(snapshot, index, site)
+    return site
+
+
+def _private_copy(post: NormalizedPost) -> NormalizedPost:
+    frontmatter = {**post.frontmatter, "id": "private-post", "visibility": "private"}
+    return replace(post, id="private-post", frontmatter=frontmatter)
+
+
+def _undated_copy(post: NormalizedPost) -> NormalizedPost:
+    frontmatter = {**post.frontmatter, "id": "undated-post", "created_at": None}
+    return replace(post, id="undated-post", frontmatter=frontmatter)
+
+
+def test_render_day_page_orders_public_posts_and_hides_private_posts(tmp_path: Path):
+    site = _rendered_site(tmp_path)
+    html = (site / "2024-08-01" / "index.html").read_text(encoding="utf-8")
+
+    assert html.index(f'data-post-id="{stable_post_id("asonas-memo", "A")}"') < html.index(
+        f'data-post-id="{stable_post_id("asonas-memo", "B")}"'
+    )
+    assert "private-post" not in html
+    assert "card--expanded" in html
+
+
+def test_render_undated_page_contains_posts_without_created_at(tmp_path: Path):
+    site = _rendered_site(tmp_path)
+    html = (site / "undated" / "index.html").read_text(encoding="utf-8")
+
+    assert 'data-post-id="undated-post"' in html
+
+
+def test_rendered_post_contains_asset_card(tmp_path: Path):
+    site = _rendered_site(tmp_path)
+    html = (site / "2024-08-01" / "index.html").read_text(encoding="utf-8")
+
+    assert "asset_" in html
+    assert "photo.jpg" in html

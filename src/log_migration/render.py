@@ -1,0 +1,516 @@
+import html
+from collections import defaultdict
+from datetime import date, timedelta
+from pathlib import Path
+from typing import Iterable
+
+from markdown_it import MarkdownIt
+
+from .index import LinkIndex, stable_asset_id
+from .normalize import NormalizedPost, NormalizationResult
+
+
+_MARKDOWN = MarkdownIt("commonmark", {"breaks": True, "html": False})
+_TEMPLATE = Path(__file__).parent / "templates" / "weblog.html"
+_CARD_TEMPLATE = Path(__file__).parent / "templates" / "cards.html"
+_CARD_SCRIPT = Path(__file__).parent / "static" / "cards.js"
+_RANGE_DAYS: dict[str, int | None] = {
+    "1d": 1,
+    "7d": 7,
+    "30d": 30,
+    "100d": 100,
+    "all": None,
+}
+_RANGE_LABELS = {
+    "1d": "1日",
+    "7d": "7日",
+    "30d": "30日",
+    "100d": "100日",
+    "all": "全期間",
+}
+
+
+def render_site(
+    normalized: NormalizationResult,
+    index: LinkIndex,
+    output_dir: Path,
+) -> None:
+    """Render the public normalized snapshot as a small static website."""
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    public_posts = tuple(_public_posts(normalized.posts))
+    posts_by_id = {post.id: post for post in public_posts}
+    assets = _assets(public_posts)
+    _write_card_script(output_dir)
+
+    dated_posts: dict[str, list[NormalizedPost]] = defaultdict(list)
+    undated_posts: list[NormalizedPost] = []
+    for post in public_posts:
+        date_text = _date_text(post)
+        if date_text is None:
+            undated_posts.append(post)
+        else:
+            dated_posts[date_text].append(post)
+
+    for date_text, posts in sorted(dated_posts.items()):
+        _write_page(
+            output_dir / date_text / "index.html",
+            title=date_text,
+            content=_render_weblog(posts, index, posts_by_id, assets),
+        )
+
+    _write_page(
+        output_dir / "undated" / "index.html",
+        title="日時なし",
+        content=_render_weblog(undated_posts, index, posts_by_id, assets),
+    )
+
+    _write_page(
+        output_dir / "index.html",
+        title="log.ason.as",
+        content=_render_index(dated_posts, undated_posts),
+    )
+
+    for post in public_posts:
+        _write_page(
+            output_dir / "posts" / post.id / "index.html",
+            title=str(post.frontmatter["title"]),
+            content=_render_post_page(post, index, posts_by_id, assets),
+        )
+        card_page = output_dir / "posts" / post.id / "cards" / "index.html"
+        card_page.parent.mkdir(parents=True, exist_ok=True)
+        card_page.write_text(
+            render_cards(normalized, index, root_id=post.id),
+            encoding="utf-8",
+        )
+
+    for asset_id, source_path in sorted(assets.items()):
+        _write_page(
+            output_dir / "assets" / asset_id / "index.html",
+            title=source_path,
+            content=_render_asset_page(
+                asset_id,
+                source_path,
+                index,
+                posts_by_id,
+            ),
+        )
+
+
+def _public_posts(posts: Iterable[NormalizedPost]) -> Iterable[NormalizedPost]:
+    return (
+        post
+        for post in posts
+        if post.frontmatter.get("visibility") == "public"
+    )
+
+
+def _assets(posts: Iterable[NormalizedPost]) -> dict[str, str]:
+    assets: dict[str, str] = {}
+    for post in posts:
+        for source_path in post.asset_references:
+            assets[stable_asset_id(source_path)] = source_path
+    return assets
+
+
+def _date_text(post: NormalizedPost) -> str | None:
+    created_at = post.frontmatter.get("created_at")
+    if created_at is None:
+        return None
+    return str(created_at)[:10]
+
+
+def _render_index(
+    dated_posts: dict[str, list[NormalizedPost]],
+    undated_posts: list[NormalizedPost],
+) -> str:
+    links = [
+        f'<li><a href="/{html.escape(date_text)}/">{html.escape(date_text)}</a>'
+        f" ({len(posts)}件)</li>"
+        for date_text, posts in sorted(dated_posts.items(), reverse=True)
+    ]
+    if undated_posts:
+        links.append(
+            f'<li><a href="/undated/">日時なし</a> ({len(undated_posts)}件)</li>'
+        )
+    if not links:
+        return '<p class="empty-state">公開記事はありません。</p>'
+    return '<ul class="date-list">' + "".join(links) + "</ul>"
+
+
+def _render_weblog(
+    posts: Iterable[NormalizedPost],
+    index: LinkIndex,
+    posts_by_id: dict[str, NormalizedPost],
+    assets: dict[str, str],
+) -> str:
+    ordered_posts = sorted(posts, key=_post_sort_key)
+    if not ordered_posts:
+        return '<p class="empty-state">このページには公開記事がありません。</p>'
+
+    cards = [
+        _render_post_card(
+            post,
+            index=index,
+            posts_by_id=posts_by_id,
+            assets=assets,
+            expanded=position == 0,
+        )
+        for position, post in enumerate(ordered_posts)
+    ]
+    return '<section class="post-stream">' + "".join(cards) + "</section>"
+
+
+def _post_sort_key(post: NormalizedPost) -> tuple[str, str, str]:
+    created_at = post.frontmatter.get("created_at")
+    return (
+        str(created_at) if created_at is not None else "9999-99-99T99:99:99+00:00",
+        str(post.frontmatter["title"]),
+        post.id,
+    )
+
+
+def _render_post_page(
+    post: NormalizedPost,
+    index: LinkIndex,
+    posts_by_id: dict[str, NormalizedPost],
+    assets: dict[str, str],
+) -> str:
+    card = _render_post_card(
+        post,
+        index=index,
+        posts_by_id=posts_by_id,
+        assets=assets,
+        expanded=True,
+    )
+    backlinks = _render_post_backlinks(post.id, index, posts_by_id)
+    card_link = (
+        f'<p class="post-mode-link"><a href="/posts/{html.escape(post.id, quote=True)}/cards/">'
+        "カードモードで見る</a></p>"
+    )
+    return card_link + card + backlinks
+
+
+def render_cards(
+    normalized: NormalizationResult,
+    index: LinkIndex,
+    *,
+    root_id: str,
+    range_name: str = "all",
+    depth: int = 1,
+) -> str:
+    """Render an article-rooted, deduplicated card exploration."""
+
+    if range_name not in _RANGE_DAYS:
+        allowed = ", ".join(_RANGE_DAYS)
+        raise ValueError(f"unknown range_name {range_name!r}; expected one of {allowed}")
+    if depth < 0:
+        raise ValueError("depth must be zero or greater")
+
+    public_posts = tuple(_public_posts(normalized.posts))
+    posts_by_id = {post.id: post for post in public_posts}
+    assets = _assets(public_posts)
+    root = posts_by_id.get(root_id)
+    if root is None:
+        raise ValueError(f"root post is not public or does not exist: {root_id}")
+
+    start_date, end_date = _range_bounds(root, _RANGE_DAYS[range_name])
+    neighbor_ids = index.neighbors(
+        root_id,
+        direction="both",
+        depth=depth,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    post_ids = [node_id for node_id in neighbor_ids if node_id in posts_by_id]
+    asset_ids = [node_id for node_id in neighbor_ids if node_id in assets]
+    post_ids.sort(key=lambda node_id: _post_sort_key(posts_by_id[node_id]))
+    asset_ids.sort(key=lambda node_id: assets[node_id])
+
+    cards = [
+        _render_exploration_post_card(
+            root,
+            root_id=root_id,
+            index=index,
+            posts_by_id=posts_by_id,
+            expanded=True,
+        )
+    ]
+    cards.extend(
+        _render_exploration_post_card(
+            posts_by_id[post_id],
+            root_id=root_id,
+            index=index,
+            posts_by_id=posts_by_id,
+            expanded=False,
+        )
+        for post_id in post_ids
+    )
+    cards.extend(
+        _render_exploration_asset_card(
+            asset_id,
+            assets[asset_id],
+            root_id=root_id,
+            index=index,
+            posts_by_id=posts_by_id,
+        )
+        for asset_id in asset_ids
+    )
+
+    controls = _render_range_controls(range_name, root_id, depth)
+    content = (
+        f'<section class="card-explorer" data-root-id="{html.escape(root_id, quote=True)}" '
+        f'data-range="{html.escape(range_name, quote=True)}" data-depth="{depth}">'
+        f"{controls}"
+        f'<div class="card-canvas">{"".join(cards)}</div>'
+        "</section>"
+    )
+    return _render_card_document(
+        title=f'{root.frontmatter["title"]} — カード',
+        content=content,
+    )
+
+
+def _range_bounds(
+    root: NormalizedPost,
+    days: int | None,
+) -> tuple[date | None, date | None]:
+    if days is None:
+        return None, None
+    created_at = root.frontmatter.get("created_at")
+    if created_at is None:
+        return None, None
+    root_date = date.fromisoformat(str(created_at)[:10])
+    delta = timedelta(days=days)
+    return root_date - delta, root_date + delta
+
+
+def _render_range_controls(range_name: str, root_id: str, depth: int) -> str:
+    options = "".join(
+        _render_range_option(name, label, range_name, root_id, depth)
+        for name, label in _RANGE_LABELS.items()
+    )
+    return (
+        '<nav class="card-controls" aria-label="カードの探索範囲">'
+        f"{options}"
+        f'<span class="depth-label">リンク深度: {depth}</span>'
+        "</nav>"
+    )
+
+
+def _render_range_option(
+    name: str,
+    label: str,
+    selected_name: str,
+    root_id: str,
+    depth: int,
+) -> str:
+    selected = " is-selected" if name == selected_name else ""
+    escaped_root_id = html.escape(root_id, quote=True)
+    return (
+        f'<a class="range-option{selected}" data-range-option="{name}" '
+        f'href="?root={escaped_root_id}&amp;range={name}&amp;depth={depth}">'
+        f"{label}</a>"
+    )
+
+
+def _render_exploration_post_card(
+    post: NormalizedPost,
+    *,
+    root_id: str,
+    index: LinkIndex,
+    posts_by_id: dict[str, NormalizedPost],
+    expanded: bool,
+) -> str:
+    post_id = html.escape(post.id, quote=True)
+    title = html.escape(str(post.frontmatter["title"]))
+    is_root = post.id == root_id
+    card_classes = ["exploration-card", "post-card"]
+    card_classes.append("card--root" if is_root else "card--compact")
+    body_class = "post-body" if expanded else "post-body post-body--compact"
+    relation = "起点" if is_root else _relation_label(root_id, post.id, index)
+    created_at = post.frontmatter.get("created_at")
+    time_html = ""
+    if created_at is not None:
+        value = html.escape(str(created_at), quote=True)
+        time_html = f'<time datetime="{value}">{value[:10]}</time>'
+    toggle = "" if is_root else '<button type="button" data-card-toggle aria-expanded="false">展開</button>'
+    return (
+        f'<article class="{" ".join(card_classes)}" data-post-id="{post_id}">'
+        f'<p class="card-relation">{html.escape(relation)}</p>'
+        f'<header class="post-card__header"><h2><a href="/posts/{post_id}/">{title}</a></h2>'
+        f"{time_html}{toggle}</header>"
+        f'<div class="{body_class}">{_MARKDOWN.render(post.body)}</div>'
+        "</article>"
+    )
+
+
+def _render_exploration_asset_card(
+    asset_id: str,
+    source_path: str,
+    *,
+    root_id: str,
+    index: LinkIndex,
+    posts_by_id: dict[str, NormalizedPost],
+) -> str:
+    references = [
+        posts_by_id[post_id]
+        for post_id in index.find_backlinks(asset_id)
+        if post_id in posts_by_id
+    ]
+    visible_references = references[:3]
+    remaining = len(references) - len(visible_references)
+    links = "".join(
+        f'<li><a href="/posts/{html.escape(post.id, quote=True)}/">'
+        f'{html.escape(str(post.frontmatter["title"]))}</a></li>'
+        for post in visible_references
+    )
+    if remaining:
+        links += f"<li>ほか{remaining}件</li>"
+    reference_html = f"<ul>{links}</ul>" if links else "<p>参照元なし</p>"
+    return (
+        f'<article class="exploration-card asset-card card--compact" '
+        f'data-asset-id="{html.escape(asset_id, quote=True)}">'
+        f'<p class="card-relation">{html.escape(_relation_label(root_id, asset_id, index))}</p>'
+        f'<a href="/assets/{html.escape(asset_id, quote=True)}/">'
+        f'<span class="asset-card__kind">asset</span>'
+        f'<span class="asset-card__name">{html.escape(source_path)}</span></a>'
+        f'<div class="asset-card__references"><span>参照元</span>{reference_html}</div>'
+        "</article>"
+    )
+
+
+def _relation_label(first_id: str, second_id: str, index: LinkIndex) -> str:
+    directions = index.directions_between(first_id, second_id)
+    if directions == ("incoming", "outgoing"):
+        return "相互参照"
+    if "outgoing" in directions:
+        return "参照先"
+    if "incoming" in directions:
+        return "逆リンク"
+    return "関連"
+
+
+def _render_card_document(*, title: str, content: str) -> str:
+    document = _CARD_TEMPLATE.read_text(encoding="utf-8")
+    document = document.replace("{{title}}", html.escape(title))
+    document = document.replace("{{content}}", content)
+    return document
+
+
+def _write_card_script(output_dir: Path) -> None:
+    target = output_dir / "static" / "cards.js"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(_CARD_SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def _render_post_card(
+    post: NormalizedPost,
+    *,
+    index: LinkIndex,
+    posts_by_id: dict[str, NormalizedPost],
+    assets: dict[str, str],
+    expanded: bool,
+) -> str:
+    title = html.escape(str(post.frontmatter["title"]))
+    post_id = html.escape(post.id, quote=True)
+    created_at = post.frontmatter.get("created_at")
+    time_html = ""
+    if created_at is not None:
+        time_value = html.escape(str(created_at), quote=True)
+        time_html = f'<time datetime="{time_value}">{time_value[:10]}</time>'
+
+    card_class = "card--expanded" if expanded else "card--compact"
+    body_class = "post-body" if expanded else "post-body post-body--compact"
+    body_html = _MARKDOWN.render(post.body)
+    asset_html = "".join(
+        _render_asset_card(asset_id, assets[asset_id], index, posts_by_id)
+        for asset_id in (stable_asset_id(path) for path in post.asset_references)
+        if asset_id in assets
+    )
+    return (
+        f'<article class="post-card {card_class}" data-post-id="{post_id}">'
+        f'<header class="post-card__header">'
+        f'<h2><a href="/posts/{post_id}/">{title}</a></h2>{time_html}'
+        f"</header>"
+        f'<div class="{body_class}">{body_html}</div>'
+        f'<div class="post-assets">{asset_html}</div>'
+        "</article>"
+    )
+
+
+def _render_asset_card(
+    asset_id: str,
+    source_path: str,
+    index: LinkIndex,
+    posts_by_id: dict[str, NormalizedPost],
+) -> str:
+    escaped_id = html.escape(asset_id, quote=True)
+    escaped_path = html.escape(source_path)
+    backlinks = [
+        posts_by_id[post_id]
+        for post_id in index.find_backlinks(asset_id)
+        if post_id in posts_by_id
+    ]
+    used_by = ""
+    if backlinks:
+        links = "".join(
+            f'<a href="/posts/{html.escape(post.id, quote=True)}/">'
+            f'{html.escape(str(post.frontmatter["title"]))}</a>'
+            for post in backlinks
+        )
+        used_by = f'<span class="asset-card__backlinks">参照: {links}</span>'
+    return (
+        f'<article class="asset-card card--compact" data-asset-id="{escaped_id}">'
+        f'<a href="/assets/{escaped_id}/">'
+        f'<span class="asset-card__kind">asset</span>'
+        f'<span class="asset-card__name">{escaped_path}</span>'
+        "</a>"
+        f"{used_by}"
+        "</article>"
+    )
+
+
+def _render_post_backlinks(
+    post_id: str,
+    index: LinkIndex,
+    posts_by_id: dict[str, NormalizedPost],
+) -> str:
+    backlinks = [
+        posts_by_id[source_id]
+        for source_id in index.find_backlinks(post_id)
+        if source_id in posts_by_id
+    ]
+    if not backlinks:
+        return ""
+    links = "".join(
+        f'<li><a href="/posts/{html.escape(post.id, quote=True)}/">'
+        f'{html.escape(str(post.frontmatter["title"]))}</a></li>'
+        for post in backlinks
+    )
+    return f'<aside class="backlinks"><h2>参照している記事</h2><ul>{links}</ul></aside>'
+
+
+def _render_asset_page(
+    asset_id: str,
+    source_path: str,
+    index: LinkIndex,
+    posts_by_id: dict[str, NormalizedPost],
+) -> str:
+    escaped_path = html.escape(source_path)
+    backlinks = _render_post_backlinks(asset_id, index, posts_by_id)
+    return (
+        f'<article class="asset-page" data-asset-id="{html.escape(asset_id, quote=True)}">'
+        f'<p class="asset-page__placeholder">{escaped_path}</p>'
+        "</article>"
+        f"{backlinks}"
+    )
+
+
+def _write_page(path: Path, *, title: str, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document = _TEMPLATE.read_text(encoding="utf-8")
+    document = document.replace("{{title}}", html.escape(title))
+    document = document.replace("{{content}}", content)
+    path.write_text(document, encoding="utf-8")

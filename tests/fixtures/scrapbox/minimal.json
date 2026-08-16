@@ -1,0 +1,24 @@
+{
+  "projectName": "asonas-memo",
+  "pages": [
+    {
+      "title": "A",
+      "lines": [
+        {"text": "本文"},
+        {"text": "[B]"}
+      ],
+      "created": 1722470400,
+      "updated": 1722556800,
+      "assets": ["photo.jpg"]
+    },
+    {
+      "title": "B",
+      "lines": [
+        {"text": "本文B"}
+      ],
+      "created": 1722474000,
+      "updated": 1722556800,
+      "assets": ["photo.jpg"]
+    }
+  ]
+}

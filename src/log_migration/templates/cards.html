@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{title}}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1d292b;
+        --muted: #5c6c6b;
+        --paper: #eef3f1;
+        --card: #fffdf8;
+        --line: #cbd6d2;
+        --accent: #ae4d3c;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Hiragino Sans", sans-serif;
+        color: var(--ink);
+        background-color: var(--paper);
+        background-image: linear-gradient(rgba(38, 74, 77, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(38, 74, 77, 0.045) 1px, transparent 1px);
+        background-size: 24px 24px;
+        line-height: 1.7;
+      }
+      body { max-width: 64rem; margin: 0 auto; padding: 2rem 1rem 5rem; }
+      a { color: inherit; text-decoration-color: #9eaea9; text-underline-offset: 0.2em; }
+      a:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+      h1, h2 { font-family: "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif; line-height: 1.25; }
+      h1 { font-size: clamp(1.6rem, 5vw, 2.4rem); }
+      .card-controls { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; margin: 1.5rem 0; }
+      .range-option, .depth-label { border: 1px solid var(--line); border-radius: 99rem; padding: 0.35rem 0.75rem; font-size: 0.86rem; }
+      .range-option.is-selected { background: #264a4d; color: #fffdf8; border-color: #264a4d; }
+      .depth-label { margin-left: auto; color: var(--muted); }
+      .card-canvas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 1rem; align-items: start; }
+      .exploration-card { background: var(--card); border: 1px solid var(--line); border-radius: 0.35rem 1rem 0.35rem 0.35rem; box-shadow: 0 0.6rem 1.5rem rgba(38, 74, 77, 0.08); padding: 1rem 1.1rem; }
+      .exploration-card.card--root { grid-column: 1 / -1; border-left: 4px solid var(--accent); }
+      .card-relation { color: var(--accent); font-size: 0.75rem; letter-spacing: 0.05em; margin: 0 0 0.4rem; }
+      .post-card__header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 0.7rem; }
+      .post-card__header h2 { flex: 1; font-size: 1.2rem; margin: 0; }
+      time { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+      button { border: 1px solid var(--line); border-radius: 99rem; background: transparent; color: inherit; padding: 0.2rem 0.55rem; cursor: pointer; }
+      .post-body--compact { max-height: 7rem; overflow: hidden; }
+      .post-body p:first-child { margin-top: 0.55rem; }
+      .post-body p:last-child { margin-bottom: 0; }
+      .asset-card__kind { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; margin-right: 0.5rem; }
+      .asset-card__name { overflow-wrap: anywhere; }
+      .asset-card__references { color: var(--muted); font-size: 0.85rem; margin-top: 0.9rem; }
+      .asset-card__references span { font-weight: 600; }
+      .asset-card__references ul { margin: 0.25rem 0 0; padding-left: 1.2rem; }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a href="/">log.ason.as</a>
+      <h1>{{title}}</h1>
+    </header>
+    <main>{{content}}</main>
+    <script src="/static/cards.js" defer></script>
+  </body>
+</html>
