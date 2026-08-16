@@ -28,6 +28,7 @@ mise exec -- .venv/bin/python -m log_migration \
 
 - `data/normalized/posts/*.md`: 1 Scrapboxページにつき1記事のMarkdown
 - `data/normalized/migration-map.json`: 元タイトルと固定記事IDの対応
+- `data/normalized/asset-manifest.json`: 本文中の外部URLと参照元記事の対応
 - `data/normalized/index/log.sqlite3`: リンク探索用の派生インデックス
 - `data/normalized/site/`: ウェブログ・記事ページ・カードモードの静的プレビュー
 - `data/reports/migration-report.json` / `migration-report.md`: 移行確認レポート
@@ -38,10 +39,23 @@ mise exec -- .venv/bin/python -m log_migration \
 mise exec -- .venv/bin/python -m http.server 8000 --directory data/normalized/site
 ```
 
+## アセット取得
+
+通常の変換ではネットワークへ接続せず、URLのmanifestだけを生成します。画像・音声・動画などをNASへ取得する場合だけ、次の明示的なコマンドを実行します。
+
+```sh
+mise exec -- .venv/bin/python -m log_migration.assets \
+  --manifest data/normalized/asset-manifest.json \
+  --output data/normalized/assets \
+  --report data/reports/asset-fetch-report.json
+```
+
+取得できないURLがあっても、元のMarkdownとmanifestは変更されません。取得結果はレポートで確認できます。
+
 ## テスト
 
 ```sh
 mise exec -- .venv/bin/python -m pytest -q
 ```
 
-現フェーズでは、AWS配信、投稿アプリ、編集履歴、音声・動画の変換、OGP取得は扱いません。まずNAS上で移行結果と記事・アセット間の関係を確認するための土台です。
+現フェーズでは、AWS配信、投稿アプリ、編集履歴、OGP取得は扱いません。音声・動画は明示的なアセット取得の対象になりますが、再生用の変換は行いません。まずNAS上で移行結果と記事・アセット間の関係を確認するための土台です。
