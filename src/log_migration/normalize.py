@@ -23,6 +23,7 @@ class NormalizedPost:
     body: str
     links: tuple[str, ...]
     asset_references: tuple[str, ...]
+    external_urls: tuple[str, ...]
     issues: tuple[NormalizationIssue, ...]
 
 
@@ -34,6 +35,7 @@ class NormalizationResult:
 
 
 _LINK = re.compile(r"\[([^\[\]]+)\]")
+_EXTERNAL_URL = re.compile(r"https?://[^\s<>\[\]\\\"']+")
 
 
 def stable_post_id(project: str, title: str) -> str:
@@ -71,6 +73,7 @@ def normalize_page(
         body="\n".join(body_lines),
         links=page.links,
         asset_references=page.asset_references,
+        external_urls=page.external_urls,
         issues=tuple(issues),
     )
 
@@ -123,6 +126,8 @@ def _rewrite_links(
 
     def replace(match: re.Match[str]) -> str:
         target_title = match.group(1).strip()
+        if _EXTERNAL_URL.search(target_title):
+            return match.group(0)
         target_id = link_map.get(target_title)
         if target_id is None:
             issues.append(
