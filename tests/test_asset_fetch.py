@@ -3,6 +3,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 
@@ -14,7 +15,8 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\nphase-zero"
 
 class _AssetHandler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
-        if self.path == "/image.png":
+        path = unquote(self.path.split("?", 1)[0])
+        if path in {"/image.png", "/画像/日本語.png"}:
             self.send_response(200)
             self.send_header("Content-Type", "image/png")
             self.send_header("Content-Length", str(len(PNG_BYTES)))
@@ -123,3 +125,30 @@ def test_fetch_assets_rejects_image_content_type_mismatch(
     assert report["downloaded"] == 0
     assert report["failed"] == 1
     assert not (tmp_path / "assets" / "asset-html.html").exists()
+
+
+def test_fetch_assets_encodes_non_ascii_request_urls(
+    tmp_path: Path,
+    local_asset_server: str,
+):
+    manifest_path = tmp_path / "asset-manifest.json"
+    _write_manifest(
+        manifest_path,
+        [
+            {
+                "id": "asset-unicode",
+                "url": f"{local_asset_server}/画像/日本語.png",
+                "kind": "image",
+            },
+        ],
+    )
+
+    report = fetch_assets(
+        manifest_path,
+        tmp_path / "assets",
+        tmp_path / "fetch.json",
+    )
+
+    assert report["downloaded"] == 1
+    assert report["failed"] == 0
+    assert (tmp_path / "assets" / "asset-unicode.png").read_bytes() == PNG_BYTES

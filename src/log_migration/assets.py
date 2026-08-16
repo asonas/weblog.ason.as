@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import urlopen
 
 
@@ -17,6 +17,8 @@ _EXPECTED_MIME_PREFIX = {
     "audio": "audio/",
     "video": "video/",
 }
+_PATH_URL_SAFE = "/:@-._~!$&'()*+,;=%"
+_QUERY_URL_SAFE = "/?:@-._~!$&'()*+,;=%"
 
 
 def fetch_assets(
@@ -95,7 +97,7 @@ def _fetch_entry(
         "kind": entry["kind"],
     }
     try:
-        with urlopen(entry["url"], timeout=timeout) as response:
+        with urlopen(_request_url(entry["url"]), timeout=timeout) as response:
             status = getattr(response, "status", None) or response.getcode()
             content_type = response.headers.get_content_type()
             content_length = response.headers.get("Content-Length")
@@ -142,6 +144,19 @@ def _file_suffix(url: str, content_type: str) -> str:
     if suffix and len(suffix) <= 10 and re.fullmatch(r"\.[a-z0-9]+", suffix):
         return suffix
     return mimetypes.guess_extension(content_type) or ".bin"
+
+
+def _request_url(url: str) -> str:
+    parts = urlsplit(url)
+    return urlunsplit(
+        (
+            parts.scheme,
+            parts.netloc,
+            quote(parts.path, safe=_PATH_URL_SAFE),
+            quote(parts.query, safe=_QUERY_URL_SAFE),
+            "",
+        )
+    )
 
 
 class _AssetFetchError(Exception):
