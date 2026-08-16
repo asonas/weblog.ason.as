@@ -11,6 +11,7 @@ class ScrapboxPage:
     updated_at: datetime | None
     links: tuple[str, ...]
     asset_references: tuple[str, ...]
+    external_urls: tuple[str, ...]
     source_url: str
 
 

@@ -8,6 +8,7 @@ from .models import ScrapboxPage, ScrapboxProject
 
 
 _SCRAPBOX_LINK = re.compile(r"\[([^\[\]]+)\]")
+_EXTERNAL_URL = re.compile(r"https?://[^\s<>\[\]\\\"']+")
 
 
 def load_export(path: Path) -> ScrapboxProject:
@@ -39,7 +40,7 @@ def _parse_page(project_name: str, raw_page: object, path: Path) -> ScrapboxPage
         raise ValueError(f"Scrapbox page is missing title or lines: {path}")
 
     lines = tuple(_line_text(line, path) for line in raw_lines)
-    links = _extract_links(lines)
+    links, external_urls = _extract_references(lines)
     assets = _extract_assets(raw_page.get("assets"), path)
     source_url = f"https://scrapbox.io/{quote(project_name)}/{quote(title, safe='')}"
 
@@ -51,6 +52,7 @@ def _parse_page(project_name: str, raw_page: object, path: Path) -> ScrapboxPage
         updated_at=_timestamp(raw_page.get("updated")),
         links=links,
         asset_references=assets,
+        external_urls=external_urls,
         source_url=source_url,
     )
 
@@ -63,14 +65,27 @@ def _line_text(line: object, path: Path) -> str:
     raise ValueError(f"Scrapbox page line must contain text: {path}")
 
 
-def _extract_links(lines: tuple[str, ...]) -> tuple[str, ...]:
+def _extract_references(
+    lines: tuple[str, ...],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     links: list[str] = []
+    external_urls: list[str] = []
     for line in lines:
         for match in _SCRAPBOX_LINK.finditer(line):
-            link = match.group(1).strip()
-            if link and not link.startswith(("http://", "https://")) and link not in links:
-                links.append(link.lstrip("/"))
-    return tuple(links)
+            target = match.group(1).strip()
+            if _EXTERNAL_URL.search(target):
+                continue
+            if target and target not in links:
+                links.append(target.lstrip("/"))
+        for match in _EXTERNAL_URL.finditer(line):
+            url = _clean_url(match.group(0))
+            if url and url not in external_urls:
+                external_urls.append(url)
+    return tuple(links), tuple(external_urls)
+
+
+def _clean_url(value: str) -> str:
+    return value.rstrip(".,;:!?)]}")
 
 
 def _extract_assets(raw_assets: object, path: Path) -> tuple[str, ...]:
