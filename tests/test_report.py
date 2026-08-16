@@ -5,6 +5,7 @@ from log_migration.index import build_index
 from log_migration.normalize import normalize_project
 from log_migration.report import build_report, write_reports
 from log_migration.scrapbox import load_export
+from support import normalized_result_with_external_urls
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "scrapbox" / "minimal.json"
@@ -71,3 +72,23 @@ def test_report_counts_external_url_candidates(tmp_path: Path):
 
     assert report["external_url_candidates"] == 0
     assert report["asset_manifest_path"].endswith("asset-manifest.json")
+
+
+def test_report_assets_include_external_url_candidates(tmp_path: Path):
+    project = load_export(FIXTURE)
+    normalized = normalized_result_with_external_urls(
+        ("https://example.test/image.png",),
+    )
+    index_path = tmp_path / "index" / "log.sqlite3"
+    build_index(normalized, index_path)
+
+    report = build_report(
+        FIXTURE,
+        project,
+        normalized,
+        index_path=index_path,
+        site_path=tmp_path / "normalized" / "site",
+    )
+
+    assert report["external_url_candidates"] == 1
+    assert report["assets"] == 1
