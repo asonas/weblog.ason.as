@@ -21,8 +21,10 @@ mise exec -- .venv/bin/python -m pip install -e .
 mise exec -- .venv/bin/python -m log_migration \
   --input data/raw/scrapbox.json \
   --output data/normalized \
-  --report data/reports
+--report data/reports
 ```
+
+`data/raw/`、`data/normalized/`、`data/reports/` はリポジトリ内のローカル作業データとして保持し、Gitにはコミットしません。`/tmp` ではなく、これらのディレクトリを使うことで、移行結果と取得済みアセットを同じ作業環境に残せます。
 
 生成される主なものは次のとおりです。
 
@@ -51,6 +53,20 @@ mise exec -- .venv/bin/python -m log_migration.assets \
 ```
 
 取得できないURLがあっても、元のMarkdownとmanifestは変更されません。取得結果はレポートで確認できます。
+
+アセットは `data/normalized/assets/` に保存されます。取得済みファイルはGit管理外ですが、リポジトリの作業ディレクトリに残ります。Scrapboxエクスポートを再生成してから取得する場合は、次の2段階で実行します。
+
+```sh
+mise exec -- .venv/bin/python -m log_migration \
+  --input data/raw/scrapbox.json \
+  --output data/normalized \
+  --report data/reports
+
+mise exec -- .venv/bin/python -m log_migration.assets \
+  --manifest data/normalized/asset-manifest.json \
+  --output data/normalized/assets \
+  --report data/reports/asset-fetch-report.json
+```
 
 ## テスト
 
