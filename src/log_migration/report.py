@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .asset_manifest import build_asset_manifest
 from .models import ScrapboxProject
 from .normalize import NormalizationResult
 
@@ -51,6 +52,9 @@ def build_report(
         page.title for page in project.pages if page.created_at is None
     )
     timestamp = run_at or datetime.now(timezone.utc)
+    manifest = build_asset_manifest(normalized)
+    kind_counts = Counter(entry.kind for entry in manifest)
+    manifest_path = index_path.parent.parent / "asset-manifest.json"
 
     return {
         "input_path": str(input_path),
@@ -59,6 +63,8 @@ def build_report(
         "pages": len(project.pages),
         "posts": len(normalized.posts),
         "assets": len(asset_paths),
+        "external_url_candidates": len(manifest),
+        "external_url_kind_counts": dict(sorted(kind_counts.items())),
         "resolved_internal_links": resolved_links,
         "unresolved_links": len(unresolved),
         "unresolved_link_details": unresolved,
@@ -67,6 +73,7 @@ def build_report(
         "duplicate_titles": duplicate_titles,
         "undated_posts": undated_posts,
         "invalid_dates": [],
+        "asset_manifest_path": str(manifest_path),
         "output_paths": {
             "index": str(index_path),
             "site": str(site_path),
@@ -128,6 +135,7 @@ def _markdown_report(report: dict[str, Any]) -> str:
         f"- Pages: {report['pages']}",
         f"- Posts: {report['posts']}",
         f"- Assets: {report['assets']}",
+        f"- External URL candidates: {report['external_url_candidates']}",
         f"- Resolved internal links: {report['resolved_internal_links']}",
         f"- Unresolved links: {report['unresolved_links']}",
         f"- Missing assets: {report['missing_assets']}",

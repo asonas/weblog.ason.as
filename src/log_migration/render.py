@@ -6,6 +6,7 @@ from typing import Iterable
 
 from markdown_it import MarkdownIt
 
+from .asset_manifest import classify_url, stable_url_asset_id
 from .index import LinkIndex, stable_asset_id
 from .normalize import NormalizedPost, NormalizationResult
 
@@ -111,6 +112,8 @@ def _assets(posts: Iterable[NormalizedPost]) -> dict[str, str]:
     for post in posts:
         for source_path in post.asset_references:
             assets[stable_asset_id(source_path)] = source_path
+        for url in post.external_urls:
+            assets[stable_url_asset_id(url)] = url
     return assets
 
 
@@ -369,12 +372,17 @@ def _render_exploration_asset_card(
     if remaining:
         links += f"<li>ほか{remaining}件</li>"
     reference_html = f"<ul>{links}</ul>" if links else "<p>参照元なし</p>"
+    kind = (
+        classify_url(source_path)
+        if source_path.startswith(("http://", "https://"))
+        else "asset"
+    )
     return (
         f'<article class="exploration-card asset-card card--compact" '
         f'data-asset-id="{html.escape(asset_id, quote=True)}">'
         f'<p class="card-relation">{html.escape(_relation_label(root_id, asset_id, index))}</p>'
         f'<a href="/assets/{html.escape(asset_id, quote=True)}/">'
-        f'<span class="asset-card__kind">asset</span>'
+        f'<span class="asset-card__kind">{html.escape(kind)}</span>'
         f'<span class="asset-card__name">{html.escape(source_path)}</span></a>'
         f'<div class="asset-card__references"><span>参照元</span>{reference_html}</div>'
         "</article>"
@@ -424,9 +432,14 @@ def _render_post_card(
     card_class = "card--expanded" if expanded else "card--compact"
     body_class = "post-body" if expanded else "post-body post-body--compact"
     body_html = _MARKDOWN.render(post.body)
+    asset_ids = [
+        stable_asset_id(path) for path in post.asset_references
+    ] + [
+        stable_url_asset_id(url) for url in post.external_urls
+    ]
     asset_html = "".join(
         _render_asset_card(asset_id, assets[asset_id], index, posts_by_id)
-        for asset_id in (stable_asset_id(path) for path in post.asset_references)
+        for asset_id in asset_ids
         if asset_id in assets
     )
     return (
@@ -448,6 +461,11 @@ def _render_asset_card(
 ) -> str:
     escaped_id = html.escape(asset_id, quote=True)
     escaped_path = html.escape(source_path)
+    kind = (
+        classify_url(source_path)
+        if source_path.startswith(("http://", "https://"))
+        else "asset"
+    )
     backlinks = [
         posts_by_id[post_id]
         for post_id in index.find_backlinks(asset_id)
@@ -464,7 +482,7 @@ def _render_asset_card(
     return (
         f'<article class="asset-card card--compact" data-asset-id="{escaped_id}">'
         f'<a href="/assets/{escaped_id}/">'
-        f'<span class="asset-card__kind">asset</span>'
+        f'<span class="asset-card__kind">{html.escape(kind)}</span>'
         f'<span class="asset-card__name">{escaped_path}</span>'
         "</a>"
         f"{used_by}"

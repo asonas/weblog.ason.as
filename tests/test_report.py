@@ -53,3 +53,21 @@ def test_report_contains_input_hash_and_writes_json_and_markdown(tmp_path: Path)
     assert len(report["input_sha256"]) == 64
     assert (tmp_path / "report" / "migration-report.json").is_file()
     assert (tmp_path / "report" / "migration-report.md").is_file()
+
+
+def test_report_counts_external_url_candidates(tmp_path: Path):
+    project = load_export(FIXTURE)
+    normalized = normalize_project(project, tmp_path / "normalized")
+    index_path = tmp_path / "index" / "log.sqlite3"
+    build_index(normalized, index_path)
+
+    report = build_report(
+        FIXTURE,
+        project,
+        normalized,
+        index_path=index_path,
+        site_path=tmp_path / "normalized" / "site",
+    )
+
+    assert report["external_url_candidates"] == 0
+    assert report["asset_manifest_path"].endswith("asset-manifest.json")

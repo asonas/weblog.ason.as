@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from .asset_manifest import write_asset_manifest
 from .index import build_index
 from .normalize import normalize_project
 from .render import render_site
@@ -30,6 +31,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         project = load_export(args.input)
         normalized = normalize_project(project, args.output)
+        write_asset_manifest(args.output, normalized)
         index_path = args.output / "index" / "log.sqlite3"
         index = build_index(normalized, index_path)
         site_path = args.output / "site"

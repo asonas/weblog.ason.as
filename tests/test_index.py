@@ -3,9 +3,11 @@ import sqlite3
 
 import pytest
 
+from log_migration.asset_manifest import stable_url_asset_id
 from log_migration.index import build_index, stable_asset_id
 from log_migration.normalize import normalize_project, stable_post_id
 from log_migration.scrapbox import load_export
+from support import normalized_result_with_external_urls
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "scrapbox" / "minimal.json"
@@ -62,3 +64,14 @@ def test_rebuilding_index_produces_identical_ordered_rows(tmp_path: Path):
             }
 
     assert rows(first_path) == rows(second_path)
+
+
+def test_backlinks_include_external_url_assets(tmp_path: Path):
+    normalized = normalized_result_with_external_urls(
+        ("https://example.test/image.png",),
+    )
+    index = build_index(normalized, tmp_path / "log.sqlite3")
+
+    asset_id = stable_url_asset_id("https://example.test/image.png")
+
+    assert index.find_backlinks(asset_id) == ["post-a"]

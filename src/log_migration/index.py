@@ -5,6 +5,8 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
+from .asset_manifest import stable_url_asset_id
+
 
 _POST_LINK = re.compile(r"\]\(/posts/([^/]+)/\)")
 
@@ -195,6 +197,17 @@ def build_index(normalized, database_path: Path) -> LinkIndex:
             connection.execute(
                 "INSERT INTO edges VALUES (?, ?, ?, ?)",
                 (post.id, asset_id, "asset_reference", position),
+            )
+
+        for position, url in enumerate(post.external_urls):
+            asset_id = stable_url_asset_id(url)
+            connection.execute(
+                "INSERT OR IGNORE INTO assets (id, source_path) VALUES (?, ?)",
+                (asset_id, url),
+            )
+            connection.execute(
+                "INSERT INTO edges VALUES (?, ?, ?, ?)",
+                (post.id, asset_id, "external_url", position),
             )
 
         for issue in post.issues:

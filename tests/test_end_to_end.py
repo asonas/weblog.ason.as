@@ -36,6 +36,7 @@ def test_cli_generates_normalized_index_site_and_report(tmp_path: Path):
     assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == before_hash
     assert list((output_dir / "posts").glob("*.md"))
     assert (output_dir / "index" / "log.sqlite3").is_file()
+    assert (output_dir / "asset-manifest.json").is_file()
     assert (output_dir / "site" / "2024-08-01" / "index.html").is_file()
     assert list((output_dir / "site" / "posts").glob("*/cards/index.html"))
 

@@ -1,6 +1,7 @@
 from dataclasses import replace
 from pathlib import Path
 
+from log_migration.asset_manifest import stable_url_asset_id
 from log_migration.index import build_index
 from log_migration.normalize import (
     NormalizedPost,
@@ -8,8 +9,9 @@ from log_migration.normalize import (
     normalize_project,
     stable_post_id,
 )
-from log_migration.render import render_site
+from log_migration.render import render_cards, render_site
 from log_migration.scrapbox import load_export
+from support import normalized_result_with_external_urls
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "scrapbox" / "minimal.json"
@@ -65,3 +67,16 @@ def test_rendered_post_contains_asset_card(tmp_path: Path):
 
     assert "asset_" in html
     assert "photo.jpg" in html
+
+
+def test_render_cards_include_external_url_asset(tmp_path: Path):
+    normalized = normalized_result_with_external_urls(
+        ("https://example.test/image.png",),
+    )
+    index = build_index(normalized, tmp_path / "log.sqlite3")
+
+    html = render_cards(normalized, index, root_id="post-a")
+
+    asset_id = stable_url_asset_id("https://example.test/image.png")
+    assert f'data-asset-id="{asset_id}"' in html
+    assert "example.test" in html
