@@ -1,8 +1,9 @@
+import json
 from dataclasses import replace
 from pathlib import Path
 
 from log_migration.asset_manifest import stable_url_asset_id
-from log_migration.index import build_index
+from log_migration.index import build_index, stable_asset_id
 from log_migration.normalize import (
     NormalizedPost,
     NormalizationResult,
@@ -67,6 +68,29 @@ def test_rendered_post_contains_asset_card(tmp_path: Path):
 
     assert "asset_" in html
     assert "photo.jpg" in html
+
+
+def test_render_site_writes_shared_card_data_without_private_posts(tmp_path: Path):
+    site = _rendered_site(tmp_path)
+
+    data = json.loads(
+        (site / "static" / "cards-data.json").read_text(encoding="utf-8")
+    )
+    post_a = stable_post_id("asonas-memo", "A")
+    post_b = stable_post_id("asonas-memo", "B")
+    asset_id = stable_asset_id("photo.jpg")
+    posts = {post["id"]: post for post in data["posts"]}
+    assets = {asset["id"]: asset for asset in data["assets"]}
+
+    assert data["version"] == 1
+    assert set(posts) == {post_a, post_b, "undated-post"}
+    assert "private-post" not in posts
+    assert posts[post_a]["body_html"].startswith("<p>本文")
+    assert assets[asset_id]["references"] == sorted([post_a, post_b, "undated-post"])
+    assert {edge["target"] for edge in data["edges"] if edge["source"] == post_a} == {
+        post_b,
+        asset_id,
+    }
 
 
 def test_render_cards_include_external_url_asset(tmp_path: Path):

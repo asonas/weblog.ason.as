@@ -28,9 +28,10 @@
       h1, h2 { font-family: "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif; line-height: 1.25; }
       h1 { font-size: clamp(1.6rem, 5vw, 2.4rem); }
       .card-controls { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; margin: 1.5rem 0; }
-      .range-option, .depth-label { border: 1px solid var(--line); border-radius: 99rem; padding: 0.35rem 0.75rem; font-size: 0.86rem; }
-      .range-option.is-selected { background: #264a4d; color: #fffdf8; border-color: #264a4d; }
-      .depth-label { margin-left: auto; color: var(--muted); }
+      .range-option, .depth-option { border: 1px solid var(--line); border-radius: 99rem; padding: 0.35rem 0.75rem; font-size: 0.86rem; }
+      .range-option.is-selected, .depth-option.is-selected { background: #264a4d; color: #fffdf8; border-color: #264a4d; }
+      .depth-options { display: inline-flex; flex-wrap: wrap; gap: 0.45rem; margin-left: auto; }
+      .card-status { color: var(--muted); min-height: 1.7em; }
       .card-canvas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 1rem; align-items: start; }
       .exploration-card { background: var(--card); border: 1px solid var(--line); border-radius: 0.35rem 1rem 0.35rem 0.35rem; box-shadow: 0 0.6rem 1.5rem rgba(38, 74, 77, 0.08); padding: 1rem 1.1rem; }
       .exploration-card.card--root { grid-column: 1 / -1; border-left: 4px solid var(--accent); }

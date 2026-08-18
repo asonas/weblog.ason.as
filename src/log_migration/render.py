@@ -1,4 +1,5 @@
 import html
+import json
 from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
@@ -15,6 +16,8 @@ _MARKDOWN = MarkdownIt("commonmark", {"breaks": True, "html": False})
 _TEMPLATE = Path(__file__).parent / "templates" / "weblog.html"
 _CARD_TEMPLATE = Path(__file__).parent / "templates" / "cards.html"
 _CARD_SCRIPT = Path(__file__).parent / "static" / "cards.js"
+_CARD_DATA_URL = "/static/cards-data.json"
+_CARD_DEPTHS = (0, 1, 2, 3)
 _RANGE_DAYS: dict[str, int | None] = {
     "1d": 1,
     "7d": 7,
@@ -44,6 +47,7 @@ def render_site(
     posts_by_id = {post.id: post for post in public_posts}
     assets = _assets(public_posts)
     _write_card_script(output_dir)
+    _write_card_data(output_dir, normalized)
 
     dated_posts: dict[str, list[NormalizedPost]] = defaultdict(list)
     undated_posts: list[NormalizedPost] = []
@@ -264,9 +268,12 @@ def render_cards(
     controls = _render_range_controls(range_name, root_id, depth)
     content = (
         f'<section class="card-explorer" data-root-id="{html.escape(root_id, quote=True)}" '
-        f'data-range="{html.escape(range_name, quote=True)}" data-depth="{depth}">'
+        f'data-range="{html.escape(range_name, quote=True)}" data-depth="{depth}" '
+        f'data-card-data-url="{_CARD_DATA_URL}">'
         f"{controls}"
         f'<div class="card-canvas">{"".join(cards)}</div>'
+        '<p class="card-status" role="status" aria-live="polite"></p>'
+        '<noscript><p>探索範囲とリンク深度の変更にはJavaScriptが必要です。</p></noscript>'
         "</section>"
     )
     return _render_card_document(
@@ -294,10 +301,14 @@ def _render_range_controls(range_name: str, root_id: str, depth: int) -> str:
         _render_range_option(name, label, range_name, root_id, depth)
         for name, label in _RANGE_LABELS.items()
     )
+    depth_options = "".join(
+        _render_depth_option(value, root_id, range_name, depth)
+        for value in _CARD_DEPTHS
+    )
     return (
         '<nav class="card-controls" aria-label="カードの探索範囲">'
         f"{options}"
-        f'<span class="depth-label">リンク深度: {depth}</span>'
+        f'<span class="depth-options" aria-label="リンク深度">{depth_options}</span>'
         "</nav>"
     )
 
@@ -310,11 +321,28 @@ def _render_range_option(
     depth: int,
 ) -> str:
     selected = " is-selected" if name == selected_name else ""
+    current = ' aria-current="page"' if name == selected_name else ""
     escaped_root_id = html.escape(root_id, quote=True)
     return (
-        f'<a class="range-option{selected}" data-range-option="{name}" '
+        f'<a class="range-option{selected}" data-range-option="{name}"{current} '
         f'href="?root={escaped_root_id}&amp;range={name}&amp;depth={depth}">'
         f"{label}</a>"
+    )
+
+
+def _render_depth_option(
+    value: int,
+    root_id: str,
+    range_name: str,
+    selected_depth: int,
+) -> str:
+    selected = " is-selected" if value == selected_depth else ""
+    current = ' aria-current="page"' if value == selected_depth else ""
+    escaped_root_id = html.escape(root_id, quote=True)
+    return (
+        f'<a class="depth-option{selected}" data-depth-option="{value}"{current} '
+        f'href="?root={escaped_root_id}&amp;range={range_name}&amp;depth={value}">'
+        f"深さ{value}</a>"
     )
 
 
@@ -411,6 +439,92 @@ def _write_card_script(output_dir: Path) -> None:
     target = output_dir / "static" / "cards.js"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(_CARD_SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def _write_card_data(
+    output_dir: Path,
+    normalized: NormalizationResult,
+) -> None:
+    target = output_dir / "static" / "cards-data.json"
+    target.write_text(
+        json.dumps(
+            _card_data(normalized),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _card_data(
+    normalized: NormalizationResult,
+) -> dict[str, object]:
+    public_posts = tuple(_public_posts(normalized.posts))
+    posts_by_id = {post.id: post for post in public_posts}
+    assets = _assets(public_posts)
+    edges = _card_edges(normalized, public_posts, posts_by_id, assets)
+
+    posts = [
+        {
+            "body_html": _MARKDOWN.render(post.body),
+            "created_at": post.frontmatter.get("created_at"),
+            "id": post.id,
+            "title": str(post.frontmatter["title"]),
+        }
+        for post in sorted(public_posts, key=_post_sort_key)
+    ]
+    assets_data = [
+        {
+            "id": asset_id,
+            "kind": (
+                classify_url(source_path)
+                if source_path.startswith(("http://", "https://"))
+                else "asset"
+            ),
+            "references": [
+                source_id
+                for source_id, target_id in edges
+                if target_id == asset_id
+            ],
+            "source_path": source_path,
+        }
+        for asset_id, source_path in sorted(assets.items(), key=lambda item: item[1])
+    ]
+    return {
+        "assets": assets_data,
+        "edges": [
+            {"source": source_id, "target": target_id}
+            for source_id, target_id in edges
+        ],
+        "posts": posts,
+        "version": 1,
+    }
+
+
+def _card_edges(
+    normalized: NormalizationResult,
+    public_posts: Iterable[NormalizedPost],
+    posts_by_id: dict[str, NormalizedPost],
+    assets: dict[str, str],
+) -> list[tuple[str, str]]:
+    edges: set[tuple[str, str]] = set()
+    for post in public_posts:
+        source_project = str(post.frontmatter["source_project"])
+        for target_title in post.links:
+            target_id = normalized.mapping.get(f"{source_project}\x00{target_title}")
+            if target_id in posts_by_id:
+                edges.add((post.id, target_id))
+        for source_path in post.asset_references:
+            asset_id = stable_asset_id(source_path)
+            if asset_id in assets:
+                edges.add((post.id, asset_id))
+        for url in post.external_urls:
+            asset_id = stable_url_asset_id(url)
+            if asset_id in assets:
+                edges.add((post.id, asset_id))
+    return sorted(edges)
 
 
 def _render_post_card(

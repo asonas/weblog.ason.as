@@ -33,6 +33,7 @@ mise exec -- .venv/bin/python -m log_migration \
 - `data/normalized/asset-manifest.json`: 本文中の外部URLと参照元記事の対応
 - `data/normalized/index/log.sqlite3`: リンク探索用の派生インデックス
 - `data/normalized/site/`: ウェブログ・記事ページ・カードモードの静的プレビュー
+- `data/normalized/site/static/cards-data.json`: カードモードの範囲・深さ切り替え用の静的データ
 - `data/reports/migration-report.json` / `migration-report.md`: 移行確認レポート
 
 静的サイトは、例えば次のコマンドでローカル確認できます。

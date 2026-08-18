@@ -47,3 +47,17 @@ def test_card_view_supports_explicit_time_range(tmp_path: Path):
     html = render_cards(normalized, index, root_id=root_id, range_name="7d", depth=1)
 
     assert 'data-range="7d"' in html
+
+
+def test_card_view_exposes_shared_data_source_and_independent_depth_controls(
+    tmp_path: Path,
+):
+    normalized, index = _card_snapshot(tmp_path)
+    root_id = stable_post_id("asonas-memo", "A")
+
+    html = render_cards(normalized, index, root_id=root_id, range_name="all", depth=1)
+
+    assert 'data-card-data-url="/static/cards-data.json"' in html
+    assert 'data-range-option="7d"' in html
+    assert 'data-depth-option="0"' in html
+    assert 'data-depth-option="3"' in html

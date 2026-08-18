@@ -38,6 +38,7 @@ def test_cli_generates_normalized_index_site_and_report(tmp_path: Path):
     assert (output_dir / "index" / "log.sqlite3").is_file()
     assert (output_dir / "asset-manifest.json").is_file()
     assert (output_dir / "site" / "2024-08-01" / "index.html").is_file()
+    assert (output_dir / "site" / "static" / "cards-data.json").is_file()
     assert list((output_dir / "site" / "posts").glob("*/cards/index.html"))
 
     report = json.loads(
