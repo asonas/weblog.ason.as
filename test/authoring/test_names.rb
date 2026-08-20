@@ -25,9 +25,13 @@ class TestNames < Minitest::Test
   end
 
   def test_page_name_rejects_syntax_delimiters
-    ["[[page-a]]", "---", "status: draft"].each do |name|
+    ["[[page-a]]", "---"].each do |name|
       assert_raises(ArgumentError) { WeblogAuthoring.validate_page_name(name) }
     end
+  end
+
+  def test_page_name_allows_normal_punctuation
+    assert_equal "status: draft", WeblogAuthoring.validate_page_name("status: draft")
   end
 
   def test_date_page_path_rejects_non_date_values

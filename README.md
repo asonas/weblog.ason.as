@@ -13,6 +13,18 @@ mise exec -- python3 -m venv .venv
 mise exec -- .venv/bin/python -m pip install -e .
 ```
 
+## ローカル執筆画面
+
+執筆画面はlocalhostだけに bind します。LAN、認証、AWS、クラウド、外部APIへの公開や連携は行いません。
+
+```sh
+mise exec -- .venv/bin/python -m log_migration.authoring --content content --index data/index/authoring.sqlite3 --site site --host 127.0.0.1 --port 8000
+```
+
+`content/` のMarkdownが正本です。最初の保存を行うまでMarkdownファイルは作成されません。
+`data/index/authoring.sqlite3` は再生成可能な検索用インデックス、`site/` は公開用の生成物であり、どちらも正本ではありません。
+下書きの保存だけでは `site/` を更新しません。執筆画面で明示的に公開操作を行ったときだけ、公開用の静的サイトを生成します。
+
 ## 変換
 
 保存済みエクスポートを `data/raw/` に置き、次のコマンドを実行します。
