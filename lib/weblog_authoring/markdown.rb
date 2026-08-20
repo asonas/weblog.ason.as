@@ -127,7 +127,7 @@ module WeblogAuthoring
 
     def wiki_route_for(name, mode)
       page = @pages_by_name[name]
-      return "/#{page.route}" unless page.nil?
+      return route_href(page.route, mode) unless page.nil?
       return nil if mode == "public"
 
       "/#{name}"
@@ -142,9 +142,14 @@ module WeblogAuthoring
       return "" if backlinks.empty?
 
       items = backlinks.map do |backlink|
-        "<li>#{internal_link(backlink.display_title, "/#{backlink.route}", mode)}</li>"
+        "<li>#{internal_link(backlink.display_title, route_href(backlink.route, mode), mode)}</li>"
       end.join
       "<section class=\"backlinks\"><h2>リンク元</h2><ul>#{items}</ul></section>"
+    end
+
+    def route_href(route, mode)
+      encoded_route = mode == "public" ? WeblogAuthoring.encoded_route(route) : route
+      "/#{encoded_route}"
     end
 
     def internal_link(text, href, mode)

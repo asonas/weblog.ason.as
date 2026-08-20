@@ -141,6 +141,23 @@ class TestMarkdown < Minitest::Test
     assert_includes rendered.problems, "wiki link omitted in public output: draft page"
   end
 
+  def test_public_render_encodes_named_routes_for_wikilinks_and_backlinks
+    named = named_page("Page-A")
+    date = date_page("2026-01-01")
+    renderer = WeblogAuthoring::MarkdownRenderer.new(pages: [named, date])
+
+    rendered = renderer.render("[[Page-A]]", mode: "public")
+    local_rendered = renderer.render("[[Page-A]]", mode: "local")
+    page_html = renderer.render_page(named_page("page-b"), backlinks: [named, date], mode: "public")
+
+    assert_includes rendered.html, 'href="/%50age-%41"'
+    refute_includes rendered.html, 'href="/Page-A"'
+    assert_includes local_rendered.html, 'href="/Page-A"'
+    assert_includes page_html, 'href="/%50age-%41"'
+    assert_includes page_html, 'href="/2026-01-01"'
+    refute_includes page_html, 'target="_blank"'
+  end
+
   def test_wiki_links_escape_html_in_text_and_href
     tricky = named_page('quote " & name')
     renderer = WeblogAuthoring::MarkdownRenderer.new(pages: [tricky])
@@ -180,6 +197,24 @@ class TestMarkdown < Minitest::Test
       published_at: nil,
       path: Pathname("/tmp/#{name}.md"),
       body:,
+      links: []
+    )
+  end
+
+  def date_page(date_string)
+    page_date = Date.iso8601(date_string)
+    WeblogAuthoring::PageDocument.new(
+      id: "date-#{date_string}",
+      page_type: "date",
+      name: nil,
+      page_date:,
+      title: nil,
+      status: "published",
+      created_at: FIXED_TIME,
+      updated_at: FIXED_TIME,
+      published_at: FIXED_TIME,
+      path: Pathname("/tmp/#{date_string}.md"),
+      body: "本文",
       links: []
     )
   end

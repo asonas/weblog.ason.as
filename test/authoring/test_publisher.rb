@@ -232,6 +232,25 @@ class TestPublisher < Minitest::Test
     refute tmpdir.join("site.staging/Page-A/index.html").exist?
   end
 
+  def test_build_encodes_public_wikilinks_and_backlinks
+    named = published_named_page("Page-A")
+    backlink = published_named_page("Page-B", body: "[[Page-A]]")
+
+    publisher.build(
+      snapshot_for(pages: [named, backlink]),
+      tmpdir.join("site.staging"),
+      release_snapshot: WeblogAuthoring::ReleaseSnapshot.new
+    )
+
+    named_html = tmpdir.join("site.staging/%50age-%41/index.html").read(encoding: "UTF-8")
+    backlink_html = tmpdir.join("site.staging/%50age-%42/index.html").read(encoding: "UTF-8")
+
+    assert_includes backlink_html, 'href="/%50age-%41"'
+    assert_includes named_html, 'href="/%50age-%42"'
+    refute_includes backlink_html, 'href="/Page-A"'
+    refute_includes named_html, 'href="/Page-B"'
+  end
+
   def test_publish_keeps_existing_site_and_manifest_when_swap_fails
     published = published_named_page("page-a", body: "公開本文")
     site_dir = tmpdir.join("site")

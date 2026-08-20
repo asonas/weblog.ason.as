@@ -622,10 +622,7 @@ module WeblogAuthoring
     end
 
     def encoded_route(route)
-      normalized_route = route.to_s
-      return normalized_route if DATE_NAME.match?(normalized_route)
-
-      WeblogAuthoring.encoded_page_name(normalized_route)
+      WeblogAuthoring.encoded_route(route)
     end
   end
 end

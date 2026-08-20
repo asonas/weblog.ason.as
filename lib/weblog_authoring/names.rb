@@ -31,6 +31,13 @@ module WeblogAuthoring
     validate_page_name(name).bytes.map { |byte| encode_byte(byte) }.join
   end
 
+  def encoded_route(route)
+    normalized = route.to_s
+    return normalized if DATE_NAME.match?(normalized)
+
+    encoded_page_name(normalized)
+  end
+
   def page_path(content_dir, page_type, name:, page_date:)
     root = Pathname(content_dir)
 
