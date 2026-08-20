@@ -51,12 +51,22 @@ class FileTransaction:
                 self._replace(path, content)
             for path in self._deletes:
                 path.unlink()
-        except Exception:
+        except Exception as error:
+            rollback_errors: list[Exception] = []
             for path, content in original.items():
-                self._replace(path, content)
+                try:
+                    self._replace(path, content)
+                except Exception as rollback_error:
+                    rollback_errors.append(rollback_error)
             for path in created:
-                if path.exists():
-                    path.unlink()
+                try:
+                    if path.exists():
+                        path.unlink()
+                except Exception as rollback_error:
+                    rollback_errors.append(rollback_error)
+            if rollback_errors:
+                details = "; ".join(str(rollback_error) for rollback_error in rollback_errors)
+                raise RuntimeError(f"file transaction failed: {error}; rollback failed: {details}") from error
             raise
 
     @staticmethod
@@ -102,7 +112,12 @@ class ContentRepository:
                 if isinstance(parsed, PageProblem):
                     problems.append(parsed)
                     continue
-                document = self._with_links_and_tokyo_time(parsed)
+                try:
+                    self._validate_external_document(parsed)
+                    document = self._with_links_and_tokyo_time(parsed)
+                except ValueError as error:
+                    problems.append(PageProblem(path, str(error)))
+                    continue
                 if document.id in ids:
                     problems.append(PageProblem(path, f"duplicate page id: {document.id}"))
                     continue
@@ -272,10 +287,33 @@ class ContentRepository:
         times = (document.created_at, document.updated_at, document.published_at)
         if any(value is not None and (value.tzinfo is None or value.utcoffset() is None) for value in times):
             raise ValueError("document timestamps must be aware")
+        links = extract_wiki_links(document.body)
+        for link in links:
+            validate_page_name(link.name)
         return replace(
             document,
             created_at=document.created_at.astimezone(TOKYO),
             updated_at=document.updated_at.astimezone(TOKYO),
             published_at=document.published_at.astimezone(TOKYO) if document.published_at else None,
-            links=extract_wiki_links(document.body),
+            links=links,
         )
+
+    def _validate_external_document(self, document: PageDocument) -> None:
+        if document.page_type == "named":
+            if document.page_date is not None:
+                raise ValueError("named pages must not have page_date")
+            if document.name != validate_page_name(document.name or ""):
+                raise ValueError("named page name must be normalized")
+        elif document.page_type == "date":
+            if document.name is not None:
+                raise ValueError("date pages must not have name")
+        else:
+            raise ValueError(f"unknown page type: {document.page_type}")
+        expected_path = page_path(
+            self.content_dir,
+            document.page_type,
+            document.name,
+            document.page_date,
+        )
+        if document.path != expected_path:
+            raise ValueError(f"document is not at canonical source path: {expected_path.name}")

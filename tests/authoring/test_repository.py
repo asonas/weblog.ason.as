@@ -7,6 +7,21 @@ from log_migration.authoring.models import ConflictError, SaveRequest
 from .support import new_date_request, repository_for, repository_with_date_page
 
 
+def external_date_document(*, created_at: str, updated_at: str, published_at: str = "null") -> str:
+    return (
+        "---\n"
+        "id: external-date\n"
+        "page_type: date\n"
+        "page_date: 2026-01-01\n"
+        "status: draft\n"
+        f"created_at: {created_at}\n"
+        f"updated_at: {updated_at}\n"
+        f"published_at: {published_at}\n"
+        "---\n"
+        "本文\n"
+    )
+
+
 def test_first_date_save_creates_only_the_date_source_file(tmp_path):
     repository = repository_for(tmp_path)
 
@@ -48,6 +63,92 @@ def test_invalid_external_document_is_reported_without_overwrite(tmp_path):
 
     assert snapshot.problems[0].path == path
     assert path.read_bytes() == original.encode()
+
+
+@pytest.mark.parametrize("field", ["created_at", "updated_at", "published_at"])
+def test_external_document_with_naive_datetime_is_reported_and_scan_continues(tmp_path, field):
+    content = tmp_path / "content"
+    content.mkdir()
+    timestamps = {
+        "created_at": "2026-01-01T00:00:00+09:00",
+        "updated_at": "2026-01-01T00:00:00+09:00",
+        "published_at": "null",
+    }
+    timestamps[field] = "2026-01-01T00:00:00"
+    invalid_path = content / "2026-01-01.md"
+    original = external_date_document(**timestamps)
+    invalid_path.write_text(original, encoding="utf-8")
+    repository = repository_for(tmp_path)
+    valid = repository.save_draft(new_date_request(date(2026, 1, 2), "有効"))
+
+    snapshot = repository.refresh()
+
+    assert snapshot.pages == (valid,)
+    assert snapshot.problems[0].path == invalid_path
+    assert "timestamps must be aware" in snapshot.problems[0].detail
+    assert invalid_path.read_text(encoding="utf-8") == original
+
+
+def test_external_named_document_with_invalid_name_is_reported(tmp_path):
+    path = tmp_path / "content" / "bad.md"
+    path.parent.mkdir()
+    path.write_text(
+        "---\n"
+        "id: invalid-name\n"
+        "page_type: named\n"
+        "name: a/b\n"
+        "status: draft\n"
+        "created_at: 2026-01-01T00:00:00+09:00\n"
+        "updated_at: 2026-01-01T00:00:00+09:00\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    snapshot = repository_for(tmp_path).refresh()
+
+    assert snapshot.pages == ()
+    assert snapshot.problems[0].path == path
+    assert "page name contains a forbidden character" in snapshot.problems[0].detail
+
+
+def test_external_named_document_at_noncanonical_path_is_reported(tmp_path):
+    path = tmp_path / "content" / "other.md"
+    path.parent.mkdir()
+    path.write_text(
+        "---\n"
+        "id: wrong-named-path\n"
+        "page_type: named\n"
+        "name: page-a\n"
+        "status: draft\n"
+        "created_at: 2026-01-01T00:00:00+09:00\n"
+        "updated_at: 2026-01-01T00:00:00+09:00\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    snapshot = repository_for(tmp_path).refresh()
+
+    assert snapshot.pages == ()
+    assert snapshot.problems[0].path == path
+    assert "canonical source path" in snapshot.problems[0].detail
+
+
+def test_external_date_document_at_noncanonical_path_is_reported(tmp_path):
+    path = tmp_path / "content" / "other.md"
+    path.parent.mkdir()
+    path.write_text(
+        external_date_document(
+            created_at="2026-01-01T00:00:00+09:00",
+            updated_at="2026-01-01T00:00:00+09:00",
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = repository_for(tmp_path).refresh()
+
+    assert snapshot.pages == ()
+    assert snapshot.problems[0].path == path
+    assert "canonical source path" in snapshot.problems[0].detail
 
 
 def test_rename_collision_leaves_all_source_files_unchanged(tmp_path):
