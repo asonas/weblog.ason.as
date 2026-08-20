@@ -111,6 +111,24 @@ class TestMarkdown < Minitest::Test
     assert_includes rendered.problems, "attribute omitted from <div>: onclick"
   end
 
+  def test_aligned_table_keeps_safe_alignment_style
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+
+    rendered = renderer.render(
+      <<~MARKDOWN,
+        | Left | Right |
+        | :-- | --: |
+        | a | b |
+      MARKDOWN
+      mode: "local"
+    )
+
+    assert_includes rendered.html, 'style="text-align: left"'
+    assert_includes rendered.html, 'style="text-align: right"'
+    refute_includes rendered.html, "onclick="
+    assert_empty rendered.problems
+  end
+
   def test_public_render_keeps_saved_links_same_tab_and_omits_unsaved_targets
     renderer = WeblogAuthoring::MarkdownRenderer.new(pages: [named_page("page-a")])
 

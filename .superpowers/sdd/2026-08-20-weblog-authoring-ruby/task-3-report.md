@@ -127,3 +127,44 @@ Parent commit: `2e78547 Add Ruby authoring markdown renderer`.
   のみに限定した。
 - ordinary Markdown の safe external anchor は維持しつつ、unsafe/unknown
   attribute 名は warning を返して落とすことを focused test で確認した。
+
+## Fix Round 2: Symbol tag whitelist normalization
+
+### Finding addressed
+
+- Kramdown は table cell/tag 名を `:td`, `:th` のような Symbol で
+  converter に渡すため、string key の whitelist に一致せず、
+  safe な `style="text-align: ..."` まで落としていた。
+
+### Implementation changes
+
+- 属性 whitelist の参照前に tag 名を `to_s` で正規化するよう修正した。
+- strict な属性名/value filter 自体は変えず、safe な table alignment style
+  だけが許可される状態を維持した。
+
+### Regression coverage
+
+- `| :-- | --: |` の aligned table で left/right alignment style が残ること
+- その描画で unsafe attribute が混入しないこと
+
+### Verification commands
+
+- `git branch --show-current`
+  - `weblog-authoring-design`
+- `mise exec -- ruby -c lib/weblog_authoring/markdown.rb`
+  - `Syntax OK`
+- `mise exec -- ruby -c test/authoring/test_markdown.rb`
+  - `Syntax OK`
+- `mise exec -- ruby -Itest test/authoring/test_markdown.rb`
+
+結果:
+
+```text
+8 runs, 95 assertions, 0 failures, 0 errors, 0 skips
+```
+
+### Self-review
+
+- 変更は tag 名正規化と aligned-table 回帰テストに限定した。
+- table alignment style は復元しつつ、unsafe attribute の rejection は
+  そのまま維持できている。

@@ -368,7 +368,7 @@ module WeblogAuthoring
       end
 
       def sanitized_html_attributes(tag_name, attributes)
-        sanitized = sanitize_attributes(tag_name, attributes)
+        sanitized = sanitize_attributes(tag_name.to_s, attributes)
         html_attributes(sanitized)
       end
 
