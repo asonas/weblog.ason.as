@@ -6,11 +6,14 @@
   const body = document.querySelector("#body");
   const titleErrors = document.querySelector("#title-errors");
   const bodyErrors = document.querySelector("#body-errors");
+  const previewErrors = document.querySelector("#body-preview-errors");
   const preview = document.querySelector("#preview");
   const saveStatus = document.querySelector("#save-status");
   let dirty = false;
   let editVersion = 0;
+  let mutationError = "";
   let previewSequence = 0;
+  let previewError = "";
   let previewTimer;
 
   const payload = () => ({
@@ -34,13 +37,22 @@
     return result;
   };
 
-  const setErrors = (message, fields) => {
-    const hasTitleError = fields.includes("title");
-    const hasBodyError = fields.includes("body");
-    titleErrors.textContent = hasTitleError ? message : "";
-    bodyErrors.textContent = hasBodyError ? message : "";
-    title.toggleAttribute("aria-invalid", hasTitleError);
-    body.toggleAttribute("aria-invalid", hasBodyError);
+  const renderErrors = () => {
+    titleErrors.textContent = mutationError;
+    bodyErrors.textContent = mutationError;
+    previewErrors.textContent = previewError;
+    title.toggleAttribute("aria-invalid", Boolean(mutationError));
+    body.toggleAttribute("aria-invalid", Boolean(mutationError || previewError));
+  };
+
+  const setMutationErrors = (message) => {
+    mutationError = message;
+    renderErrors();
+  };
+
+  const setPreviewErrors = (message) => {
+    previewError = message;
+    renderErrors();
   };
 
   const updatePage = (page, savedVersion) => {
@@ -51,7 +63,7 @@
     form.dataset.expectedUpdatedAt = page.updated_at;
     saveStatus.textContent = `${new Date(page.updated_at).toLocaleString("ja-JP")}・${page.status}`;
     dirty = editVersion !== savedVersion;
-    if (!dirty) setErrors("", []);
+    setMutationErrors("");
   };
 
   const updatePreview = async (sequence) => {
@@ -59,10 +71,10 @@
       const result = await request("/api/preview", payload());
       if (sequence !== previewSequence) return;
       preview.innerHTML = result.html;
-      setErrors(result.errors.join(" "), result.errors.length ? ["body"] : []);
+      setPreviewErrors(result.errors.join(" "));
     } catch (error) {
       if (sequence !== previewSequence) return;
-      setErrors(error.message, ["body"]);
+      setPreviewErrors(error.message);
     }
   };
 
@@ -84,7 +96,7 @@
       updatePage(await request("/api/save", payload()), savedVersion);
     } catch (error) {
       saveStatus.textContent = error.message;
-      setErrors(error.message, ["title", "body"]);
+      setMutationErrors(error.message);
     }
   });
   document.querySelector("#publish").addEventListener("click", async () => {
@@ -103,7 +115,7 @@
       );
     } catch (error) {
       saveStatus.textContent = error.message;
-      setErrors(error.message, ["title", "body"]);
+      setMutationErrors(error.message);
     }
   });
   document.querySelector("#unpublish").addEventListener("click", async () => {

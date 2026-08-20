@@ -142,12 +142,15 @@ def test_editor_contains_split_view_accessible_controls_and_scripts(tmp_path):
     assert response.status == 200
     assert '<label for="title">タイトル</label>' in response.body
     assert 'aria-describedby="title-errors"' in response.body
-    assert 'aria-describedby="body-errors"' in response.body
+    assert 'aria-describedby="body-errors body-preview-errors"' in response.body
     assert '<textarea id="body"' in response.body
     assert 'aria-live="polite"' in response.body
     assert 'src="/static/authoring/editor.js"' in response.body
     assert "先に保存してください" in javascript
     assert "previewSequence" in javascript
+    assert "setPreviewErrors" in javascript
+    assert "setMutationErrors" in javascript
+    assert "setErrors(" not in javascript
     assert 'pre { max-width: 100%; overflow-x: auto; }' in stylesheet
     assert 'img { max-width: 100%; height: auto; }' in stylesheet
     assert "box-sizing: border-box" in stylesheet
