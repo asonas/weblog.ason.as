@@ -87,6 +87,46 @@ def test_republish_preserves_first_published_at(tmp_path):
     assert republished.updated_at > first.updated_at
 
 
+def test_later_publish_uses_last_release_for_an_edited_published_page(tmp_path):
+    service = service_for(tmp_path)
+    page_a = service.save_draft(new_date_request(body="Aの公開版"))
+    service.publish(PublishRequest(page_a.id))
+
+    service.save_draft(SaveRequest(page_type="date", page_id=page_a.id, body="Aの編集中"))
+    page_b = service.save_draft(
+        SaveRequest(page_type="date", page_date=date(2026, 1, 2), body="Bの公開版")
+    )
+    service.publish(PublishRequest(page_b.id))
+
+    public_a = (tmp_path / "site" / "2026-01-01" / "index.html").read_text(
+        encoding="utf-8"
+    )
+    assert "Aの公開版" in public_a
+    assert "Aの編集中" not in public_a
+
+
+def test_corrupt_released_source_rejects_unrelated_publish_without_site_swap(tmp_path):
+    service = service_for(tmp_path)
+    page_a = service.save_draft(new_date_request(body="Aの公開版"))
+    service.publish(PublishRequest(page_a.id))
+    page_b = service.save_draft(
+        SaveRequest(page_type="date", page_date=date(2026, 1, 2), body="Bの公開版")
+    )
+    site_before = {
+        path: path.read_bytes() for path in (tmp_path / "site").rglob("*") if path.is_file()
+    }
+    page_a.path.write_text("---\nstatus: broken\n---\n壊れた本文\n", encoding="utf-8")
+
+    with pytest.raises(PublishError, match="released page"):
+        service.publish(PublishRequest(page_b.id))
+
+    site_after = {
+        path: path.read_bytes() for path in (tmp_path / "site").rglob("*") if path.is_file()
+    }
+    assert site_after == site_before
+    assert not (tmp_path / "site" / "2026-01-02").exists()
+
+
 def test_unpublish_rebuilds_referenced_page_as_public_placeholder(tmp_path):
     service = service_for(tmp_path)
     source = service.save_draft(new_date_request(body="[[page-a]]"))
@@ -135,18 +175,39 @@ def test_published_rename_redirect_survives_a_fresh_service_publish(tmp_path):
     assert 'url=/new-public' in redirect
 
 
+def test_persisted_rename_redirect_chain_flattens_after_restart(tmp_path):
+    service = service_for(tmp_path)
+    page = service.save_draft(SaveRequest(page_type="named", name="page-a", body="本文"))
+    service.publish(PublishRequest(page.id))
+    service.rename(page.id, "page-b")
+    service.rename(page.id, "page-c")
+
+    restarted = service_for(tmp_path)
+    later = restarted.save_draft(
+        SaveRequest(page_type="date", page_date=date(2026, 1, 2), body="後続公開")
+    )
+    restarted.publish(PublishRequest(later.id))
+
+    redirect_a = (tmp_path / "site" / "page-a" / "index.html").read_text(encoding="utf-8")
+    redirect_b = (tmp_path / "site" / "page-b" / "index.html").read_text(encoding="utf-8")
+    assert 'url=/page-c' in redirect_a
+    assert 'url=/page-c' in redirect_b
+    assert 'url=/page-b' not in redirect_a
+
+
 def test_failed_published_rename_restores_source_without_redirect_metadata(tmp_path):
     service = service_for(tmp_path)
     page = service.save_draft(SaveRequest(page_type="named", name="old-public", body="本文"))
     service.publish(PublishRequest(page.id))
     service.publisher = FailingPublisher(tmp_path / "site")
+    metadata_before = (tmp_path / "content" / ".authoring-redirects.json").read_bytes()
 
     with pytest.raises(PublishError, match="simulated build failure"):
         service.rename(page.id, "new-public")
 
     assert (tmp_path / "content" / "old-public.md").exists()
     assert not (tmp_path / "content" / "new-public.md").exists()
-    assert not (tmp_path / "content" / ".authoring-redirects.json").exists()
+    assert (tmp_path / "content" / ".authoring-redirects.json").read_bytes() == metadata_before
 
 
 def test_failed_rename_swap_restores_existing_redirect_metadata(tmp_path):

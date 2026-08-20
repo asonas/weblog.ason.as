@@ -6,12 +6,33 @@ from pathlib import Path
 from urllib.parse import quote, unquote
 
 from .markdown import render_markdown, render_page
-from .models import PageDocument, PublishError
+from .models import PageDocument, PublishError, Redirect
 from .repository import RepositorySnapshot
 
 
 _TEMPLATE = Path(__file__).parent.parent / "templates" / "authoring" / "public.html"
 _EMPTY_STATE = "まだ内容がありません"
+
+
+def flatten_redirects(redirects: tuple[Redirect, ...]) -> tuple[Redirect, ...]:
+    targets = {redirect.old_route: redirect.new_route for redirect in redirects}
+    flattened: list[Redirect] = []
+    seen_old_routes: set[str] = set()
+    for redirect in redirects:
+        old_route = redirect.old_route
+        if old_route in seen_old_routes:
+            continue
+        seen_old_routes.add(old_route)
+        route = old_route
+        visited: set[str] = set()
+        while route in targets:
+            if route in visited:
+                raise PublishError(f"redirect cycle detected: {old_route}")
+            visited.add(route)
+            route = targets[route]
+        if route != old_route:
+            flattened.append(Redirect(old_route=old_route, new_route=route))
+    return tuple(flattened)
 
 
 class StaticPublisher:
@@ -138,7 +159,7 @@ class StaticPublisher:
         }
         return tuple(
             (redirect.old_route, redirect.new_route)
-            for redirect in snapshot.redirects
+            for redirect in flatten_redirects(snapshot.redirects)
             if redirect.new_route in published_named_routes
         )
 

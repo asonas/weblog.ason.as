@@ -60,6 +60,27 @@ def test_build_writes_redirect_only_for_published_named_page(tmp_path):
     assert not (destination / "old-draft").exists()
 
 
+def test_build_flattens_redirect_chain_to_final_published_route(tmp_path):
+    repository = repository_for(tmp_path)
+    page = repository.save_draft(SaveRequest(page_type="named", name="page-c", body="本文"))
+    snapshot = replace(
+        published_snapshot(repository.refresh(), page.id),
+        redirects=(
+            Redirect(old_route="page-a", new_route="page-b"),
+            Redirect(old_route="page-b", new_route="page-c"),
+        ),
+    )
+    destination = tmp_path / "next-site"
+
+    publisher(tmp_path).build(snapshot, destination)
+
+    page_a = (destination / "page-a" / "index.html").read_text(encoding="utf-8")
+    page_b = (destination / "page-b" / "index.html").read_text(encoding="utf-8")
+    assert 'url=/page-c' in page_a
+    assert 'url=/page-c' in page_b
+    assert 'url=/page-b' not in page_a
+
+
 def test_build_rejects_problem_required_by_public_candidate(tmp_path):
     repository = repository_for(tmp_path)
     published = repository.save_draft(new_date_request(date(2026, 1, 1), "[[page-a]]"))
