@@ -62,6 +62,27 @@ class TestFrontmatter < Minitest::Test
     assert_includes result.detail, "status"
   end
 
+  def test_non_string_status_returns_page_problem
+    result = WeblogAuthoring.parse_document(
+      Pathname("/tmp/content/page-a.md"),
+      <<~DOC
+        ---
+        id: page-id
+        page_type: named
+        name: page-a
+        status:
+          - draft
+        created_at: 2026-01-01 00:00:00 Z
+        updated_at: 2026-01-01 00:00:00 Z
+        ---
+        body
+      DOC
+    )
+
+    assert_instance_of WeblogAuthoring::PageProblem, result
+    assert_includes result.detail, "status"
+  end
+
   def test_non_string_id_returns_page_problem
     result = WeblogAuthoring.parse_document(
       Pathname("/tmp/content/page-a.md"),
