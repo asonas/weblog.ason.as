@@ -174,6 +174,18 @@ class TestRepository < Minitest::Test
     assert_includes source.path.read, "[[page-b]]"
   end
 
+  def test_rename_updates_the_renamed_page_self_links
+    repository = repository_for
+    page = repository.save_draft(
+      WeblogAuthoring::SaveRequest.new(page_type: "named", name: "page-a", body: "[[page-a]]")
+    )
+
+    renamed = repository.rename_named_page(page.id, "page-b")
+
+    assert_equal "[[page-b]]", renamed.body
+    assert_equal "[[page-b]]", renamed.path.read(encoding: "UTF-8").split("---").last.strip
+  end
+
   def test_rename_uses_case_distinguishing_canonical_path_rule
     repository = repository_for
     page = repository.save_draft(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "page-a", body: "本文"))

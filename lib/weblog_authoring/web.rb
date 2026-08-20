@@ -20,11 +20,12 @@ module WeblogAuthoring
   end
 
   class WebInputError < StandardError
-    attr_reader :status
+    attr_reader :field, :status
 
-    def initialize(message, status: 422)
+    def initialize(message, status: 422, field: nil)
       super(message)
       @status = status
+      @field = field
     end
   end
 
@@ -53,7 +54,7 @@ module WeblogAuthoring
     rescue WebNotFoundError => error
       text_response(404, error.message)
     rescue WebInputError => error
-      json_response(error.status, error_payload(error.message))
+      json_response(error.status, error_payload(error.message, field: error.field))
     rescue ArgumentError, TypeError => error
       json_response(422, error_payload(error.message))
     rescue ConflictError, PublishError => error
@@ -65,7 +66,11 @@ module WeblogAuthoring
     def dispatch(request)
       path = request.path_info.to_s
 
-      return static_response(path) if path.start_with?("/static/authoring/")
+      if path.start_with?("/static/authoring/")
+        return method_not_allowed_response unless request.get?
+
+        return static_response(path)
+      end
       return api_response(request, path) if path.start_with?("/api/")
       return method_not_allowed_response if path == "/api" && !request.get?
       return method_not_allowed_response unless request.get?
@@ -179,7 +184,8 @@ module WeblogAuthoring
         status: CGI.escapeHTML(page&.status || "未保存"),
         saved_at: CGI.escapeHTML(page ? format_time(page.updated_at) : "未保存"),
         expected_updated_at: html_attribute(page&.updated_at&.iso8601.to_s),
-        rename_hidden: page&.page_type == "named" ? "" : " hidden"
+        rename_hidden: page&.page_type == "named" ? "" : " hidden",
+        title_hidden: (page&.page_type || draft.fetch(:page_type, "date")) == "named" ? " hidden" : ""
       }
       html_response(render_template("editor.html", values))
     end
@@ -291,7 +297,12 @@ module WeblogAuthoring
       when "/api/rename"
         page_id = required_string(payload, "page_id")
         name = required_string(payload, "name")
-        json_response(200, page_json(@service.rename(page_id, name)))
+        begin
+          normalized_name = WeblogAuthoring.validate_page_name(name)
+        rescue ArgumentError => error
+          raise WebInputError.new(error.message, field: "name")
+        end
+        json_response(200, page_json(@service.rename(page_id, normalized_name)))
       else
         text_response(404, "APIが見つかりません")
       end
@@ -323,14 +334,16 @@ module WeblogAuthoring
                   page
                 end
       page_type = optional_string(payload, "page_type") || current&.page_type || "date"
-      raise ArgumentError, "page_type が不正です" unless ALLOWED_PAGE_TYPES.include?(page_type)
+      unless ALLOWED_PAGE_TYPES.include?(page_type)
+        raise WebInputError.new("page_type が不正です", field: "page_type")
+      end
 
       body = if payload.key?("body")
                optional_string(payload, "body") || ""
              elsif preview
                ""
              else
-               raise ArgumentError, "body は必須です"
+               raise WebInputError.new("body は必須です", field: "body")
              end
       page_date = if page_type == "date"
                     raw_date = optional_string(payload, "date")
@@ -341,6 +354,13 @@ module WeblogAuthoring
       name = if page_type == "named"
                optional_string(payload, "name") || current&.name
              end
+      if !preview && page_type == "named"
+        begin
+          name = WeblogAuthoring.validate_page_name(name.to_s)
+        rescue ArgumentError => error
+          raise WebInputError.new(error.message, field: "name")
+        end
+      end
 
       SaveRequest.new(
         page_type:,
@@ -356,14 +376,16 @@ module WeblogAuthoring
     def optional_string(payload, key)
       value = payload[key]
       return nil if value.nil?
-      raise ArgumentError, "#{key} は文字列にしてください" unless value.is_a?(String)
+      unless value.is_a?(String)
+        raise WebInputError.new("#{key} は文字列にしてください", field: key)
+      end
 
       value.empty? ? nil : value
     end
 
     def required_string(payload, key)
       value = optional_string(payload, key)
-      raise ArgumentError, "#{key} は必須です" if value.nil?
+      raise WebInputError.new("#{key} は必須です", field: key) if value.nil?
 
       value
     end
@@ -374,13 +396,13 @@ module WeblogAuthoring
 
       Time.iso8601(value)
     rescue ArgumentError
-      raise ArgumentError, "expected_updated_at が不正です"
+      raise WebInputError.new("expected_updated_at が不正です", field: "expected_updated_at")
     end
 
     def parse_date(value, key)
       Date.iso8601(value)
     rescue ArgumentError
-      raise ArgumentError, "#{key} が不正です"
+      raise WebInputError.new("#{key} が不正です", field: key)
     end
 
     def page_json(page)
@@ -416,8 +438,8 @@ module WeblogAuthoring
       CGI.escapeHTML(value.to_s)
     end
 
-    def error_payload(message)
-      { "error" => message, "errors" => { "form" => [message] } }
+    def error_payload(message, field: nil)
+      { "error" => message, "errors" => { field || "form" => [message] } }
     end
 
     def method_not_allowed_response

@@ -27,7 +27,7 @@
     page_type: form.dataset.pageType,
     date: form.dataset.pageDate || undefined,
     name: form.dataset.pageName || undefined,
-    title: title.value,
+    title: title ? title.value : undefined,
     body: body.value,
     expected_updated_at: form.dataset.expectedUpdatedAt || undefined,
   });
@@ -57,10 +57,10 @@
   };
 
   const renderErrors = (message = "", previewMessage = "") => {
-    titleErrors.textContent = message;
+    if (titleErrors) titleErrors.textContent = message;
     bodyErrors.textContent = message;
     previewErrors.textContent = previewMessage;
-    title.toggleAttribute("aria-invalid", Boolean(message));
+    if (title) title.toggleAttribute("aria-invalid", Boolean(message));
     body.toggleAttribute("aria-invalid", Boolean(message || previewMessage));
   };
 
@@ -123,7 +123,7 @@
     state.previewTimer = window.setTimeout(() => updatePreview(sequence), 300);
   };
 
-  title.addEventListener("input", schedulePreview);
+  if (title) title.addEventListener("input", schedulePreview);
   body.addEventListener("input", schedulePreview);
 
   form.addEventListener("submit", async (event) => {

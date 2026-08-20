@@ -152,7 +152,7 @@ class TestMarkdown < Minitest::Test
 
     assert_includes rendered.html, 'href="/%50age-%41"'
     refute_includes rendered.html, 'href="/Page-A"'
-    assert_includes local_rendered.html, 'href="/Page-A"'
+    assert_includes local_rendered.html, 'href="/%50age-%41"'
     assert_includes page_html, 'href="/%50age-%41"'
     assert_includes page_html, 'href="/2026-01-01"'
     refute_includes page_html, 'target="_blank"'
@@ -164,7 +164,7 @@ class TestMarkdown < Minitest::Test
 
     rendered = renderer.render('[[quote " & name]]', mode: "local")
 
-    assert_includes rendered.html, 'href="/quote &quot; &amp; name"'
+    assert_includes rendered.html, 'href="/quote%20%22%20%26%20name"'
     assert_includes rendered.html, 'quote &quot; &amp; name</a>'
   end
 

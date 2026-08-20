@@ -27,11 +27,13 @@
         <div class="editor-grid">
           <section aria-labelledby="input-heading">
             <h2 id="input-heading">入力</h2>
-            <div class="field-group">
-              <label for="title">タイトル</label>
-              <input id="title" name="title" value="<%= document_title %>" aria-describedby="title-errors">
-              <p id="title-errors" class="input-error" aria-live="polite"></p>
-            </div>
+            <% unless title_hidden == " hidden" %>
+              <div class="field-group">
+                <label for="title">タイトル</label>
+                <input id="title" name="title" value="<%= document_title %>" aria-describedby="title-errors">
+                <p id="title-errors" class="input-error" aria-live="polite"></p>
+              </div>
+            <% end %>
             <div class="field-group">
               <label for="body">本文（Markdown）</label>
               <textarea id="body" name="body" rows="24"

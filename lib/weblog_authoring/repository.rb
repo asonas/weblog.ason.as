@@ -246,6 +246,16 @@ module WeblogAuthoring
 
       snapshot.pages.each do |source|
         if source.id == page.id
+          body = WeblogAuthoring.replace_wiki_links(
+            source.body,
+            old_name: page.name.to_s,
+            new_name: normalized_name
+          )
+          renamed_page = replace_document(
+            renamed_page,
+            body:,
+            links: WeblogAuthoring.extract_wiki_links(body)
+          )
           transaction.write(destination, WeblogAuthoring.serialize_document(renamed_page))
           next
         end

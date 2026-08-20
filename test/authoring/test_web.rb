@@ -129,6 +129,7 @@ class TestWeb < Minitest::Test
     assert_equal 200, status
     assert_includes body, 'data-page-type="named"'
     assert_includes body, 'data-page-name="hello world"'
+    refute_includes body, 'id="title"'
 
     status, _headers, body = json_request(
       "/api/save",
@@ -160,6 +161,18 @@ class TestWeb < Minitest::Test
 
     assert_equal 403, status
     assert_includes body, "localhost"
+  end
+
+  def test_api_validation_errors_identify_the_input_field
+    status, _headers, body = json_request(
+      "/api/save",
+      page_type: "named",
+      name: "bad/name",
+      body: "本文"
+    )
+
+    assert_equal 422, status
+    assert JSON.parse(body).fetch("errors").key?("name")
   end
 
   def test_route_decoding_rejects_slashes_and_does_not_decode_twice
