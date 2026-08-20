@@ -75,9 +75,9 @@ module WeblogAuthoring
       "page_date" => document.page_date,
       "title" => document.title,
       "status" => document.status,
-      "created_at" => document.created_at,
-      "updated_at" => document.updated_at,
-      "published_at" => document.published_at
+      "created_at" => document.created_at&.dup,
+      "updated_at" => document.updated_at&.dup,
+      "published_at" => document.published_at&.dup
     }
     serialized = Psych.safe_dump(values, permitted_classes: [Date, Time], line_width: -1).delete_prefix("---\n")
 

@@ -99,4 +99,7 @@ module WeblogAuthoring
       freeze
     end
   end
+
+  class ConflictError < StandardError
+  end
 end
