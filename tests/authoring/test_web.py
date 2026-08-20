@@ -134,10 +134,20 @@ def test_api_returns_japanese_errors_for_invalid_and_conflicting_requests(tmp_pa
 
 
 def test_editor_contains_split_view_accessible_controls_and_scripts(tmp_path):
-    response = request_json(create_app(service_for(tmp_path)), "GET", "/editor/today")
+    app = create_app(service_for(tmp_path))
+    response = request_json(app, "GET", "/editor/today")
+    javascript = request_json(app, "GET", "/static/authoring/editor.js").body
+    stylesheet = request_json(app, "GET", "/static/authoring/authoring.css").body
 
     assert response.status == 200
     assert '<label for="title">タイトル</label>' in response.body
+    assert 'aria-describedby="title-errors"' in response.body
+    assert 'aria-describedby="body-errors"' in response.body
     assert '<textarea id="body"' in response.body
     assert 'aria-live="polite"' in response.body
     assert 'src="/static/authoring/editor.js"' in response.body
+    assert "先に保存してください" in javascript
+    assert "previewSequence" in javascript
+    assert 'pre { max-width: 100%; overflow-x: auto; }' in stylesheet
+    assert 'img { max-width: 100%; height: auto; }' in stylesheet
+    assert "box-sizing: border-box" in stylesheet

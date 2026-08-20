@@ -1,11 +1,13 @@
 :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
 body { margin: 0; }
-header, main { max-width: 72rem; margin: auto; padding: 1rem; }
+header, main { box-sizing: border-box; width: 100%; max-width: 72rem; margin: auto; padding: 1rem; overflow-wrap: anywhere; }
 nav { display: flex; gap: 1rem; }
 .editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem; }
 label, input, textarea, select { display: block; width: 100%; box-sizing: border-box; margin-block: .4rem; }
 textarea { resize: vertical; }
 #preview { min-height: 12rem; overflow-wrap: anywhere; }
+pre { max-width: 100%; overflow-x: auto; }
+img { max-width: 100%; height: auto; }
 .editor-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
 button, input, textarea, select, a { outline-offset: 3px; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid Highlight; }
