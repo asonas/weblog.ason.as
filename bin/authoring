@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "optparse"
+require "rackup"
+require "webrick"
+
+require_relative "../lib/weblog_authoring/app"
+
+module WeblogAuthoring
+  module AuthoringCLI
+    LOOPBACK_HOSTS = WebApp::LOOPBACK_HOSTS
+
+    module_function
+
+    def main(argv = ARGV, root: Application::ROOT, server: Rackup::Handler::WEBrick)
+      options = parse_options(argv)
+      validate_host!(options.fetch(:host))
+
+      app = Application.build(root:)
+      server.run(
+        app,
+        Host: options.fetch(:host),
+        Port: options.fetch(:port),
+        AccessLog: [],
+        Logger: WEBrick::Log.new($stderr, WEBrick::Log::WARN)
+      )
+      0
+    rescue Interrupt
+      0
+    end
+
+    def parse_options(argv)
+      options = { host: "127.0.0.1", port: 8000 }
+      parser = OptionParser.new do |arguments|
+        arguments.banner = "Usage: bin/authoring [options]"
+        arguments.on("--host HOST", "loopback host (default: 127.0.0.1)") { |host| options[:host] = host }
+        arguments.on("--port PORT", Integer, "port (default: 8000)") { |port| options[:port] = port }
+      end
+      parser.parse!(argv)
+      raise OptionParser::InvalidArgument, "port must be between 1 and 65535" unless options[:port].between?(1, 65_535)
+
+      options
+    end
+
+    def validate_host!(host)
+      return if LOOPBACK_HOSTS.include?(host)
+
+      raise OptionParser::InvalidArgument, "--host must be a loopback host (127.0.0.1, localhost, or ::1)"
+    end
+  end
+end
+
+exit(WeblogAuthoring::AuthoringCLI.main)
