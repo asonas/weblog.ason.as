@@ -3,6 +3,8 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
+from .models import PageType
+
 
 _DATE_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -30,7 +32,7 @@ def encoded_page_name(name: str) -> str:
 
 def page_path(
     content_dir: Path,
-    page_type: str,
+    page_type: PageType,
     name: str | None,
     page_date: date | None,
 ) -> Path:

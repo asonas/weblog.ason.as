@@ -9,12 +9,19 @@ _FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 
 def _segments(body: str):
     offset = 0
-    fenced = False
+    fence: tuple[str, int] | None = None
     for line in body.splitlines(keepends=True):
-        is_fence = _FENCE.match(line) is not None
-        if is_fence:
-            fenced = not fenced
-        yield line, offset, fenced or is_fence
+        match = _FENCE.match(line)
+        was_fenced = fence is not None
+        if match is not None:
+            marker = match.group(1)
+            marker_type = marker[0]
+            marker_length = len(marker)
+            if fence is None:
+                fence = (marker_type, marker_length)
+            elif marker_type == fence[0] and marker_length >= fence[1]:
+                fence = None
+        yield line, offset, was_fenced or match is not None
         offset += len(line)
 
 

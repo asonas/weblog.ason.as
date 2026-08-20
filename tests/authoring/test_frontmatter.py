@@ -60,3 +60,41 @@ def test_missing_id_returns_page_problem(tmp_path):
     )
     assert isinstance(result, PageProblem)
     assert "id" in result.detail
+
+
+def test_date_document_rejects_datetime_page_date(tmp_path):
+    result = parse_document(
+        tmp_path / "2026-01-01.md",
+        "---\n"
+        "id: page-id\n"
+        "page_type: date\n"
+        "page_date: 2026-01-01T00:00:00+00:00\n"
+        "status: draft\n"
+        "created_at: 2026-01-01T00:00:00+00:00\n"
+        "updated_at: 2026-01-01T00:00:00+00:00\n"
+        "---\nbody\n",
+    )
+    assert isinstance(result, PageProblem)
+    assert "page_date" in result.detail
+
+
+@pytest.mark.parametrize(
+    "frontmatter, expected",
+    [
+        ("page_type: date\npage_date: null\n", "page_date"),
+        ("page_type: named\nname: null\n", "name"),
+    ],
+)
+def test_document_requires_identity_for_its_page_type(tmp_path, frontmatter, expected):
+    result = parse_document(
+        tmp_path / "page.md",
+        "---\n"
+        "id: page-id\n"
+        f"{frontmatter}"
+        "status: draft\n"
+        "created_at: 2026-01-01T00:00:00+00:00\n"
+        "updated_at: 2026-01-01T00:00:00+00:00\n"
+        "---\nbody\n",
+    )
+    assert isinstance(result, PageProblem)
+    assert expected in result.detail

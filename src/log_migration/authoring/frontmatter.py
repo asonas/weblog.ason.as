@@ -40,7 +40,9 @@ def parse_document(path: Path, text: str) -> PageDocument | PageProblem:
     if not all(isinstance(values[key], datetime) for key in ("created_at", "updated_at")):
         return _problem(path, "created_at and updated_at must be datetimes")
     page_date = values.get("page_date")
-    if page_date is not None and not isinstance(page_date, date):
+    if isinstance(page_date, datetime) or (
+        page_date is not None and not isinstance(page_date, date)
+    ):
         return _problem(path, "page_date must be a date")
     published_at = values.get("published_at")
     if published_at is not None and not isinstance(published_at, datetime):
@@ -51,6 +53,10 @@ def parse_document(path: Path, text: str) -> PageDocument | PageProblem:
         return _problem(path, "name must be a string")
     if title is not None and not isinstance(title, str):
         return _problem(path, "title must be a string")
+    if values["page_type"] == "date" and page_date is None:
+        return _problem(path, "date pages require page_date")
+    if values["page_type"] == "named" and not name:
+        return _problem(path, "named pages require name")
     return PageDocument(
         id=values["id"],
         page_type=values["page_type"],
