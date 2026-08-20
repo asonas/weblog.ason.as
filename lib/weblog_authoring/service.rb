@@ -95,7 +95,7 @@ module WeblogAuthoring
       candidate = release_candidate_snapshot(after_rename, release_after_rename)
       publish_candidate(candidate, release_after_rename, nil, source_before:)
       repository.find_route(renamed.route) || renamed
-    rescue StandardError
+    rescue ConflictError, PublishError, ArgumentError, FileTransactionError, SystemCallError, IOError
       restore_source_files(source_before) if defined?(source_before) && source_before
       repository.refresh if defined?(source_before) && source_before
       raise
@@ -225,7 +225,7 @@ module WeblogAuthoring
 
         begin
           publisher.swap(staging)
-        rescue StandardError
+        rescue PublishError, FileTransactionError, SystemCallError, IOError
           restore_source_files(source_before)
           raise
         end
@@ -234,7 +234,7 @@ module WeblogAuthoring
         remove_staging(staging)
         repository.refresh
         raise
-      rescue StandardError => error
+      rescue ArgumentError, TypeError, FileTransactionError, SystemCallError, IOError => error
         restore_source_files(source_before)
         remove_staging(staging)
         repository.refresh

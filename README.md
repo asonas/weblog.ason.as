@@ -70,7 +70,7 @@ mise exec -- .venv/bin/python -m log_migration \
 静的サイトは、例えば次のコマンドでローカル確認できます。
 
 ```sh
-mise exec -- .venv/bin/python -m http.server 8000 --directory data/normalized/site
+mise exec -- ruby -run -e httpd -- -p 8000 data/normalized/site
 ```
 
 ## アセット取得
@@ -103,8 +103,7 @@ mise exec -- .venv/bin/python -m log_migration.assets \
 ## テスト
 
 ```sh
-mise exec -- bundle exec ruby -Itest test/authoring/test_web.rb
-mise exec -- bundle exec ruby -Itest test/authoring/test_e2e.rb
+mise exec -- bundle exec ruby -Itest -e 'Dir["test/authoring/test_*.rb"].sort.each { |file| require_relative file }'
 mise exec -- .venv/bin/python -m pytest -q
 ```
 

@@ -446,7 +446,7 @@ module WeblogAuthoring
         return nil if lexer.nil? || lexer.tag == "plaintext"
 
         Rouge::Formatters::HTML.new.format(lexer.lex(text))
-      rescue StandardError
+      rescue ArgumentError, EncodingError, Rouge::Guesser::Ambiguous, Rouge::RegexLexer::InvalidRegex
         nil
       end
 

@@ -371,7 +371,7 @@ module WeblogAuthoring
     rescue PublishError
       remove_path(destination_path) if defined?(destination_path) && destination_path.exist?
       raise
-    rescue StandardError => error
+    rescue ArgumentError, TypeError, EncodingError, SystemCallError, IOError => error
       remove_path(destination_path) if defined?(destination_path) && destination_path.exist?
       raise PublishError, "public site build failed: #{error.message}"
     end
@@ -383,10 +383,10 @@ module WeblogAuthoring
       begin
         File.rename(output_dir, previous_path) if output_dir.exist?
         File.rename(destination_path, output_dir)
-      rescue StandardError => error
+      rescue SystemCallError, IOError => error
         begin
           File.rename(previous_path, output_dir) if previous_path.exist? && !output_dir.exist?
-        rescue StandardError => restore_error
+        rescue SystemCallError, IOError => restore_error
           raise PublishError, "public site swap failed: #{error.message}; restore failed: #{restore_error.message}"
         end
 
@@ -586,7 +586,7 @@ module WeblogAuthoring
     def reset_destination(destination)
       remove_path(destination) if destination.exist?
       destination.mkpath
-    rescue StandardError => error
+    rescue SystemCallError, IOError => error
       raise PublishError, "cannot prepare staging directory: #{error.message}"
     end
 
@@ -598,7 +598,7 @@ module WeblogAuthoring
       output_path = destination.join(encoded_route(route), "index.html")
       output_path.dirname.mkpath
       output_path.write(content, encoding: "UTF-8")
-    rescue StandardError => error
+    rescue EncodingError, SystemCallError, IOError => error
       raise PublishError, "cannot write public page #{route}: #{error.message}"
     end
 

@@ -3,8 +3,17 @@
 require "pathname"
 require "securerandom"
 
+require_relative "database"
+require_relative "frontmatter"
+require_relative "links"
+require_relative "models"
+require_relative "names"
+
 module WeblogAuthoring
   TOKYO_OFFSET = "+09:00"
+
+  class FileTransactionError < StandardError
+  end
 
   RepositorySnapshot = Struct.new(:pages, :problems, :redirects, keyword_init: true) do
     def initialize(pages: [], problems: [], redirects: [])
@@ -51,7 +60,7 @@ module WeblogAuthoring
         @deletes.each_key do |path|
           path.unlink if path.exist?
         end
-      rescue StandardError => error
+      rescue SystemCallError, IOError => error
         rollback(original, created, error)
       end
     end
@@ -63,13 +72,13 @@ module WeblogAuthoring
 
       original.each do |path, content|
         replace(path, content)
-      rescue StandardError => error
+      rescue SystemCallError, IOError => error
         rollback_errors << error
       end
 
       created.each do |path|
         path.unlink if path.exist?
-      rescue StandardError => error
+      rescue SystemCallError, IOError => error
         rollback_errors << error
       end
 
@@ -78,7 +87,7 @@ module WeblogAuthoring
       end
 
       details = rollback_errors.map(&:message).join("; ")
-      raise RuntimeError, "file transaction failed: #{original_error.message}; rollback failed: #{details}"
+      raise FileTransactionError, "file transaction failed: #{original_error.message}; rollback failed: #{details}"
     end
 
     def replace(path, content)
