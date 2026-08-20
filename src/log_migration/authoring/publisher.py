@@ -20,7 +20,8 @@ class StaticPublisher:
 
     def build(self, snapshot: RepositorySnapshot, destination: Path) -> None:
         candidates = self._public_candidates(snapshot)
-        self._validate(snapshot, candidates)
+        redirects = self._published_redirects(snapshot)
+        self._validate(snapshot, candidates, redirects)
         try:
             if destination.exists():
                 _remove(destination)
@@ -34,7 +35,7 @@ class StaticPublisher:
                     title = page.display_title
                     content = render_page(page, backlinks, mode="public")
                 self._write(destination, route, self._document(title, content))
-            for old_route, new_route in self._published_redirects(snapshot):
+            for old_route, new_route in redirects:
                 self._write(destination, old_route, self._redirect(new_route))
         except PublishError:
             raise
@@ -95,8 +96,12 @@ class StaticPublisher:
         self,
         snapshot: RepositorySnapshot,
         candidates: dict[str, PageDocument | None],
+        redirects: tuple[tuple[str, str], ...],
     ) -> None:
         candidate_routes = set(candidates)
+        for old_route, _new_route in redirects:
+            if old_route in candidate_routes:
+                raise PublishError(f"redirect collides with public route: {old_route}")
         for problem in snapshot.problems:
             route = unquote(problem.path.stem)
             if route in candidate_routes:
@@ -171,6 +176,10 @@ class StaticPublisher:
     @staticmethod
     def _write(destination: Path, route: str, content: str) -> None:
         path = destination / _encoded_route(route) / "index.html"
+        try:
+            path.resolve().relative_to(destination.resolve())
+        except ValueError as error:
+            raise PublishError(f"output route escapes destination: {route}") from error
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
 

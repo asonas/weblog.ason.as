@@ -97,6 +97,33 @@ def test_build_url_encodes_named_page_route(tmp_path):
     assert not (destination / "page a").exists()
 
 
+def test_publish_rejects_route_that_escapes_staging_destination(tmp_path):
+    repository = repository_for(tmp_path)
+    page = repository.save_draft(SaveRequest(page_type="named", name="..", body="公開本文"))
+    current_site = tmp_path / "site"
+    current_site.mkdir()
+    (current_site / "marker").write_text("before", encoding="utf-8")
+
+    with pytest.raises(PublishError, match="escapes destination"):
+        publisher(tmp_path).publish(published_snapshot(repository.refresh(), page.id))
+
+    assert (current_site / "marker").read_text(encoding="utf-8") == "before"
+    assert not (tmp_path / "index.html").exists()
+    assert not tuple(tmp_path.glob("site.staging-*"))
+
+
+def test_build_rejects_redirect_that_overwrites_current_public_route(tmp_path):
+    repository = repository_for(tmp_path)
+    page = repository.save_draft(SaveRequest(page_type="named", name="current", body="公開本文"))
+    snapshot = replace(
+        published_snapshot(repository.refresh(), page.id),
+        redirects=(Redirect(old_route="current", new_route="current"),),
+    )
+
+    with pytest.raises(PublishError, match="redirect.*current"):
+        publisher(tmp_path).build(snapshot, tmp_path / "next-site")
+
+
 def test_publish_keeps_existing_site_when_swap_fails(tmp_path, monkeypatch):
     repository = repository_for(tmp_path)
     published = repository.save_draft(new_date_request(date(2026, 1, 1), "公開本文"))
