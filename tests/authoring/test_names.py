@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -31,3 +31,8 @@ def test_page_name_rejects_syntax_delimiters():
     for name in ["[[page-a]]", "---", "status: draft"]:
         with pytest.raises(ValueError):
             validate_page_name(name)
+
+
+def test_date_page_path_rejects_datetime(tmp_path):
+    with pytest.raises(ValueError):
+        page_path(tmp_path, "date", None, datetime(2026, 1, 1, tzinfo=timezone.utc))

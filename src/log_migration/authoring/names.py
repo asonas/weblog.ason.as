@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -41,7 +41,7 @@ def page_path(
             raise ValueError("named pages require a name")
         return content_dir / f"{encoded_page_name(name)}.md"
     if page_type == "date":
-        if page_date is None:
+        if page_date is None or isinstance(page_date, datetime):
             raise ValueError("date pages require a date")
         return content_dir / f"{page_date.isoformat()}.md"
     raise ValueError(f"unknown page type: {page_type}")
