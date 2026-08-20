@@ -1,3 +1,4 @@
+import json
 import shutil
 import uuid
 from dataclasses import dataclass, replace
@@ -14,6 +15,7 @@ from .repository import ContentRepository, FileTransaction, RepositorySnapshot
 
 
 TOKYO = ZoneInfo("Asia/Tokyo")
+_REDIRECTS_FILENAME = ".authoring-redirects.json"
 
 
 @dataclass(frozen=True)
@@ -88,13 +90,13 @@ class AuthoringService:
         redirect = Redirect(old_route=page.route, new_route=renamed.route)
         try:
             candidate = self._snapshot_with_redirect(self._refresh(), redirect)
-            self._publish_snapshot(candidate)
+            self._publish_snapshot(candidate, candidate.redirects)
         except Exception:
             assert source_before is not None
             self._restore_source_files(source_before)
             self._refresh()
             raise
-        self._redirects = (*self._redirects, redirect)
+        self._refresh()
         return self.repository.get_page(page_id) or renamed
 
     def _publish_candidate(
@@ -126,10 +128,15 @@ class AuthoringService:
             raise PublishError(f"could not publish page: {error}") from error
         self._refresh()
 
-    def _publish_snapshot(self, snapshot: RepositorySnapshot) -> None:
+    def _publish_snapshot(
+        self, snapshot: RepositorySnapshot, redirects: tuple[Redirect, ...]
+    ) -> None:
         staging = self._staging_path()
         try:
             self.publisher.build(snapshot, staging)
+            transaction = FileTransaction()
+            transaction.write(self._redirects_path, self._serialize_redirects(redirects))
+            transaction.commit()
             self.publisher.swap(staging)
         except PublishError:
             self._remove_staging(staging)
@@ -140,8 +147,9 @@ class AuthoringService:
 
     def _refresh(self) -> RepositorySnapshot:
         snapshot = self.repository.refresh()
+        self._redirects = self._load_redirects()
         self.database.rebuild(snapshot)
-        return snapshot
+        return replace(snapshot, redirects=self._redirects)
 
     def _replace_page(
         self, snapshot: RepositorySnapshot, replacement: PageDocument
@@ -200,16 +208,62 @@ class AuthoringService:
                 path.unlink()
 
     def _source_files(self) -> dict[Path, bytes]:
-        return {
+        files = {
             path: path.read_bytes()
             for path in self.repository.content_dir.glob("*.md")
         }
+        if self._redirects_path.exists():
+            files[self._redirects_path] = self._redirects_path.read_bytes()
+        return files
 
     def _restore_source_files(self, source_before: dict[Path, bytes]) -> None:
         transaction = FileTransaction()
-        for path in self.repository.content_dir.glob("*.md"):
+        current_paths = list(self.repository.content_dir.glob("*.md"))
+        if self._redirects_path.exists():
+            current_paths.append(self._redirects_path)
+        for path in current_paths:
             if path not in source_before:
                 transaction.delete(path)
         for path, content in source_before.items():
             transaction.write(path, content)
         transaction.commit()
+
+    @property
+    def _redirects_path(self) -> Path:
+        return self.repository.content_dir / _REDIRECTS_FILENAME
+
+    def _load_redirects(self) -> tuple[Redirect, ...]:
+        if not self._redirects_path.exists():
+            return ()
+        try:
+            value = json.loads(self._redirects_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ConflictError(f"redirect metadata is invalid: {error}") from error
+        if not isinstance(value, dict) or set(value) != {"redirects"}:
+            raise ConflictError("redirect metadata must contain only redirects")
+        redirects = value["redirects"]
+        if not isinstance(redirects, list):
+            raise ConflictError("redirect metadata redirects must be a list")
+        loaded: list[Redirect] = []
+        for item in redirects:
+            if (
+                not isinstance(item, dict)
+                or set(item) != {"old_route", "new_route"}
+                or not isinstance(item["old_route"], str)
+                or not isinstance(item["new_route"], str)
+            ):
+                raise ConflictError("redirect metadata contains an invalid redirect")
+            redirect = Redirect(**item)
+            if redirect not in loaded:
+                loaded.append(redirect)
+        return tuple(loaded)
+
+    @staticmethod
+    def _serialize_redirects(redirects: tuple[Redirect, ...]) -> bytes:
+        value = {
+            "redirects": [
+                {"old_route": redirect.old_route, "new_route": redirect.new_route}
+                for redirect in redirects
+            ]
+        }
+        return (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode()

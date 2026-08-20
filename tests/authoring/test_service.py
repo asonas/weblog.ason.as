@@ -119,6 +119,58 @@ def test_rename_published_page_adds_redirect_but_draft_rename_does_not(tmp_path)
     assert service.repository.find_route("new-public").id == published.id
 
 
+def test_published_rename_redirect_survives_a_fresh_service_publish(tmp_path):
+    service = service_for(tmp_path)
+    page = service.save_draft(SaveRequest(page_type="named", name="old-public", body="本文"))
+    service.publish(PublishRequest(page.id))
+    service.rename(page.id, "new-public")
+
+    restarted = service_for(tmp_path)
+    later = restarted.save_draft(
+        SaveRequest(page_type="date", page_date=date(2026, 1, 2), body="後続公開")
+    )
+    restarted.publish(PublishRequest(later.id))
+
+    redirect = (tmp_path / "site" / "old-public" / "index.html").read_text(encoding="utf-8")
+    assert 'url=/new-public' in redirect
+
+
+def test_failed_published_rename_restores_source_without_redirect_metadata(tmp_path):
+    service = service_for(tmp_path)
+    page = service.save_draft(SaveRequest(page_type="named", name="old-public", body="本文"))
+    service.publish(PublishRequest(page.id))
+    service.publisher = FailingPublisher(tmp_path / "site")
+
+    with pytest.raises(PublishError, match="simulated build failure"):
+        service.rename(page.id, "new-public")
+
+    assert (tmp_path / "content" / "old-public.md").exists()
+    assert not (tmp_path / "content" / "new-public.md").exists()
+    assert not (tmp_path / "content" / ".authoring-redirects.json").exists()
+
+
+def test_failed_rename_swap_restores_existing_redirect_metadata(tmp_path):
+    service = service_for(tmp_path)
+    page = service.save_draft(SaveRequest(page_type="named", name="old-public", body="本文"))
+    service.publish(PublishRequest(page.id))
+    service.rename(page.id, "current-public")
+    service.publisher = FailingSwapPublisher(tmp_path / "site")
+
+    with pytest.raises(PublishError, match="simulated swap failure"):
+        service.rename(page.id, "next-public")
+
+    restarted = service_for(tmp_path)
+    later = restarted.save_draft(
+        SaveRequest(page_type="date", page_date=date(2026, 1, 2), body="後続公開")
+    )
+    restarted.publish(PublishRequest(later.id))
+
+    redirect = (tmp_path / "site" / "old-public" / "index.html").read_text(encoding="utf-8")
+    assert 'url=/current-public' in redirect
+    assert (tmp_path / "content" / "current-public.md").exists()
+    assert not (tmp_path / "content" / "next-public.md").exists()
+
+
 JST = ZoneInfo("Asia/Tokyo")
 
 
