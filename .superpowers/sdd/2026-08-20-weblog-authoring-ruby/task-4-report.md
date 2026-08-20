@@ -96,3 +96,51 @@
   `published_at` だけ既存 release snapshot を優先するため、Task 5 の service
   から原子的保存へ接続しやすい形にしている。
 - 変更は Task 4 で指定された 3 ファイルと report のみに限定した。
+
+## Fix Round 1
+
+### Findings addressed
+
+- missing release manifest を first publish と誤認しないよう、
+  `ReleaseManifest#load` はファイル不在で `PublishError` を返すよう修正した。
+- published named page の rename で、public build が旧 route を本体 page として
+  残さず、新 route に旧公開本文を表示し、旧 route から redirect するよう
+  修正した。
+- public output route encoding を shared named-page encoding に揃え、
+  `.` / `..` を page name として reject するようにした。
+
+### Implementation changes
+
+- `ReleaseManifest#load` の absent-file fast path を削除し、service が
+  明示的な空 `ReleaseSnapshot` を渡す first-publish 経路と区別した。
+- released body を public build に使う場合でも、current snapshot の
+  `name` / `route` / `path` を保持する `merge_released_page` を追加した。
+  これにより rename 後の new route で旧公開本文を描画しつつ、
+  `release_candidate` には current source 本文を保持できる。
+- `StaticPublisher#encoded_route` は date route だけ素通しし、それ以外は
+  `WeblogAuthoring.encoded_page_name` を使うように変更した。
+- `validate_page_name` で `.` と `..` を reject し、path traversal と
+  case-insensitive filesystem 上の出力 collision を shared rule 側で防いだ。
+
+### Additional verification
+
+- `mise exec -- ruby -c lib/weblog_authoring/publisher.rb`
+- `mise exec -- ruby -c lib/weblog_authoring/names.rb`
+- `mise exec -- ruby -c test/authoring/test_publisher.rb`
+- `mise exec -- ruby -c test/authoring/test_names.rb`
+- `mise exec -- ruby -Itest test/authoring/test_publisher.rb`
+- `mise exec -- ruby -Itest test/authoring/test_names.rb`
+
+結果:
+
+```text
+test_publisher.rb: 13 runs, 65 assertions, 0 failures, 0 errors, 0 skips
+test_names.rb: 6 runs, 24 assertions, 0 failures, 0 errors, 0 skips
+```
+
+### Added coverage
+
+- missing manifest rejection for `ReleaseManifest#load`
+- published rename rendering/redirect behavior
+- case-distinguishing output route encoding for uppercase named pages
+- `.` / `..` shared page-name rejection

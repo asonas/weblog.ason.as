@@ -4,7 +4,7 @@ require_relative "../test_helper"
 
 class TestNames < Minitest::Test
   def test_invalid_page_names_are_rejected
-    ["", "2026-01-01", "a/b", "a?b", "a#b", "a\nb", "a\x00b", "manage", "api"].each do |name|
+    ["", ".", "..", "2026-01-01", "a/b", "a?b", "a#b", "a\nb", "a\x00b", "manage", "api"].each do |name|
       assert_raises(ArgumentError) { WeblogAuthoring.validate_page_name(name) }
     end
   end

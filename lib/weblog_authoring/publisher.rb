@@ -79,7 +79,7 @@ module WeblogAuthoring
     end
 
     def load
-      return ReleaseSnapshot.new if !path.exist?
+      raise PublishError, "release manifest is missing: #{path}" unless path.exist?
 
       payload = JSON.parse(path.read(encoding: "UTF-8"))
       raise ArgumentError, "manifest root must be an object" unless payload.is_a?(Hash)
@@ -426,7 +426,7 @@ module WeblogAuthoring
         previously_released = release_by_id[page.id]
         if previously_released
           validate_release_identity(page, previously_released)
-          refresh_links(previously_released)
+          merge_released_page(page, previously_released)
         else
           refresh_links(page)
         end
@@ -467,6 +467,20 @@ module WeblogAuthoring
     def validate_release_identity(current_page, released_page)
       raise PublishError, "release metadata mismatch for page #{current_page.id}" unless released_page.page_type == current_page.page_type
       raise PublishError, "release metadata mismatch for page #{current_page.id}" unless released_page.created_at == current_page.created_at
+    end
+
+    def merge_released_page(current_page, released_page)
+      refresh_links(
+        PageDocument.new(
+          **current_page.to_h.merge(
+            title: released_page.title,
+            created_at: released_page.created_at,
+            updated_at: released_page.updated_at,
+            published_at: released_page.published_at,
+            body: released_page.body
+          )
+        )
+      )
     end
 
     def refresh_links(page)
@@ -608,10 +622,10 @@ module WeblogAuthoring
     end
 
     def encoded_route(route)
-      route.to_s.bytes.map do |byte|
-        character = byte.chr
-        character.match?(/[A-Za-z0-9\-._~]/) ? character : format("%%%02X", byte)
-      end.join
+      normalized_route = route.to_s
+      return normalized_route if DATE_NAME.match?(normalized_route)
+
+      WeblogAuthoring.encoded_page_name(normalized_route)
     end
   end
 end

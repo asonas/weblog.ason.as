@@ -15,6 +15,7 @@ module WeblogAuthoring
 
     normalized = name.strip
     raise ArgumentError, "page name must not be empty" if normalized.empty?
+    raise ArgumentError, "page name must not be . or .." if %w[. ..].include?(normalized)
     raise ArgumentError, "page name contains a forbidden character" if normalized.match?(/[\/?#\r\n]/)
     raise ArgumentError, "page name contains a control character" if normalized.each_codepoint.any? { |codepoint| codepoint < 32 || codepoint == 127 }
     raise ArgumentError, "date-shaped names are reserved" if DATE_NAME.match?(normalized)

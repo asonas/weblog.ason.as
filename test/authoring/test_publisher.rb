@@ -47,6 +47,14 @@ class TestPublisher < Minitest::Test
     assert_includes error.message, "missing root key"
   end
 
+  def test_release_manifest_rejects_missing_file
+    manifest = WeblogAuthoring::ReleaseManifest.new(tmpdir.join("content/.authoring-release.json"))
+
+    error = assert_raises(WeblogAuthoring::PublishError) { manifest.load }
+
+    assert_includes error.message, "missing"
+  end
+
   def test_build_uses_release_snapshot_body_for_existing_published_page
     published = published_date_page("2026-01-01", body: "未公開編集\n\n[[page-a]]")
     placeholder_source = draft_named_page("page-a", body: "下書き本文")
@@ -88,6 +96,34 @@ class TestPublisher < Minitest::Test
     assert_includes placeholder_html, "2026-01-01"
     refute_includes placeholder_html, "下書き本文"
     assert_equal ["2026-01-01", "page-a"], result.public_routes.sort
+  end
+
+  def test_build_published_rename_uses_released_body_at_new_route_and_redirects_old_route
+    current_page = published_named_page("new-name", id: "renamed-page", body: "未公開の新本文")
+    release_snapshot = WeblogAuthoring::ReleaseSnapshot.new(
+      pages: [published_named_page("old-name", id: "renamed-page", body: "旧公開本文")],
+      redirects: [],
+      published_at: FIXED_TIME
+    )
+
+    result = publisher.build(
+      snapshot_for(
+        pages: [current_page],
+        redirects: [WeblogAuthoring::Redirect.new(old_route: "old-name", new_route: "new-name")]
+      ),
+      tmpdir.join("site.staging"),
+      release_snapshot:
+    )
+
+    new_route_html = tmpdir.join("site.staging/new-name/index.html").read(encoding: "UTF-8")
+    old_route_html = tmpdir.join("site.staging/old-name/index.html").read(encoding: "UTF-8")
+
+    assert_includes new_route_html, "旧公開本文"
+    refute_includes new_route_html, "未公開の新本文"
+    assert_includes old_route_html, "url=/new-name"
+    assert_equal ["new-name", "old-name"], result.public_routes.sort
+    assert_equal "未公開の新本文", result.release_candidate.pages.fetch(0).body
+    assert_equal "new-name", result.release_candidate.pages.fetch(0).route
   end
 
   def test_build_does_not_output_draft_only_reference
@@ -182,6 +218,20 @@ class TestPublisher < Minitest::Test
     assert tmpdir.join("site.staging/page-a/index.html").exist?
   end
 
+  def test_build_uses_case_distinguishing_output_route_encoding
+    published = published_named_page("Page-A")
+
+    result = publisher.build(
+      snapshot_for(pages: [published]),
+      tmpdir.join("site.staging"),
+      release_snapshot: WeblogAuthoring::ReleaseSnapshot.new
+    )
+
+    assert_equal ["Page-A"], result.public_routes
+    assert tmpdir.join("site.staging/%50age-%41/index.html").exist?
+    refute tmpdir.join("site.staging/Page-A/index.html").exist?
+  end
+
   def test_publish_keeps_existing_site_and_manifest_when_swap_fails
     published = published_named_page("page-a", body: "公開本文")
     site_dir = tmpdir.join("site")
@@ -246,9 +296,9 @@ class TestPublisher < Minitest::Test
     )
   end
 
-  def published_named_page(name, body: "公開本文")
+  def published_named_page(name, id: nil, body: "公開本文")
     WeblogAuthoring::PageDocument.new(
-      id: "page-#{name}",
+      id: id || "page-#{name}",
       page_type: "named",
       name:,
       page_date: nil,
