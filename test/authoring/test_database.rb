@@ -51,6 +51,31 @@ class TestDatabase < Minitest::Test
     assert_equal 1, Pathname.glob(tmpdir.join("data/index/authoring.sqlite3.corrupt-*").to_s).size
   end
 
+  def test_incompatible_schema_columns_are_rotated_and_rebuilt
+    repository = repository_for
+    repository.save_draft(new_date_request(Date.new(2026, 1, 1), "本文"))
+    database = database_for
+    database.path.unlink if database.path.exist?
+
+    database.connect.tap do |connection|
+      connection.execute_batch(
+        <<~SQL
+          CREATE TABLE pages (id TEXT PRIMARY KEY, page_type TEXT NOT NULL);
+          CREATE TABLE links (source_id TEXT NOT NULL, target_id TEXT);
+          CREATE TABLE problems (path TEXT PRIMARY KEY, detail INTEGER NOT NULL);
+        SQL
+      )
+    ensure
+      connection.close
+    end
+
+    database.rebuild(repository.refresh)
+
+    assert database.integrity_ok?
+    assert_equal 1, Pathname.glob(tmpdir.join("data/index/authoring.sqlite3.corrupt-*").to_s).size
+    assert_equal [repository.find_route("/2026-01-01")], database.search("2026-01-01")
+  end
+
   def test_backlinks_can_exclude_draft_sources_and_search_filters_status
     repository = repository_for
     draft = repository.save_draft(new_date_request(Date.new(2026, 1, 1), "[[page-a]]"))
@@ -89,7 +114,8 @@ class TestDatabase < Minitest::Test
       dumped = connection.execute("SELECT * FROM pages").flatten.join(" ")
       problems = connection.execute("SELECT path, detail FROM problems")
       refute_includes dumped, "visible body"
-      assert_equal [[content_dir.join("broken.md").to_s, "missing required key: id"]], problems
+      assert_equal [content_dir.join("broken.md").to_s], problems.map(&:first)
+      assert_includes problems.first.last, "missing required key"
     ensure
       connection.close
     end

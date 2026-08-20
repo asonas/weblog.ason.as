@@ -6,7 +6,7 @@ require "pathname"
 module WeblogAuthoring
   DATE_NAME = /\A\d{4}-\d{2}-\d{2}\z/.freeze
   RESERVED_ROUTES = %w[manage api static].freeze
-  UNRESERVED_BYTE = /[A-Za-z0-9\-._~]/.freeze
+  UNRESERVED_FILENAME_BYTE = /[a-z0-9\-._~]/.freeze
 
   module_function
 
@@ -49,7 +49,8 @@ module WeblogAuthoring
 
   def encode_byte(byte)
     character = byte.chr
-    return character if character.match?(UNRESERVED_BYTE)
+    # Keep named-page filenames distinct on case-insensitive filesystems.
+    return character if character.match?(UNRESERVED_FILENAME_BYTE)
 
     format("%%%02X", byte)
   end

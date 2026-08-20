@@ -19,8 +19,10 @@ class TestNames < Minitest::Test
     root = Pathname("/tmp/content")
 
     assert_equal "page-a", WeblogAuthoring.encoded_page_name("page-a")
+    assert_equal "%50age-%41", WeblogAuthoring.encoded_page_name("Page-A")
     assert_equal "%E6%97%A5%E6%9C%AC%E8%AA%9E%20page", WeblogAuthoring.encoded_page_name("日本語 page")
     assert_equal root.join("page-a.md"), WeblogAuthoring.page_path(root, "named", name: "page-a", page_date: nil)
+    assert_equal root.join("%50age-%41.md"), WeblogAuthoring.page_path(root, "named", name: "Page-A", page_date: nil)
     assert_equal root.join("2026-01-01.md"), WeblogAuthoring.page_path(root, "date", name: nil, page_date: Date.new(2026, 1, 1))
   end
 

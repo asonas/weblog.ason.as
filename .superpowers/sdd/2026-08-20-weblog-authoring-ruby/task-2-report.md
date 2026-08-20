@@ -83,3 +83,44 @@ Python authoring implementation and design/spec files were not modified or delet
 
 - `AuthoringDatabase#search` indexes and queries route metadata only, not body text. This matches the current Task 2 scope and management-page search needs, but full-text search would require a later task.
 - `mise` warnings about tracked-config/cache writes were environmental and did not block syntax checks or tests.
+
+## Fix Round 1
+
+Date: 2026-08-20
+Branch: `weblog-authoring-design`
+
+### Changed Files
+
+- `lib/weblog_authoring/names.rb`
+- `lib/weblog_authoring/database.rb`
+- `test/authoring/test_names.rb`
+- `test/authoring/test_repository.rb`
+- `test/authoring/test_database.rb`
+
+### Addressed Findings
+
+- Named page source filenames are now deterministic and case-distinguishing on macOS case-insensitive filesystems.
+  - Lowercase ASCII remains readable, for example `page-a.md`.
+  - Uppercase ASCII bytes are percent-encoded in filenames, for example `Page-A` becomes `%50age-%41.md`.
+  - Public routes and page names remain case-sensitive and unchanged, so `/page-a` and `/Page-A` can coexist.
+  - Save, rename, and external canonical path validation all use the same filename rule.
+- `AuthoringDatabase#schema_compatible?` now validates expected column structure for `pages`, `links`, and `problems`, not just table names and `user_version`.
+  - Incompatible derived DBs are rotated to `.corrupt-*` and rebuilt from Markdown.
+  - Source Markdown is not modified during this recovery.
+- Added concrete tests for `RepositorySnapshot#with_redirect`.
+  - `with_redirect` preserves valid pages and problems.
+  - It returns a new immutable snapshot and does not duplicate identical redirects.
+  - Redirect manifest persistence remains intentionally out of scope for Task 2.
+
+### Commands And Results
+
+1. `mise exec -- ruby -c lib/weblog_authoring/names.rb lib/weblog_authoring/repository.rb lib/weblog_authoring/database.rb test/authoring/test_names.rb test/authoring/test_repository.rb test/authoring/test_database.rb`
+   - Result: `Syntax OK`
+2. `mise exec -- ruby -Itest -e "require './test/authoring/test_names'; require './test/authoring/test_repository'; require './test/authoring/test_database'"`
+   - Result: `29 runs, 102 assertions, 0 failures, 0 errors, 0 skips`
+3. `git --no-pager diff --check`
+   - Result: no whitespace / patch format issues
+
+### Notes
+
+- The earlier shorthand `ruby test1 test2 ...` form only executes the first Ruby file. Focused tests were rerun with explicit `require` calls so all targeted test files were executed in one process.

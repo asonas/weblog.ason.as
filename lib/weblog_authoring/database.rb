@@ -10,7 +10,32 @@ require "time"
 module WeblogAuthoring
   class AuthoringDatabase
     SCHEMA_VERSION = 1
-    REQUIRED_TABLES = %w[links pages problems].freeze
+    EXPECTED_COLUMNS = {
+      "pages" => [
+        ["id", "TEXT", 0, 1],
+        ["page_type", "TEXT", 1, 0],
+        ["name", "TEXT", 0, 0],
+        ["page_date", "TEXT", 0, 0],
+        ["title", "TEXT", 0, 0],
+        ["status", "TEXT", 1, 0],
+        ["created_at", "TEXT", 1, 0],
+        ["updated_at", "TEXT", 1, 0],
+        ["published_at", "TEXT", 0, 0],
+        ["path", "TEXT", 1, 0],
+        ["body_hash", "TEXT", 1, 0],
+        ["is_empty", "INTEGER", 1, 0]
+      ],
+      "links" => [
+        ["source_id", "TEXT", 1, 1],
+        ["target_id", "TEXT", 0, 0],
+        ["target_name", "TEXT", 1, 0],
+        ["position", "INTEGER", 1, 2]
+      ],
+      "problems" => [
+        ["path", "TEXT", 0, 1],
+        ["detail", "TEXT", 1, 0]
+      ]
+    }.freeze
 
     attr_reader :path
 
@@ -209,13 +234,18 @@ module WeblogAuthoring
         version = database.get_first_value("PRAGMA user_version").to_i
         return false unless [0, SCHEMA_VERSION].include?(version)
 
-        tables = database.execute(
-          "SELECT name FROM sqlite_master WHERE type = 'table'"
-        ).flatten
-        tables.empty? || (REQUIRED_TABLES - tables).empty?
+        EXPECTED_COLUMNS.all? do |table, columns|
+          actual_columns(database, table) == columns
+        end
       end
     rescue SQLite3::Exception
       false
+    end
+
+    def actual_columns(database, table)
+      database.execute("PRAGMA table_info(#{table})").map do |row|
+        [row[1], row[2], row[3], row[5]]
+      end
     end
 
     def rotate_corrupt_database!

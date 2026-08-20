@@ -40,6 +40,18 @@ class TestRepository < Minitest::Test
     assert linked_page.path.read(encoding: "UTF-8").end_with?("---\n")
   end
 
+  def test_case_distinct_named_pages_can_coexist_with_distinct_source_paths
+    repository = repository_for
+
+    lower = repository.save_draft(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "page-a", body: "lower"))
+    upper = repository.save_draft(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "Page-A", body: "upper"))
+
+    assert_equal tmpdir.join("content/page-a.md"), lower.path
+    assert_equal tmpdir.join("content/%50age-%41.md"), upper.path
+    assert_equal lower.id, repository.find_route("/page-a").id
+    assert_equal upper.id, repository.find_route("/Page-A").id
+  end
+
   def test_invalid_external_document_is_reported_without_overwrite
     path = tmpdir.join("content/2026-01-01.md")
     path.dirname.mkpath
@@ -98,6 +110,28 @@ class TestRepository < Minitest::Test
     assert_includes snapshot.problems.fetch(0).detail, "canonical source path"
   end
 
+  def test_external_named_document_with_legacy_uppercase_path_is_reported
+    path = tmpdir.join("content/Page-A.md")
+    path.dirname.mkpath
+    path.write(
+      <<~DOC
+        ---
+        id: wrong-uppercase-path
+        page_type: named
+        name: Page-A
+        status: draft
+        created_at: 2026-01-01 00:00:00 +09:00
+        updated_at: 2026-01-01 00:00:00 +09:00
+        ---
+      DOC
+    )
+
+    snapshot = repository_for.refresh
+
+    assert_empty snapshot.pages
+    assert_includes snapshot.problems.fetch(0).detail, "canonical source path"
+  end
+
   def test_rename_collision_leaves_all_source_files_unchanged
     repository = repository_for
     first = repository.save_draft(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "page-a", body: "本文"))
@@ -125,6 +159,51 @@ class TestRepository < Minitest::Test
     assert_equal tmpdir.join("content/page-b.md"), renamed.path
     refute tmpdir.join("content/page-a.md").exist?
     assert_includes source.path.read, "[[page-b]]"
+  end
+
+  def test_rename_uses_case_distinguishing_canonical_path_rule
+    repository = repository_for
+    page = repository.save_draft(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "page-a", body: "本文"))
+
+    renamed = repository.rename_named_page(page.id, "Page-A")
+
+    assert_equal tmpdir.join("content/%50age-%41.md"), renamed.path
+    assert_equal renamed.id, repository.find_route("/Page-A").id
+    refute tmpdir.join("content/page-a.md").exist?
+  end
+
+  def test_snapshot_with_redirect_preserves_pages_and_problems_immutably
+    page = WeblogAuthoring::PageDocument.new(
+      id: "page-id",
+      page_type: "named",
+      name: "page-a",
+      page_date: nil,
+      title: nil,
+      status: "draft",
+      created_at: FIXED_TIME,
+      updated_at: FIXED_TIME,
+      published_at: nil,
+      path: tmpdir.join("content/page-a.md"),
+      body: "",
+      links: []
+    )
+    problem = WeblogAuthoring::PageProblem.new(path: tmpdir.join("content/broken.md"), detail: "broken")
+    snapshot = WeblogAuthoring::RepositorySnapshot.new(pages: [page], problems: [problem])
+
+    updated = snapshot.with_redirect(old_route: "old", new_route: "new")
+
+    assert_empty snapshot.redirects
+    assert_equal [page], updated.pages
+    assert_equal [problem], updated.problems
+    assert_equal [WeblogAuthoring::Redirect.new(old_route: "old", new_route: "new")], updated.redirects
+  end
+
+  def test_snapshot_with_redirect_avoids_duplicates
+    snapshot = WeblogAuthoring::RepositorySnapshot.new
+    updated = snapshot.with_redirect(old_route: "old", new_route: "new")
+
+    assert_equal updated, updated.with_redirect(old_route: "old", new_route: "new")
+    assert_equal 1, updated.redirects.size
   end
 
   def test_rename_restores_source_files_when_transaction_fails
