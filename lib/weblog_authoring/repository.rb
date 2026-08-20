@@ -190,6 +190,7 @@ module WeblogAuthoring
       existing_names = snapshot.pages.each_with_object({}) do |page, names|
         names[page.name] = true unless page.name.nil?
       end
+      existing_names[document.name] = true unless document.name.nil?
 
       document.links.each do |link|
         name = WeblogAuthoring.validate_page_name(link.name)

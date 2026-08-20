@@ -40,6 +40,19 @@ class TestRepository < Minitest::Test
     assert linked_page.path.read(encoding: "UTF-8").end_with?("---\n")
   end
 
+  def test_saving_named_page_with_a_self_link_keeps_the_page_body
+    repository = repository_for
+
+    page = repository.save_draft(
+      WeblogAuthoring::SaveRequest.new(page_type: "named", name: "page-a", body: "[[page-a]]")
+    )
+
+    saved = repository.find_route("/page-a")
+    refute_nil saved
+    assert_equal page.id, saved.id
+    assert_equal "[[page-a]]", saved.body
+  end
+
   def test_case_distinct_named_pages_can_coexist_with_distinct_source_paths
     repository = repository_for
 

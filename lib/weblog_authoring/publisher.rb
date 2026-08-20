@@ -335,12 +335,16 @@ module WeblogAuthoring
       end
     end
 
-    attr_reader :output_dir
+    attr_reader :output_dir, :release_manifest
 
-    def initialize(output_dir, template_path: TEMPLATE_PATH)
+    def initialize(
+      output_dir,
+      template_path: TEMPLATE_PATH,
+      release_manifest_path: Pathname("content/.authoring-release.json")
+    )
       @output_dir = Pathname(output_dir)
       @template_path = Pathname(template_path)
-      @release_manifest = ReleaseManifest.new(Pathname("content/.authoring-release.json"))
+      @release_manifest = ReleaseManifest.new(Pathname(release_manifest_path))
     end
 
     def build(snapshot, destination, release_snapshot:)
