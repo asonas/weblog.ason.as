@@ -186,6 +186,19 @@ module WeblogAuthoring
         "class" => "task-list-item-checkbox",
         "disabled" => "disabled"
       }.freeze
+      SHARED_ATTRIBUTES = %w[class id].freeze
+      TAG_ATTRIBUTE_WHITELIST = Hash.new(SHARED_ATTRIBUTES).merge(
+        "a" => (SHARED_ATTRIBUTES + %w[href rel target title]).freeze,
+        "hr" => SHARED_ATTRIBUTES.freeze,
+        "input" => %w[checked class disabled type].freeze,
+        "li" => SHARED_ATTRIBUTES.freeze,
+        "ol" => (SHARED_ATTRIBUTES + %w[start]).freeze,
+        "table" => SHARED_ATTRIBUTES.freeze,
+        "td" => (SHARED_ATTRIBUTES + %w[style]).freeze,
+        "th" => (SHARED_ATTRIBUTES + %w[style]).freeze
+      ).freeze
+      SAFE_TEXT_ALIGN_STYLE = /\Atext-align:\s*(left|right|center)\z/.freeze
+      SAFE_LIST_START = /\A[1-9]\d*\z/.freeze
 
       class << self
         def with_context(context)
@@ -221,7 +234,7 @@ module WeblogAuthoring
           return format_as_span_html("a", attributes, CGI.escapeHTML(target.fetch("label")))
         end
 
-        return format_as_span_html("a", { "href" => href }, inner(el, indent)) if href.match?(ALLOWED_EXTERNAL_URI)
+        return format_as_span_html("a", el.attr, inner(el, indent)) if href.match?(ALLOWED_EXTERNAL_URI)
 
         warning("link omitted: #{href}") unless href.empty?
         inner(el, indent)
@@ -242,7 +255,7 @@ module WeblogAuthoring
       end
 
       def convert_html_element(el, indent)
-        return super if safe_html_element?(el)
+        return render_safe_html_element(el) if safe_html_element?(el)
 
         warning("raw HTML escaped: #{el.value}")
 
@@ -269,6 +282,34 @@ module WeblogAuthoring
 
       def convert_codespan(el, _indent)
         format_as_span_html("code", el.attr, CGI.escapeHTML(el.value.to_s))
+      end
+
+      def convert_hr(el, indent)
+        "#{' ' * indent}<hr#{sanitized_html_attributes('hr', el.attr)} />\n"
+      end
+
+      def convert_li(el, indent)
+        output = ' ' * indent << "<#{el.type}" << sanitized_html_attributes(el.type.to_s, el.attr) << ">"
+        res = inner(el, indent)
+        if el.children.empty? || (el.children.first.type == :p && el.children.first.options[:transparent])
+          output << res << (res.match?(/\n\Z/) ? ' ' * indent : '')
+        else
+          output << "\n" << res << ' ' * indent
+        end
+        output << "</#{el.type}>\n"
+      end
+      alias convert_dd convert_li
+
+      def format_as_span_html(name, attr, body)
+        "<#{name}#{sanitized_html_attributes(name, attr)}>#{body}</#{name}>"
+      end
+
+      def format_as_block_html(name, attr, body, indent)
+        "#{' ' * indent}<#{name}#{sanitized_html_attributes(name, attr)}>#{body}</#{name}>\n"
+      end
+
+      def format_as_indented_block_html(name, attr, body, indent)
+        "#{' ' * indent}<#{name}#{sanitized_html_attributes(name, attr)}>\n#{body}#{' ' * indent}</#{name}>\n"
       end
 
       private
@@ -311,6 +352,89 @@ module WeblogAuthoring
         end
       end
 
+      def render_safe_html_element(el)
+        case el.value
+        when "del"
+          format_as_span_html("del", el.attr, inner(el, indent_for_inline_html))
+        when "input"
+          "<input#{sanitized_html_attributes('input', el.attr)} />"
+        else
+          raise ArgumentError, "unsupported safe html element: #{el.value}"
+        end
+      end
+
+      def indent_for_inline_html
+        0
+      end
+
+      def sanitized_html_attributes(tag_name, attributes)
+        sanitized = sanitize_attributes(tag_name, attributes)
+        html_attributes(sanitized)
+      end
+
+      def sanitize_attributes(tag_name, attributes)
+        return {} if attributes.nil? || attributes.empty?
+
+        allowed_names = TAG_ATTRIBUTE_WHITELIST.fetch(tag_name, SHARED_ATTRIBUTES)
+        sanitized = {}
+
+        attributes.each do |name, value|
+          next if value.nil? || value.to_s.empty?
+
+          if !allowed_names.include?(name)
+            warning("attribute omitted from <#{tag_name}>: #{name}")
+            next
+          end
+
+          sanitized_value = sanitize_attribute_value(tag_name, name, value.to_s)
+          if sanitized_value.nil?
+            warning("attribute omitted from <#{tag_name}>: #{name}")
+            next
+          end
+
+          sanitized[name] = sanitized_value
+        end
+
+        sanitized
+      end
+
+      def sanitize_attribute_value(tag_name, name, value)
+        case name
+        when "href"
+          sanitize_href(value)
+        when "rel"
+          value == MarkdownRenderer::INTERNAL_REL ? value : nil
+        when "target"
+          value == "_blank" ? value : nil
+        when "type"
+          tag_name == "input" && value == "checkbox" ? value : nil
+        when "disabled"
+          tag_name == "input" && value == "disabled" ? value : nil
+        when "checked"
+          tag_name == "input" && value == "checked" ? value : nil
+        when "style"
+          sanitize_style(tag_name, value)
+        when "start"
+          tag_name == "ol" && value.match?(SAFE_LIST_START) ? value : nil
+        else
+          value
+        end
+      end
+
+      def sanitize_href(value)
+        return value if value.start_with?("/")
+        return value if value.match?(ALLOWED_EXTERNAL_URI)
+
+        nil
+      end
+
+      def sanitize_style(tag_name, value)
+        return nil unless %w[td th].include?(tag_name)
+        return value if value.match?(SAFE_TEXT_ALIGN_STYLE)
+
+        nil
+      end
+
       def highlighted_code(text, language)
         return nil if language.nil? || language.empty?
 
@@ -327,7 +451,7 @@ module WeblogAuthoring
         attr = attr.merge("class" => classes)
         code_attr = { "class" => "highlight" }
 
-        "#{' ' * indent}<div#{html_attributes(attr)}><pre#{html_attributes(code_attr)}><code>#{highlighted}</code></pre></div>\n"
+        "#{' ' * indent}<div#{sanitized_html_attributes('div', attr)}><pre#{sanitized_html_attributes('pre', code_attr)}><code>#{highlighted}</code></pre></div>\n"
       end
 
       def fallback_codeblock_html(text, language, attr, indent)
@@ -335,7 +459,7 @@ module WeblogAuthoring
         code_attr["class"] = "language-#{language}" unless language.nil? || language.empty?
         escaped = CGI.escapeHTML(text)
 
-        "#{' ' * indent}<pre#{html_attributes(attr)}><code#{html_attributes(code_attr)}>#{escaped}</code></pre>\n"
+        "#{' ' * indent}<pre#{sanitized_html_attributes('pre', attr)}><code#{sanitized_html_attributes('code', code_attr)}>#{escaped}</code></pre>\n"
       end
     end
   end

@@ -76,6 +76,41 @@ class TestMarkdown < Minitest::Test
     assert_includes rendered.problems, "link omitted: javascript:alert(1)"
   end
 
+  def test_attribute_injection_is_stripped_across_block_inline_table_and_code_paths
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+
+    rendered = renderer.render(
+      <<~MARKDOWN,
+        hello
+        {: onclick="alert(1)"}
+
+        [safe](https://example.com){: title="A \\"quote\\" & more" onclick="alert(2)"}
+
+        | A |
+        | --- |
+        | 1 |
+        {: onclick="alert(3)"}
+
+        ```ruby
+        puts 1
+        ```
+        {: onclick="alert(4)"}
+      MARKDOWN
+      mode: "local"
+    )
+
+    refute_includes rendered.html, "onclick="
+    assert_includes rendered.html, "<p>hello</p>"
+    assert_includes rendered.html, 'href="https://example.com"'
+    assert_includes rendered.html, 'title="A &quot;quote&quot; &amp; more"'
+    assert_includes rendered.html, "<table>"
+    assert_includes rendered.html, 'class="language-ruby highlighter-rouge"'
+    assert_includes rendered.problems, "attribute omitted from <p>: onclick"
+    assert_includes rendered.problems, "attribute omitted from <a>: onclick"
+    assert_includes rendered.problems, "attribute omitted from <table>: onclick"
+    assert_includes rendered.problems, "attribute omitted from <div>: onclick"
+  end
+
   def test_public_render_keeps_saved_links_same_tab_and_omits_unsaved_targets
     renderer = WeblogAuthoring::MarkdownRenderer.new(pages: [named_page("page-a")])
 
