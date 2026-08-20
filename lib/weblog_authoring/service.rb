@@ -30,6 +30,10 @@ module WeblogAuthoring
       MarkdownRenderer.new.render(request.body, mode:)
     end
 
+    def today
+      current_time.to_date
+    end
+
     def publish(request)
       snapshot = repository.refresh
       page = find_page(snapshot, request.page_id)

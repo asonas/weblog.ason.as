@@ -155,6 +155,26 @@ module WeblogAuthoring
       refresh.pages.find { |page| page.route == normalized }
     end
 
+    def find_route_read_only(route)
+      normalized = route.to_s.sub(%r{\A/+}, "").sub(%r{/+\z}, "")
+      return nil unless content_dir.exist?
+
+      problems = []
+      Pathname.glob(content_dir.join("*.md").to_s).sort.each do |path|
+        parsed = parse_path(path, problems)
+        next if parsed.nil?
+
+        begin
+          document = with_links_and_tokyo_time(validate_external_document(parsed))
+        rescue ArgumentError
+          next
+        end
+
+        return document if document.route == normalized
+      end
+      nil
+    end
+
     def list_pages(query: "", status: nil, empty_only: false)
       normalized_query = query.to_s.downcase
 
