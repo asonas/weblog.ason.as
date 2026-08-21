@@ -260,7 +260,10 @@
     rangeDays,
     params.get("range"),
   ) ? params.get("range") : explorer.dataset.range || "all";
-  const requestedDepth = Number(params.get("depth"));
+  const rawDepth = params.get("depth");
+  const requestedDepth = rawDepth === null
+    ? Number(explorer.dataset.depth || 1)
+    : Number(rawDepth);
   const depth = Number.isInteger(requestedDepth) && requestedDepth >= 0 && requestedDepth <= maxDepth
     ? requestedDepth
     : Number(explorer.dataset.depth || 1);
