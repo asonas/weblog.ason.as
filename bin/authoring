@@ -3,27 +3,25 @@
 
 require "optparse"
 require "rackup"
-require "webrick"
+require "rack/handler/puma"
 
-require_relative "../lib/weblog_authoring/app"
+require_relative "../lib/weblog_authoring/development_app"
 
 module WeblogAuthoring
   module AuthoringCLI
-    LOOPBACK_HOSTS = WebApp::LOOPBACK_HOSTS
+    LOOPBACK_HOSTS = DevelopmentApp::LOOPBACK_HOSTS
 
     module_function
 
-    def main(argv = ARGV, root: Application::ROOT, server: Rackup::Handler::WEBrick)
+    def main(argv = ARGV, root: DevelopmentApp::ROOT, server: Rackup::Handler::Puma)
       options = parse_options(argv)
       validate_host!(options.fetch(:host))
 
-      app = Application.build(root:)
+      app = DevelopmentApp.application(root:)
       server.run(
         app,
         Host: options.fetch(:host),
-        Port: options.fetch(:port),
-        AccessLog: [],
-        Logger: WEBrick::Log.new($stderr, WEBrick::Log::WARN)
+        Port: options.fetch(:port)
       )
       0
     rescue Interrupt

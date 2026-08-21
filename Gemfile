@@ -4,6 +4,8 @@ ruby ">= 4.0", "< 5.0"
 
 gem "rack"
 gem "rackup"
+gem "sinatra", "~> 4.2"
+gem "puma", "~> 8.0"
 gem "webrick"
 gem "sqlite3"
 gem "kramdown"

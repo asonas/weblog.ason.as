@@ -46,7 +46,7 @@ class TestWeb < Minitest::Test
     status, headers, javascript = request("GET", "/static/authoring/app.js")
     assert_equal 200, status
     assert_equal "application/javascript; charset=utf-8", headers.fetch("content-type")
-    assert_includes javascript, "save-and-publish"
+    assert_includes javascript, "/api/pages"
     assert_includes javascript, "aria-multiline"
     assert_includes javascript, "beforeunload"
 

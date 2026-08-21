@@ -127,6 +127,42 @@ h1 {
   margin-block: 1rem;
 }
 
+.home-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-inline-size: 52rem;
+  gap: 1rem;
+}
+
+.new-page-button {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border: 1px solid #404040;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #171717;
+  font-size: 1.6rem;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.new-page-button:hover {
+  background: #e5e5e5;
+}
+
+.home-page-list {
+  max-inline-size: 52rem;
+  margin-block: 1.5rem 0;
+  padding-inline-start: 1.25rem;
+}
+
+.empty-home {
+  color: #505050;
+}
+
 h2 {
   margin-block: 0 0.75rem;
   font-size: 1.25rem;

@@ -64,6 +64,7 @@ type ApiError = Error & {
 };
 
 type JsonObject = Record<string, unknown>;
+type HttpMethod = "POST" | "PATCH";
 
 const EDITOR_EXTENSIONS = [
   StarterKit.configure({
@@ -100,9 +101,9 @@ function initialDraft(bootstrap: EditorBootstrap): EditorDraft {
   };
 }
 
-async function requestJson<T>(url: string, payload: JsonObject): Promise<T> {
+async function requestJson<T>(url: string, payload: JsonObject, method: HttpMethod = "POST"): Promise<T> {
   const response = await fetch(url, {
-    method: "POST",
+    method,
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json"
@@ -130,7 +131,7 @@ async function requestJson<T>(url: string, payload: JsonObject): Promise<T> {
 }
 
 function statusMessage(page: PageResponse): string {
-  return page.updated_at ? `自動公開済み・最終更新 ${page.updated_at}` : "自動公開済み";
+  return page.updated_at ? `保存済み・最終更新 ${page.updated_at}` : "保存済み";
 }
 
 export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
@@ -160,7 +161,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     setDirty(value);
   }, []);
 
-  const saveAndPublish = useCallback(async () => {
+  const savePage = useCallback(async () => {
     if (!draftRef.current.pageId && !draftRef.current.title.trim()) return;
     if (savingRef.current) {
       pendingSaveRef.current = true;
@@ -179,7 +180,10 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     setStatus("保存中…");
 
     try {
-      const page = await requestJson<PageResponse>("/api/save-and-publish", {
+      const endpoint = snapshot.pageId
+        ? `/api/pages/${encodeURIComponent(snapshot.pageId)}`
+        : "/api/pages";
+      const page = await requestJson<PageResponse>(endpoint, {
         page_id: snapshot.pageId,
         page_type: snapshot.pageType,
         date: snapshot.date,
@@ -187,7 +191,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
         title: snapshot.title || undefined,
         body: snapshot.body,
         expected_updated_at: snapshot.expectedUpdatedAt || undefined
-      });
+      }, snapshot.pageId ? "PATCH" : "POST");
       const current = draftRef.current;
       const next = {
         ...current,
@@ -216,7 +220,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       setSaving(false);
       if (pendingSaveRef.current) {
         pendingSaveRef.current = false;
-        window.setTimeout(() => void saveAndPublish(), 0);
+        window.setTimeout(() => void savePage(), 0);
       }
     }
   }, [setDirtyState]);
@@ -226,9 +230,9 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null;
-      void saveAndPublish();
+      void savePage();
     }, 700);
-  }, [saveAndPublish]);
+  }, [savePage]);
 
   const handleBodyChange = useCallback((markdown: string) => {
     updateDraft({ body: markdownForSource(markdown) });
@@ -264,8 +268,8 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     }
     if (current.title === savedTitleRef.current && current.pageId) return;
     setErrors({});
-    await saveAndPublish();
-  }, [saveAndPublish]);
+    await savePage();
+  }, [savePage]);
 
   const handleTitleChange = useCallback((value: string) => {
     updateDraft({ title: value });
@@ -354,7 +358,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
             <EditorContent editor={editor} />
           </div>
           <p id="body-errors" className="input-error" aria-live="polite">{bodyErrors.join(" ")}</p>
-          <p className="editor-help">タイトルを確定すると保存・公開します。本文は変更後に自動保存されます。</p>
+          <p className="editor-help">タイトルを確定すると保存します。本文は変更後に自動保存されます。</p>
         </div>
       </section>
       {draft.pageType === "named" && draft.pageId.length > 0 && (

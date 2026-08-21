@@ -1,8 +1,10 @@
 # weblog.ason.as
 
-Scrapboxの保存済みエクスポートを変換するRuby製の移行ツールと、localhostでMarkdown記事を書くRuby製の投稿画面を管理するリポジトリです。
+Scrapboxの保存済みエクスポートを変換するRuby製の移行ツールと、localhostで記事を書くRuby製の投稿画面を管理するリポジトリです。
 
-記事の正本は`content/`のMarkdownとfrontmatterです。`data/index/authoring.sqlite3`はページ・Wikiリンク・逆リンクを検索するための再生成可能なインデックスで、`site/`は投稿画面の公開処理から作られる派生静的サイトです。
+Scrapbox移行・静的生成の既存処理では、記事の正本は`content/`のMarkdownとfrontmatterです。`data/index/authoring.sqlite3`はページ・Wikiリンク・逆リンクを検索するための再生成可能なインデックスで、`site/`は派生静的サイトです。
+
+新しい記事作成画面の開発中は、`data/development/authoring.sqlite3`を正本として使います。この段階ではMarkdownファイルや静的サイトへは書き込みません。将来、DBからMarkdown/NASへ書き出す処理を追加します。
 
 ## Ruby投稿画面
 
@@ -22,7 +24,19 @@ mise exec -- npm run typecheck
 mise exec -- npm run build
 ```
 
-投稿サーバーは`content/`、`data/index/authoring.sqlite3`、`site/`をリポジトリルートから解決し、既定では`127.0.0.1:8000`だけで待ち受けます。LAN公開、認証、AWS、クラウド、外部APIは扱いません。
+フロントエンドを開発するときは、Sinatra APIとViteを別々のターミナルで起動します。ViteがHTML、TypeScript、CSS、画像などの開発用アセットを配信し、`/api`へのリクエストをSinatraへプロキシします。Reactの変更はHMRで反映されます。
+
+```sh
+# ターミナル1
+mise exec -- bin/authoring
+
+# ターミナル2
+mise exec -- npm run dev
+```
+
+ブラウザでは`http://127.0.0.1:5173/`を開きます。配布用のビルド済みアセットをSinatraから確認するときは、`npm run build`の後に`http://127.0.0.1:8000/`を開きます。
+
+投稿サーバーはSinatraとPumaで動作し、開発用DBをリポジトリルートから解決します。既定では`127.0.0.1:8000`だけで待ち受け、Rubyファイルはリクエスト時に自動再読み込みします。LAN公開、認証、AWS、クラウド、外部APIは扱いません。
 
 ```sh
 mise exec -- bin/authoring
@@ -36,9 +50,9 @@ Rackupから同じアプリを起動する場合も、bind先をloopbackに限�
 mise exec -- bundle exec rackup -o 127.0.0.1 -p 8000 config.ru
 ```
 
-編集画面で一行目のタイトルまたはページ名を確定すると、本文とともに`content/`へMarkdownを保存し、公開サイトも更新します。既存ページの本文は変更後に自動保存・公開されます。Wikiリンク先の空ページと逆リンクは自動的に構築されます。
+ルートの`＋`から新しい記事を作成できます。編集画面で一行目のタイトルを確定するとDBへ保存し、本文は変更後に自動保存します。日付ページのURLは`/yyyy-mm-dd`です。保存結果はDBから読み出され、サーバーを再起動しても保持されます。
 
-編集画面に独立したプレビュー画面はありません。WYSIWYGエディタ上で本文を編集し、公開結果はlocalhostの読み取り専用ページで確認します。保存済みページのWikiリンクからは、そのページを新しいタブで開けます。
+編集画面に独立したプレビュー画面はありません。WYSIWYGエディタ上で本文を編集します。Markdownへの書き出しと公開は次の段階で実装します。
 
 ## Scrapbox移行・静的生成
 

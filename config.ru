@@ -2,6 +2,6 @@
 
 require "pathname"
 
-require_relative "lib/weblog_authoring/app"
+require_relative "lib/weblog_authoring/development_app"
 
-run WeblogAuthoring::Application.build(root: Pathname(__dir__))
+run WeblogAuthoring::DevelopmentApp.application(root: Pathname(__dir__))
