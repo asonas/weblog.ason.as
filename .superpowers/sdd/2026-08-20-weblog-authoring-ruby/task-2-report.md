@@ -15,7 +15,7 @@ Implementation Commit Subject: `Add Ruby content repository and index`
 - `test/authoring/test_repository.rb`
 - `test/authoring/test_database.rb`
 
-Python authoring implementation and design/spec files were not modified or deleted.
+Unrelated authoring implementation and design/spec files were not modified or deleted.
 
 ## Implemented
 

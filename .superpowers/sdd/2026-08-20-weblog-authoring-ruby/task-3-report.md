@@ -69,7 +69,7 @@
 ## Self-review
 
 - 変更対象は Task 3 で指定された `markdown.rb` と `test_markdown.rb` に限定した。
-- 既存の Python authoring 実装や他タスクの Ruby ファイルは変更していない。
+- 既存の authoring 実装や他タスクの Ruby ファイルは変更していない。
 - `lib/weblog_authoring.rb` には require を追加していない。Task 3 の範囲を超えないためで、将来 task 側で集約 require が必要なら別途対応する。
 
 Parent commit: `2e78547 Add Ruby authoring markdown renderer`.
