@@ -6,7 +6,7 @@ Scrapboxの保存済みエクスポートを変換するツールと、localhost
 
 ## Ruby投稿画面
 
-Ruby 3.3.6をmiseで選択し、依存gemをインストールします。
+Ruby 4系の最新バージョンをmiseで選択し、依存gemをインストールします。`.ruby-version`は`4`を指定しているため、Ruby 4系のパッチ更新に追従します。
 
 ```sh
 mise exec -- ruby --version
