@@ -4,16 +4,16 @@
 
 **Goal:** 開発マシンのlocalhostでMarkdown記事を書き、Wikiリンクと逆リンクを自動構築し、明示的な操作で安全に静的公開できる投稿インターフェースをRubyで実装する。
 
-**Architecture:** 既存のScrapbox移行・静的生成ツールはPythonのまま維持するが、投稿・編集サーバーの実行経路はRubyだけにする。`content/` のMarkdownとfrontmatterを正本とし、`data/index/authoring.sqlite3` は走査結果から再生成する派生インデックスとする。localhostの管理画面はRackアプリとして実装し、WEBrickでloopbackにbindする。公開操作では現在の正本を検証し、最後に公開したページのスナップショットと合わせた候補をステージング生成してから `site/` を差し替える。
+**Architecture:** Scrapbox移行・静的生成・アセット取得・投稿編集のすべてをRubyで実装する。`content/` のMarkdownとfrontmatterを正本とし、`data/index/authoring.sqlite3` は走査結果から再生成する派生インデックスとする。localhostの管理画面はRackアプリとして実装し、WEBrickでloopbackにbindする。公開操作では現在の正本を検証し、最後に公開したページのスナップショットと合わせた候補をステージング生成してから `site/` を差し替える。
 
-**Tech Stack:** Ruby 3.3.6（miseで固定）、Rack 3、rackup、WEBrick、sqlite3、Kramdownとkramdown-parser-gfm、Rouge、Psych、標準ライブラリのMinitest、プレーンHTML/CSS/JavaScript。フロントエンドのビルド環境やRuby Webフレームワークは追加しない。
+**Tech Stack:** Ruby 4系（miseで選択）、Rack 3、rackup、WEBrick、sqlite3、Kramdownとkramdown-parser-gfm、Rouge、Psych、標準ライブラリのMinitest、プレーンHTML/CSS/JavaScript。フロントエンドのビルド環境やRuby Webフレームワークは追加しない。
 
 **Spec:** `docs/superpowers/specs/2026-08-20-weblog-authoring-design.md`
 
 ## Global Constraints
 
-- 投稿サーバー、投稿ドメイン、Markdown描画、SQLiteインデックス、公開生成、localhost UI、CLIはRubyで実装する。PythonやGoのサーバーは作らない。
-- 既存のPythonはScrapbox移行、既存データの静的生成、アセット取得のためにのみ残す。Python authoringパッケージ、authoring専用テンプレート、authoring専用テストはRuby版の受入れ後に削除する。
+- 投稿サーバー、投稿ドメイン、Scrapbox移行、Markdown描画、SQLiteインデックス、公開生成、localhost UI、CLIはRubyで実装する。別言語のサーバーは作らない。
+- 移行・投稿・静的生成の実装、テンプレート、テストはRubyの依存と実行経路だけで構成する。
 - 初期実装は `127.0.0.1` または `::1` にだけbindし、LAN公開、認証、AWS、S3、CloudFront、Lambda、外部公開APIは実装しない。
 - `content/` のMarkdownとfrontmatterを正本とし、既存の `data/normalized/` は読み取り専用にする。SQLiteと `site/` は正本ではない。
 - 日付ページはAsia/Tokyoの日付ごとに一つだけ作成し、URLとファイル名を `/yyyy-mm-dd` と `content/yyyy-mm-dd.md` に固定する。
@@ -31,9 +31,9 @@
 
 ## File and module map
 
-Rubyの投稿機能は既存の `src/log_migration/` Pythonパッケージとは別の `lib/weblog_authoring/` に置く。
+Rubyの投稿機能は移行機能を含む `lib/weblog_migration/` とは別の `lib/weblog_authoring/` に置く。
 
-- `Gemfile`、`.ruby-version`: Ruby 3.3.6と依存gemを固定する。
+- `Gemfile`、`.ruby-version`: Ruby 4系と依存gemを固定する。
 - `lib/weblog_authoring/models.rb`: ページ、文書、リンク、問題、保存・公開リクエストの値オブジェクト。
 - `lib/weblog_authoring/names.rb`: ページ名の検証、日付判定、URL・ファイルパス変換。
 - `lib/weblog_authoring/frontmatter.rb`: Psychを使ったstrictなfrontmatterの読み書き。
@@ -47,7 +47,7 @@ Rubyの投稿機能は既存の `src/log_migration/` Pythonパッケージとは
 - `lib/weblog_authoring/app.rb`、`bin/authoring`: 設定、起動、loopback検証。
 - `templates/authoring/`、`static/authoring/`: Rubyで配信するHTML、CSS、JavaScript。
 - `test/test_helper.rb`、`test/authoring/`: Minitestのfixture、unit/API/publisher/E2Eテスト。
-- `README.md`: Ruby版の起動方法と既存Python移行コマンドの区別を説明する。
+- `README.md`: Ruby版の起動方法と移行・静的生成コマンドを説明する。
 
 `content/.authoring-redirects.json` は名前付きページの旧routeを保持する。`content/.authoring-release.json` は最後に公開したページの内部ID、route、タイトル、本文、リンク、公開メタデータを保持する。どちらも正本Markdownとは別の投稿管理メタデータであり、壊れていた場合は公開と状態変更を停止する。release snapshotは、保存済みだが未公開の現行Markdownで上書きしない。
 
@@ -185,23 +185,20 @@ Rubyの投稿機能は既存の `src/log_migration/` Pythonパッケージとは
 - [ ] HTML escape、属性escape、CSRF境界、loopback bind、キーボード操作、focus、狭幅のtextarea/preview overflow、preview応答の競合抑制を対象テストで確認する。
 - [ ] `Add Ruby authoring web interface`としてコミットする。
 
-## Task 7: CLI, README, and removal of Python authoring runtime
+## Task 7: CLI, README, and runtime consolidation
 
 **Files:**
 
 - Create: `bin/authoring`
 - Create: `config.ru`
 - Modify: `README.md`
-- Delete after Ruby acceptance: `src/log_migration/authoring/`
-- Delete after Ruby acceptance: `src/log_migration/templates/authoring/`
-- Delete after Ruby acceptance: `src/log_migration/static/authoring/`
-- Delete after Ruby acceptance: `tests/authoring/`
-- Modify: `pyproject.toml` only to remove dependencies used exclusively by authoring, if migration no longer needs them.
+- Keep: `lib/weblog_migration/` for Scrapbox移行・静的生成・アセット取得。
+- Keep: `test/migration/` for移行処理とネットワーク境界の受入れテスト。
 
 - [ ] `bin/authoring`は既定で`127.0.0.1:8000`にbindし、`--host`でloopback以外を指定した場合は起動前に拒否する。設定されるcontent/index/siteはrepository rootから解決し、任意の外部パスで正本を上書きしない。
-- [ ] `config.ru`から同じRack appを起動できることを確認する。サーバー起動経路にPythonやGoの呼び出しを残さない。
-- [ ] READMEの投稿画面コマンドをRuby版へ更新し、PythonコマンドはScrapbox移行・静的生成用として別見出しに残す。Ruby 3.3.6の確認方法とlocalhost限定を記載する。
-- [ ] Ruby版のunit/API/E2E受入れが通った後にPython authoring実装、テンプレート、static、テストを削除し、`rg`でauthoringのPython起動参照がないことを確認する。移行用Python依存は実際のimportを確認してから削る。
+- [ ] `config.ru`から同じRack appを起動できることを確認する。サーバー起動経路に別言語の呼び出しを残さない。
+- [ ] READMEの投稿画面、Scrapbox移行、静的生成、アセット取得、URLカード取得のRubyコマンドを記載し、Ruby 4系とlocalhost限定を明記する。
+- [ ] Ruby版のunit/API/E2E/移行受入れが通った後、リポジトリ全体に旧実装・依存・実行参照が残っていないことを確認する。
 - [ ] `Switch authoring runtime to Ruby`としてコミットする。
 
 ## Task 8: End-to-end verification and final review
@@ -216,6 +213,6 @@ Rubyの投稿機能は既存の `src/log_migration/` Pythonパッケージとは
 - [ ] draft、published、unpublished、公開済みページの未公開編集を確認し、publicにはrelease snapshotだけが出ることを確認する。
 - [ ] 失敗するMarkdown、壊れたfrontmatter、redirect/release metadata、SQLite削除・破損をそれぞれ確認する。公開失敗時に旧siteが変わらないことを確認する。
 - [ ] 名前付きページのrenameで本文中リンク、self-link、旧URLredirect、A→B→Cのchainを確認する。衝突時に全対象が不変であることを確認する。
-- [ ] Rubyテスト、既存Python移行テスト、静的検査を実行する。Rubyサーバーはloopbackで起動し、HTTP smoke testを実際のRack/WEBrickへ送る。
+- [ ] Rubyテスト、移行テスト、静的検査を実行する。Rubyサーバーはloopbackで起動し、HTTP smoke testを実際のRack/WEBrickへ送る。
 - [ ] セキュリティ、アクセシビリティ、レイアウトの差分レビューを行い、未解決の重要指摘がないことを確認する。
 - [ ] 最終的なIssueコメントにRuby採用、実装範囲、検証コマンド、残課題を記録する。Issueは検証完了まで`in_progress`のままにし、完了条件を満たした時点でだけ`done`へ進める。

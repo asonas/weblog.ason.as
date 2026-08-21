@@ -1,0 +1,28 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "optparse"
+require "weblog_migration"
+
+options = { timeout: 20.0, max_bytes: 5 * 1024 * 1024 }
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: fetch-url-metadata --manifest PATH --output PATH --assets DIR --report PATH"
+  opts.on("--manifest PATH") { |value| options[:manifest] = Pathname(value) }
+  opts.on("--output PATH") { |value| options[:output] = Pathname(value) }
+  opts.on("--assets PATH") { |value| options[:assets_dir] = Pathname(value) }
+  opts.on("--report PATH") { |value| options[:report] = Pathname(value) }
+  opts.on("--timeout SECONDS", Float) { |value| options[:timeout] = value }
+  opts.on("--max-bytes BYTES", Integer) { |value| options[:max_bytes] = value }
+end
+
+begin
+  parser.parse!(ARGV)
+  missing = %i[manifest output assets_dir report].reject { |key| options.key?(key) }
+  raise OptionParser::MissingArgument, missing.map { |key| "--#{key}" }.join(", ") unless missing.empty?
+  WeblogMigration::UrlMetadata.fetch_url_metadata(**options)
+rescue OptionParser::ParseError, ArgumentError => error
+  warn "fetch-url-metadata: #{error.message}"
+  warn parser
+  exit 2
+end

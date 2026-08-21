@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "weblog_migration"
+
+begin
+  exit WeblogMigration::CLI.migrate(ARGV)
+rescue OptionParser::ParseError, ArgumentError => error
+  warn "migrate: #{error.message}"
+  warn "Usage: migrate --input EXPORT --output DIR --report DIR"
+  exit 2
+end

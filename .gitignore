@@ -1,8 +1,4 @@
 .worktrees/
-.venv/
-*.egg-info/
-__pycache__/
-.pytest_cache/
 data/raw/
 data/normalized/
 data/index/

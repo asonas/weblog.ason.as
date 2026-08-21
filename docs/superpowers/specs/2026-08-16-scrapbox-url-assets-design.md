@@ -85,7 +85,7 @@ manifestは入力と正規化結果だけから決定的に生成し、取得状
 通常の移行コマンドとは別に、manifestを入力にした明示的な取得コマンドを提供する。
 
 ```sh
-mise exec -- .venv/bin/python -m log_migration.assets \
+mise exec -- bin/fetch-assets \
   --manifest data/normalized/asset-manifest.json \
   --output data/normalized/assets \
   --report data/reports/asset-fetch-report.json
@@ -104,13 +104,13 @@ mise exec -- .venv/bin/python -m log_migration.assets \
 
 ## 変更対象
 
-- `scrapbox.py`: 外部URLを内部リンクから除外し、角括弧と裸URLを抽出する。
-- `models.py` / `normalize.py`: 正規化記事に外部URL参照を保持し、manifestを生成する。
-- `index.py`: URLアセットと記事のエッジを派生インデックスへ保存する。
-- `report.py`: URLアセット候補、未解決内部リンク、取得前の欠落情報を区別する。
-- `render.py`: URLアセットをURLカードのフォールバックとして表示する。
-- `assets.py`: manifestから明示的にアセットを取得する。
-- `cli.py`またはモジュールエントリポイント: manifest生成を通常移行へ接続する。
+- `lib/weblog_migration/scrapbox.rb`: 外部URLを内部リンクから除外し、角括弧と裸URLを抽出する。
+- `lib/weblog_migration/models.rb` / `normalize.rb`: 正規化記事に外部URL参照を保持し、manifestを生成する。
+- `lib/weblog_migration/index.rb`: URLアセットと記事のエッジを派生インデックスへ保存する。
+- `lib/weblog_migration/report.rb`: URLアセット候補、未解決内部リンク、取得前の欠落情報を区別する。
+- `lib/weblog_migration/render.rb`: URLアセットをURLカードのフォールバックとして表示する。
+- `lib/weblog_migration/assets.rb`: manifestから明示的にアセットを取得する。
+- `lib/weblog_migration/cli.rb` と `bin/migrate`: manifest生成を通常移行へ接続する。
 
 ## エラーと安全性
 

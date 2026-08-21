@@ -1,0 +1,27 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "optparse"
+require "weblog_migration"
+
+options = { timeout: 20.0, max_bytes: 50 * 1024 * 1024 }
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: fetch-assets --manifest PATH --output DIR --report PATH"
+  opts.on("--manifest PATH") { |value| options[:manifest] = Pathname(value) }
+  opts.on("--output PATH") { |value| options[:output] = Pathname(value) }
+  opts.on("--report PATH") { |value| options[:report] = Pathname(value) }
+  opts.on("--timeout SECONDS", Float) { |value| options[:timeout] = value }
+  opts.on("--max-bytes BYTES", Integer) { |value| options[:max_bytes] = value }
+end
+
+begin
+  parser.parse!(ARGV)
+  missing = %i[manifest output report].reject { |key| options.key?(key) }
+  raise OptionParser::MissingArgument, missing.map { |key| "--#{key}" }.join(", ") unless missing.empty?
+  WeblogMigration::Assets.fetch_assets(**options)
+rescue OptionParser::ParseError, ArgumentError => error
+  warn "fetch-assets: #{error.message}"
+  warn parser
+  exit 2
+end

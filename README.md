@@ -1,6 +1,6 @@
 # weblog.ason.as
 
-Scrapboxの保存済みエクスポートを変換するツールと、localhostでMarkdown記事を書くRuby製の投稿画面を管理するリポジトリです。
+Scrapboxの保存済みエクスポートを変換するRuby製の移行ツールと、localhostでMarkdown記事を書くRuby製の投稿画面を管理するリポジトリです。
 
 記事の正本は`content/`のMarkdownとfrontmatterです。`data/index/authoring.sqlite3`はページ・Wikiリンク・逆リンクを検索するための再生成可能なインデックスで、`site/`は明示的な公開操作から作られる派生静的サイトです。
 
@@ -33,15 +33,15 @@ mise exec -- bundle exec rackup -o 127.0.0.1 -p 8000 config.ru
 
 ## Scrapbox移行・静的生成
 
-以下は既存のScrapbox移行と静的生成のためのPythonツールです。投稿サーバーの起動には使いません。
+以下は既存のScrapbox移行と静的生成のためのRubyツールです。投稿サーバーの起動とは独立したコマンドです。
 
 ### セットアップ
 
-リポジトリのルートで実行します。
+Ruby 4系の最新バージョンをmiseで選択し、依存gemをインストールします。
 
 ```sh
-mise exec -- python3 -m venv .venv
-mise exec -- .venv/bin/python -m pip install -e .
+mise exec -- ruby --version
+mise exec -- bundle install
 ```
 
 ## 変換
@@ -49,7 +49,7 @@ mise exec -- .venv/bin/python -m pip install -e .
 保存済みエクスポートを `data/raw/` に置き、次のコマンドを実行します。
 
 ```sh
-mise exec -- .venv/bin/python -m log_migration \
+mise exec -- bin/migrate \
   --input data/raw/scrapbox.json \
   --output data/normalized \
   --report data/reports
@@ -78,7 +78,7 @@ mise exec -- ruby -run -e httpd -- -p 8000 data/normalized/site
 通常の変換ではネットワークへ接続せず、URLのmanifestだけを生成します。画像・音声・動画などをNASへ取得する場合だけ、次の明示的なコマンドを実行します。
 
 ```sh
-mise exec -- .venv/bin/python -m log_migration.assets \
+mise exec -- bin/fetch-assets \
   --manifest data/normalized/asset-manifest.json \
   --output data/normalized/assets \
   --report data/reports/asset-fetch-report.json
@@ -89,12 +89,12 @@ mise exec -- .venv/bin/python -m log_migration.assets \
 アセットは `data/normalized/assets/` に保存されます。取得済みファイルはGit管理外ですが、リポジトリの作業ディレクトリに残ります。Scrapboxエクスポートを再生成してから取得する場合は、次の2段階で実行します。
 
 ```sh
-mise exec -- .venv/bin/python -m log_migration \
+mise exec -- bin/migrate \
   --input data/raw/scrapbox.json \
   --output data/normalized \
   --report data/reports
 
-mise exec -- .venv/bin/python -m log_migration.assets \
+mise exec -- bin/fetch-assets \
   --manifest data/normalized/asset-manifest.json \
   --output data/normalized/assets \
   --report data/reports/asset-fetch-report.json
@@ -105,7 +105,7 @@ mise exec -- .venv/bin/python -m log_migration.assets \
 通常の変換は引き続きネットワークへ接続しません。一般URLのタイトル、説明、`og:image` と画像を取得する場合だけ、次の明示的なコマンドを実行します。
 
 ```sh
-mise exec -- .venv/bin/python -m log_migration.url_metadata \
+mise exec -- bin/fetch-url-metadata \
   --manifest data/normalized/asset-manifest.json \
   --output data/normalized/url-metadata.json \
   --assets data/normalized/assets \
@@ -115,7 +115,7 @@ mise exec -- .venv/bin/python -m log_migration.url_metadata \
 取得結果を静的カードへ反映するには、通常の変換を取得済みJSON付きで再実行します。これはネットワークを使わず、`data/normalized/assets/` の画像を `site/assets/` へコピーしてカードの背景にします。
 
 ```sh
-mise exec -- .venv/bin/python -m log_migration \
+mise exec -- bin/migrate \
   --input data/raw/scrapbox.json \
   --output data/normalized \
   --report data/reports \
@@ -128,8 +128,7 @@ mise exec -- .venv/bin/python -m log_migration \
 ## テスト
 
 ```sh
-mise exec -- bundle exec ruby -Itest -e 'Dir["test/authoring/test_*.rb"].sort.each { |file| require_relative file }'
-mise exec -- .venv/bin/python -m pytest -q
+mise exec -- bundle exec ruby -Itest -e 'Dir["test/authoring/test_*.rb", "test/migration/test_*.rb"].sort.each { |file| require_relative file }'
 ```
 
-Rubyの投稿機能はlocalhostでの記事作成・編集・公開を対象にします。現フェーズでは、LAN公開、認証、AWS配信、公開データAPI、編集履歴は扱いません。音声・動画はPython側で明示的なアセット取得の対象になりますが、再生用の変換は行いません。まずNAS上で移行結果と記事・アセット間の関係を確認するための土台です。
+Rubyの投稿機能はlocalhostでの記事作成・編集・公開を対象にします。現フェーズでは、LAN公開、認証、AWS配信、公開データAPI、編集履歴は扱いません。音声・動画はRuby側で明示的なアセット取得の対象になりますが、再生用の変換は行いません。まずNAS上で移行結果と記事・アセット間の関係を確認するための土台です。
