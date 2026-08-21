@@ -9,3 +9,7 @@ gem "sqlite3"
 gem "kramdown"
 gem "kramdown-parser-gfm"
 gem "rouge"
+
+group :test do
+  gem "minitest"
+end

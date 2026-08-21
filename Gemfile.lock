@@ -1,10 +1,15 @@
 GEM
   remote: https://rubygems.org/
   specs:
+    drb (2.2.3)
     kramdown (2.5.2)
       rexml (>= 3.4.4)
     kramdown-parser-gfm (1.1.0)
       kramdown (~> 2.0)
+    minitest (6.0.6)
+      drb (~> 2.0)
+      prism (~> 1.5)
+    prism (1.9.0)
     rack (3.2.7)
     rackup (2.3.1)
       rack (>= 3)
@@ -39,6 +44,7 @@ PLATFORMS
 DEPENDENCIES
   kramdown
   kramdown-parser-gfm
+  minitest
   rack
   rackup
   rouge

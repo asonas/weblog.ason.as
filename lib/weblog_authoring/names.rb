@@ -6,7 +6,7 @@ require "pathname"
 module WeblogAuthoring
   DATE_NAME = /\A\d{4}-\d{2}-\d{2}\z/.freeze
   RESERVED_ROUTES = %w[manage api static].freeze
-  UNRESERVED_BYTE = /[A-Za-z0-9\-._~]/.freeze
+  UNRESERVED_FILENAME_BYTE = /[a-z0-9\-._~]/.freeze
 
   module_function
 
@@ -15,6 +15,7 @@ module WeblogAuthoring
 
     normalized = name.strip
     raise ArgumentError, "page name must not be empty" if normalized.empty?
+    raise ArgumentError, "page name must not be . or .." if %w[. ..].include?(normalized)
     raise ArgumentError, "page name contains a forbidden character" if normalized.match?(/[\/?#\r\n]/)
     raise ArgumentError, "page name contains a control character" if normalized.each_codepoint.any? { |codepoint| codepoint < 32 || codepoint == 127 }
     raise ArgumentError, "date-shaped names are reserved" if DATE_NAME.match?(normalized)
@@ -28,6 +29,13 @@ module WeblogAuthoring
 
   def encoded_page_name(name)
     validate_page_name(name).bytes.map { |byte| encode_byte(byte) }.join
+  end
+
+  def encoded_route(route)
+    normalized = route.to_s
+    return normalized if DATE_NAME.match?(normalized)
+
+    encoded_page_name(normalized)
   end
 
   def page_path(content_dir, page_type, name:, page_date:)
@@ -49,7 +57,8 @@ module WeblogAuthoring
 
   def encode_byte(byte)
     character = byte.chr
-    return character if character.match?(UNRESERVED_BYTE)
+    # Keep named-page filenames distinct on case-insensitive filesystems.
+    return character if character.match?(UNRESERVED_FILENAME_BYTE)
 
     format("%%%02X", byte)
   end

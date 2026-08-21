@@ -9,9 +9,6 @@ description = "Scrapbox migration and local preview tools for log.ason.as"
 requires-python = ">=3.12,<3.15"
 dependencies = [
     "markdown-it-py>=4,<5",
-    "mdit-py-plugins>=0.4,<1",
-    "PyYAML>=6,<7",
-    "Pygments>=2.18,<3",
 ]
 
 [project.optional-dependencies]

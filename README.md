@@ -1,10 +1,41 @@
-# log.ason.as migration tools
+# weblog.ason.as
 
-Scrapboxの保存済みエクスポートを、NAS上で確認できるMarkdown・SQLite派生インデックス・静的プレビューへ変換するフェーズ0の実装です。
+Scrapboxの保存済みエクスポートを変換するツールと、localhostでMarkdown記事を書くRuby製の投稿画面を管理するリポジトリです。
 
-正本はMarkdownとアセットです。SQLiteは記事・アセット・内部リンク・逆リンクを探索するための再生成可能なインデックスとして扱います。AWSやScrapboxへ接続する処理は含みません。
+記事の正本は`content/`のMarkdownとfrontmatterです。`data/index/authoring.sqlite3`はページ・Wikiリンク・逆リンクを検索するための再生成可能なインデックスで、`site/`は明示的な公開操作から作られる派生静的サイトです。
 
-## セットアップ
+## Ruby投稿画面
+
+Ruby 3.3.6をmiseで選択し、依存gemをインストールします。
+
+```sh
+mise exec -- ruby --version
+mise exec -- bundle install
+```
+
+投稿サーバーは`content/`、`data/index/authoring.sqlite3`、`site/`をリポジトリルートから解決し、既定では`127.0.0.1:8000`だけで待ち受けます。LAN公開、認証、AWS、クラウド、外部APIは扱いません。
+
+```sh
+mise exec -- bin/authoring
+```
+
+ブラウザで`http://127.0.0.1:8000/`を開きます。`--host`には`127.0.0.1`、`localhost`、`::1`だけを指定できます。
+
+Rackupから同じアプリを起動する場合も、bind先をloopbackに限定します。
+
+```sh
+mise exec -- bundle exec rackup -o 127.0.0.1 -p 8000 config.ru
+```
+
+保存前の本文はファイルやSQLiteへ書き込まず、保存操作で初めて`content/`へMarkdownを作成します。Wikiリンク先の空ページと逆リンクは自動的に構築されます。下書き保存だけでは`site/`を更新せず、画面から明示的に公開したときだけ静的サイトを差し替えます。
+
+独立した記事プレビュー画面はありません。編集画面の左側にMarkdown入力欄、右側にライブプレビューを表示し、保存済み・未保存を問わずlocalhostの読み取り専用ページをWikiリンクから新しいタブで開けます。
+
+## Scrapbox移行・静的生成
+
+以下は既存のScrapbox移行と静的生成のためのPythonツールです。投稿サーバーの起動には使いません。
+
+### セットアップ
 
 リポジトリのルートで実行します。
 
@@ -12,18 +43,6 @@ Scrapboxの保存済みエクスポートを、NAS上で確認できるMarkdown�
 mise exec -- python3 -m venv .venv
 mise exec -- .venv/bin/python -m pip install -e .
 ```
-
-## ローカル執筆画面
-
-執筆画面はlocalhostだけに bind します。LAN、認証、AWS、クラウド、外部APIへの公開や連携は行いません。
-
-```sh
-mise exec -- .venv/bin/python -m log_migration.authoring --content content --index data/index/authoring.sqlite3 --site site --host 127.0.0.1 --port 8000
-```
-
-`content/` のMarkdownが正本です。最初の保存を行うまでMarkdownファイルは作成されません。
-`data/index/authoring.sqlite3` は再生成可能な検索用インデックス、`site/` は公開用の生成物であり、どちらも正本ではありません。
-下書きの保存だけでは `site/` を更新しません。執筆画面で明示的に公開操作を行ったときだけ、公開用の静的サイトを生成します。
 
 ## 変換
 
@@ -33,7 +52,7 @@ mise exec -- .venv/bin/python -m log_migration.authoring --content content --ind
 mise exec -- .venv/bin/python -m log_migration \
   --input data/raw/scrapbox.json \
   --output data/normalized \
---report data/reports
+  --report data/reports
 ```
 
 `data/raw/`、`data/normalized/`、`data/reports/` はリポジトリ内のローカル作業データとして保持し、Gitにはコミットしません。`/tmp` ではなく、これらのディレクトリを使うことで、移行結果と取得済みアセットを同じ作業環境に残せます。
@@ -51,7 +70,7 @@ mise exec -- .venv/bin/python -m log_migration \
 静的サイトは、例えば次のコマンドでローカル確認できます。
 
 ```sh
-mise exec -- .venv/bin/python -m http.server 8000 --directory data/normalized/site
+mise exec -- ruby -run -e httpd -- -p 8000 data/normalized/site
 ```
 
 ## アセット取得
@@ -109,7 +128,8 @@ mise exec -- .venv/bin/python -m log_migration \
 ## テスト
 
 ```sh
+mise exec -- bundle exec ruby -Itest -e 'Dir["test/authoring/test_*.rb"].sort.each { |file| require_relative file }'
 mise exec -- .venv/bin/python -m pytest -q
 ```
 
-現フェーズでは、AWS配信、投稿アプリ、編集履歴は扱いません。音声・動画は明示的なアセット取得の対象になりますが、再生用の変換は行いません。まずNAS上で移行結果と記事・アセット間の関係を確認するための土台です。
+Rubyの投稿機能はlocalhostでの記事作成・編集・公開を対象にします。現フェーズでは、LAN公開、認証、AWS配信、公開データAPI、編集履歴は扱いません。音声・動画はPython側で明示的なアセット取得の対象になりますが、再生用の変換は行いません。まずNAS上で移行結果と記事・アセット間の関係を確認するための土台です。

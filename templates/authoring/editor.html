@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/static/authoring/app.css">
+    <script src="/static/authoring/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">本文へ移動</a>
+    <header class="site-header">
+      <nav aria-label="主要ナビゲーション">
+        <a href="/">今日を編集</a>
+        <a href="/manage">管理</a>
+      </nav>
+    </header>
+    <main id="main" class="page-shell">
+      <h1>編集</h1>
+      <p id="save-status" class="save-status" aria-live="polite"><%= saved_at %>・<%= status %></p>
+      <form id="editor"
+            data-page-id="<%= page_id %>"
+            data-page-type="<%= page_type %>"
+            data-page-date="<%= page_date %>"
+            data-page-name="<%= page_name %>"
+            data-expected-updated-at="<%= expected_updated_at %>">
+        <div class="editor-grid">
+          <section aria-labelledby="input-heading">
+            <h2 id="input-heading">入力</h2>
+            <% unless title_hidden == " hidden" %>
+              <div class="field-group">
+                <label for="title">タイトル</label>
+                <input id="title" name="title" value="<%= document_title %>" aria-describedby="title-errors">
+                <p id="title-errors" class="input-error" aria-live="polite"></p>
+              </div>
+            <% end %>
+            <div class="field-group">
+              <label for="body">本文（Markdown）</label>
+              <textarea id="body" name="body" rows="24"
+                        aria-describedby="body-errors body-preview-errors"><%= body %></textarea>
+              <p id="body-errors" class="input-error" aria-live="polite"></p>
+              <p id="body-preview-errors" class="input-error" aria-live="polite"></p>
+            </div>
+          </section>
+          <section aria-labelledby="preview-heading">
+            <h2 id="preview-heading">プレビュー</h2>
+            <div id="preview" class="preview-panel" aria-live="polite" aria-busy="false"></div>
+          </section>
+        </div>
+        <div class="editor-actions">
+          <button type="submit">下書きを保存</button>
+          <button id="publish" type="button">公開する</button>
+          <button id="unpublish" type="button">非公開にする</button>
+        </div>
+      </form>
+      <section id="rename-settings" class="settings-panel"<%= rename_hidden %> aria-labelledby="rename-heading">
+        <h2 id="rename-heading">ページ設定</h2>
+        <div class="field-group">
+          <label for="page-name">ページ名</label>
+          <input id="page-name" name="page-name" value="<%= page_name %>" aria-describedby="rename-errors">
+          <p id="rename-errors" class="input-error" aria-live="polite"></p>
+        </div>
+        <button id="rename" type="button">ページ名を変更</button>
+      </section>
+    </main>
+  </body>
+</html>
