@@ -11,6 +11,7 @@ gem "sqlite3"
 gem "kramdown"
 gem "kramdown-parser-gfm"
 gem "rouge"
+gem "aws-sdk-s3"
 
 group :test do
   gem "minitest"

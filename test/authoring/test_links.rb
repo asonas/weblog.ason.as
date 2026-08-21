@@ -28,4 +28,30 @@ class TestLinks < Minitest::Test
 
     assert_equal ["draft page", "another"], WeblogAuthoring.extract_wiki_links(body).map(&:name)
   end
+
+  def test_extract_external_urls_ignores_code_fences_and_deduplicates_urls
+    body = <<~MARKDOWN
+      https://example.com/article
+      [example](https://example.com/article)
+      [https://example.net/path?item=1]
+      ```
+      https://ignored.example.com
+      ```
+    MARKDOWN
+
+    assert_equal [
+      "https://example.com/article",
+      "https://example.net/path?item=1"
+    ], WeblogAuthoring.extract_external_urls(body)
+  end
+
+  def test_extract_external_urls_deduplicates_markdown_escaped_link_labels
+    body = <<~MARKDOWN
+      [https://example.com/culture\_history.php](https://example.com/culture_history.php)
+    MARKDOWN
+
+    assert_equal [
+      "https://example.com/culture_history.php"
+    ], WeblogAuthoring.extract_external_urls(body)
+  end
 end

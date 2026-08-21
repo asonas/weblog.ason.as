@@ -2,7 +2,9 @@
 
 require "cgi"
 require "date"
+require "digest"
 require "erb"
+require "fileutils"
 require "json"
 require "pathname"
 require "rack"
@@ -10,12 +12,50 @@ require "rack/reloader"
 require "sinatra/base"
 require "time"
 require "uri"
+require "aws-sdk-s3"
 
 require_relative "development_database"
+require_relative "embed_metadata"
 require_relative "models"
 require_relative "names"
 
 module WeblogAuthoring
+  class DevelopmentRequestLog
+    def initialize(app, path)
+      @app = app
+      FileUtils.mkdir_p(path.dirname)
+      @output = path.open("a", encoding: "UTF-8")
+      @output.sync = true
+    end
+
+    def call(env)
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      status, headers, body = @app.call(env)
+      chunks = body.each.to_a
+      body.close if body.respond_to?(:close)
+      write(env, status, chunks.join, started_at)
+      [status, headers, chunks]
+    rescue StandardError => error
+      write(env, 500, "#{error.class}: #{error.message}", started_at)
+      raise
+    end
+
+    private
+
+    def write(env, status, response_body, started_at)
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+      entry = {
+        time: Time.now.iso8601(6),
+        method: env.fetch("REQUEST_METHOD"),
+        path: env.fetch("PATH_INFO"),
+        status:,
+        duration_ms: (elapsed * 1000).round(1)
+      }
+      entry[:error] = response_body if status >= 400
+      @output.puts(JSON.generate(entry))
+    end
+  end
+
   class DevelopmentInputError < StandardError
     attr_reader :field, :status
 
@@ -36,6 +76,14 @@ module WeblogAuthoring
       "app.js" => ["application/javascript", "app.js"]
     }.freeze
     ALLOWED_PAGE_TYPES = %w[date named].freeze
+    JAPANESE_WEEKDAYS = %w[日曜日 月曜日 火曜日 水曜日 木曜日 金曜日 土曜日].freeze
+    IMAGE_EXTENSIONS = /\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|\z)/i
+    HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]]+)/
+    RELATED_PAGE_LIMIT = 50
+    DEVELOPMENT_ASSET_BUCKET = "weblog-asonas-assets-dev-282782318939"
+    DEVELOPMENT_ASSET_REGION = "ap-northeast-1"
+    ASSET_FILENAME = /\Aasset_[0-9a-f]{16}\.(?:avif|gif|jpe?g|png|webp)\z/i
+    EMBED_CACHE_TTL = 7 * 24 * 60 * 60
 
     set :environment, :development
     set :show_exceptions, false
@@ -47,12 +95,14 @@ module WeblogAuthoring
     end
 
     get "/" do
+      initial_state = case params["new"]
+                      when "1" then new_editor_state
+                      when "daily" then daily_editor_state
+                      else home_state
+                      end
       render_shell(
         title: "weblog",
-        initial_state: {
-          "mode" => "home",
-          "pages" => settings.database.list_pages.map { |page| page_summary(page) }
-        }
+        initial_state:
       )
     end
 
@@ -77,10 +127,7 @@ module WeblogAuthoring
     end
 
     get "/api/pages" do
-      json_response({
-        "mode" => "home",
-        "pages" => settings.database.list_pages.map { |page| page_summary(page) }
-      })
+      json_response(home_state)
     end
 
     get "/api/editor/new" do
@@ -92,6 +139,50 @@ module WeblogAuthoring
       return json_error(404, "ページが見つかりません") if page.nil?
 
       json_response(editor_json(page))
+    end
+
+    get "/api/routes/:route" do
+      route = valid_page_route(params.fetch("route"))
+      return json_error(404, "ページが見つかりません") if route.nil?
+
+      json_response(editor_state_for_route(route))
+    end
+
+    get "/api/related" do
+      route = valid_page_route(params.fetch("route", ""))
+      return json_error(422, "ページ名が不正です") if route.nil?
+
+      offset = Integer(params.fetch("offset", "0"), 10)
+      return json_error(422, "offset が不正です") if offset.negative?
+
+      page = params["excluding_id"].to_s.empty? ? nil : settings.database.find(params["excluding_id"])
+      json_response(related_page_result(route, page&.body.to_s, excluding_id: page&.id, offset:))
+    rescue ArgumentError
+      json_error(422, "offset が不正です")
+    end
+
+    get "/api/embed" do
+      url = params.fetch("url", "")
+      return json_error(422, "URLを指定してください") if url.empty?
+
+      json_response(embed_metadata(url))
+    rescue EmbedMetadataFetcher::UnsafeUrlError => error
+      json_error(422, error.message)
+    end
+
+    get "/assets/:filename" do
+      filename = params.fetch("filename")
+      halt 404 unless ASSET_FILENAME.match?(filename)
+
+      object = s3_client.get_object(
+        bucket: settings.asset_bucket,
+        key: "assets/#{filename}"
+      )
+      content_type object.content_type || "application/octet-stream"
+      cache_control :public, max_age: 31_536_000, immutable: true
+      object.body.read
+    rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
+      halt 404
     end
 
     get "/static/authoring/:asset" do
@@ -116,6 +207,30 @@ module WeblogAuthoring
       end
     end
 
+    post "/api/rename" do
+      api_response do |payload|
+        page_id = required_string(payload, "page_id")
+        name = required_string(payload, "name")
+        body = payload.fetch("body") { raise DevelopmentInputError.new("body は必須です", field: "body") }
+        raise DevelopmentInputError.new("body は文字列にしてください", field: "body") unless body.is_a?(String)
+
+        page = settings.database.rename(
+          page_id,
+          name,
+          body:,
+          expected_updated_at: expected_updated_at(payload)
+        )
+        page_json(page)
+      end
+    end
+
+    get "/:route" do
+      route = valid_page_route(params.fetch("route"))
+      halt 404, "ページが見つかりません" if route.nil?
+
+      render_shell(title: route, initial_state: editor_state_for_route(route))
+    end
+
     error DevelopmentInputError do
       error = env.fetch("sinatra.error")
       json_error(error.status, error.message, field: error.field)
@@ -128,7 +243,8 @@ module WeblogAuthoring
 
     private
 
-    def self.application(root: ROOT, clock: -> { Time.now.getlocal(DevelopmentDatabase::TOKYO_OFFSET) })
+    def self.application(root: ROOT, clock: -> { Time.now.getlocal(DevelopmentDatabase::TOKYO_OFFSET) },
+                         s3_client: nil, asset_bucket: DEVELOPMENT_ASSET_BUCKET, embed_fetcher: nil)
       root_path = Pathname(root).expand_path
       database = DevelopmentDatabase.new(
         root_path.join("data/development/authoring.sqlite3"),
@@ -141,13 +257,83 @@ module WeblogAuthoring
       app.set :root_path, root_path
       app.set :database, database
       app.set :clock, -> { clock }
-      Rack::Reloader.new(app, 0)
+      app.set :s3_client, s3_client
+      app.set :asset_bucket, asset_bucket
+      app.set :embed_fetcher, embed_fetcher
+      app.set :asset_image_paths, asset_image_paths(root_path)
+      reloader = Rack::Reloader.new(app, 0)
+      DevelopmentRequestLog.new(reloader, root_path.join("log/authoring-development.log"))
+    end
+
+    def self.asset_image_paths(root_path)
+      manifest_path = root_path.join("data/normalized/asset-manifest.json")
+      report_path = root_path.join("data/reports/asset-fetch-report.json")
+      return {} unless manifest_path.file? && report_path.file?
+
+      manifest = JSON.parse(manifest_path.read(encoding: "UTF-8")).fetch("assets")
+      local_paths = JSON.parse(report_path.read(encoding: "UTF-8")).fetch("results").to_h do |result|
+        [result["id"], result["local_path"]]
+      end
+      manifest.each_with_object({}) do |asset, paths|
+        local_path = local_paths[asset.fetch("id")]
+        paths[asset.fetch("url")] = local_path if asset.fetch("kind") == "image" && local_path
+      end
     end
 
     def validate_loopback_host!
       return if LOOPBACK_HOSTS.include?(request.host)
 
       halt 403, "localhostからのアクセスだけを許可しています"
+    end
+
+    def s3_client
+      settings.s3_client || (@s3_client ||= Aws::S3::Client.new(region: DEVELOPMENT_ASSET_REGION))
+    end
+
+    def embed_fetcher
+      settings.embed_fetcher || (@embed_fetcher ||= EmbedMetadataFetcher.new)
+    end
+
+    def embed_metadata(url)
+      key = "assets/embed-cache/#{Digest::SHA256.hexdigest(url)}.json"
+      cached = read_embed_cache(key, url)
+      return cached unless cached.nil?
+
+      metadata = embed_fetcher.fetch(url)
+      write_embed_cache(key, metadata.merge("fetched_at" => settings.clock.call.iso8601))
+    rescue EmbedMetadataFetcher::FetchError
+      fallback = {
+        "url" => url,
+        "canonical_url" => url,
+        "title" => URI.parse(url).host || url,
+        "description" => nil,
+        "image_url" => nil,
+        "site_name" => URI.parse(url).host,
+        "status" => "fallback",
+        "fetched_at" => settings.clock.call.iso8601
+      }
+      write_embed_cache(key, fallback)
+    end
+
+    def read_embed_cache(key, url)
+      object = s3_client.get_object(bucket: settings.asset_bucket, key:)
+      metadata = JSON.parse(object.body.read)
+      return nil unless metadata["url"] == url
+
+      fetched_at = Time.iso8601(metadata.fetch("fetched_at"))
+      settings.clock.call - fetched_at <= EMBED_CACHE_TTL ? metadata : nil
+    rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound, JSON::ParserError, KeyError, ArgumentError
+      nil
+    end
+
+    def write_embed_cache(key, metadata)
+      s3_client.put_object(
+        bucket: settings.asset_bucket,
+        key:,
+        body: JSON.generate(metadata),
+        content_type: "application/json; charset=utf-8"
+      )
+      metadata
     end
 
     def render_editor(page_id:, page_type:, date:, name:, title:, body:, expected_updated_at:, save_message:)
@@ -167,7 +353,9 @@ module WeblogAuthoring
     end
 
     def new_editor_state
-      page_type = params.fetch("type", "date")
+      return daily_editor_state if params["template"] == "daily"
+
+      page_type = params.fetch("type", "named")
       raise DevelopmentInputError, "page_type が不正です" unless ALLOWED_PAGE_TYPES.include?(page_type)
 
       page_date = if page_type == "date"
@@ -191,6 +379,54 @@ module WeblogAuthoring
       )
     end
 
+    def daily_editor_state
+      date = today
+      title = date.iso8601
+      page = settings.database.find_route(title)
+      return editor_json(page) unless page.nil?
+
+      links = [
+        JAPANESE_WEEKDAYS.fetch(date.wday),
+        date.strftime("%Y%m"),
+        date.strftime("%m%d"),
+        "日記"
+      ].map { |name| "[[#{name}]]" }.join(" ")
+
+      editor_json(
+        page_id: "",
+        page_type: "named",
+        date: "",
+        name: title,
+        title:,
+        body: links,
+        expected_updated_at: "",
+        save_message: ""
+      )
+    end
+
+    def editor_state_for_route(raw_route)
+      route = WeblogAuthoring.validate_page_name(raw_route)
+      page = settings.database.find_route(route)
+      return editor_json(page) unless page.nil?
+
+      editor_json(
+        page_id: "",
+        page_type: "named",
+        date: "",
+        name: route,
+        title: route,
+        body: "",
+        expected_updated_at: "",
+        save_message: ""
+      )
+    end
+
+    def valid_page_route(raw_route)
+      WeblogAuthoring.validate_page_name(raw_route)
+    rescue ArgumentError
+      nil
+    end
+
     def editor_json(page = nil, page_id: nil, page_type: nil, date: nil, name: nil, title: nil, body: nil,
                     expected_updated_at: nil, save_message: nil)
       if page
@@ -204,6 +440,7 @@ module WeblogAuthoring
         save_message = "保存済み・最終更新 #{format_time(page.updated_at)}"
       end
 
+      related = related_page_result(name.to_s.empty? ? title : name, body, excluding_id: page_id)
       {
         "mode" => "editor",
         "page_id" => page_id,
@@ -213,7 +450,44 @@ module WeblogAuthoring
         "title" => title,
         "body" => body,
         "expected_updated_at" => expected_updated_at,
-        "save_message" => save_message
+        "save_message" => save_message,
+        "linked_pages" => related.fetch("pages"),
+        "linked_pages_has_more" => related.fetch("has_more")
+      }
+    end
+
+    def related_page_result(route, body, excluding_id: nil, offset: 0)
+      pages = settings.database.list_pages
+      outgoing_names = WeblogAuthoring.extract_wiki_links(body.to_s).map(&:name).uniq
+      outgoing_urls = WeblogAuthoring.extract_external_urls(body.to_s)
+
+      related = pages.each_with_index.filter_map do |page, index|
+        next false if page.id == excluding_id
+
+        page_link_names = page.links.map(&:name)
+        related_by = outgoing_names.filter do |name|
+          next page.route == name if name == "日記"
+
+          page.route == name || page_link_names.include?(name)
+        end
+        related_by << route if !route.to_s.empty? && page_link_names.include?(route)
+        related_urls = WeblogAuthoring.extract_external_urls(page.body.to_s) & outgoing_urls
+        next if related_by.empty? && related_urls.empty?
+
+        direct_link_index = outgoing_names.index(page.route)
+        priority = direct_link_index.nil? ? 1 : 0
+        order = direct_link_index || index
+        summary = page_summary(page).merge(
+          "related_by" => related_by.uniq,
+          "related_urls" => related_urls
+        )
+        [priority, order, summary]
+      end.sort_by { |priority, order, _page| [priority, order] }
+        .map(&:last)
+
+      {
+        "pages" => related.slice(offset, RELATED_PAGE_LIMIT) || [],
+        "has_more" => offset + RELATED_PAGE_LIMIT < related.length
       }
     end
 
@@ -262,7 +536,8 @@ module WeblogAuthoring
         raise DevelopmentInputError.new("page_type が不正です", field: "page_type")
       end
 
-      body = required_string(payload, "body")
+      body = payload.fetch("body") { raise DevelopmentInputError.new("body は必須です", field: "body") }
+      raise DevelopmentInputError.new("body は文字列にしてください", field: "body") unless body.is_a?(String)
       title = optional_string(payload, "title")
       name = optional_string(payload, "name")
       page_date = if page_type == "date"
@@ -315,6 +590,7 @@ module WeblogAuthoring
     end
 
     def page_json(page)
+      related = related_page_result(page.route, page.body, excluding_id: page.id)
       {
         "id" => page.id,
         "page_type" => page.page_type,
@@ -323,7 +599,9 @@ module WeblogAuthoring
         "title" => page.title,
         "status" => page.status,
         "updated_at" => page.updated_at.iso8601(9),
-        "route" => page.route
+        "route" => page.route,
+        "linked_pages" => related.fetch("pages"),
+        "linked_pages_has_more" => related.fetch("has_more")
       }
     end
 
@@ -332,8 +610,70 @@ module WeblogAuthoring
         "id" => page.id,
         "title" => page.display_title,
         "route" => page.route,
-        "updated_at" => page.updated_at.iso8601(9)
+        "created_at" => page.created_at.iso8601(9),
+        "updated_at" => page.updated_at.iso8601(9),
+        "excerpt" => page_excerpt(page),
+        "image_url" => page_image_url(page)
       }
+    end
+
+    def home_state
+      pages = settings.database.list_pages
+      {
+        "mode" => "home",
+        "tags" => recent_tags(pages),
+        "pages" => pages.first(30).map { |page| page_summary(page) },
+        "archive" => archive_years(pages)
+      }
+    end
+
+    def archive_years(pages)
+      return [] if pages.empty?
+
+      months_by_year = pages.each_with_object(Hash.new { |hash, year| hash[year] = [] }) do |page, result|
+        date = page.created_at.getlocal(DevelopmentDatabase::TOKYO_OFFSET)
+        result[date.year] << date.month unless result[date.year].include?(date.month)
+      end
+      newest_year = [today.year, months_by_year.keys.max].max
+      oldest_year = months_by_year.keys.min
+
+      newest_year.downto(oldest_year).map do |year|
+        { "year" => year, "months" => months_by_year.fetch(year, []).sort }
+      end
+    end
+
+    def recent_tags(pages)
+      pages.sort_by(&:updated_at).reverse_each.each_with_object([]) do |page, tags|
+        names = page.links.map(&:name)
+        names.concat(page.body.to_s.scan(HASHTAG_PATTERN).flatten)
+        names.each do |name|
+          tag = name.strip
+          tags << tag unless tag.empty? || tags.include?(tag)
+          return tags if tags.length == 20
+        end
+      end
+    end
+
+    def page_image_url(page)
+      urls = page.body.to_s.scan(/\[(https?:\/\/[^\]\s]+)(?:\s+[^\]]+)?\]/).flatten
+      urls.each do |url|
+        local_path = settings.asset_image_paths[url]
+        return "/assets/#{local_path}" if local_path
+        return url.sub(/#\.png\z/i, "") if IMAGE_EXTENSIONS.match?(url)
+      end
+      nil
+    end
+
+    def page_excerpt(page)
+      lines = page.body.to_s.lines.map(&:strip)
+      lines.shift if lines.first == page.display_title
+      lines.reject! { |line| line.empty? || line.match?(/\A\[https?:\/\//) }
+      lines.join(" ")
+        .gsub(/\[\[([^\]]+)\]\]/, "\\1")
+        .gsub(/(?:\A|\s)#[^\s#\[\]]+/, " ")
+        .gsub(/\s+/, " ")
+        .strip
+        .slice(0, 600)
     end
 
     def today

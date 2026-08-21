@@ -182,7 +182,9 @@ module WeblogAuthoring
         "title" => document_title,
         "body" => page&.body || draft.fetch(:body, ""),
         "expected_updated_at" => page&.updated_at&.iso8601(9).to_s,
-        "save_message" => save_message
+        "save_message" => save_message,
+        "linked_pages" => [],
+        "linked_pages_has_more" => false
       }
       values = {
         title: "編集",
@@ -438,7 +440,9 @@ module WeblogAuthoring
         "title" => page.title,
         "status" => page.status,
         "updated_at" => page.updated_at&.iso8601(9),
-        "route" => page.route
+        "route" => page.route,
+        "linked_pages" => [],
+        "linked_pages_has_more" => false
       }
     end
 

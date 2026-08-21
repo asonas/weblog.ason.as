@@ -4,17 +4,48 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>weblog</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem("weblog-palette") === "loadmore" ? "loadmore" : "departure";
+      } catch (_error) {
+        document.documentElement.dataset.theme = "departure";
+      }
+    </script>
+    <link rel="stylesheet" href="/frontend/authoring/styles.css">
   </head>
   <body>
     <a class="skip-link" href="#main">本文へ移動</a>
     <header class="site-header">
-      <nav aria-label="主要ナビゲーション">
+      <nav class="header-nav" aria-label="主要ナビゲーション">
         <a href="/">weblog</a>
+        <span class="header-actions">
+          <button class="header-action universe-toggle" id="universe-toggle" type="button" aria-label="ユニバースを開く" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="2"/>
+              <ellipse cx="12" cy="12" rx="9" ry="4.5"/>
+              <ellipse cx="12" cy="12" rx="4.5" ry="9" transform="rotate(42 12 12)"/>
+              <circle cx="20" cy="12" r="1.25"/>
+            </svg>
+          </button>
+          <button class="header-action theme-toggle" id="theme-toggle" type="button" aria-label="配色を切り替える">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="8" cy="12" r="4"/>
+              <circle cx="16" cy="12" r="4"/>
+            </svg>
+          </button>
+          <a class="header-action" href="/?new=1" aria-label="新しい記事を作成">＋</a>
+          <a class="header-action" href="/?new=daily" aria-label="今日の日記を開く">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 2v3M17 2v3M3.5 9h17M5 4h14a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 19 21H5a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 5 4Z"/>
+            </svg>
+          </a>
+        </span>
       </nav>
     </header>
     <main id="main" class="page-shell">
       <div id="authoring-root"></div>
-      <noscript><a href="/editor/new" aria-label="新しい記事を作成">新しい記事を作成</a></noscript>
+      <noscript>記事の編集にはJavaScriptが必要です。</noscript>
     </main>
     <script type="module" src="/frontend/authoring/main.tsx"></script>
   </body>

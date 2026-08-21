@@ -4,9 +4,13 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite --host 127.0.0.1",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:scrapbox": "tsx --test scripts/scrapbox-to-weblog.test.ts",
+    "convert:scrapbox:all": "tsx scripts/scrapbox-to-weblog.ts",
+    "convert:scrapbox:assets": "tsx scripts/scrapbox-to-weblog.ts --assets-only"
   },
   "dependencies": {
+    "@progfay/scrapbox-parser": "10.1.1",
     "@tiptap/markdown": "3.30.2",
     "@tiptap/pm": "3.30.2",
     "@tiptap/react": "3.30.2",
@@ -15,9 +19,11 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@types/node": "24.10.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.1.0",
+    "tsx": "4.20.3",
     "typescript": "7.0.2",
     "vite": "8.2.2"
   }

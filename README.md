@@ -28,18 +28,20 @@ mise exec -- npm run build
 
 ```sh
 # ターミナル1
-mise exec -- bin/authoring
+mairu exec --no-login auto -- mise exec -- bin/authoring
 
 # ターミナル2
 mise exec -- npm run dev
 ```
 
+投稿サーバーは`.mairu.json`で`weblog-authoring-development`を選び、開発用S3バケットの`assets/`から画像を読み取ります。初回だけ`mairu exec auto`が`.mairu.json`を信頼してよいか確認するため、人間が表示内容を確認して承認してください。以後は`--no-login`付きで起動できます。Viteは`/assets`へのリクエストもSinatraへプロキシします。
+
 ブラウザでは`http://127.0.0.1:5173/`を開きます。配布用のビルド済みアセットをSinatraから確認するときは、`npm run build`の後に`http://127.0.0.1:8000/`を開きます。
 
-投稿サーバーはSinatraとPumaで動作し、開発用DBをリポジトリルートから解決します。既定では`127.0.0.1:8000`だけで待ち受け、Rubyファイルはリクエスト時に自動再読み込みします。LAN公開、認証、AWS、クラウド、外部APIは扱いません。
+投稿サーバーはSinatraとPumaで動作し、開発用DBをリポジトリルートから解決します。既定では`127.0.0.1:8000`だけで待ち受け、Rubyファイルはリクエスト時に自動再読み込みします。LANには公開しません。
 
 ```sh
-mise exec -- bin/authoring
+mairu exec --no-login auto -- mise exec -- bin/authoring
 ```
 
 ブラウザで`http://127.0.0.1:8000/`を開きます。`--host`には`127.0.0.1`、`localhost`、`::1`だけを指定できます。
@@ -57,6 +59,32 @@ mise exec -- bundle exec rackup -o 127.0.0.1 -p 8000 config.ru
 ## Scrapbox移行・静的生成
 
 以下は既存のScrapbox移行と静的生成のためのRubyツールです。投稿サーバーの起動とは独立したコマンドです。
+
+### Scrapbox記法の変換
+
+Scrapboxの内部リンクを、weblogのwikiリンクへ変換できます。入力JSONは変更せず、変換後のJSONを別ファイルへ出力します。
+
+```sh
+npm run convert:scrapbox:all -- \
+  --input data/raw/asonas-memo-weblog.json \
+  --output data/raw/asonas-memo-assets.json \
+  --asset-manifest data/normalized/asset-manifest.json \
+  --asset-fetch-report data/reports/asset-fetch-report.json
+```
+
+`convert:scrapbox:all`では、例えば`[日記]`を`[[日記]]`にし、取得済みのGyazo画像も`![](/assets/asset_....jpg)`へ変換します。
+
+画像だけを変換し、Scrapbox内部リンクを変更しない場合は`convert:scrapbox:assets`を使います。
+
+```sh
+npm run convert:scrapbox:assets -- \
+  --input data/raw/asonas-memo-weblog.json \
+  --output data/raw/asonas-memo-assets.json \
+  --asset-manifest data/normalized/asset-manifest.json \
+  --asset-fetch-report data/reports/asset-fetch-report.json
+```
+
+どちらもmanifestの固定asset IDと取得レポートのファイル名を照合します。取得に失敗した画像、通常の外部URL、インラインコード中の記法、すでに変換済みの`[[日記]]`はそのまま保持します。`--asset-manifest`と`--asset-fetch-report`を省略した場合は、上記と同じ`data/normalized/asset-manifest.json`と`data/reports/asset-fetch-report.json`を使用します。
 
 ### セットアップ
 

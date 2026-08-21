@@ -54,6 +54,41 @@ class RenderAndReportMigrationTest < Minitest::Test
     assert_includes html, 'data-depth-option="3"'
   end
 
+  def test_date_page_groups_articles_by_all_internal_links_including_unresolved_tags
+    root, _project, normalized, index = snapshot
+    source = normalized.posts.first
+    tagged_source = WeblogMigration::NormalizedPost.new(
+      id: source.id,
+      frontmatter: source.frontmatter,
+      body: source.body,
+      links: ["B", "202408"],
+      asset_references: source.asset_references,
+      external_urls: source.external_urls,
+      issues: source.issues
+    )
+    tagged_target = normalized.posts.last
+    tagged_target = WeblogMigration::NormalizedPost.new(
+      id: tagged_target.id,
+      frontmatter: tagged_target.frontmatter,
+      body: tagged_target.body,
+      links: ["202408"],
+      asset_references: tagged_target.asset_references,
+      external_urls: tagged_target.external_urls,
+      issues: tagged_target.issues
+    )
+    result = WeblogMigration::NormalizationResult.new(
+      posts: [tagged_source, tagged_target], mapping: normalized.mapping, issues: normalized.issues
+    )
+    site = root.join("tagged-site")
+    WeblogMigration::Render.render_site(result, index, site)
+    html = site.join("2024-08-01", "index.html").read
+
+    assert_includes html, 'class="link-groups"'
+    assert_includes html, 'class="link-group"'
+    assert_includes html, ">202408</h2>"
+    assert_includes html, "data-post-id=\"#{tagged_target.id}\""
+  end
+
   def test_report_counts_unresolved_and_missing_assets
     root = Pathname(Dir.mktmpdir)
     payload = JSON.parse(FIXTURE.read)

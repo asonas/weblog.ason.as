@@ -22,37 +22,123 @@ class TestDevelopmentDatabase < Minitest::Test
     assert database.path.file?
     assert_equal page, database.find(page.id)
     assert_equal "published", page.status
-    assert_equal "2026-08-21", page.route
+    assert_equal "最初の記事", page.route
     assert_equal ["page-a"], page.links.map(&:name)
     refute tmpdir.join("content/2026-08-21.md").exist?
 
     updated = database.save(
       WeblogAuthoring::SaveRequest.new(
         page_id: page.id,
-        page_type: "date",
-        page_date: page.page_date,
-        title: page.title,
+        page_type: page.page_type,
+        name: page.name,
         body: "更新した本文",
         expected_updated_at: page.updated_at
       )
     )
 
     assert_equal "更新した本文", database.find(page.id).body
-    assert_equal updated, database.find_route("/2026-08-21")
+    assert_equal updated, database.find_route("/最初の記事")
   end
 
-  def test_date_route_is_unique
+  def test_titles_are_unique_and_the_same_date_can_have_multiple_pages
     database = development_database
-    request = WeblogAuthoring::SaveRequest.new(
+    database.save(WeblogAuthoring::SaveRequest.new(
       page_type: "date",
       page_date: Date.new(2026, 8, 21),
       title: "最初の記事",
       body: "本文"
-    )
-    database.save(request)
+    ))
+    second = database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "date",
+      page_date: Date.new(2026, 8, 21),
+      title: "次の記事",
+      body: "本文"
+    ))
 
-    error = assert_raises(WeblogAuthoring::ConflictError) { database.save(request) }
-    assert_includes error.message, "2026-08-21"
+    assert_equal "次の記事", second.route
+    error = assert_raises(WeblogAuthoring::ConflictError) do
+      database.save(WeblogAuthoring::SaveRequest.new(
+        page_type: "named",
+        name: "最初の記事",
+        body: "重複"
+      ))
+    end
+    assert_includes error.message, "最初の記事"
+  end
+
+  def test_list_pages_orders_pages_by_creation_time_descending
+    current_time = Time.iso8601("2026-08-20T12:00:00+09:00")
+    database = WeblogAuthoring::DevelopmentDatabase.new(
+      tmpdir.join("data/development/authoring.sqlite3"),
+      content_dir: tmpdir.join("content"),
+      clock: -> { current_time }
+    )
+    database.setup!
+    database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "older", body: "古い記事"
+    ))
+    current_time = Time.iso8601("2026-08-21T12:00:00+09:00")
+    database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "newer", body: "新しい記事"
+    ))
+
+    assert_equal ["newer", "older"], database.list_pages.map(&:name)
+  end
+
+  def test_version_one_date_pages_are_migrated_to_title_routes
+    database = development_database
+    database.path.dirname.mkpath
+    SQLite3::Database.new(database.path.to_s) do |sqlite|
+      sqlite.execute_batch(<<~SQL)
+        PRAGMA user_version = 1;
+        CREATE TABLE pages (
+          id TEXT PRIMARY KEY, page_type TEXT NOT NULL, name TEXT, page_date TEXT,
+          title TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL, published_at TEXT, path TEXT NOT NULL,
+          body_hash TEXT NOT NULL, is_empty INTEGER NOT NULL, body TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX pages_date_route ON pages(page_date) WHERE page_type = 'date';
+        CREATE UNIQUE INDEX pages_named_route ON pages(name) WHERE page_type = 'named';
+        CREATE TABLE links (
+          source_id TEXT NOT NULL, target_id TEXT, target_name TEXT NOT NULL,
+          position INTEGER NOT NULL, PRIMARY KEY (source_id, position)
+        );
+        INSERT INTO pages VALUES (
+          'legacy', 'date', NULL, '2026-08-21', 'test', 'published',
+          '2026-08-21T12:00:00+09:00', '2026-08-21T12:00:00+09:00',
+          '2026-08-21T12:00:00+09:00', 'content/2026-08-21.md', '', 1, ''
+        );
+      SQL
+    end
+
+    database.setup!
+
+    page = database.find_route("/test")
+    assert_equal "named", page.page_type
+    assert_equal "test", page.name
+    assert_nil database.find_route("/2026-08-21")
+  end
+
+  def test_rename_updates_incoming_and_self_wiki_links
+    database = development_database
+    target = database.save(
+      WeblogAuthoring::SaveRequest.new(page_type: "named", name: "old", body: "[[old]]")
+    )
+    source = database.save(
+      WeblogAuthoring::SaveRequest.new(page_type: "named", name: "source", body: "see [[old]]")
+    )
+
+    renamed = database.rename(
+      target.id,
+      "new",
+      body: target.body,
+      expected_updated_at: target.updated_at
+    )
+
+    assert_equal "new", renamed.route
+    assert_equal "[[new]]", renamed.body
+    assert_equal "see [[new]]", database.find(source.id).body
+    assert_nil database.find_route("old")
   end
 
   private

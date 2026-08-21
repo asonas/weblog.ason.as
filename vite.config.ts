@@ -6,7 +6,34 @@ import react from "@vitejs/plugin-react";
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react()],
+  plugins: [
+    {
+      name: "reject-unsafe-page-routes",
+      configureServer(server) {
+        server.middlewares.use((request, response, next) => {
+          if (!request.headers.accept?.includes("text/html") || !request.url) return next();
+
+          let pathname: string;
+          try {
+            pathname = decodeURIComponent(new URL(request.url, "http://127.0.0.1").pathname);
+          } catch (_error) {
+            response.statusCode = 400;
+            response.end("Bad Request");
+            return;
+          }
+
+          const route = pathname.slice(1).replace(/\/$/, "");
+          if (route.includes("/") || /[<>\\]/.test(route)) {
+            response.statusCode = 404;
+            response.end("Not Found");
+            return;
+          }
+          next();
+        });
+      }
+    },
+    react()
+  ],
   define: {
     "process.env.NODE_ENV": JSON.stringify(mode === "production" ? "production" : "development")
   },
@@ -16,6 +43,10 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     proxy: {
       "/api": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true
+      },
+      "/assets": {
         target: "http://127.0.0.1:8000",
         changeOrigin: true
       }

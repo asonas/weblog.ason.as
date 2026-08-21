@@ -2,6 +2,7 @@
 
 module WeblogAuthoring
   LINK_PATTERN = /\[\[([^\[\]]+)\]\]/.freeze
+  EXTERNAL_URL_PATTERN = %r{https?://[^\s<>\[\]\\"')]+}.freeze
   FENCE_PATTERN = /^\s*(`{3,}|~{3,})/.freeze
 
   module_function
@@ -32,6 +33,21 @@ module WeblogAuthoring
     end
 
     body
+  end
+
+  def extract_external_urls(body)
+    urls = []
+
+    each_segment(body) do |line, _offset, fenced|
+      next if fenced
+
+      line.scan(EXTERNAL_URL_PATTERN) do |url|
+        normalized = url.gsub(/\\(?=[^\w\s]|_)/, "").sub(/[.,;:!?]+\z/, "")
+        urls << normalized unless urls.include?(normalized)
+      end
+    end
+
+    urls.freeze
   end
 
   def each_segment(body)

@@ -41,7 +41,15 @@ module WeblogMigration
         write_page(
           output_dir.join(date_value, "index.html"),
           title: date_value,
-          content: render_weblog(dated_posts.fetch(date_value), index, posts_by_id, assets, url_metadata, image_paths)
+          content: render_weblog(
+            dated_posts.fetch(date_value),
+            index,
+            posts_by_id,
+            assets,
+            url_metadata,
+            image_paths,
+            show_link_groups: true
+          )
         )
       end
       write_page(
@@ -124,14 +132,16 @@ module WeblogMigration
       links.empty? ? '<p class="empty-state">公開記事はありません。</p>' : "<ul class=\"date-list\">#{links.join}</ul>"
     end
 
-    def render_weblog(posts, index, posts_by_id, asset_map, url_metadata, image_paths)
+    def render_weblog(posts, index, posts_by_id, asset_map, url_metadata, image_paths, show_link_groups: false)
       ordered = posts.sort_by { |post| post_sort_key(post) }
       return '<p class="empty-state">このページには公開記事がありません。</p>' if ordered.empty?
 
       cards = ordered.each_with_index.map do |post, position|
         render_post_card(post, index:, posts_by_id:, asset_map:, url_metadata:, image_paths:, expanded: position.zero?)
       end
-      "<section class=\"post-stream\">#{cards.join}</section>"
+      content = "<section class=\"post-stream\">#{cards.join}</section>"
+      content += render_link_groups(ordered, posts_by_id, index, asset_map, url_metadata, image_paths) if show_link_groups
+      content
     end
 
     def post_sort_key(post)
@@ -325,6 +335,34 @@ module WeblogMigration
       return "" if backlinks.empty?
       links = backlinks.map { |post| "<li><a href=\"/posts/#{escape(post.id)}/\">#{escape(post.frontmatter.fetch("title"))}</a></li>" }.join
       "<aside class=\"backlinks\"><h2>参照している記事</h2><ul>#{links}</ul></aside>"
+    end
+
+    def render_link_groups(posts, posts_by_id, index, asset_map, url_metadata, image_paths)
+      link_names = posts.flat_map(&:links).reject(&:empty?).uniq
+      groups = link_names.filter_map do |link_name|
+        linked_posts = posts_by_id.values.select { |post| post.links.include?(link_name) }
+        next if linked_posts.empty?
+
+        cards = linked_posts.sort_by { |post| post_sort_key(post) }.map do |post|
+          render_post_card(
+            post,
+            index:,
+            posts_by_id:,
+            asset_map:,
+            url_metadata:,
+            image_paths:,
+            expanded: false
+          )
+        end
+        heading = posts_by_id.values.find { |post| post.frontmatter["source_title"] == link_name }
+        label = if heading.nil?
+                  escape(link_name)
+                else
+                  "<a href=\"/posts/#{escape(heading.id)}/\">#{escape(link_name)}</a>"
+                end
+        "<section class=\"link-group\" aria-labelledby=\"link-group-#{escape(link_name)}\"><h2 id=\"link-group-#{escape(link_name)}\">#{label}</h2><div class=\"post-stream\">#{cards.join}</div></section>"
+      end
+      groups.empty? ? "" : "<div class=\"link-groups\">#{groups.join}</div>"
     end
 
     def render_asset_page(asset_id, source_path, index, posts_by_id)
