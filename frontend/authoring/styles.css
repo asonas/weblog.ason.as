@@ -1,0 +1,299 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.5;
+  background: #f5f5f0;
+  color: #171717;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+a,
+button,
+input,
+select,
+textarea,
+.ProseMirror {
+  outline-offset: 3px;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.ProseMirror:focus-visible {
+  outline: 3px solid #005fcc;
+  outline-offset: 3px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+.button-link {
+  min-block-size: 2.5rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid #404040;
+  border-radius: 0.35rem;
+  background: #ffffff;
+  color: #171717;
+  cursor: pointer;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+button:hover,
+.button-link:hover {
+  background: #e5e5e5;
+}
+
+button:disabled,
+input:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+input,
+select,
+textarea {
+  inline-size: 100%;
+  border: 1px solid #737373;
+  border-radius: 0.35rem;
+  background: #ffffff;
+  color: #171717;
+}
+
+input,
+select {
+  min-block-size: 2.5rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.skip-link {
+  position: absolute;
+  inset-block-start: 0.5rem;
+  inset-inline-start: 0.75rem;
+  z-index: 1;
+  padding: 0.5rem 0.75rem;
+  background: #ffffff;
+  color: #171717;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.site-header,
+.page-shell {
+  inline-size: 100%;
+  max-inline-size: 76rem;
+  margin-inline: auto;
+  padding: 1rem;
+}
+
+.site-header {
+  padding-block-end: 0;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+h1,
+h2 {
+  line-height: 1.2;
+}
+
+h1 {
+  margin-block: 1rem;
+}
+
+h2 {
+  margin-block: 0 0.75rem;
+  font-size: 1.25rem;
+}
+
+.save-status {
+  min-block-size: 1.5rem;
+}
+
+.editor-shell {
+  max-inline-size: 52rem;
+}
+
+.field-group {
+  margin-block-end: 1rem;
+}
+
+.field-group label,
+.field-label {
+  display: block;
+  margin-block-end: 0.35rem;
+  font-weight: 650;
+}
+
+.wysiwyg-editor {
+  min-block-size: 24rem;
+  border: 1px solid #737373;
+  border-radius: 0.35rem;
+  background: #ffffff;
+}
+
+.ProseMirror {
+  min-block-size: 24rem;
+  padding: 0.85rem;
+}
+
+.ProseMirror:focus {
+  outline: 3px solid #005fcc;
+  outline-offset: -3px;
+}
+
+.ProseMirror > :first-child {
+  margin-block-start: 0;
+}
+
+.ProseMirror > :last-child {
+  margin-block-end: 0;
+}
+
+.ProseMirror pre,
+.page-view pre {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  padding: 1rem;
+  background: #1f2937;
+  color: #f9fafb;
+}
+
+.ProseMirror img,
+.page-view img {
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+.editor-help {
+  color: #505050;
+  font-size: 0.95rem;
+}
+
+.input-error {
+  min-block-size: 1.5rem;
+  margin-block: 0.35rem 0;
+  color: #9b1c1c;
+}
+
+.settings-panel {
+  max-inline-size: 52rem;
+  margin-block: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #b0b0a8;
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.filter-form .field-group {
+  flex: 1 1 14rem;
+  margin-block-end: 0;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  min-block-size: 2.5rem;
+}
+
+.checkbox-label input {
+  inline-size: auto;
+  min-block-size: auto;
+}
+
+.table-wrap {
+  max-inline-size: 100%;
+  overflow-x: auto;
+}
+
+table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+th,
+td {
+  padding: 0.55rem;
+  border: 1px solid #b0b0a8;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.page-shell--reading {
+  max-inline-size: 52rem;
+  padding-block-start: 3rem;
+}
+
+.page-view p,
+.page-view li {
+  line-height: 1.75;
+}
+
+.backlinks,
+.markdown-problems {
+  margin-block-start: 2rem;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid #b0b0a8;
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 36rem) {
+  .site-header,
+  .page-shell {
+    padding-inline: 0.75rem;
+  }
+
+  .page-shell--reading {
+    padding-block-start: 2rem;
+  }
+}

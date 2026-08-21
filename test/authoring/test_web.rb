@@ -11,26 +11,27 @@ require "tmpdir"
 class TestWeb < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-01-01T12:00:00+09:00")
 
-  def test_editor_today_renders_split_editor_with_accessible_controls
+  def test_editor_today_renders_react_wysiwyg_shell_without_preview
     status, headers, body = request("GET", "/editor/today")
 
     assert_equal 200, status
     assert_equal "text/html; charset=utf-8", headers.fetch("content-type")
     assert_includes body, 'href="#main"'
-    assert_includes body, 'class="editor-grid"'
-    assert_includes body, 'for="body"'
-    assert_includes body, 'id="preview"'
-    assert_includes body, 'aria-live="polite"'
-    assert_includes body, "下書きを保存"
+    assert_includes body, 'id="authoring-root"'
+    assert_includes body, 'id="authoring-data"'
+    refute_includes body, 'id="preview"'
+    refute_includes body, "プレビュー"
+    refute_includes body, "下書きを保存"
   end
 
-  def test_management_page_exposes_page_creation_and_filters
+  def test_management_page_exposes_minimal_page_creation_and_filters
     status, _headers, body = request("GET", "/manage")
 
     assert_equal 200, status
-    assert_includes body, 'action="/editor/new"'
-    assert_includes body, 'name="status"'
+    assert_includes body, 'href="/editor/new?type=named"'
+    assert_includes body, 'href="/editor/today?template=daily"'
     assert_includes body, 'name="empty"'
+    refute_includes body, 'name="status"'
     assert_includes body, "問題はありません"
   end
 
@@ -39,12 +40,14 @@ class TestWeb < Minitest::Test
     assert_equal 200, status
     assert_equal "text/css; charset=utf-8", headers.fetch("content-type")
     assert_includes css, ":focus-visible"
-    assert_includes css, ".editor-grid"
+    assert_includes css, ".wysiwyg-editor"
+    refute_includes css, ".preview-panel"
 
     status, headers, javascript = request("GET", "/static/authoring/app.js")
     assert_equal 200, status
     assert_equal "application/javascript; charset=utf-8", headers.fetch("content-type")
-    assert_includes javascript, "previewSequence"
+    assert_includes javascript, "save-and-publish"
+    assert_includes javascript, "aria-multiline"
     assert_includes javascript, "beforeunload"
 
     assert_equal 404, request("GET", "/static/authoring/secret.txt").first
@@ -91,6 +94,49 @@ class TestWeb < Minitest::Test
     refute database_path.exist?
   end
 
+  def test_daily_template_is_generated_for_today
+    status, _headers, body = request("GET", "/editor/today?template=daily")
+
+    assert_equal 200, status
+    assert_includes body, '"title":"2026-01-01"'
+    assert_includes body, '[[木曜日]]'
+    assert_includes body, '[[202601]] [[0101]] [[日記]]'
+  end
+
+  def test_title_confirmation_saves_and_publishes_a_named_page
+    status, _headers, body = json_request(
+      "/api/save-and-publish",
+      page_type: "named",
+      title: "page-b",
+      body: "page-bの本文"
+    )
+
+    assert_equal 200, status
+    page = JSON.parse(body)
+    assert_equal "page-b", page.fetch("name")
+    assert_equal "published", page.fetch("status")
+    assert root_site_path("page-b").join("index.html").exist?
+    assert_includes root_site_path("page-b").join("index.html").read(encoding: "UTF-8"), "page-bの本文"
+  end
+
+  def test_date_route_is_readable_after_title_confirmation
+    status, _headers, body = json_request(
+      "/api/save-and-publish",
+      page_type: "date",
+      date: "2026-01-01",
+      title: "元日",
+      body: "本文"
+    )
+
+    assert_equal 200, status
+    assert_equal "2026-01-01", JSON.parse(body).fetch("route")
+
+    status, _headers, body = request("GET", "/2026-01-01")
+    assert_equal 200, status
+    assert_includes body, "元日"
+    assert_includes body, "本文"
+  end
+
   def test_save_creates_empty_link_target_and_local_backlink
     status, _headers, body = json_request(
       "/api/save",
@@ -127,8 +173,8 @@ class TestWeb < Minitest::Test
     status, _headers, body = request("GET", "/editor/new?type=named&name=hello%20world")
 
     assert_equal 200, status
-    assert_includes body, 'data-page-type="named"'
-    assert_includes body, 'data-page-name="hello world"'
+    assert_includes body, '"page_type":"named"'
+    assert_includes body, '"name":"hello world"'
     refute_includes body, 'id="title"'
 
     status, _headers, body = json_request(
@@ -203,7 +249,7 @@ class TestWeb < Minitest::Test
     assert_equal 200, status
     refute_includes body, "<script>alert(1)</script>"
     refute_includes body, "<script>alert(2)</script>"
-    assert_includes body, "&lt;script&gt;"
+    assert_includes body, '\\u003cscript\\u003e'
   end
 
   private
@@ -262,6 +308,10 @@ class TestWeb < Minitest::Test
 
   def database_path
     tmpdir.join("data/index/authoring.sqlite3")
+  end
+
+  def root_site_path(route)
+    tmpdir.join("site", route)
   end
 
   def teardown

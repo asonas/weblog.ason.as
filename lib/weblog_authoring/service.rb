@@ -26,12 +26,26 @@ module WeblogAuthoring
       repository.save_draft(request)
     end
 
+    def save_and_publish(request)
+      saved = save_draft(request)
+      publish(PublishRequest.new(page_id: saved.id, expected_updated_at: saved.updated_at))
+    end
+
     def preview(request, mode: "local")
       MarkdownRenderer.new.render(request.body, mode:)
     end
 
     def today
       current_time.to_date
+    end
+
+    def daily_template
+      date = today
+      weekdays = %w[日曜日 月曜日 火曜日 水曜日 木曜日 金曜日 土曜日]
+      {
+        title: date.iso8601,
+        body: "[[#{weekdays.fetch(date.wday)}]]\n[[#{date.strftime('%Y%m')}]] [[#{date.strftime('%m%d')}]] [[日記]]"
+      }
     end
 
     def publish(request)

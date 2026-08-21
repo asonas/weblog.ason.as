@@ -81,7 +81,7 @@ module WeblogAuthoring
       when "/manage"
         management_response(request)
       when "/editor/today"
-        editor_response(today_page)
+        editor_response(today_page, draft: today_editor_draft(request))
       when "/editor/new"
         new_editor_response(request)
       else
@@ -122,20 +122,12 @@ module WeblogAuthoring
 
     def management_response(request)
       query = request.params.fetch("q", "")
-      status = request.params.fetch("status", "")
-      status = nil if status.empty?
-      unless status.nil? || %w[draft published].include?(status)
-        raise ArgumentError, "status は draft または published を指定してください"
-      end
-
       empty_only = request.params.fetch("empty", "") == "1"
-      pages = @service.repository.list_pages(query:, status:, empty_only:)
+      pages = @service.repository.list_pages(query:, empty_only:)
       problems = @service.repository.refresh.problems
       values = {
         title: "管理",
         search: html_attribute(query),
-        draft_selected: status == "draft" ? " selected" : "",
-        published_selected: status == "published" ? " selected" : "",
         empty_checked: empty_only ? " checked" : "",
         rows: management_rows(pages),
         problems: management_problems(problems),
@@ -145,7 +137,7 @@ module WeblogAuthoring
     end
 
     def management_rows(pages)
-      return '<tr><td colspan="5">該当するページはありません</td></tr>' if pages.empty?
+      return '<tr><td colspan="4">該当するページはありません</td></tr>' if pages.empty?
 
       pages.map do |page|
         identity = page.page_type == "named" ? page.name : page.page_date.iso8601
@@ -155,7 +147,6 @@ module WeblogAuthoring
           <tr>
             <td>#{CGI.escapeHTML(page.page_type)}</td>
             <td><a href="#{html_attribute(editor_href)}">#{CGI.escapeHTML(identity)}</a></td>
-            <td>#{CGI.escapeHTML(page.status)}</td>
             <td>#{page.empty? ? "空" : "内容あり"}</td>
             <td><a href="#{html_attribute(view_href)}" target="_blank" rel="noopener noreferrer">閲覧</a></td>
           </tr>
@@ -173,21 +164,44 @@ module WeblogAuthoring
     end
 
     def editor_response(page, draft: {})
+      page_type = page&.page_type || draft.fetch(:page_type, "date")
+      page_date = page&.page_date || draft[:page_date] || @service.today
+      document_title = page&.title
+      document_title = page.name if document_title.nil? && page&.page_type == "named"
+      document_title ||= draft.fetch(:title, "")
+      save_message = if page.nil?
+                       "タイトルを確定すると保存・公開します"
+                     else
+                       "自動公開済み・最終更新 #{format_time(page.updated_at)}"
+                     end
+      initial_state = {
+        "page_id" => page&.id.to_s,
+        "page_type" => page_type,
+        "date" => page_date.iso8601,
+        "name" => page&.name || draft.fetch(:name, ""),
+        "title" => document_title,
+        "body" => page&.body || draft.fetch(:body, ""),
+        "expected_updated_at" => page&.updated_at&.iso8601(9).to_s,
+        "save_message" => save_message
+      }
       values = {
         title: "編集",
-        page_id: html_attribute(page&.id.to_s),
-        page_type: html_attribute(page&.page_type || draft.fetch(:page_type, "date")),
-        page_date: html_attribute((page&.page_date || draft[:page_date] || @service.today).iso8601),
-        page_name: html_attribute(page&.name || draft.fetch(:name, "")),
-        document_title: html_attribute(page&.title || draft.fetch(:title, "")),
-        body: CGI.escapeHTML(page&.body || draft.fetch(:body, "")),
-        status: CGI.escapeHTML(page&.status || "未保存"),
-        saved_at: CGI.escapeHTML(page ? format_time(page.updated_at) : "未保存"),
-        expected_updated_at: html_attribute(page&.updated_at&.iso8601.to_s),
-        rename_hidden: page&.page_type == "named" ? "" : " hidden",
-        title_hidden: (page&.page_type || draft.fetch(:page_type, "date")) == "named" ? " hidden" : ""
+        initial_state: safe_json(initial_state)
       }
       html_response(render_template("editor.html", values))
+    end
+
+    def today_editor_draft(request)
+      return {} unless request.params.fetch("template", "") == "daily"
+      return {} unless today_page.nil?
+
+      template = @service.daily_template
+      {
+        page_type: "date",
+        page_date: @service.today,
+        title: template.fetch(:title),
+        body: template.fetch(:body)
+      }
     end
 
     def new_editor_response(request)
@@ -195,7 +209,8 @@ module WeblogAuthoring
       raise ArgumentError, "page_type が不正です" unless ALLOWED_PAGE_TYPES.include?(page_type)
 
       if page_type == "named"
-        name = WeblogAuthoring.validate_page_name(request.params.fetch("name", ""))
+        raw_name = request.params.fetch("name", "")
+        name = raw_name.empty? ? "" : WeblogAuthoring.validate_page_name(raw_name)
         return editor_response(nil, draft: { page_type:, name: })
       end
 
@@ -251,7 +266,11 @@ module WeblogAuthoring
       raise WebNotFoundError, "ページが見つかりません" if raw_route.empty? || raw_route.include?("/")
 
       route = decode_segment(raw_route, "route")
-      normalized = WeblogAuthoring.validate_page_name(route)
+      normalized = if WeblogAuthoring::DATE_NAME.match?(route)
+                     route
+                   else
+                     WeblogAuthoring.validate_page_name(route)
+                   end
       raise WebNotFoundError, "ページが見つかりません" unless normalized == route
 
       normalized
@@ -285,6 +304,9 @@ module WeblogAuthoring
         json_response(200, { "html" => rendered.html, "errors" => rendered.problems.map(&:to_s) })
       when "/api/save"
         page = @service.save_draft(save_request(payload))
+        json_response(200, page_json(page))
+      when "/api/save-and-publish"
+        page = @service.save_and_publish(save_request(payload))
         json_response(200, page_json(page))
       when "/api/publish"
         request_value = PublishRequest.new(
@@ -354,7 +376,9 @@ module WeblogAuthoring
       name = if page_type == "named"
                optional_string(payload, "name") || current&.name
              end
+      title = optional_string(payload, "title")
       if !preview && page_type == "named"
+        name ||= title
         begin
           name = WeblogAuthoring.validate_page_name(name.to_s)
         rescue ArgumentError => error
@@ -368,7 +392,7 @@ module WeblogAuthoring
         page_id:,
         name:,
         page_date:,
-        title: optional_string(payload, "title"),
+        title:,
         expected_updated_at: expected_updated_at(payload)
       )
     end
@@ -413,7 +437,7 @@ module WeblogAuthoring
         "name" => page.name,
         "title" => page.title,
         "status" => page.status,
-        "updated_at" => page.updated_at&.iso8601,
+        "updated_at" => page.updated_at&.iso8601(9),
         "route" => page.route
       }
     end
@@ -436,6 +460,10 @@ module WeblogAuthoring
 
     def html_attribute(value)
       CGI.escapeHTML(value.to_s)
+    end
+
+    def safe_json(value)
+      JSON.generate(value).gsub("<", "\\u003c").gsub(">", "\\u003e").gsub("&", "\\u0026")
     end
 
     def error_payload(message, field: nil)

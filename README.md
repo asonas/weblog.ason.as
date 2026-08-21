@@ -2,7 +2,7 @@
 
 Scrapboxの保存済みエクスポートを変換するRuby製の移行ツールと、localhostでMarkdown記事を書くRuby製の投稿画面を管理するリポジトリです。
 
-記事の正本は`content/`のMarkdownとfrontmatterです。`data/index/authoring.sqlite3`はページ・Wikiリンク・逆リンクを検索するための再生成可能なインデックスで、`site/`は明示的な公開操作から作られる派生静的サイトです。
+記事の正本は`content/`のMarkdownとfrontmatterです。`data/index/authoring.sqlite3`はページ・Wikiリンク・逆リンクを検索するための再生成可能なインデックスで、`site/`は投稿画面の公開処理から作られる派生静的サイトです。
 
 ## Ruby投稿画面
 
@@ -11,6 +11,15 @@ Ruby 4系の最新バージョンをmiseで選択し、依存gemをインスト�
 ```sh
 mise exec -- ruby --version
 mise exec -- bundle install
+```
+
+編集画面のフロントエンドはReact、TypeScript、Tiptapで構成しています。Node.jsの環境をmiseで選択し、依存関係をインストールしてから、Ruby投稿画面が配信する静的アセットをビルドします。
+
+```sh
+mise exec -- node --version
+mise exec -- npm install
+mise exec -- npm run typecheck
+mise exec -- npm run build
 ```
 
 投稿サーバーは`content/`、`data/index/authoring.sqlite3`、`site/`をリポジトリルートから解決し、既定では`127.0.0.1:8000`だけで待ち受けます。LAN公開、認証、AWS、クラウド、外部APIは扱いません。
@@ -27,9 +36,9 @@ Rackupから同じアプリを起動する場合も、bind先をloopbackに限�
 mise exec -- bundle exec rackup -o 127.0.0.1 -p 8000 config.ru
 ```
 
-保存前の本文はファイルやSQLiteへ書き込まず、保存操作で初めて`content/`へMarkdownを作成します。Wikiリンク先の空ページと逆リンクは自動的に構築されます。下書き保存だけでは`site/`を更新せず、画面から明示的に公開したときだけ静的サイトを差し替えます。
+編集画面で一行目のタイトルまたはページ名を確定すると、本文とともに`content/`へMarkdownを保存し、公開サイトも更新します。既存ページの本文は変更後に自動保存・公開されます。Wikiリンク先の空ページと逆リンクは自動的に構築されます。
 
-独立した記事プレビュー画面はありません。編集画面の左側にMarkdown入力欄、右側にライブプレビューを表示し、保存済み・未保存を問わずlocalhostの読み取り専用ページをWikiリンクから新しいタブで開けます。
+編集画面に独立したプレビュー画面はありません。WYSIWYGエディタ上で本文を編集し、公開結果はlocalhostの読み取り専用ページで確認します。保存済みページのWikiリンクからは、そのページを新しいタブで開けます。
 
 ## Scrapbox移行・静的生成
 

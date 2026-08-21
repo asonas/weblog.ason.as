@@ -26,7 +26,8 @@ class TestApplication < Minitest::Test
 
     assert_equal 200, status
     assert_equal "text/html; charset=utf-8", headers.fetch("content-type")
-    assert_includes body.join, "editor-grid"
+    assert_includes body.join, "authoring-root"
+    refute_includes body.join, "preview"
   ensure
     FileUtils.remove_entry(root.to_s) if defined?(root) && root&.exist?
   end
