@@ -1,15 +1,17 @@
 import html
 import json
+import shutil
 from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from markdown_it import MarkdownIt
 
 from .asset_manifest import classify_url, stable_url_asset_id
 from .index import LinkIndex, stable_asset_id
 from .normalize import NormalizedPost, NormalizationResult
+from .url_metadata import load_url_metadata
 
 
 _MARKDOWN = MarkdownIt("commonmark", {"breaks": True, "html": False})
@@ -38,6 +40,9 @@ def render_site(
     normalized: NormalizationResult,
     index: LinkIndex,
     output_dir: Path,
+    *,
+    url_metadata_path: Path | None = None,
+    asset_dir: Path | None = None,
 ) -> None:
     """Render the public normalized snapshot as a small static website."""
 
@@ -46,8 +51,10 @@ def render_site(
     public_posts = tuple(_public_posts(normalized.posts))
     posts_by_id = {post.id: post for post in public_posts}
     assets = _assets(public_posts)
+    url_metadata = load_url_metadata(url_metadata_path)
+    image_paths = _copy_url_images(output_dir, asset_dir, url_metadata)
     _write_card_script(output_dir)
-    _write_card_data(output_dir, normalized)
+    _write_card_data(output_dir, normalized, url_metadata, image_paths)
 
     dated_posts: dict[str, list[NormalizedPost]] = defaultdict(list)
     undated_posts: list[NormalizedPost] = []
@@ -62,13 +69,27 @@ def render_site(
         _write_page(
             output_dir / date_text / "index.html",
             title=date_text,
-            content=_render_weblog(posts, index, posts_by_id, assets),
+            content=_render_weblog(
+                posts,
+                index,
+                posts_by_id,
+                assets,
+                url_metadata,
+                image_paths,
+            ),
         )
 
     _write_page(
         output_dir / "undated" / "index.html",
         title="日時なし",
-        content=_render_weblog(undated_posts, index, posts_by_id, assets),
+        content=_render_weblog(
+            undated_posts,
+            index,
+            posts_by_id,
+            assets,
+            url_metadata,
+            image_paths,
+        ),
     )
 
     _write_page(
@@ -81,12 +102,25 @@ def render_site(
         _write_page(
             output_dir / "posts" / post.id / "index.html",
             title=str(post.frontmatter["title"]),
-            content=_render_post_page(post, index, posts_by_id, assets),
+            content=_render_post_page(
+                post,
+                index,
+                posts_by_id,
+                assets,
+                url_metadata,
+                image_paths,
+            ),
         )
         card_page = output_dir / "posts" / post.id / "cards" / "index.html"
         card_page.parent.mkdir(parents=True, exist_ok=True)
         card_page.write_text(
-            render_cards(normalized, index, root_id=post.id),
+            render_cards(
+                normalized,
+                index,
+                root_id=post.id,
+                url_metadata=url_metadata,
+                image_paths=image_paths,
+            ),
             encoding="utf-8",
         )
 
@@ -151,6 +185,8 @@ def _render_weblog(
     index: LinkIndex,
     posts_by_id: dict[str, NormalizedPost],
     assets: dict[str, str],
+    url_metadata: Mapping[str, Mapping[str, object]],
+    image_paths: Mapping[str, str],
 ) -> str:
     ordered_posts = sorted(posts, key=_post_sort_key)
     if not ordered_posts:
@@ -162,6 +198,8 @@ def _render_weblog(
             index=index,
             posts_by_id=posts_by_id,
             assets=assets,
+            url_metadata=url_metadata,
+            image_paths=image_paths,
             expanded=position == 0,
         )
         for position, post in enumerate(ordered_posts)
@@ -183,12 +221,16 @@ def _render_post_page(
     index: LinkIndex,
     posts_by_id: dict[str, NormalizedPost],
     assets: dict[str, str],
+    url_metadata: Mapping[str, Mapping[str, object]],
+    image_paths: Mapping[str, str],
 ) -> str:
     card = _render_post_card(
         post,
         index=index,
         posts_by_id=posts_by_id,
         assets=assets,
+        url_metadata=url_metadata,
+        image_paths=image_paths,
         expanded=True,
     )
     backlinks = _render_post_backlinks(post.id, index, posts_by_id)
@@ -206,6 +248,8 @@ def render_cards(
     root_id: str,
     range_name: str = "all",
     depth: int = 1,
+    url_metadata: Mapping[str, Mapping[str, object]] | None = None,
+    image_paths: Mapping[str, str] | None = None,
 ) -> str:
     """Render an article-rooted, deduplicated card exploration."""
 
@@ -218,6 +262,8 @@ def render_cards(
     public_posts = tuple(_public_posts(normalized.posts))
     posts_by_id = {post.id: post for post in public_posts}
     assets = _assets(public_posts)
+    url_metadata = url_metadata or {}
+    image_paths = image_paths or {}
     root = posts_by_id.get(root_id)
     if root is None:
         raise ValueError(f"root post is not public or does not exist: {root_id}")
@@ -261,6 +307,8 @@ def render_cards(
             root_id=root_id,
             index=index,
             posts_by_id=posts_by_id,
+            url_metadata=url_metadata,
+            image_paths=image_paths,
         )
         for asset_id in asset_ids
     )
@@ -384,6 +432,8 @@ def _render_exploration_asset_card(
     root_id: str,
     index: LinkIndex,
     posts_by_id: dict[str, NormalizedPost],
+    url_metadata: Mapping[str, Mapping[str, object]],
+    image_paths: Mapping[str, str],
 ) -> str:
     references = [
         posts_by_id[post_id]
@@ -405,13 +455,16 @@ def _render_exploration_asset_card(
         if source_path.startswith(("http://", "https://"))
         else "asset"
     )
+    metadata = url_metadata.get(asset_id)
+    image_path = image_paths.get(asset_id)
+    image_class = " asset-card--with-image" if image_path else ""
     return (
-        f'<article class="exploration-card asset-card card--compact" '
+        f'<article class="exploration-card asset-card{image_class} card--compact" '
+        f'{_asset_background_style(image_path)} '
         f'data-asset-id="{html.escape(asset_id, quote=True)}">'
         f'<p class="card-relation">{html.escape(_relation_label(root_id, asset_id, index))}</p>'
         f'<a href="/assets/{html.escape(asset_id, quote=True)}/">'
-        f'<span class="asset-card__kind">{html.escape(kind)}</span>'
-        f'<span class="asset-card__name">{html.escape(source_path)}</span></a>'
+        f'{_render_asset_card_content(source_path, kind, metadata)}</a>'
         f'<div class="asset-card__references"><span>参照元</span>{reference_html}</div>'
         "</article>"
     )
@@ -435,6 +488,37 @@ def _render_card_document(*, title: str, content: str) -> str:
     return document
 
 
+def _copy_url_images(
+    output_dir: Path,
+    asset_dir: Path | None,
+    url_metadata: Mapping[str, Mapping[str, object]],
+) -> dict[str, str]:
+    if asset_dir is None:
+        return {}
+
+    asset_dir = Path(asset_dir)
+    asset_root = asset_dir.resolve()
+    image_paths: dict[str, str] = {}
+    for asset_id, metadata in url_metadata.items():
+        image = metadata.get("image")
+        if not isinstance(image, Mapping):
+            continue
+        local_path = image.get("local_path")
+        if not isinstance(local_path, str) or Path(local_path).name != local_path:
+            continue
+        source = asset_dir / local_path
+        try:
+            if source.resolve().parent != asset_root or not source.is_file():
+                continue
+        except OSError:
+            continue
+        target = output_dir / "assets" / asset_id / local_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+        image_paths[asset_id] = f"/assets/{asset_id}/{local_path}"
+    return image_paths
+
+
 def _write_card_script(output_dir: Path) -> None:
     target = output_dir / "static" / "cards.js"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -444,11 +528,13 @@ def _write_card_script(output_dir: Path) -> None:
 def _write_card_data(
     output_dir: Path,
     normalized: NormalizationResult,
+    url_metadata: Mapping[str, Mapping[str, object]],
+    image_paths: Mapping[str, str],
 ) -> None:
     target = output_dir / "static" / "cards-data.json"
     target.write_text(
         json.dumps(
-            _card_data(normalized),
+            _card_data(normalized, url_metadata, image_paths),
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -460,6 +546,8 @@ def _write_card_data(
 
 def _card_data(
     normalized: NormalizationResult,
+    url_metadata: Mapping[str, Mapping[str, object]],
+    image_paths: Mapping[str, str],
 ) -> dict[str, object]:
     public_posts = tuple(_public_posts(normalized.posts))
     posts_by_id = {post.id: post for post in public_posts}
@@ -475,8 +563,10 @@ def _card_data(
         }
         for post in sorted(public_posts, key=_post_sort_key)
     ]
-    assets_data = [
-        {
+    assets_data = []
+    for asset_id, source_path in sorted(assets.items(), key=lambda item: item[1]):
+        metadata = url_metadata.get(asset_id)
+        asset_data: dict[str, object] = {
             "id": asset_id,
             "kind": (
                 classify_url(source_path)
@@ -490,8 +580,17 @@ def _card_data(
             ],
             "source_path": source_path,
         }
-        for asset_id, source_path in sorted(assets.items(), key=lambda item: item[1])
-    ]
+        if metadata is not None:
+            asset_data.update(
+                {
+                    "description": _metadata_text(metadata, "description"),
+                    "domain": _metadata_text(metadata, "domain"),
+                    "title": _metadata_text(metadata, "title"),
+                }
+            )
+        if asset_id in image_paths:
+            asset_data["image_path"] = image_paths[asset_id]
+        assets_data.append(asset_data)
     return {
         "assets": assets_data,
         "edges": [
@@ -533,6 +632,8 @@ def _render_post_card(
     index: LinkIndex,
     posts_by_id: dict[str, NormalizedPost],
     assets: dict[str, str],
+    url_metadata: Mapping[str, Mapping[str, object]],
+    image_paths: Mapping[str, str],
     expanded: bool,
 ) -> str:
     title = html.escape(str(post.frontmatter["title"]))
@@ -552,7 +653,14 @@ def _render_post_card(
         stable_url_asset_id(url) for url in post.external_urls
     ]
     asset_html = "".join(
-        _render_asset_card(asset_id, assets[asset_id], index, posts_by_id)
+        _render_asset_card(
+            asset_id,
+            assets[asset_id],
+            index,
+            posts_by_id,
+            url_metadata.get(asset_id),
+            image_paths.get(asset_id),
+        )
         for asset_id in asset_ids
         if asset_id in assets
     )
@@ -572,9 +680,10 @@ def _render_asset_card(
     source_path: str,
     index: LinkIndex,
     posts_by_id: dict[str, NormalizedPost],
+    metadata: Mapping[str, object] | None,
+    image_path: str | None,
 ) -> str:
     escaped_id = html.escape(asset_id, quote=True)
-    escaped_path = html.escape(source_path)
     kind = (
         classify_url(source_path)
         if source_path.startswith(("http://", "https://"))
@@ -593,15 +702,63 @@ def _render_asset_card(
             for post in backlinks
         )
         used_by = f'<span class="asset-card__backlinks">参照: {links}</span>'
+    image_class = " asset-card--with-image" if image_path else ""
     return (
-        f'<article class="asset-card card--compact" data-asset-id="{escaped_id}">'
+        f'<article class="asset-card{image_class} card--compact" '
+        f'{_asset_background_style(image_path)} '
+        f'data-asset-id="{escaped_id}">'
         f'<a href="/assets/{escaped_id}/">'
-        f'<span class="asset-card__kind">{html.escape(kind)}</span>'
-        f'<span class="asset-card__name">{escaped_path}</span>'
+        f'{_render_asset_card_content(source_path, kind, metadata)}'
         "</a>"
         f"{used_by}"
         "</article>"
     )
+
+
+def _render_asset_card_content(
+    source_path: str,
+    kind: str,
+    metadata: Mapping[str, object] | None,
+) -> str:
+    title = _metadata_text(metadata, "title") if metadata is not None else None
+    domain = _metadata_text(metadata, "domain") if metadata is not None else None
+    description = (
+        _metadata_text(metadata, "description") if metadata is not None else None
+    )
+    name = title or domain or source_path
+    domain_html = ""
+    if domain and domain != name:
+        domain_html = f'<span class="asset-card__domain">{html.escape(domain)}</span>'
+    url_html = ""
+    if metadata is not None:
+        url_html = f'<span class="asset-card__url">{html.escape(source_path)}</span>'
+    description_html = ""
+    if description:
+        description_html = (
+            f'<span class="asset-card__description">{html.escape(description)}</span>'
+        )
+    return (
+        f'<span class="asset-card__kind">{html.escape(kind)}</span>'
+        f'<span class="asset-card__name">{html.escape(name)}</span>'
+        f"{domain_html}{url_html}{description_html}"
+    )
+
+
+def _metadata_text(
+    metadata: Mapping[str, object] | None,
+    key: str,
+) -> str | None:
+    if metadata is None:
+        return None
+    value = metadata.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+def _asset_background_style(image_path: str | None) -> str:
+    if not image_path:
+        return ""
+    escaped_path = html.escape(image_path, quote=True)
+    return f'style="--asset-background-image: url(\'{escaped_path}\')"'
 
 
 def _render_post_backlinks(

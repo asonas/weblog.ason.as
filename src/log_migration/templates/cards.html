@@ -43,8 +43,18 @@
       .post-body--compact { max-height: 7rem; overflow: hidden; }
       .post-body p:first-child { margin-top: 0.55rem; }
       .post-body p:last-child { margin-bottom: 0; }
+      .asset-card { overflow: hidden; }
+      .asset-card--with-image {
+        background-image: linear-gradient(rgba(255, 253, 248, 0.84), rgba(255, 253, 248, 0.94)), var(--asset-background-image);
+        background-position: center;
+        background-size: cover;
+      }
+      .asset-card--with-image > a { display: block; }
       .asset-card__kind { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; margin-right: 0.5rem; }
       .asset-card__name { overflow-wrap: anywhere; }
+      .asset-card__domain, .asset-card__url, .asset-card__description { display: block; overflow-wrap: anywhere; }
+      .asset-card__domain, .asset-card__url { color: var(--muted); font-size: 0.78rem; }
+      .asset-card__description { margin-top: 0.35rem; }
       .asset-card__references { color: var(--muted); font-size: 0.85rem; margin-top: 0.9rem; }
       .asset-card__references span { font-weight: 600; }
       .asset-card__references ul { margin: 0.25rem 0 0; padding-left: 1.2rem; }

@@ -162,12 +162,28 @@
     ).join("");
     if (remaining) links += `<li>ほか${remaining}件</li>`;
     const referenceHtml = links ? `<ul>${links}</ul>` : "<p>参照元なし</p>";
-    return `<article class="exploration-card asset-card card--compact" ` +
+    const title = asset.title || asset.domain || asset.source_path;
+    const domain = asset.domain && asset.domain !== title
+      ? `<span class="asset-card__domain">${escapeHtml(asset.domain)}</span>`
+      : "";
+    const sourceUrl = asset.title || asset.domain
+      ? `<span class="asset-card__url">${escapeHtml(asset.source_path)}</span>`
+      : "";
+    const description = asset.description
+      ? `<span class="asset-card__description">${escapeHtml(asset.description)}</span>`
+      : "";
+    const imageClass = asset.image_path ? " asset-card--with-image" : "";
+    const imageStyle = asset.image_path
+      ? ` style="--asset-background-image: url('${escapeHtml(asset.image_path)}')"`
+      : "";
+    return `<article class="exploration-card asset-card${imageClass} card--compact"` +
+      `${imageStyle} ` +
       `data-asset-id="${escapeHtml(asset.id)}">` +
       `<p class="card-relation">${relationLabel(rootId, asset.id)}</p>` +
       `<a href="/assets/${escapeHtml(asset.id)}/">` +
       `<span class="asset-card__kind">${escapeHtml(asset.kind)}</span>` +
-      `<span class="asset-card__name">${escapeHtml(asset.source_path)}</span></a>` +
+      `<span class="asset-card__name">${escapeHtml(title)}</span>` +
+      `${domain}${sourceUrl}${description}</a>` +
       `<div class="asset-card__references"><span>参照元</span>${referenceHtml}</div></article>`;
   };
 

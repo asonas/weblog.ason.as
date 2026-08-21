@@ -15,6 +15,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
+    parser.add_argument(
+        "--url-metadata",
+        type=Path,
+        help="fetched URL metadata JSON to include in the static cards",
+    )
+    parser.add_argument(
+        "--asset-dir",
+        type=Path,
+        help="directory containing downloaded URL preview images",
+    )
     return parser
 
 
@@ -35,7 +45,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         index_path = args.output / "index" / "log.sqlite3"
         index = build_index(normalized, index_path)
         site_path = args.output / "site"
-        render_site(normalized, index, site_path)
+        render_site(
+            normalized,
+            index,
+            site_path,
+            url_metadata_path=args.url_metadata,
+            asset_dir=args.asset_dir or args.output / "assets",
+        )
         write_reports(
             args.report,
             args.input,

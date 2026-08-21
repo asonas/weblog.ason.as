@@ -81,10 +81,35 @@ mise exec -- .venv/bin/python -m log_migration.assets \
   --report data/reports/asset-fetch-report.json
 ```
 
+## URLカードのOGP取得
+
+通常の変換は引き続きネットワークへ接続しません。一般URLのタイトル、説明、`og:image` と画像を取得する場合だけ、次の明示的なコマンドを実行します。
+
+```sh
+mise exec -- .venv/bin/python -m log_migration.url_metadata \
+  --manifest data/normalized/asset-manifest.json \
+  --output data/normalized/url-metadata.json \
+  --assets data/normalized/assets \
+  --report data/reports/url-metadata-report.json
+```
+
+取得結果を静的カードへ反映するには、通常の変換を取得済みJSON付きで再実行します。これはネットワークを使わず、`data/normalized/assets/` の画像を `site/assets/` へコピーしてカードの背景にします。
+
+```sh
+mise exec -- .venv/bin/python -m log_migration \
+  --input data/raw/scrapbox.json \
+  --output data/normalized \
+  --report data/reports \
+  --url-metadata data/normalized/url-metadata.json \
+  --asset-dir data/normalized/assets
+```
+
+取得できないURL、OGPのないページ、壊れた画像は、ドメイン・タイトル・元URLを残したフォールバックカードとして表示されます。同じURLはmanifestの固定アセットIDと1つの画像ファイルを共有します。
+
 ## テスト
 
 ```sh
 mise exec -- .venv/bin/python -m pytest -q
 ```
 
-現フェーズでは、AWS配信、投稿アプリ、編集履歴、OGP取得は扱いません。音声・動画は明示的なアセット取得の対象になりますが、再生用の変換は行いません。まずNAS上で移行結果と記事・アセット間の関係を確認するための土台です。
+現フェーズでは、AWS配信、投稿アプリ、編集履歴は扱いません。音声・動画は明示的なアセット取得の対象になりますが、再生用の変換は行いません。まずNAS上で移行結果と記事・アセット間の関係を確認するための土台です。

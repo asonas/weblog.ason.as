@@ -46,9 +46,17 @@
       .post-body p:last-child { margin-bottom: 0; }
       .post-assets { display: grid; gap: 0.6rem; margin-top: 1rem; }
       .asset-card { padding: 0.75rem 0.9rem; font-size: 0.9rem; border-radius: 0.25rem 0.7rem 0.25rem 0.25rem; }
-      .asset-card a { display: flex; align-items: baseline; gap: 0.6rem; }
-      .asset-card__kind { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; }
+      .asset-card { overflow: hidden; }
+      .asset-card--with-image {
+        background-image: linear-gradient(rgba(255, 253, 248, 0.84), rgba(255, 253, 248, 0.94)), var(--asset-background-image);
+        background-position: center;
+        background-size: cover;
+      }
+      .asset-card__kind { color: var(--accent); display: inline-block; font-size: 0.72rem; text-transform: uppercase; margin-right: 0.6rem; }
       .asset-card__name { overflow-wrap: anywhere; }
+      .asset-card__domain, .asset-card__url, .asset-card__description { display: block; overflow-wrap: anywhere; }
+      .asset-card__domain, .asset-card__url { color: var(--muted); font-size: 0.78rem; }
+      .asset-card__description { margin-top: 0.35rem; }
       .asset-card__backlinks { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 0.35rem; }
       .asset-card__backlinks a { margin-left: 0.4rem; }
       .backlinks { margin-top: 1rem; padding: 1rem 1.2rem; }
