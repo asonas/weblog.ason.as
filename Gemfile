@@ -13,3 +13,7 @@ gem "rouge"
 group :test do
   gem "minitest"
 end
+
+group :development do
+  gem "rubocop", "~> 1.89"
+end
