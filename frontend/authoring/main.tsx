@@ -23,12 +23,19 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 }
 
 async function fetchBootstrap<T>(url: string): Promise<T> {
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  let response: Response;
+  try {
+    response = await fetch(url, { headers: { Accept: "application/json" } });
+  } catch (_error) {
+    throw new Error("APIに接続できません。Sinatraを127.0.0.1:8000で起動してください");
+  }
+
+  const responseText = await response.text();
   let raw: unknown;
   try {
-    raw = await response.json();
+    raw = JSON.parse(responseText);
   } catch (_error) {
-    throw new Error("サーバーからの応答を読み取れませんでした");
+    throw new Error(`APIからJSONではない応答が返されました（HTTP ${response.status}）`);
   }
 
   if (!response.ok) {
@@ -56,6 +63,7 @@ function routeBootstrapUrl(): string {
 function App({ initialBootstrap }: { initialBootstrap?: AppBootstrap }) {
   const [bootstrap, setBootstrap] = useState<AppBootstrap | null>(initialBootstrap || null);
   const [error, setError] = useState<string | null>(null);
+  const [requestVersion, setRequestVersion] = useState(0);
 
   useEffect(() => {
     if (initialBootstrap) return;
@@ -72,9 +80,25 @@ function App({ initialBootstrap }: { initialBootstrap?: AppBootstrap }) {
     return () => {
       active = false;
     };
-  }, [initialBootstrap]);
+  }, [initialBootstrap, requestVersion]);
 
-  if (error) return <p role="alert">{error}</p>;
+  if (error) {
+    return (
+      <>
+        <p role="alert">{error}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setBootstrap(null);
+            setRequestVersion((version) => version + 1);
+          }}
+        >
+          再読み込み
+        </button>
+      </>
+    );
+  }
   if (!bootstrap) return <p role="status">読み込み中…</p>;
 
   return bootstrap.mode === "home" ? <Home bootstrap={bootstrap} /> : <AuthoringEditor bootstrap={bootstrap} />;
