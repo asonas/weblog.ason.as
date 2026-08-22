@@ -342,6 +342,7 @@ h1 {
   place-items: center;
   inline-size: 2.75rem;
   block-size: 2.75rem;
+  padding: 0;
   border: 1px solid var(--ink);
   border-radius: 50%;
   background: var(--surface);
@@ -356,6 +357,7 @@ h1 {
 }
 
 .header-action svg {
+  display: block;
   inline-size: 1.4rem;
   block-size: 1.4rem;
   fill: none;
@@ -956,19 +958,23 @@ h1 {
   text-decoration: none;
 }
 
-.home-intro__panel h1 {
-  max-inline-size: 12ch;
-  margin: auto 0;
-  font-size: clamp(2rem, 4.4vw, 4rem);
-  font-weight: 700;
-  letter-spacing: -0.055em;
-  line-height: 0.98;
-}
-
-.home-intro__panel p,
 .home-intro__latest span {
   max-inline-size: 38rem;
   margin: 0;
+}
+
+.home-intro__blank {
+  position: relative;
+  overflow: hidden;
+}
+
+.home-intro__blank::before {
+  position: absolute;
+  inset: clamp(1rem, 2vw, 1.5rem);
+  border: 1px solid color-mix(in oklch, var(--separator) 58%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in oklch, var(--surface) 42%, transparent);
+  content: "";
 }
 
 .home-intro__label {
@@ -1381,10 +1387,6 @@ td {
     min-block-size: 17rem;
     padding: 1.25rem;
     border-radius: 1.25rem;
-  }
-
-  .home-intro__panel h1 {
-    font-size: clamp(2.2rem, 11vw, 3.2rem);
   }
 
   .home-page-list {

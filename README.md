@@ -19,7 +19,7 @@ mise exec -- bundle install
 
 ```sh
 mise exec -- node --version
-mise exec -- npm install
+mise exec -- npm ci
 mise exec -- npm run typecheck
 mise exec -- npm run build
 ```
@@ -37,6 +37,61 @@ mise exec -- npm run dev
 投稿サーバーは`.mairu.json`で`weblog-authoring-development`を選び、開発用S3バケットの`assets/`から画像を読み取ります。初回だけ`mairu exec auto`が`.mairu.json`を信頼してよいか確認するため、人間が表示内容を確認して承認してください。以後は`--no-login`付きで起動できます。Viteは`/assets`へのリクエストもSinatraへプロキシします。
 
 ブラウザでは`http://127.0.0.1:5173/`を開きます。配布用のビルド済みアセットをSinatraから確認するときは、`npm run build`の後に`http://127.0.0.1:8000/`を開きます。
+
+### NASからのリモート開発
+
+外出先から開発するときは、リポジトリと`data/development/authoring.sqlite3`をNASのローカルディスクへ置き、RubyとViteのプロセスもNAS上で起動します。投稿画面には認証がないため、待受先を`0.0.0.0`やNASのLANアドレスへ変更せず、SSHのポートフォワードで手元のブラウザへ転送します。
+
+NASへ初めてセットアップするときは、NAS上のリポジトリで依存関係をインストールします。macOSで作成した`node_modules/`はコピーせず、NASのOSとCPU向けに作り直します。
+
+```sh
+mise exec -- ruby --version
+mise exec -- bundle install
+mise exec -- node --version
+mise exec -- npm ci
+mise exec -- npm run typecheck
+mise exec -- npm run build
+```
+
+NAS上の2つのターミナルでは、通常の開発時と同じコマンドを実行します。`.mairu.json`の信頼確認と`asonas-aws`へのログインはNAS側で事前に済ませてください。
+
+```sh
+# NASのターミナル1
+mairu exec --no-login auto -- mise exec -- bin/authoring
+
+# NASのターミナル2
+mise exec -- npm run dev
+```
+
+手元のMacからNASへSSH接続し、両方のloopbackポートを転送します。`nas-user`と`nas-host`は実際のSSH接続先へ置き換えます。
+
+```sh
+ssh -N \
+  -L 5173:127.0.0.1:5173 \
+  -L 8000:127.0.0.1:8000 \
+  nas-user@nas-host
+```
+
+接続後は手元のブラウザで`http://127.0.0.1:5173/`を開きます。ViteのHMRとSinatraへの`/api`・`/assets`プロキシはSSHトンネル内で動作します。
+
+開発DBはSQLiteなので、同じ`data/development/authoring.sqlite3`を複数ホストから同時に開かないでください。SMBやNFSでMacへマウントしたリポジトリ上から投稿サーバーを起動する構成も避け、NAS上の1プロセスだけがDBを書き込む状態を保ちます。帰省前には`data/development/authoring.sqlite3`のバックアップを作成してください。
+
+開発DBと移行用JSONはGit管理外です。別ホストへ現在の編集内容を引き継ぐ場合はJSONから再構築せず、SQLiteのオンラインバックアップを転送します。投稿サーバーを止めなくても一貫したバックアップを作成できます。
+
+```sh
+sqlite3 data/development/authoring.sqlite3 \
+  ".backup '/tmp/weblog-authoring.sqlite3'"
+sqlite3 /tmp/weblog-authoring.sqlite3 "PRAGMA quick_check;"
+scp /tmp/weblog-authoring.sqlite3 \
+  nas:/home/asonas/ghq/github.com/asonas/weblog.ason.as/data/development/authoring.sqlite3
+```
+
+転送後、NAS上でも整合性と記事件数を確認します。
+
+```sh
+ssh nas \
+  'sqlite3 /home/asonas/ghq/github.com/asonas/weblog.ason.as/data/development/authoring.sqlite3 "PRAGMA quick_check; SELECT count(*) FROM pages;"'
+```
 
 投稿サーバーはSinatraとPumaで動作し、開発用DBをリポジトリルートから解決します。既定では`127.0.0.1:8000`だけで待ち受け、Rubyファイルはリクエスト時に自動再読み込みします。LANには公開しません。
 

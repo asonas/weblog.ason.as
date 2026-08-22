@@ -339,12 +339,8 @@ function Home({ bootstrap }: { bootstrap: HomeBootstrap }) {
 
   return (
     <div className="home-layout">
-      <section className="home-intro" aria-labelledby="home-heading">
-        <div className="home-intro__panel">
-          <p className="home-intro__label">weblog</p>
-          <h1 id="home-heading">思考と日々の記録を、つながりのまま残す。</h1>
-          <p>日記、制作のメモ、見つけたものをひとつの場所に書き留めています。</p>
-        </div>
+      <section className="home-intro" aria-label="概要と最近の記事">
+        <div className="home-intro__panel home-intro__blank" aria-hidden="true" />
         {latestPage && (
           <a className="home-intro__panel home-intro__latest" href={`/${encodeURIComponent(latestPage.route)}`}>
             <span className="home-intro__label">最近の記事</span>
