@@ -1,30 +1,17 @@
 # weblog.ason.as
 
-Scrapboxの保存済みエクスポートを変換するRuby製の移行ツールと、localhostで記事を書くRuby製の投稿画面を管理するリポジトリです。
+Scrapbox移行ツールと記事作成画面を管理するリポジトリです。
 
-Scrapbox移行・静的生成の既存処理では、記事の正本は`content/`のMarkdownとfrontmatterです。`data/index/authoring.sqlite3`はページ・Wikiリンク・逆リンクを検索するための再生成可能なインデックスで、`site/`は派生静的サイトです。
-
-新しい記事作成画面の開発中は、`data/development/authoring.sqlite3`を正本として使います。この段階ではMarkdownファイルや静的サイトへは書き込みません。将来、DBからMarkdown/NASへ書き出す処理を追加します。
-
-## Ruby投稿画面
-
-Ruby 4系の最新バージョンをmiseで選択し、依存gemをインストールします。`.ruby-version`は`4`を指定しているため、Ruby 4系のパッチ更新に追従します。
+## セットアップ
 
 ```sh
-mise exec -- ruby --version
-mise exec -- bundle install
-```
-
-編集画面のフロントエンドはReact、TypeScript、Tiptapで構成しています。Node.jsの環境をmiseで選択し、依存関係をインストールしてから、Ruby投稿画面が配信する静的アセットをビルドします。
-
-```sh
-mise exec -- node --version
-mise exec -- npm ci
+mise install
+mise run setup
 mise exec -- npm run typecheck
 mise exec -- npm run build
 ```
 
-フロントエンドを開発するときは、Sinatra APIとViteを別々のターミナルで起動します。ViteがHTML、TypeScript、CSS、画像などの開発用アセットを配信し、`/api`へのリクエストをSinatraへプロキシします。Reactの変更はHMRで反映されます。
+## 開発
 
 ```sh
 # ターミナル1
@@ -34,82 +21,7 @@ mairu exec --no-login auto -- mise exec -- bin/authoring
 mise exec -- npm run dev
 ```
 
-投稿サーバーは`.mairu.json`で`weblog-authoring-development`を選び、開発用S3バケットの`assets/`から画像を読み取ります。初回だけ`mairu exec auto`が`.mairu.json`を信頼してよいか確認するため、人間が表示内容を確認して承認してください。以後は`--no-login`付きで起動できます。Viteは`/assets`へのリクエストもSinatraへプロキシします。
-
-ブラウザでは`http://127.0.0.1:5173/`を開きます。配布用のビルド済みアセットをSinatraから確認するときは、`npm run build`の後に`http://127.0.0.1:8000/`を開きます。
-
-### NASからのリモート開発
-
-外出先から開発するときは、リポジトリと`data/development/authoring.sqlite3`をNASのローカルディスクへ置き、RubyとViteのプロセスもNAS上で起動します。投稿画面には認証がないため、待受先を`0.0.0.0`やNASのLANアドレスへ変更せず、SSHのポートフォワードで手元のブラウザへ転送します。
-
-NASへ初めてセットアップするときは、NAS上のリポジトリで依存関係をインストールします。macOSで作成した`node_modules/`はコピーせず、NASのOSとCPU向けに作り直します。
-
-```sh
-mise exec -- ruby --version
-mise exec -- bundle install
-mise exec -- node --version
-mise exec -- npm ci
-mise exec -- npm run typecheck
-mise exec -- npm run build
-```
-
-NAS上の2つのターミナルでは、通常の開発時と同じコマンドを実行します。`.mairu.json`の信頼確認と`asonas-aws`へのログインはNAS側で事前に済ませてください。
-
-```sh
-# NASのターミナル1
-mairu exec --no-login auto -- mise exec -- bin/authoring
-
-# NASのターミナル2
-mise exec -- npm run dev
-```
-
-手元のMacからNASへSSH接続し、両方のloopbackポートを転送します。`nas-user`と`nas-host`は実際のSSH接続先へ置き換えます。
-
-```sh
-ssh -N \
-  -L 5173:127.0.0.1:5173 \
-  -L 8000:127.0.0.1:8000 \
-  nas-user@nas-host
-```
-
-接続後は手元のブラウザで`http://127.0.0.1:5173/`を開きます。ViteのHMRとSinatraへの`/api`・`/assets`プロキシはSSHトンネル内で動作します。
-
-開発DBはSQLiteなので、同じ`data/development/authoring.sqlite3`を複数ホストから同時に開かないでください。SMBやNFSでMacへマウントしたリポジトリ上から投稿サーバーを起動する構成も避け、NAS上の1プロセスだけがDBを書き込む状態を保ちます。帰省前には`data/development/authoring.sqlite3`のバックアップを作成してください。
-
-開発DBと移行用JSONはGit管理外です。別ホストへ現在の編集内容を引き継ぐ場合はJSONから再構築せず、SQLiteのオンラインバックアップを転送します。投稿サーバーを止めなくても一貫したバックアップを作成できます。
-
-```sh
-sqlite3 data/development/authoring.sqlite3 \
-  ".backup '/tmp/weblog-authoring.sqlite3'"
-sqlite3 /tmp/weblog-authoring.sqlite3 "PRAGMA quick_check;"
-scp /tmp/weblog-authoring.sqlite3 \
-  nas:/home/asonas/ghq/github.com/asonas/weblog.ason.as/data/development/authoring.sqlite3
-```
-
-転送後、NAS上でも整合性と記事件数を確認します。
-
-```sh
-ssh nas \
-  'sqlite3 /home/asonas/ghq/github.com/asonas/weblog.ason.as/data/development/authoring.sqlite3 "PRAGMA quick_check; SELECT count(*) FROM pages;"'
-```
-
-投稿サーバーはSinatraとPumaで動作し、開発用DBをリポジトリルートから解決します。既定では`127.0.0.1:8000`だけで待ち受け、Rubyファイルはリクエスト時に自動再読み込みします。LANには公開しません。
-
-```sh
-mairu exec --no-login auto -- mise exec -- bin/authoring
-```
-
-ブラウザで`http://127.0.0.1:8000/`を開きます。`--host`には`127.0.0.1`、`localhost`、`::1`だけを指定できます。
-
-Rackupから同じアプリを起動する場合も、bind先をloopbackに限定します。
-
-```sh
-mise exec -- bundle exec rackup -o 127.0.0.1 -p 8000 config.ru
-```
-
-ルートの`＋`から新しい記事を作成できます。編集画面で一行目のタイトルを確定するとDBへ保存し、本文は変更後に自動保存します。日付ページのURLは`/yyyy-mm-dd`です。保存結果はDBから読み出され、サーバーを再起動しても保持されます。
-
-編集画面に独立したプレビュー画面はありません。WYSIWYGエディタ上で本文を編集します。Markdownへの書き出しと公開は次の段階で実装します。
+ブラウザで`http://127.0.0.1:5173/`を開きます。
 
 ## Scrapbox移行・静的生成
 
@@ -140,15 +52,6 @@ npm run convert:scrapbox:assets -- \
 ```
 
 どちらもmanifestの固定asset IDと取得レポートのファイル名を照合します。取得に失敗した画像、通常の外部URL、インラインコード中の記法、すでに変換済みの`[[日記]]`はそのまま保持します。`--asset-manifest`と`--asset-fetch-report`を省略した場合は、上記と同じ`data/normalized/asset-manifest.json`と`data/reports/asset-fetch-report.json`を使用します。
-
-### セットアップ
-
-Ruby 4系の最新バージョンをmiseで選択し、依存gemをインストールします。
-
-```sh
-mise exec -- ruby --version
-mise exec -- bundle install
-```
 
 ## 変換
 
@@ -181,7 +84,7 @@ mise exec -- ruby -run -e httpd -- -p 8000 data/normalized/site
 
 ## アセット取得
 
-通常の変換ではネットワークへ接続せず、URLのmanifestだけを生成します。画像・音声・動画などをNASへ取得する場合だけ、次の明示的なコマンドを実行します。
+通常の変換ではネットワークへ接続せず、URLのmanifestだけを生成します。画像・音声・動画などを取得する場合だけ、次のコマンドを実行します。
 
 ```sh
 mise exec -- bin/fetch-assets \
@@ -237,4 +140,4 @@ mise exec -- bin/migrate \
 mise exec -- bundle exec ruby -Itest -e 'Dir["test/authoring/test_*.rb", "test/migration/test_*.rb"].sort.each { |file| require_relative file }'
 ```
 
-Rubyの投稿機能はlocalhostでの記事作成・編集・公開を対象にします。現フェーズでは、LAN公開、認証、AWS配信、公開データAPI、編集履歴は扱いません。音声・動画はRuby側で明示的なアセット取得の対象になりますが、再生用の変換は行いません。まずNAS上で移行結果と記事・アセット間の関係を確認するための土台です。
+Rubyの投稿機能はlocalhostでの記事作成・編集・公開を対象にします。

@@ -1,0 +1,13 @@
+[tools]
+ruby = "4.0.6"
+node = "24"
+aws-cli = "latest"
+"github:sorah/mairu" = "latest"
+
+[tasks.setup]
+description = "Install Ruby and Node.js dependencies"
+env = { npm_config_cache = "/tmp/weblog-npm-cache" }
+run = [
+  "bundle install",
+  "npm ci",
+]
