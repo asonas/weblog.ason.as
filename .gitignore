@@ -1,4 +1,7 @@
 .worktrees/
+.terraform/
+*.tfstate
+*.tfstate.*
 .env
 node_modules/
 data/raw/
