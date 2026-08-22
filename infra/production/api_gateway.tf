@@ -17,9 +17,12 @@ resource "aws_apigatewayv2_route" "authoring" {
     "GET /api/auth/github"          = "NONE"
     "GET /api/auth/github/callback" = "NONE"
     "POST /api/auth/logout"         = "NONE"
-    "GET /api/pages"                = "AWS_IAM"
-    "GET /api/pages/{id}"           = "AWS_IAM"
-    "GET /api/routes/{route}"       = "AWS_IAM"
+    "GET /api/pages"                = "NONE"
+    "GET /api/editor/new"           = "NONE"
+    "GET /api/pages/{id}"           = "NONE"
+    "GET /api/routes/{route}"       = "NONE"
+    "POST /api/pages"               = "NONE"
+    "PATCH /api/pages/{id}"         = "NONE"
   }
 
   api_id             = aws_apigatewayv2_api.authoring.id

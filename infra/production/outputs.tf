@@ -24,7 +24,7 @@ output "authoring_lambda_function_name" {
 }
 
 output "authoring_api_endpoint" {
-  description = "Endpoint of the production authoring API. Page routes require AWS IAM authorization."
+  description = "Endpoint of the production authoring API. Reads are public and mutations require an application session."
   value       = aws_apigatewayv2_api.authoring.api_endpoint
 }
 

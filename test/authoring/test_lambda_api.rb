@@ -7,11 +7,12 @@ require_relative "../../lib/weblog_authoring/lambda_session"
 
 class LambdaApiTest < Minitest::Test
   class FakeDatabase
-    attr_reader :health_checks, :pages
+    attr_reader :health_checks, :pages, :saved_requests
 
     def initialize(pages)
       @pages = pages
       @health_checks = 0
+      @saved_requests = []
     end
 
     def healthy?
@@ -29,6 +30,11 @@ class LambdaApiTest < Minitest::Test
 
     def find_route(route)
       pages.find { |page| page.route == route }
+    end
+
+    def save(request)
+      saved_requests << request
+      pages.fetch(0)
     end
   end
 
@@ -76,6 +82,7 @@ class LambdaApiTest < Minitest::Test
     response = @api.call(event("GET", "/api/pages"))
     page = JSON.parse(response.fetch(:body)).fetch("pages").fetch(0)
 
+    assert_equal "home", JSON.parse(response.fetch(:body)).fetch("mode")
     assert_equal "記事名", page.fetch("title")
     assert_equal "記事名", page.fetch("route")
     refute page.key?("body")
@@ -83,9 +90,10 @@ class LambdaApiTest < Minitest::Test
 
   def test_finds_a_page_by_id
     response = @api.call(event("GET", "/api/pages/page-id", { "id" => "page-id" }))
-    page = JSON.parse(response.fetch(:body)).fetch("page")
+    page = JSON.parse(response.fetch(:body))
 
     assert_equal 200, response.fetch(:statusCode)
+    assert_equal "editor", page.fetch("mode")
     assert_equal "本文", page.fetch("body")
   end
 
@@ -97,13 +105,62 @@ class LambdaApiTest < Minitest::Test
     ))
 
     assert_equal 200, response.fetch(:statusCode)
-    assert_equal "記事名", JSON.parse(response.fetch(:body)).dig("page", "route")
+    assert_equal "記事名", JSON.parse(response.fetch(:body)).fetch("name")
   end
 
   def test_returns_not_found_for_unknown_routes
-    response = @api.call(event("POST", "/api/pages"))
+    response = @api.call(event("GET", "/api/unknown"))
 
     assert_equal 404, response.fetch(:statusCode)
+  end
+
+  def test_mutations_require_an_allowed_session_and_csrf_token
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      session_codec: codec,
+      allowed_github_user_id: 630_181
+    )
+
+    unauthorized = api.call(json_event("POST", "/api/pages", { title: "new", body: "本文" }))
+    assert_equal 401, unauthorized.fetch(:statusCode)
+
+    denied_token = codec.issue(
+      kind: "session",
+      attributes: { "github_user_id" => 999, "login" => "other", "csrf_token" => "csrf-token" },
+      ttl: 600
+    )
+    denied = api.call(json_event(
+      "POST",
+      "/api/pages",
+      { title: "new", body: "本文" },
+      cookies: ["weblog_authoring_session=#{denied_token}"],
+      headers: { "content-type" => "application/json", "x-csrf-token" => "csrf-token" }
+    ))
+    assert_equal 403, denied.fetch(:statusCode)
+
+    allowed_token = codec.issue(
+      kind: "session",
+      attributes: { "github_user_id" => 630_181, "login" => "asonas", "csrf_token" => "csrf-token" },
+      ttl: 600
+    )
+    missing_csrf = api.call(json_event(
+      "POST",
+      "/api/pages",
+      { title: "new", body: "本文" },
+      cookies: ["weblog_authoring_session=#{allowed_token}"]
+    ))
+    assert_equal 403, missing_csrf.fetch(:statusCode)
+
+    allowed = api.call(json_event(
+      "POST",
+      "/api/pages",
+      { title: "new", body: "本文" },
+      cookies: ["weblog_authoring_session=#{allowed_token}"],
+      headers: { "x-csrf-token" => "csrf-token" }
+    ))
+    assert_equal 201, allowed.fetch(:statusCode)
+    assert_equal "本文", @database.saved_requests.fetch(0).body
   end
 
   def test_github_oauth_creates_an_authenticated_session
@@ -191,6 +248,12 @@ class LambdaApiTest < Minitest::Test
   end
 
   private
+
+  def json_event(method, path, payload = {}, cookies: nil, headers: nil, path_parameters: nil)
+    event(method, path, path_parameters, cookies:, headers: { "content-type" => "application/json", **headers.to_h }).merge(
+      "body" => JSON.generate(payload)
+    )
+  end
 
   def event(method, path, path_parameters = nil, query: nil, cookies: nil, headers: nil)
     {
