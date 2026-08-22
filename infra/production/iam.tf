@@ -31,6 +31,18 @@ resource "aws_iam_role_policy" "dsql_connect" {
 
 data "aws_iam_policy_document" "embed_cache" {
   statement {
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.site.arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["assets/embed-cache/*"]
+    }
+  }
+
+  statement {
     effect = "Allow"
     actions = [
       "s3:GetObject",
