@@ -6,6 +6,48 @@ require_relative "../../lib/weblog_authoring/lambda_api"
 require_relative "../../lib/weblog_authoring/lambda_session"
 
 class LambdaApiTest < Minitest::Test
+  class FakeS3
+    ObjectBody = Data.define(:body)
+
+    attr_reader :objects
+
+    def initialize
+      @objects = {}
+    end
+
+    def get_object(bucket:, key:)
+      value = objects[[bucket, key]]
+      raise Aws::S3::Errors::NoSuchKey.new(nil, "missing") if value.nil?
+
+      ObjectBody.new(StringIO.new(value))
+    end
+
+    def put_object(bucket:, key:, body:, content_type:) # rubocop:disable Lint/UnusedMethodArgument
+      objects[[bucket, key]] = body
+    end
+  end
+
+  class FakeEmbedFetcher
+    attr_reader :requests
+
+    def initialize
+      @requests = []
+    end
+
+    def fetch(url)
+      requests << url
+      {
+        "url" => url,
+        "canonical_url" => url,
+        "title" => "Example",
+        "description" => "Description",
+        "image_url" => "https://example.com/image.jpg",
+        "site_name" => "example.com",
+        "status" => "ready",
+      }
+    end
+  end
+
   class FakeDatabase
     attr_reader :health_checks, :pages, :saved_requests
 
@@ -139,6 +181,29 @@ class LambdaApiTest < Minitest::Test
     assert first_body.fetch("linked_pages_has_more")
     assert_equal 1, second_body.fetch("pages").length
     refute second_body.fetch("has_more")
+  end
+
+  def test_returns_and_caches_embed_metadata
+    s3 = FakeS3.new
+    fetcher = FakeEmbedFetcher.new
+    clock = -> { Time.iso8601("2026-08-22T12:00:00+09:00") }
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      s3_client: s3,
+      asset_bucket: "production-assets",
+      embed_fetcher: fetcher,
+      clock:
+    )
+    url = "https://example.com/article"
+
+    first = api.call(event("GET", "/api/embed", query: { "url" => url }))
+    second = api.call(event("GET", "/api/embed", query: { "url" => url }))
+
+    assert_equal 200, first.fetch(:statusCode)
+    assert_equal "Example", JSON.parse(first.fetch(:body)).fetch("title")
+    assert_equal first.fetch(:body), second.fetch(:body)
+    assert_equal [url], fetcher.requests
+    assert_equal 1, s3.objects.length
   end
 
   def test_returns_not_found_for_unknown_routes

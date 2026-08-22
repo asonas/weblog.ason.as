@@ -3,6 +3,7 @@
 require "pathname"
 
 require "weblog_authoring/dsql_database"
+require "weblog_authoring/embed_metadata"
 require "weblog_authoring/github_oauth"
 require "weblog_authoring/lambda_api"
 require "weblog_authoring/lambda_session"
@@ -24,6 +25,8 @@ module WeblogAuthoring
           host: ENV.fetch("DSQL_HOST"),
           content_dir: Pathname("/tmp/content")
         ),
+        asset_bucket: ENV.fetch("ASSET_BUCKET"),
+        embed_fetcher: EmbedMetadataFetcher.new,
         oauth: GitHubOAuth.new(
           client_id: secrets.fetch("github_client_id"),
           client_secret: secrets.fetch("github_client_secret")

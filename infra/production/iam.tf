@@ -29,6 +29,23 @@ resource "aws_iam_role_policy" "dsql_connect" {
   policy = data.aws_iam_policy_document.dsql_connect.json
 }
 
+data "aws_iam_policy_document" "embed_cache" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+    ]
+    resources = ["${aws_s3_bucket.site.arn}/assets/embed-cache/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "embed_cache" {
+  name   = "EmbedCache"
+  role   = aws_iam_role.authoring_runtime.id
+  policy = data.aws_iam_policy_document.embed_cache.json
+}
+
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   role       = aws_iam_role.authoring_runtime.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"

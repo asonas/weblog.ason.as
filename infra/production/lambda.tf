@@ -14,11 +14,13 @@ resource "aws_lambda_function" "authoring" {
       GITHUB_ALLOWED_USER_ID = "630181"
       GITHUB_REDIRECT_URI    = "https://weblog.ason.as/api/auth/github/callback"
       OAUTH_SECRET_ID        = aws_secretsmanager_secret.oauth.name
+      ASSET_BUCKET           = aws_s3_bucket.site.id
     }
   }
 
   depends_on = [
     aws_iam_role_policy.dsql_connect,
+    aws_iam_role_policy.embed_cache,
     aws_iam_role_policy.oauth_secret,
     aws_iam_role_policy_attachment.lambda_basic_execution,
   ]

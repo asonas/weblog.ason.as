@@ -5,7 +5,7 @@ data "aws_iam_openid_connect_provider" "github_actions" {
 }
 
 locals {
-  github_actions_subject = "repo:asonas/weblog.ason.as:ref:refs/heads/main"
+  github_actions_subject = "repo:asonas@630181/weblog.ason.as@1335130954:ref:refs/heads/main"
 }
 
 data "aws_iam_policy_document" "github_actions_assume_role" {

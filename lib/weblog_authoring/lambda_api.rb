@@ -8,7 +8,9 @@ require "rack/utils"
 require "securerandom"
 require "time"
 require "uri"
+require "aws-sdk-s3"
 
+require_relative "embed_metadata"
 require_relative "models"
 require_relative "names"
 
@@ -34,15 +36,21 @@ module WeblogAuthoring
     HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]]+)/
     JAPANESE_WEEKDAYS = %w[日曜日 月曜日 火曜日 水曜日 木曜日 金曜日 土曜日].freeze
     RELATED_PAGE_LIMIT = 50
+    EMBED_CACHE_TTL = 7 * 24 * 60 * 60
 
     def initialize(database:, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
-                   allowed_github_user_id: nil)
+                   allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
+                   clock: Time.method(:now))
       @database = database
       @oauth = oauth
       @session_codec = session_codec
       @redirect_uri = redirect_uri
       @frontend_url = frontend_url
       @allowed_github_user_id = allowed_github_user_id
+      @s3_client = s3_client
+      @asset_bucket = asset_bucket
+      @embed_fetcher = embed_fetcher
+      @clock = clock
     end
 
     def call(event)
@@ -55,6 +63,7 @@ module WeblogAuthoring
       return logout_response(event) if method == "POST" && path == "/api/auth/logout"
       return pages_response if method == "GET" && path == "/api/pages"
       return related_pages_response(event) if method == "GET" && path == "/api/related"
+      return embed_response(event) if method == "GET" && path == "/api/embed"
       return new_editor_response(event) if method == "GET" && path == "/api/editor/new"
       return page_response(@database.find(event.dig("pathParameters", "id"))) if method == "GET" && page_id_path?(path)
       return route_response(event) if method == "GET" && route_path?(path)
@@ -217,6 +226,57 @@ module WeblogAuthoring
       json_response(200, result)
     rescue ArgumentError
       json_response(422, error: "Invalid offset")
+    end
+
+    def embed_response(event)
+      url = event.dig("queryStringParameters", "url").to_s
+      raise InputError.new("url is required", field: "url") if url.empty?
+
+      json_response(200, embed_metadata(url))
+    rescue EmbedMetadataFetcher::UnsafeUrlError => error
+      json_response(422, error: error.message)
+    end
+
+    def embed_metadata(url)
+      key = "assets/embed-cache/#{Digest::SHA256.hexdigest(url)}.json"
+      cached = read_embed_cache(key, url)
+      return cached unless cached.nil?
+
+      metadata = @embed_fetcher.fetch(url)
+      write_embed_cache(key, metadata.merge("fetched_at" => @clock.call.iso8601))
+    rescue EmbedMetadataFetcher::FetchError
+      fallback = {
+        "url" => url,
+        "canonical_url" => url,
+        "title" => URI.parse(url).host || url,
+        "description" => nil,
+        "image_url" => nil,
+        "site_name" => URI.parse(url).host,
+        "status" => "fallback",
+        "fetched_at" => @clock.call.iso8601,
+      }
+      write_embed_cache(key, fallback)
+    end
+
+    def read_embed_cache(key, url)
+      object = @s3_client.get_object(bucket: @asset_bucket, key:)
+      metadata = JSON.parse(object.body.read)
+      return nil unless metadata["url"] == url
+
+      fetched_at = Time.iso8601(metadata.fetch("fetched_at"))
+      @clock.call - fetched_at <= EMBED_CACHE_TTL ? metadata : nil
+    rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound, JSON::ParserError, KeyError, ArgumentError
+      nil
+    end
+
+    def write_embed_cache(key, metadata)
+      @s3_client.put_object(
+        bucket: @asset_bucket,
+        key:,
+        body: JSON.generate(metadata),
+        content_type: "application/json; charset=utf-8"
+      )
+      metadata
     end
 
     def route_response(event)
