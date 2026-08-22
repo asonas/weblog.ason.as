@@ -18,6 +18,7 @@ resource "aws_apigatewayv2_route" "authoring" {
     "GET /api/auth/github/callback" = "NONE"
     "POST /api/auth/logout"         = "NONE"
     "GET /api/pages"                = "NONE"
+    "GET /api/related"              = "NONE"
     "GET /api/editor/new"           = "NONE"
     "GET /api/pages/{id}"           = "NONE"
     "GET /api/routes/{route}"       = "NONE"

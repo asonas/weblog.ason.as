@@ -1,0 +1,42 @@
+name: Apply production Terraform
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-terraform
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: arn:aws:iam::282782318939:role/WeblogGitHubTerraform
+          aws-region: ap-northeast-1
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.9
+
+      - name: Initialize Terraform
+        run: terraform -chdir=infra/production init -input=false
+
+      - name: Validate Terraform
+        run: terraform -chdir=infra/production validate
+
+      - name: Plan Terraform
+        run: terraform -chdir=infra/production plan -input=false -out=tfplan
+
+      - name: Apply Terraform
+        run: terraform -chdir=infra/production apply -input=false -auto-approve tfplan

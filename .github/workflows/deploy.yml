@@ -1,0 +1,82 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-1
+  AWS_ACCOUNT_ID: "282782318939"
+  DSQL_HOST: zjuauvwetzvab4i3bdfd47e3yu.dsql.ap-northeast-1.on.aws
+  DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-authoring-production-runtime
+  ECR_REPOSITORY: weblog-authoring-production
+  LAMBDA_FUNCTION: weblog-authoring-production
+  SITE_BUCKET: weblog-asonas-site-production-282782318939
+  DEVELOPMENT_ASSET_BUCKET: weblog-asonas-assets-dev-282782318939
+  CLOUDFRONT_DISTRIBUTION_ID: E3BCWEKGAG5LSG
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # master
+        with:
+          ruby-version: 4.0.6
+          bundler-cache: true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: bundle exec ruby -Itest -e 'Dir["test/**/*_test.rb", "test/**/test_*.rb"].uniq.sort.each { |file| require_relative file }'
+
+      - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: arn:aws:iam::282782318939:role/WeblogGitHubDeploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Apply database schema
+        run: bundle exec ruby bin/bootstrap-dsql
+
+      - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build and publish Lambda image
+        env:
+          IMAGE_URI: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}-${{ github.run_attempt }}
+        run: docker buildx build --platform linux/arm64 --provenance=false --push --file Dockerfile.lambda --tag "$IMAGE_URI" .
+
+      - name: Deploy Lambda image
+        env:
+          IMAGE_URI: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}-${{ github.run_attempt }}
+        run: |
+          aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" --image-uri "$IMAGE_URI"
+          aws lambda wait function-updated-v2 --function-name "$LAMBDA_FUNCTION"
+
+      - name: Publish site and existing images
+        run: |
+          aws s3 sync static/ "s3://$SITE_BUCKET/" --only-show-errors
+          aws s3 sync "s3://$DEVELOPMENT_ASSET_BUCKET/assets/" "s3://$SITE_BUCKET/assets/" --exclude '*' --include 'asset_*' --only-show-errors
+
+      - name: Invalidate CloudFront
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths '/*'
