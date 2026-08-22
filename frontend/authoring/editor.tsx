@@ -434,7 +434,8 @@ function separateTopicsFromLinks(
 
 function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): InternalGraphLayout {
   const PAGE_NODE_RADIUS = 13;
-  const PAGE_NODE_CLEARANCE = 12;
+  const PAGE_NODE_CLEARANCE = 16;
+  const PAGE_NODE_MIN_DISTANCE = 54;
   const pageRanks = new Map<string, number>();
   const pagesById = new Map<string, LinkedPage>();
   for (const group of groups) {
@@ -519,6 +520,40 @@ function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): Int
     } else {
       node.y = Math.max(pageStartY - 25, Math.min(height - 28, node.y ?? node.targetY));
     }
+  }
+
+  for (let iteration = 0; iteration < 48; iteration += 1) {
+    let moved = false;
+    for (let leftIndex = 0; leftIndex < pages.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < pages.length; rightIndex += 1) {
+        const left = pages[leftIndex];
+        const right = pages[rightIndex];
+        let dx = (right.x ?? right.targetX) - (left.x ?? left.targetX);
+        let dy = (right.y ?? right.targetY) - (left.y ?? left.targetY);
+        let distance = Math.hypot(dx, dy);
+        if (distance >= PAGE_NODE_MIN_DISTANCE) continue;
+
+        if (distance < 0.001) {
+          const angle = stableNumber(`${left.id}:${right.id}`) % 360 * Math.PI / 180;
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+        const displacement = (PAGE_NODE_MIN_DISTANCE - distance) / 2 + 0.5;
+        const unitX = dx / distance;
+        const unitY = dy / distance;
+        left.x = (left.x ?? left.targetX) - unitX * displacement;
+        left.y = (left.y ?? left.targetY) - unitY * displacement;
+        right.x = (right.x ?? right.targetX) + unitX * displacement;
+        right.y = (right.y ?? right.targetY) + unitY * displacement;
+        moved = true;
+      }
+    }
+    for (const page of pages) {
+      page.x = Math.max(24, Math.min(width - 24, page.x ?? page.targetX));
+      page.y = Math.max(pageStartY - 25, Math.min(height - 28, page.y ?? page.targetY));
+    }
+    if (!moved) break;
   }
 
   const resolvedLinks = links.map((link) => ({

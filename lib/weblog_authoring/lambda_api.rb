@@ -33,6 +33,7 @@ module WeblogAuthoring
     TOKYO_OFFSET = "+09:00"
     HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]]+)/
     JAPANESE_WEEKDAYS = %w[日曜日 月曜日 火曜日 水曜日 木曜日 金曜日 土曜日].freeze
+    RELATED_PAGE_LIMIT = 50
 
     def initialize(database:, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
                    allowed_github_user_id: nil)
@@ -53,6 +54,7 @@ module WeblogAuthoring
       return github_callback_response(event) if method == "GET" && path == "/api/auth/github/callback"
       return logout_response(event) if method == "POST" && path == "/api/auth/logout"
       return pages_response if method == "GET" && path == "/api/pages"
+      return related_pages_response(event) if method == "GET" && path == "/api/related"
       return new_editor_response(event) if method == "GET" && path == "/api/editor/new"
       return page_response(@database.find(event.dig("pathParameters", "id"))) if method == "GET" && page_id_path?(path)
       return route_response(event) if method == "GET" && route_path?(path)
@@ -204,6 +206,19 @@ module WeblogAuthoring
       json_response(200, editor_json(page:))
     end
 
+    def related_pages_response(event)
+      query = event.fetch("queryStringParameters", {}).to_h
+      result = related_page_result(
+        query.fetch("route", ""),
+        query.fetch("body", ""),
+        excluding_id: query["excluding_id"],
+        offset: Integer(query.fetch("offset", 0))
+      )
+      json_response(200, result)
+    rescue ArgumentError
+      json_response(422, error: "Invalid offset")
+    end
+
     def route_response(event)
       route = event.dig("pathParameters", "route").to_s
       route = URI.decode_www_form_component(route)
@@ -237,18 +252,60 @@ module WeblogAuthoring
     end
 
     def editor_json(page: nil, title: nil, name: nil, body: nil)
+      resolved_name = page&.name.to_s.empty? ? name.to_s : page.name.to_s
+      resolved_title = page ? page.display_title : title.to_s
+      resolved_body = page ? page.body : body.to_s
+      related = related_page_result(
+        resolved_name.empty? ? resolved_title : resolved_name,
+        resolved_body,
+        excluding_id: page&.id
+      )
       {
         "mode" => "editor",
         "page_id" => page&.id.to_s,
         "page_type" => page&.page_type || "named",
         "date" => page&.page_date&.iso8601.to_s,
-        "name" => page&.name.to_s.empty? ? name.to_s : page.name.to_s,
-        "title" => page ? page.display_title : title.to_s,
-        "body" => page ? page.body : body.to_s,
+        "name" => resolved_name,
+        "title" => resolved_title,
+        "body" => resolved_body,
         "expected_updated_at" => page&.updated_at&.iso8601(9).to_s,
         "save_message" => "",
-        "linked_pages" => [],
-        "linked_pages_has_more" => false,
+        "linked_pages" => related.fetch("pages"),
+        "linked_pages_has_more" => related.fetch("has_more"),
+      }
+    end
+
+    def related_page_result(route, body, excluding_id: nil, offset: 0)
+      pages = @database.list_pages
+      outgoing_names = WeblogAuthoring.extract_wiki_links(body.to_s).map(&:name).uniq
+      outgoing_urls = WeblogAuthoring.extract_external_urls(body.to_s)
+
+      related = pages.each_with_index.filter_map do |page, index|
+        next if page.id == excluding_id
+
+        page_link_names = page.links.map(&:name)
+        related_by = outgoing_names.filter do |name|
+          next page.route == name if name == "日記"
+
+          page.route == name || page_link_names.include?(name)
+        end
+        related_by << route if !route.to_s.empty? && page_link_names.include?(route)
+        related_urls = WeblogAuthoring.extract_external_urls(page.body.to_s) & outgoing_urls
+        next if related_by.empty? && related_urls.empty?
+
+        direct_link_index = outgoing_names.index(page.route)
+        priority = direct_link_index.nil? ? 1 : 0
+        order = direct_link_index || index
+        summary = page_summary(page).merge(
+          "related_by" => related_by.uniq,
+          "related_urls" => related_urls
+        )
+        [priority, order, summary]
+      end.sort_by { |priority, order, _page| [priority, order] }.map(&:last)
+
+      {
+        "pages" => related.slice(offset, RELATED_PAGE_LIMIT) || [],
+        "has_more" => offset + RELATED_PAGE_LIMIT < related.length,
       }
     end
 
@@ -293,6 +350,7 @@ module WeblogAuthoring
     end
 
     def saved_page_json(page)
+      related = related_page_result(page.route, page.body, excluding_id: page.id)
       {
         "id" => page.id,
         "page_type" => page.page_type,
@@ -302,8 +360,8 @@ module WeblogAuthoring
         "status" => page.status,
         "updated_at" => page.updated_at.iso8601(9),
         "route" => page.route,
-        "linked_pages" => [],
-        "linked_pages_has_more" => false,
+        "linked_pages" => related.fetch("pages"),
+        "linked_pages_has_more" => related.fetch("has_more"),
       }
     end
 

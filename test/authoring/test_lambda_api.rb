@@ -108,6 +108,39 @@ class LambdaApiTest < Minitest::Test
     assert_equal "記事名", JSON.parse(response.fetch(:body)).fetch("name")
   end
 
+  def test_returns_pages_related_by_wiki_links
+    source = page_document(id: "source", name: "source", body: "[[target]]")
+    target = page_document(id: "target", name: "target", body: "")
+    @database.pages.replace([source, target])
+
+    response = @api.call(event("GET", "/api/routes/source", { "route" => "source" }))
+    linked_pages = JSON.parse(response.fetch(:body)).fetch("linked_pages")
+
+    assert_equal ["target"], linked_pages.map { |page| page.fetch("route") }
+  end
+
+  def test_returns_related_pages_from_the_pagination_endpoint
+    target = page_document(id: "target", name: "target", body: "")
+    sources = 51.times.map do |index|
+      page_document(id: "source-#{index}", name: "source-#{index}", body: "[[target]]")
+    end
+    @database.pages.replace([target, *sources])
+
+    first = @api.call(event("GET", "/api/routes/target", { "route" => "target" }))
+    first_body = JSON.parse(first.fetch(:body))
+    second = @api.call(event(
+      "GET",
+      "/api/related",
+      query: { "route" => "target", "excluding_id" => "target", "offset" => "50" }
+    ))
+    second_body = JSON.parse(second.fetch(:body))
+
+    assert_equal 50, first_body.fetch("linked_pages").length
+    assert first_body.fetch("linked_pages_has_more")
+    assert_equal 1, second_body.fetch("pages").length
+    refute second_body.fetch("has_more")
+  end
+
   def test_returns_not_found_for_unknown_routes
     response = @api.call(event("GET", "/api/unknown"))
 
@@ -248,6 +281,23 @@ class LambdaApiTest < Minitest::Test
   end
 
   private
+
+  def page_document(id:, name:, body:)
+    WeblogAuthoring::PageDocument.new(
+      id:,
+      page_type: "named",
+      name:,
+      page_date: nil,
+      title: nil,
+      status: "published",
+      created_at: Time.iso8601("2026-08-22T10:00:00+09:00"),
+      updated_at: Time.iso8601("2026-08-22T11:00:00+09:00"),
+      published_at: Time.iso8601("2026-08-22T11:00:00+09:00"),
+      path: Pathname("content/pages/#{id}.md"),
+      body:,
+      links: WeblogAuthoring.extract_wiki_links(body)
+    )
+  end
 
   def json_event(method, path, payload = {}, cookies: nil, headers: nil, path_parameters: nil)
     event(method, path, path_parameters, cookies:, headers: { "content-type" => "application/json", **headers.to_h }).merge(
