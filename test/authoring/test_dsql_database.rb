@@ -83,7 +83,10 @@ class DsqlDatabaseTest < Minitest::Test
         id page_type name page_date title status created_at updated_at published_at
         path body_hash is_empty body
       ]
-      @pages[values.fetch(0)] = keys.zip(values).to_h
+      stored_values = values.each_with_index.map do |value, index|
+        index.between?(6, 8) && value.is_a?(Time) ? value.strftime("%Y-%m-%d %H:%M:%S%:z").sub(/:00\z/, "") : value
+      end
+      @pages[values.fetch(0)] = keys.zip(stored_values).to_h
     end
 
     def update_page(values)

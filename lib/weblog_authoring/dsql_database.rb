@@ -249,7 +249,7 @@ module WeblogAuthoring
     end
 
     def parse_time(value)
-      value.is_a?(Time) ? value : Time.iso8601(value)
+      value.is_a?(Time) ? value : Time.parse(value)
     end
 
     def with_connection(&)

@@ -1,0 +1,41 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "optparse"
+
+require_relative "../lib/weblog_authoring/dsql_importer"
+
+options = {
+  database_path: "data/development/authoring.sqlite3",
+  apply: false,
+}
+OptionParser.new do |parser|
+  parser.banner = "Usage: import-dsql --host HOST [--database PATH] [--apply]"
+  parser.on("--host HOST", "Aurora DSQL host") { |value| options[:host] = value }
+  parser.on("--database PATH", "Source SQLite database") { |value| options[:database_path] = value }
+  parser.on("--export PATH", "Only import pages found in this Scrapbox export") { |value| options[:export_path] = value }
+  parser.on("--apply", "Write the source pages and links to Aurora DSQL") { options[:apply] = true }
+  parser.on("--prune-excluded", "Delete source pages excluded by --export") { options[:prune_excluded] = true }
+end.parse!
+
+host = options.fetch(:host) { raise OptionParser::MissingArgument, "--host" }
+if options[:prune_excluded] && !options[:export_path]
+  raise OptionParser::MissingArgument, "--export is required with --prune-excluded"
+end
+importer = WeblogAuthoring::DsqlImporter.new(
+  host:,
+  database_path: options.fetch(:database_path),
+  export_path: options[:export_path]
+)
+
+unless options.fetch(:apply)
+  counts = importer.counts
+  puts "Dry run: #{counts.fetch(:pages)} pages and #{counts.fetch(:links)} links"
+  puts "Excluded source pages: #{counts.fetch(:excluded_pages)}"
+  puts "Run again with --apply to import them"
+  exit
+end
+
+counts = importer.run(prune_excluded: options.fetch(:prune_excluded, false))
+puts "Imported #{counts.fetch(:pages)} pages and #{counts.fetch(:links)} links"
+puts "Excluded source pages: #{counts.fetch(:excluded_pages)}"
