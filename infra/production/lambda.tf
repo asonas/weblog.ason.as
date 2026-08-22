@@ -1,7 +1,7 @@
 resource "aws_lambda_function" "authoring" {
   function_name = "weblog-authoring-production"
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.authoring.repository_url}:bootstrap-5"
+  image_uri     = "${aws_ecr_repository.authoring.repository_url}:bootstrap-7"
   role          = aws_iam_role.authoring_runtime.arn
   architectures = ["arm64"]
   memory_size   = 512
