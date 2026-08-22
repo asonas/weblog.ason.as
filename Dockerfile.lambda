@@ -1,0 +1,13 @@
+FROM public.ecr.aws/lambda/ruby:4.0
+
+RUN dnf install -y gcc make && dnf clean all
+
+COPY Gemfile Gemfile.lock ./
+RUN bundle config set without "development test" && bundle install
+
+COPY lib/ ${LAMBDA_TASK_ROOT}/lib/
+COPY lambda/authoring.rb ${LAMBDA_TASK_ROOT}/lambda_function.rb
+
+ENV RUBYLIB=${LAMBDA_TASK_ROOT}/lib
+
+CMD ["lambda_function.WeblogAuthoring::LambdaHandler.call"]

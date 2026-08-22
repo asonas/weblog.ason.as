@@ -39,6 +39,7 @@ class DsqlDatabaseTest < Minitest::Test
     end
 
     def exec(statement)
+      return Result.new([{ "?column?" => "1" }]) if statement.strip == "SELECT 1"
       return Result.new(sorted_pages) if statement.include?("ORDER BY created_at DESC")
 
       raise "unexpected SQL: #{statement}"
@@ -125,6 +126,10 @@ class DsqlDatabaseTest < Minitest::Test
     assert_equal [page], database.list_pages
     assert_equal ["リンク先"], page.links.map(&:name)
     assert_equal [{ source_id: page.id, target_name: "リンク先" }], @pool.connection.links
+  end
+
+  def test_checks_database_health
+    assert dsql_database.healthy?
   end
 
   def test_updates_existing_page_with_optimistic_timestamp

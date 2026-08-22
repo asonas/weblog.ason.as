@@ -1,0 +1,8 @@
+.git
+.terraform
+data
+frontend
+log
+node_modules
+site
+test

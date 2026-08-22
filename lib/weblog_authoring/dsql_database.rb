@@ -43,6 +43,11 @@ module WeblogAuthoring
       end
     end
 
+    def healthy?
+      with_connection { |connection| connection.exec("SELECT 1") }
+      true
+    end
+
     def find(id)
       with_connection do |connection|
         result = connection.exec_params("#{select_sql("id")} LIMIT 1", [id])
