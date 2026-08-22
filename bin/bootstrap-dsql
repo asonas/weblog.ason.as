@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "dotenv/load"
+
+require_relative "../lib/weblog_authoring/dsql_bootstrap"
+
+host = ENV.fetch("DSQL_HOST")
+runtime_role_arn = ENV.fetch("DSQL_RUNTIME_ROLE_ARN")
+
+WeblogAuthoring::DsqlBootstrap.new(host:, runtime_role_arn:).run
+puts "Aurora DSQL bootstrap completed"

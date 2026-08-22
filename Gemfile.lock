@@ -2,6 +2,10 @@ GEM
   remote: https://rubygems.org/
   specs:
     ast (2.4.3)
+    aurora-dsql-ruby-pg (1.1.0)
+      aws-sdk-dsql (~> 1.6)
+      connection_pool (>= 2.4, < 4.0)
+      pg (~> 1.5)
     aws-eventstream (1.4.0)
     aws-partitions (1.1281.0)
     aws-sdk-core (3.254.1)
@@ -12,6 +16,9 @@ GEM
       bigdecimal
       jmespath (~> 1, >= 1.6.1)
       logger
+    aws-sdk-dsql (1.32.0)
+      aws-sdk-core (~> 3, >= 3.254.0)
+      aws-sigv4 (~> 1.5)
     aws-sdk-kms (1.130.0)
       aws-sdk-core (~> 3, >= 3.254.0)
       aws-sigv4 (~> 1.5)
@@ -23,6 +30,7 @@ GEM
       aws-eventstream (~> 1, >= 1.0.2)
     base64 (0.3.0)
     bigdecimal (4.1.2)
+    connection_pool (3.0.2)
     dotenv (3.2.0)
     drb (2.2.3)
     jmespath (1.6.2)
@@ -43,6 +51,13 @@ GEM
     parser (3.3.12.0)
       ast (~> 2.4.1)
       racc
+    pg (1.6.3)
+    pg (1.6.3-aarch64-linux)
+    pg (1.6.3-aarch64-linux-musl)
+    pg (1.6.3-arm64-darwin)
+    pg (1.6.3-x86_64-darwin)
+    pg (1.6.3-x86_64-linux)
+    pg (1.6.3-x86_64-linux-musl)
     prism (1.9.0)
     puma (8.0.2)
       nio4r (~> 2.0)
@@ -114,6 +129,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
+  aurora-dsql-ruby-pg
   aws-sdk-s3
   dotenv
   kramdown
