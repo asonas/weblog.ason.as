@@ -688,6 +688,11 @@ h1 {
   transition-timing-function: ease-out;
 }
 
+.internal-universe-group__node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0.35rem;
+}
+
 .internal-universe-group__node:hover,
 .internal-universe-group__node:focus-visible {
   opacity: 1;
@@ -696,7 +701,11 @@ h1 {
 
 .internal-universe-group__node::before {
   position: absolute;
-  inset: -0.4rem;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  transform: translate(-50%, -50%);
   content: "";
 }
 
@@ -1181,6 +1190,12 @@ h1 {
 .home-auth button:hover {
   color: var(--ink);
   background: var(--quiet-fill);
+}
+
+.home-auth a:focus-visible,
+.home-auth button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0.2rem;
 }
 
 .home-auth svg {

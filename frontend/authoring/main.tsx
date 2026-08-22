@@ -123,7 +123,7 @@ type AuthState = {
 
 const DEFAULT_AUTH_STATE: AuthState = {
   authenticated: false,
-  authentication_required: false,
+  authentication_required: true,
   can_edit: false,
   login: null,
   csrf_token: ""

@@ -433,6 +433,8 @@ function separateTopicsFromLinks(
 }
 
 function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): InternalGraphLayout {
+  const PAGE_NODE_RADIUS = 13;
+  const PAGE_NODE_CLEARANCE = 12;
   const pageRanks = new Map<string, number>();
   const pagesById = new Map<string, LinkedPage>();
   for (const group of groups) {
@@ -472,7 +474,7 @@ function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): Int
       kind: "page",
       page,
       rank,
-      radius: 13,
+      radius: PAGE_NODE_RADIUS,
       targetX,
       targetY,
       x: targetX,
@@ -500,8 +502,8 @@ function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): Int
       .strength((node) => node.kind === "topic" ? -520 : -72)
       .distanceMax(520))
     .force("collision", forceCollide<InternalGraphNode>()
-      .radius((node) => node.radius + (node.kind === "topic" ? 18 : 8))
-      .iterations(2))
+      .radius((node) => node.radius + (node.kind === "topic" ? 18 : PAGE_NODE_CLEARANCE))
+      .iterations(6))
     .force("x", forceX<InternalGraphNode>((node) => node.targetX)
       .strength((node) => node.kind === "topic" ? 0.42 : 0.045))
     .force("y", forceY<InternalGraphNode>((node) => node.targetY)
@@ -1488,7 +1490,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null;
       void savePage();
-    }, 700);
+    }, 300);
   }, [savePage]);
 
   const handleDocumentChange = useCallback((markdown: string, hasBodyBlock: boolean) => {
@@ -1507,7 +1509,10 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       if (current.title.trim()) void savePage();
       return;
     }
-    if (current.pageType !== "named" || current.title === savedNameRef.current) return;
+    if (current.pageType !== "named" || current.title === savedNameRef.current) {
+      if (dirtyRef.current) void savePage();
+      return;
+    }
     if (savingRef.current) {
       window.setTimeout(() => void handleEditorBlur(currentEditor), 50);
       return;
