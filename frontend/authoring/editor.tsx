@@ -4,6 +4,16 @@ import { Plugin, TextSelection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
+  forceCollide,
+  forceLink,
+  forceManyBody,
+  forceSimulation,
+  forceX,
+  forceY,
+  type SimulationLinkDatum,
+  type SimulationNodeDatum
+} from "d3-force";
+import {
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -11,6 +21,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type RefObject
 } from "react";
 
@@ -32,30 +43,111 @@ const WikiLinks = Extension.create({
     return [
       new Plugin({
         appendTransaction(transactions, _oldState, newState) {
-          if (!transactions.some((transaction) => transaction.docChanged)) return null;
+          if (!transactions.some((transaction) => transaction.docChanged || transaction.selectionSet)) return null;
+          if (transactions.some((transaction) => transaction.getMeta("wikiLinkRawEditing"))) return null;
+
+          const cursor = newState.selection.empty ? newState.selection.from : -1;
+          if (transactions.some((transaction) => transaction.selectionSet)) {
+            const activeLinks: Array<{ from: number; to: number; text: string }> = [];
+            newState.doc.descendants((node, from) => {
+              if (activeLinks.length > 0 || !node.isText || !node.text || cursor < from || cursor > from + node.nodeSize) {
+                return;
+              }
+              const link = node.marks.find((mark) => mark.type === linkType);
+              if (typeof link?.attrs.href === "string" && link.attrs.href.startsWith("/")) {
+                activeLinks.push({ from, to: from + node.nodeSize, text: node.text });
+              }
+            });
+            const activeLink = activeLinks[0];
+            if (activeLink) {
+              const offset = Math.max(0, Math.min(cursor - activeLink.from, activeLink.text.length));
+              const transaction = newState.tr.replaceWith(
+                activeLink.from,
+                activeLink.to,
+                newState.schema.text(`[[${activeLink.text}]]`)
+              );
+              return transaction
+                .setSelection(TextSelection.create(transaction.doc, activeLink.from + 2 + offset))
+                .setMeta("wikiLinkRawEditing", true);
+            }
+          }
 
           const matches: Array<{ from: number; to: number; pageName: string }> = [];
+          const changedLinks: Array<{ from: number; to: number; pageName: string }> = [];
           newState.doc.descendants((node, position) => {
             if (!node.isText || !node.text) return;
+
+            const link = node.marks.find((mark) => mark.type === linkType);
+            const href = link?.attrs.href;
+            if (typeof href === "string" && href.startsWith("/")) {
+              try {
+                const pageName = decodeURIComponent(href.slice(1));
+                if (pageName !== node.text) {
+                  changedLinks.push({ from: position, to: position + node.nodeSize, pageName: node.text });
+                }
+              } catch (_error) {
+                // Malformed internal links remain untouched.
+              }
+            }
 
             for (const match of node.text.matchAll(WIKI_LINK_PATTERN)) {
               const pageName = match[1].trim();
               if (!pageName || match.index === undefined) continue;
 
               const from = position + match.index;
-              matches.push({ from, to: from + match[0].length, pageName });
+              const to = from + match[0].length;
+              if (cursor >= from && cursor <= to) continue;
+              matches.push({ from, to, pageName });
             }
           });
 
-          if (matches.length === 0) return null;
+          if (matches.length === 0 && changedLinks.length === 0) return null;
 
           const transaction = newState.tr;
+          for (const link of changedLinks) {
+            transaction.addMark(
+              link.from,
+              link.to,
+              linkType.create({ href: `/${encodePageName(link.pageName)}`, target: "_self" })
+            );
+          }
           for (const match of matches.reverse()) {
             const href = `/${encodePageName(match.pageName)}`;
             const linkedText = newState.schema.text(match.pageName, [linkType.create({ href })]);
             transaction.replaceWith(match.from, match.to, linkedText);
           }
           return transaction;
+        },
+        props: {
+          handleClick(view, position, event) {
+            const link = (event.target as Element | null)?.closest?.('a[href^="/"]');
+            if (!link || event.metaKey || event.ctrlKey) return false;
+            event.preventDefault();
+            const href = link.getAttribute("href");
+            const linkedTexts: Array<{ from: number; to: number; text: string }> = [];
+            view.state.doc.descendants((node, from) => {
+              if (!node.isText || !node.text) return;
+              const mark = node.marks.find((candidate) => candidate.type === linkType);
+              if (mark?.attrs.href === href) {
+                linkedTexts.push({ from, to: from + node.nodeSize, text: node.text });
+              }
+            });
+            const linkedText = linkedTexts.sort((left, right) =>
+              Math.min(Math.abs(position - left.from), Math.abs(position - left.to)) -
+              Math.min(Math.abs(position - right.from), Math.abs(position - right.to))
+            )[0];
+            if (!linkedText) return false;
+            const rawText = `[[${linkedText.text}]]`;
+            const offset = Math.max(0, Math.min(position - linkedText.from, linkedText.text.length));
+            const transaction = view.state.tr
+              .replaceWith(linkedText.from, linkedText.to, view.state.schema.text(rawText));
+            transaction
+              .setSelection(TextSelection.create(transaction.doc, linkedText.from + 2 + offset))
+              .setMeta("wikiLinkRawEditing", true);
+            view.dispatch(transaction);
+            view.focus();
+            return true;
+          }
         }
       })
     ];
@@ -175,6 +267,11 @@ function extractEmbeddableUrls(body: string): Array<string> {
     .filter((url) => !/\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|$)/i.test(url));
 }
 
+function extractWikiLinkNames(body: string): Array<string> {
+  return Array.from(body.matchAll(WIKI_LINK_PATTERN), (match) => match[1].trim())
+    .filter((name, index, names) => name && names.indexOf(name) === index);
+}
+
 function externalLinkLabel(url: string): string {
   try {
     return new URL(url).hostname;
@@ -183,18 +280,15 @@ function externalLinkLabel(url: string): string {
   }
 }
 
-function EmbedCard({ url }: { url: string }) {
-  const [metadata, setMetadata] = useState<EmbedMetadata | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setMetadata(null);
-    setFailed(false);
-    void fetchJson<EmbedMetadata>(`/api/embed?${new URLSearchParams({ url }).toString()}`)
-      .then(setMetadata)
-      .catch(() => setFailed(true));
-  }, [url]);
-
+function EmbedCard({
+  url,
+  metadata,
+  failed = false
+}: {
+  url: string;
+  metadata?: EmbedMetadata;
+  failed?: boolean;
+}) {
   if (!metadata) {
     return (
       <div className="embed-card embed-card--loading" role="status">
@@ -219,8 +313,424 @@ function EmbedCard({ url }: { url: string }) {
   );
 }
 
+function stableNumber(value: string): number {
+  let hash = 0;
+  for (const character of value) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return hash;
+}
+
+type InternalGraphNode = SimulationNodeDatum & {
+  id: string;
+  kind: "topic" | "page";
+  name?: string;
+  group?: LinkedPageGroup;
+  page?: LinkedPage;
+  rank: number;
+  radius: number;
+  targetX: number;
+  targetY: number;
+};
+
+type InternalGraphLink = SimulationLinkDatum<InternalGraphNode> & {
+  source: string | InternalGraphNode;
+  target: string | InternalGraphNode;
+};
+
+type InternalGraphLayout = {
+  height: number;
+  links: Array<{ source: InternalGraphNode; target: InternalGraphNode }>;
+  pages: Array<InternalGraphNode>;
+  topics: Array<InternalGraphNode>;
+};
+
+type InternalGraphRect = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+function internalTopicRect(node: InternalGraphNode): InternalGraphRect {
+  const halfWidth = node.radius + 10;
+  const halfHeight = node.group?.kind === "url" ? 112 : (node.name?.length || 0) > 16 ? 44 : 32;
+  return {
+    top: (node.y ?? 0) - halfHeight,
+    right: (node.x ?? 0) + halfWidth,
+    bottom: (node.y ?? 0) + halfHeight,
+    left: (node.x ?? 0) - halfWidth
+  };
+}
+
+function pointInInternalRect(point: UniversePoint, rect: InternalGraphRect): boolean {
+  return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
+}
+
+function internalSegmentsIntersect(
+  start: UniversePoint,
+  end: UniversePoint,
+  edgeStart: UniversePoint,
+  edgeEnd: UniversePoint
+): boolean {
+  const cross = (a: UniversePoint, b: UniversePoint, c: UniversePoint) =>
+    (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const first = cross(start, end, edgeStart);
+  const second = cross(start, end, edgeEnd);
+  const third = cross(edgeStart, edgeEnd, start);
+  const fourth = cross(edgeStart, edgeEnd, end);
+  return first * second <= 0 && third * fourth <= 0;
+}
+
+function internalSegmentIntersectsRect(
+  start: UniversePoint,
+  end: UniversePoint,
+  rect: InternalGraphRect
+): boolean {
+  if (pointInInternalRect(start, rect) || pointInInternalRect(end, rect)) return true;
+  const topLeft = { x: rect.left, y: rect.top };
+  const topRight = { x: rect.right, y: rect.top };
+  const bottomRight = { x: rect.right, y: rect.bottom };
+  const bottomLeft = { x: rect.left, y: rect.bottom };
+  return [
+    [topLeft, topRight],
+    [topRight, bottomRight],
+    [bottomRight, bottomLeft],
+    [bottomLeft, topLeft]
+  ].some(([edgeStart, edgeEnd]) => internalSegmentsIntersect(start, end, edgeStart, edgeEnd));
+}
+
+function separateTopicsFromLinks(
+  topics: Array<InternalGraphNode>,
+  links: Array<{ source: InternalGraphNode; target: InternalGraphNode }>,
+  width: number
+): void {
+  for (let iteration = 0; iteration < 120; iteration += 1) {
+    let moved = false;
+    for (const topic of topics) {
+      const rect = internalTopicRect(topic);
+      for (const link of links) {
+        if (link.source.id === topic.id) continue;
+        const start = { x: link.source.x ?? 0, y: link.source.y ?? 0 };
+        const end = { x: link.target.x ?? 0, y: link.target.y ?? 0 };
+        if (!internalSegmentIntersectsRect(start, end, rect)) continue;
+
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const length = Math.max(1, Math.hypot(dx, dy));
+        const side = dx * ((topic.y ?? 0) - start.y) - dy * ((topic.x ?? 0) - start.x);
+        const direction = side === 0 ? (stableNumber(topic.id) % 2 === 0 ? 1 : -1) : Math.sign(side);
+        topic.x = (topic.x ?? topic.targetX) + (-dy / length) * direction * 5;
+        topic.y = (topic.y ?? topic.targetY) + (dx / length) * direction * 5;
+        moved = true;
+      }
+      topic.x = Math.max(topic.radius, Math.min(width - topic.radius, topic.x ?? topic.targetX));
+      const verticalInset = topic.group?.kind === "url" ? 112 : 48;
+      topic.y = Math.max(verticalInset, Math.min(240, topic.y ?? topic.targetY));
+    }
+    if (!moved) return;
+  }
+}
+
+function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): InternalGraphLayout {
+  const pageRanks = new Map<string, number>();
+  const pagesById = new Map<string, LinkedPage>();
+  for (const group of groups) {
+    group.pages.forEach((page, index) => {
+      pagesById.set(page.id, page);
+      pageRanks.set(page.id, Math.min(pageRanks.get(page.id) ?? index, index));
+    });
+  }
+
+  const pageCount = pagesById.size;
+  const hasExternalTopic = groups.some((group) => group.kind === "url");
+  const pageStartY = hasExternalTopic ? 360 : 230;
+  const height = Math.max(hasExternalTopic ? 680 : 520, pageStartY + 80 + Math.sqrt(Math.max(pageCount, 1)) * 82);
+  const topics = groups.map((group, index): InternalGraphNode => {
+    const targetX = width * (index + 1) / (groups.length + 1);
+    const targetY = 92 + stableNumber(group.name) % 42;
+    return {
+      id: `topic:${group.name}`,
+      kind: "topic",
+      name: group.name,
+      group,
+      rank: 0,
+      radius: group.kind === "url" ? 150 : Math.min(120, 58 + Math.sqrt(group.name.length) * 11),
+      targetX,
+      targetY,
+      x: targetX,
+      y: targetY
+    };
+  });
+  const pages = Array.from(pagesById.values(), (page): InternalGraphNode => {
+    const rank = pageRanks.get(page.id) ?? 0;
+    const seed = stableNumber(page.id);
+    const targetX = width * (0.18 + seed % 640 / 1000);
+    const targetY = Math.min(height - 42, pageStartY + rank * 22);
+    return {
+      id: `page:${page.id}`,
+      kind: "page",
+      page,
+      rank,
+      radius: 13,
+      targetX,
+      targetY,
+      x: targetX,
+      y: targetY
+    };
+  });
+  const nodes = [...topics, ...pages];
+  const links: Array<InternalGraphLink> = groups.flatMap((group) =>
+    group.pages.map((page) => ({
+      source: `topic:${group.name}`,
+      target: `page:${page.id}`
+    }))
+  );
+
+  const simulation = forceSimulation(nodes)
+    .stop()
+    .force("link", forceLink<InternalGraphNode, InternalGraphLink>(links)
+      .id((node) => node.id)
+      .distance((link) => {
+        const target = typeof link.target === "string" ? undefined : link.target;
+        return 118 + Math.min(target?.rank ?? 0, 12) * 7;
+      })
+      .strength(0.34))
+    .force("charge", forceManyBody<InternalGraphNode>()
+      .strength((node) => node.kind === "topic" ? -520 : -72)
+      .distanceMax(520))
+    .force("collision", forceCollide<InternalGraphNode>()
+      .radius((node) => node.radius + (node.kind === "topic" ? 18 : 8))
+      .iterations(2))
+    .force("x", forceX<InternalGraphNode>((node) => node.targetX)
+      .strength((node) => node.kind === "topic" ? 0.42 : 0.045))
+    .force("y", forceY<InternalGraphNode>((node) => node.targetY)
+      .strength((node) => node.kind === "topic" ? 0.58 : 0.16));
+
+  simulation.tick(300);
+  for (const node of nodes) {
+    const horizontalInset = node.kind === "topic" ? node.radius : 18;
+    node.x = Math.max(horizontalInset, Math.min(width - horizontalInset, node.x ?? node.targetX));
+    if (node.kind === "topic") {
+      const verticalInset = node.group?.kind === "url" ? 112 : 54;
+      node.y = Math.max(verticalInset, Math.min(220, node.y ?? node.targetY));
+    } else {
+      node.y = Math.max(pageStartY - 25, Math.min(height - 28, node.y ?? node.targetY));
+    }
+  }
+
+  const resolvedLinks = links.map((link) => ({
+    source: link.source as InternalGraphNode,
+    target: link.target as InternalGraphNode
+  }));
+  separateTopicsFromLinks(topics, resolvedLinks, width);
+
+  return {
+    height,
+    links: resolvedLinks,
+    pages,
+    topics
+  };
+}
+
+function InternalUniverseGraph({
+  groups,
+  onActiveTopicChange
+}: {
+  groups: Array<LinkedPageGroup>;
+  onActiveTopicChange: (topic: string | null) => void;
+}) {
+  const [activePage, setActivePage] = useState<LinkedPage | null>(null);
+  const [previewSide, setPreviewSide] = useState<"left" | "right">("right");
+  const [width, setWidth] = useState(() => Math.max(1100, window.innerWidth));
+  const [embeds, setEmbeds] = useState<Record<string, EmbedMetadata | null>>({});
+  const closeTimerRef = useRef<number | null>(null);
+  const graphRef = useRef<HTMLElement | null>(null);
+  const layout = useMemo(() => internalGraphLayout(groups, width), [groups, width]);
+  const activeNode = layout.pages.find((node) => node.page?.id === activePage?.id);
+  const previewY = activeNode
+    ? Math.max(112, Math.min((activeNode.y ?? 0) - 80, layout.height - 176))
+    : 0;
+  const externalUrls = useMemo(
+    () => groups.filter((group) => group.kind === "url").map((group) => group.name),
+    [groups]
+  );
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all(externalUrls.map(async (url) => {
+      try {
+        return { url, metadata: await fetchJson<EmbedMetadata>(`/api/embed?${new URLSearchParams({ url })}`) };
+      } catch (_error) {
+        return { url, metadata: null };
+      }
+    })).then((results) => {
+      if (active) setEmbeds(Object.fromEntries(results.map(({ url, metadata }) => [url, metadata])));
+    });
+    return () => {
+      active = false;
+    };
+  }, [externalUrls]);
+
+  useLayoutEffect(() => {
+    const graph = graphRef.current;
+    if (!graph) return;
+    const updateWidth = () => setWidth(graph.getBoundingClientRect().width);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(graph);
+    return () => observer.disconnect();
+  }, []);
+  const showPreview = (page: LinkedPage, side: "left" | "right") => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    setPreviewSide(side);
+    setActivePage(page);
+  };
+  const previewSideForNode = (
+    node: HTMLElement,
+    preferredSide: "left" | "right"
+  ): "left" | "right" => {
+    const nodeRect = node.getBoundingClientRect();
+    const previewWidth = 256;
+    const canShowRight = nodeRect.right + 18 + previewWidth <= window.innerWidth - 16;
+    const canShowLeft = nodeRect.left - 18 - previewWidth >= 16;
+    if (preferredSide === "right" && !canShowRight && canShowLeft) return "left";
+    if (preferredSide === "left" && !canShowLeft && canShowRight) return "right";
+    return preferredSide;
+  };
+  const showPreviewFromPointer = (page: LinkedPage, event: ReactPointerEvent<HTMLAnchorElement>) => {
+    const node = event.currentTarget;
+    const nodeRect = node.getBoundingClientRect();
+    const nodeCenter = nodeRect.left + nodeRect.width / 2;
+    const preferredSide = event.clientX >= nodeCenter ? "right" : "left";
+    showPreview(page, previewSideForNode(node, preferredSide));
+  };
+  const schedulePreviewClose = () => {
+    closeTimerRef.current = window.setTimeout(() => setActivePage(null), 100);
+  };
+
+  return (
+    <section
+      className="internal-universe-groups"
+      aria-label="内部リンクでつながる記事"
+      data-universe-obstacle
+      ref={graphRef}
+      style={{ blockSize: `${layout.height}px` }}
+    >
+      <svg viewBox={`0 0 ${width} ${layout.height}`} preserveAspectRatio="none" aria-hidden="true">
+        {layout.links.map(({ source, target }) => (
+          <line
+            key={`${source.id}:${target.id}`}
+            x1={source.x}
+            y1={source.y}
+            x2={target.x}
+            y2={target.y}
+          />
+        ))}
+      </svg>
+      {layout.topics.map((topic) => (
+        <span
+          className="internal-universe-group__topic-wrap"
+          key={topic.id}
+          onPointerEnter={() => onActiveTopicChange(topic.name || null)}
+          onPointerLeave={() => onActiveTopicChange(null)}
+          onFocus={() => onActiveTopicChange(topic.name || null)}
+          onBlur={() => onActiveTopicChange(null)}
+        >
+          <a
+            className="internal-universe-group__topic-node"
+            href={topic.group?.kind === "url" ? topic.name : `/${encodePageName(topic.name || "")}`}
+            data-universe-topic={topic.name}
+            aria-label={topic.name}
+            target={topic.group?.kind === "url" ? "_blank" : undefined}
+            rel={topic.group?.kind === "url" ? "noreferrer" : undefined}
+            style={{
+              "--internal-topic-x": `${topic.x}px`,
+              "--internal-topic-y": `${topic.y}px`
+            } as CSSProperties}
+          />
+          <a
+            className={`internal-universe-group__topic${topic.group?.kind === "url" ? " internal-universe-group__topic--external" : ""}`}
+            href={topic.group?.kind === "url" ? topic.name : `/${encodePageName(topic.name || "")}`}
+            target={topic.group?.kind === "url" ? "_blank" : undefined}
+            rel={topic.group?.kind === "url" ? "noreferrer" : undefined}
+            style={{
+              "--internal-topic-x": `${topic.x}px`,
+              "--internal-topic-y": `${topic.y}px`
+            } as CSSProperties}
+          >
+            {topic.group?.kind === "url" ? (
+              <EmbedCard
+                url={topic.name || ""}
+                metadata={embeds[topic.name || ""] || undefined}
+                failed={embeds[topic.name || ""] === null}
+              />
+            ) : topic.name}
+          </a>
+        </span>
+      ))}
+      {layout.pages.map((node) => {
+        const page = node.page;
+        if (!page) return null;
+        return (
+          <a
+            className="internal-universe-group__node"
+            href={`/${encodePageName(page.route)}`}
+            aria-label={page.title}
+            key={page.id}
+            style={{
+              "--internal-node-x": `${node.x}px`,
+              "--internal-node-y": `${node.y}px`
+            } as CSSProperties}
+            onPointerEnter={(event) => showPreviewFromPointer(page, event)}
+            onMouseLeave={schedulePreviewClose}
+            onFocus={(event) => {
+              const preferredSide = (node.x ?? 0) < width / 2 ? "right" : "left";
+              showPreview(page, previewSideForNode(event.currentTarget, preferredSide));
+            }}
+            onBlur={schedulePreviewClose}
+          />
+        );
+      })}
+      {activePage && activeNode && (
+        <a
+          className="internal-universe-group__preview page-card__link"
+          href={`/${encodePageName(activePage.route)}`}
+          style={{
+            "--internal-preview-anchor-x": `${activeNode.x}px`,
+            "--internal-preview-y": `${previewY}px`
+          } as CSSProperties}
+          data-side={previewSide}
+          onMouseEnter={() => showPreview(activePage, previewSide)}
+          onMouseLeave={schedulePreviewClose}
+        >
+          {activePage.image_url && (
+            <img className="page-card__image" src={activePage.image_url} alt="" loading="lazy" />
+          )}
+          <span className="page-card__title">{activePage.title}</span>
+          {activePage.excerpt && <span className="page-card__excerpt">{activePage.excerpt}</span>}
+        </a>
+      )}
+    </section>
+  );
+}
+
 type UniversePoint = { x: number; y: number };
 type UniverseRect = { top: number; right: number; bottom: number; left: number };
+type UniverseSize = { width: number; height: number };
+type UniverseLayout = {
+  editorRect: UniverseRect;
+  obstacles: Array<UniverseRect>;
+  width: number;
+  height: number;
+};
+type UniverseTopicLine = {
+  name: string;
+  kind: "wiki" | "url";
+  anchor: UniversePoint;
+  start: UniversePoint;
+  end: UniversePoint;
+};
 type UniverseNode = UniversePoint & {
   url: string;
   anchor: UniversePoint;
@@ -230,6 +740,7 @@ type UniverseNode = UniversePoint & {
 };
 const UNIVERSE_NODE_RADIUS = 7;
 const UNIVERSE_NODE_GAP = 15;
+const UNIVERSE_PREVIEW_GAP = 20;
 
 function useUniverseEnabled(): boolean {
   const [enabled, setEnabled] = useState(document.documentElement.dataset.universe === "on");
@@ -360,19 +871,183 @@ function initialUniverseNodes(
   });
 }
 
+function rectOverlapArea(rect: UniverseRect, other: UniverseRect): number {
+  const width = Math.max(0, Math.min(rect.right, other.right) - Math.max(rect.left, other.left));
+  const height = Math.max(0, Math.min(rect.bottom, other.bottom) - Math.max(rect.top, other.top));
+  return width * height;
+}
+
+function previewPosition(
+  node: UniverseNode,
+  nodes: Array<UniverseNode>,
+  size: UniverseSize,
+  layout: UniverseLayout
+): UniversePoint {
+  const candidates = [
+    { x: node.x + UNIVERSE_PREVIEW_GAP, y: node.y - size.height / 2 },
+    { x: node.x + UNIVERSE_PREVIEW_GAP, y: node.y + UNIVERSE_PREVIEW_GAP },
+    { x: node.x + UNIVERSE_PREVIEW_GAP, y: node.y - size.height - UNIVERSE_PREVIEW_GAP },
+    { x: node.x - size.width - UNIVERSE_PREVIEW_GAP, y: node.y - size.height / 2 },
+    { x: node.x - size.width - UNIVERSE_PREVIEW_GAP, y: node.y + UNIVERSE_PREVIEW_GAP },
+    { x: node.x - size.width - UNIVERSE_PREVIEW_GAP, y: node.y - size.height - UNIVERSE_PREVIEW_GAP },
+    { x: node.x - size.width / 2, y: node.y + UNIVERSE_PREVIEW_GAP },
+    { x: node.x - size.width / 2, y: node.y - size.height - UNIVERSE_PREVIEW_GAP }
+  ];
+  const nodeRects = nodes
+    .filter((candidate) => candidate.url !== node.url)
+    .map((candidate) => ({
+      top: candidate.y - UNIVERSE_NODE_RADIUS,
+      right: candidate.x + UNIVERSE_NODE_RADIUS,
+      bottom: candidate.y + UNIVERSE_NODE_RADIUS,
+      left: candidate.x - UNIVERSE_NODE_RADIUS
+    }));
+
+  return candidates
+    .map((candidate) => {
+      const x = Math.max(16, Math.min(candidate.x, layout.width - size.width - 16));
+      const y = Math.max(0, Math.min(candidate.y, layout.height - size.height));
+      const rect = { top: y, right: x + size.width, bottom: y + size.height, left: x };
+      const obstacleOverlap = layout.obstacles
+        .reduce((total, obstacle) => total + rectOverlapArea(rect, obstacle), 0);
+      const nodeOverlap = nodeRects
+        .reduce((total, nodeRect) => total + rectOverlapArea(rect, nodeRect), 0);
+      const overlap = obstacleOverlap + nodeOverlap * 1000;
+      return { x, y, overlap };
+    })
+    .reduce((best, candidate) => candidate.overlap < best.overlap ? candidate : best);
+}
+
+function editorEdgePoint(anchor: UniversePoint, node: UniversePoint, rect: UniverseRect): UniversePoint {
+  const dx = node.x - anchor.x;
+  const dy = node.y - anchor.y;
+  const candidates: Array<{ t: number; point: UniversePoint }> = [];
+
+  for (const x of [rect.left, rect.right]) {
+    if (dx === 0) continue;
+    const t = (x - anchor.x) / dx;
+    const y = anchor.y + dy * t;
+    if (t >= 0 && t <= 1 && y >= rect.top && y <= rect.bottom) {
+      candidates.push({ t, point: { x, y } });
+    }
+  }
+  for (const y of [rect.top, rect.bottom]) {
+    if (dy === 0) continue;
+    const t = (y - anchor.y) / dy;
+    const x = anchor.x + dx * t;
+    if (t >= 0 && t <= 1 && x >= rect.left && x <= rect.right) {
+      candidates.push({ t, point: { x, y } });
+    }
+  }
+
+  if (candidates.length === 0) return anchor;
+  return candidates.reduce((nearest, candidate) =>
+    candidate.t < nearest.t ? candidate : nearest
+  ).point;
+}
+
+function linkUnderlineAnchor(link: HTMLAnchorElement, workspaceRect: DOMRect): UniversePoint {
+  const textLength = link.textContent?.length || 0;
+  const targetOffset = Math.floor(Math.max(0, textLength - 1) / 2);
+  const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
+  let consumed = 0;
+  let textNode = walker.nextNode();
+
+  while (textNode) {
+    const length = textNode.textContent?.length || 0;
+    if (targetOffset < consumed + length) {
+      const range = document.createRange();
+      const offset = targetOffset - consumed;
+      range.setStart(textNode, offset);
+      range.setEnd(textNode, Math.min(offset + 1, length));
+      const rect = range.getBoundingClientRect();
+      if (rect.width > 0 || rect.height > 0) {
+        return {
+          x: rect.left - workspaceRect.left + rect.width / 2,
+          y: rect.bottom - workspaceRect.top - 1
+        };
+      }
+    }
+    consumed += length;
+    textNode = walker.nextNode();
+  }
+
+  const rect = link.getBoundingClientRect();
+  return {
+    x: rect.left - workspaceRect.left + rect.width / 2,
+    y: rect.bottom - workspaceRect.top - 1
+  };
+}
+
 function Universe({
   urls,
+  topics,
+  activeTopic,
   editor,
+  editorContentReady,
+  enabled,
   workspaceRef
 }: {
   urls: Array<string>;
+  topics: Array<Pick<LinkedPageGroup, "kind" | "name">>;
+  activeTopic: string | null;
   editor: Editor | null;
+  editorContentReady: boolean;
+  enabled: boolean;
   workspaceRef: RefObject<HTMLDivElement | null>;
 }) {
-  const enabled = useUniverseEnabled();
   const [nodes, setNodes] = useState<Array<UniverseNode>>([]);
+  const [topicLines, setTopicLines] = useState<Array<UniverseTopicLine>>([]);
+  const [embeds, setEmbeds] = useState<Record<string, EmbedMetadata | null>>({});
+  const [failedEmbeds, setFailedEmbeds] = useState<Array<string>>([]);
+  const [cardSizes, setCardSizes] = useState<Record<string, UniverseSize>>({});
+  const [layout, setLayout] = useState<UniverseLayout | null>(null);
   const [activeUrl, setActiveUrl] = useState<string | null>(null);
   const closeTimerRef = useRef<number | null>(null);
+  const measurementsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    let active = true;
+    void Promise.all(urls.map(async (url) => {
+      try {
+        const metadata = await fetchJson<EmbedMetadata>(`/api/embed?${new URLSearchParams({ url }).toString()}`);
+        return { url, metadata };
+      } catch (_error) {
+        return { url, metadata: null };
+      }
+    })).then((results) => {
+      if (!active) return;
+      setEmbeds(Object.fromEntries(results.map(({ url, metadata }) => [url, metadata])));
+      setFailedEmbeds(results.filter(({ metadata }) => metadata === null).map(({ url }) => url));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [enabled, urls]);
+
+  useLayoutEffect(() => {
+    const measurements = measurementsRef.current;
+    if (!enabled || !measurements) return;
+
+    const update = () => {
+      const nextSizes = Object.fromEntries(
+        Array.from(measurements.querySelectorAll<HTMLElement>("[data-universe-card]"))
+          .map((element) => [element.dataset.universeCard || "", {
+            width: element.offsetWidth,
+            height: element.offsetHeight
+          }])
+          .filter(([url]) => url)
+      );
+      setCardSizes(nextSizes);
+    };
+    const observer = new ResizeObserver(update);
+    measurements.querySelectorAll<HTMLElement>("[data-universe-card]")
+      .forEach((element) => observer.observe(element));
+    update();
+    return () => observer.disconnect();
+  }, [embeds, enabled, urls]);
 
   const closePreview = useCallback(() => {
     closeTimerRef.current = window.setTimeout(() => setActiveUrl(null), 120);
@@ -385,8 +1060,9 @@ function Universe({
 
   useLayoutEffect(() => {
     const workspace = workspaceRef.current;
-    if (!enabled || !editor || !workspace || urls.length === 0) {
+    if (!enabled || !editor || !editorContentReady || !workspace || (urls.length === 0 && topics.length === 0)) {
       setNodes([]);
+      setTopicLines([]);
       setActiveUrl(null);
       return;
     }
@@ -424,8 +1100,31 @@ function Universe({
         const obstacles = Array.from(workspace.querySelectorAll<HTMLElement>("[data-universe-obstacle]"))
           .map((element) => relativeRect(element, workspaceRect, 20));
         const editorRect = relativeRect(editorShell, workspaceRect, 20);
+        const glassRect = relativeRect(editorShell, workspaceRect);
         const width = workspace.clientWidth;
         const height = workspace.scrollHeight;
+        setLayout({ editorRect: glassRect, obstacles, width, height });
+        setTopicLines(topics.flatMap(({ kind, name }) => {
+          const href = kind === "url"
+            ? name
+            : new URL(`/${encodePageName(name)}`, window.location.origin).href;
+          const link = links.find((candidate) => candidate.href === href);
+          const topic = workspace.querySelector<HTMLElement>(`[data-universe-topic="${CSS.escape(name)}"]`);
+          if (!link || !topic) return [];
+          const anchor = linkUnderlineAnchor(link, workspaceRect);
+          const topicRect = relativeRect(topic, workspaceRect);
+          const center = {
+            x: (topicRect.left + topicRect.right) / 2,
+            y: (topicRect.top + topicRect.bottom) / 2
+          };
+          return [{
+            name,
+            kind,
+            anchor,
+            start: editorEdgePoint(anchor, center, glassRect),
+            end: editorEdgePoint(center, anchor, topicRect)
+          }];
+        }));
         const nextNodes = initialUniverseNodes(urls, anchors, editorRect, width);
 
         if (reducedMotion.matches) {
@@ -462,31 +1161,58 @@ function Universe({
       editor.off("update", measure);
       media.removeEventListener("change", measure);
     };
-  }, [editor, enabled, urls, workspaceRef]);
+  }, [editor, editorContentReady, enabled, topics, urls, workspaceRef]);
 
   useEffect(() => () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
   }, []);
 
-  if (!enabled || nodes.length === 0) return null;
+  if (!enabled) return null;
 
   const activeNode = nodes.find((node) => node.url === activeUrl);
-  const workspaceWidth = workspaceRef.current?.clientWidth || 0;
-  const previewLeft = activeNode
-    ? Math.max(16, Math.min(activeNode.x + 20, workspaceWidth - 272))
-    : 0;
-  const previewStyle = activeNode ? {
-    "--universe-preview-x": `${previewLeft}px`,
-    "--universe-preview-y": `${Math.max(0, activeNode.y - 64)}px`
+  const activeTopicLine = topicLines.find((line) => line.name === activeTopic);
+  const activeSize = activeNode ? cardSizes[activeNode.url] || { width: 256, height: 128 } : null;
+  const activePosition = activeNode && activeSize && layout
+    ? previewPosition(activeNode, nodes, activeSize, layout)
+    : null;
+  const previewStyle = activePosition ? {
+    "--universe-preview-x": `${activePosition.x}px`,
+    "--universe-preview-y": `${activePosition.y}px`
   } as CSSProperties : undefined;
 
   return (
     <div className="universe" aria-label="ユニバース">
-      <svg className="universe__graph" aria-hidden="true">
-        {nodes.map((node) => (
-          <line key={node.url} x1={node.anchor.x} y1={node.anchor.y} x2={node.x} y2={node.y} />
-        ))}
-      </svg>
+      {layout && (
+        <>
+          <svg className="universe__graph" aria-hidden="true">
+            {nodes.map((node) => {
+              const start = editorEdgePoint(node.anchor, node, layout.editorRect);
+              return <line className="universe__external-line" key={node.url} x1={start.x} y1={start.y} x2={node.x} y2={node.y} />;
+            })}
+            {topicLines.map((line) => (
+              <line
+                className={line.kind === "url" ? "universe__external-line" : "universe__internal-line"}
+                key={`topic:${line.name}`}
+                x1={line.start.x}
+                y1={line.start.y}
+                x2={line.end.x}
+                y2={line.end.y}
+              />
+            ))}
+          </svg>
+          {activeTopicLine && (
+            <svg className="universe__graph universe__graph--active" aria-hidden="true">
+              <line
+                className={`${activeTopicLine.kind === "url" ? "universe__external-line" : "universe__internal-line"} universe__internal-line--active`}
+                x1={activeTopicLine.anchor.x}
+                y1={activeTopicLine.anchor.y}
+                x2={activeTopicLine.start.x}
+                y2={activeTopicLine.start.y}
+              />
+            </svg>
+          )}
+        </>
+      )}
       <div className="universe__nodes">
         {nodes.map((node) => (
           <a
@@ -505,7 +1231,7 @@ function Universe({
           />
         ))}
       </div>
-      {activeNode && (
+      {activeNode && previewStyle && (
         <div
           className="universe__preview"
           id="universe-preview"
@@ -514,9 +1240,24 @@ function Universe({
           onMouseEnter={() => openPreview(activeNode.url)}
           onMouseLeave={closePreview}
         >
-          <EmbedCard url={activeNode.url} />
+          <EmbedCard
+            url={activeNode.url}
+            metadata={embeds[activeNode.url] || undefined}
+            failed={failedEmbeds.includes(activeNode.url)}
+          />
         </div>
       )}
+      <div className="universe__measurements" ref={measurementsRef} aria-hidden="true">
+        {urls.map((url) => (
+          <div data-universe-card={url} key={url}>
+            <EmbedCard
+              url={url}
+              metadata={embeds[url] || undefined}
+              failed={failedEmbeds.includes(url)}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -619,6 +1360,7 @@ function statusMessage(page: PageResponse): string {
 
 export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const [draft, setDraft] = useState<EditorDraft>(() => initialDraft(bootstrap));
+  const [editorContentReady, setEditorContentReady] = useState(false);
   const [status, setStatus] = useState(bootstrap.save_message);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
@@ -626,6 +1368,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const [linkedPagesHasMore, setLinkedPagesHasMore] = useState(bootstrap.linked_pages_has_more || false);
   const [loadingLinkedPages, setLoadingLinkedPages] = useState(false);
   const [linkedPagesError, setLinkedPagesError] = useState("");
+  const [activeUniverseTopic, setActiveUniverseTopic] = useState<string | null>(null);
   const draftRef = useRef(draft);
   const dirtyRef = useRef(false);
   const savingRef = useRef(false);
@@ -636,7 +1379,27 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const loadingLinkedPagesRef = useRef(false);
   const linkedPagesSentinelRef = useRef<HTMLDivElement | null>(null);
   const initialFocusAppliedRef = useRef(false);
+  const editorContentReadyFrameRef = useRef<number | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const isUnpersistedRouteRef = useRef(
+    !bootstrap.page_id &&
+    bootstrap.title.length > 0 &&
+    window.location.pathname !== "/" &&
+    window.location.pathname !== "/editor/new"
+  );
+
+  const handleEditorContentRef = useCallback((element: HTMLDivElement | null) => {
+    if (editorContentReadyFrameRef.current !== null) {
+      window.cancelAnimationFrame(editorContentReadyFrameRef.current);
+    }
+    if (!element) {
+      setEditorContentReady(false);
+      return;
+    }
+    editorContentReadyFrameRef.current = window.requestAnimationFrame(() => {
+      setEditorContentReady(true);
+    });
+  }, []);
 
   const updateDraft = useCallback((changes: Partial<EditorDraft>) => {
     const next = { ...draftRef.current, ...changes };
@@ -651,6 +1414,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
 
   const savePage = useCallback(async () => {
     if (!draftRef.current.pageId && !draftRef.current.title.trim()) return;
+    if (isUnpersistedRouteRef.current && !draftRef.current.body.trim()) return;
     if (savingRef.current) {
       pendingSaveRef.current = true;
       return;
@@ -731,6 +1495,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     setErrors({});
     setDirtyState(true);
     const isRenaming = next.pageId && next.pageType === "named" && next.title !== savedNameRef.current;
+    if (isUnpersistedRouteRef.current && !next.body.trim()) return;
     if (!isRenaming && (next.pageId || (next.title && hasBodyBlock))) scheduleSave();
   }, [scheduleSave, setDirtyState, updateDraft]);
 
@@ -901,8 +1666,33 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     ...(errors.body || []),
     ...(errors.form || [])
   ];
+  const universeEnabled = useUniverseEnabled();
   const linkedPageGroups = useMemo(() => groupLinkedPages(linkedPages), [linkedPages]);
   const embedUrls = useMemo(() => extractEmbeddableUrls(draft.body), [draft.body]);
+  const internalUniverseGroups = useMemo(() =>
+    extractWikiLinkNames(draft.body).map((name) => {
+      const group = linkedPageGroups.find((candidate) => candidate.kind === "wiki" && candidate.name === name);
+      return group ? {
+        ...group,
+        pages: group.pages.filter((page) => page.route !== name)
+      } : {
+        kind: "wiki" as const,
+        name,
+        pages: [],
+        isTopicOnly: false
+      };
+    }), [draft.body, linkedPageGroups]);
+  const externalUniverseGroups = useMemo(() =>
+    embedUrls.map((url) => linkedPageGroups.find((group) => group.kind === "url" && group.name === url) || {
+      kind: "url" as const,
+      name: url,
+      pages: [],
+      isTopicOnly: false
+    }), [embedUrls, linkedPageGroups]);
+  const universeGroups = useMemo(
+    () => [...internalUniverseGroups, ...externalUniverseGroups],
+    [externalUniverseGroups, internalUniverseGroups]
+  );
 
   return (
     <>
@@ -921,13 +1711,19 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
             }}
           >
             <div className="wysiwyg-editor" aria-busy={saving}>
-              <EditorContent editor={editor} />
+              <EditorContent editor={editor} ref={handleEditorContentRef} />
             </div>
             {editorErrors.length > 0 && (
               <p className="input-error" role="alert">{editorErrors.join(" ")}</p>
             )}
           </section>
         </div>
+        {universeEnabled && universeGroups.length > 0 && (
+          <InternalUniverseGraph
+            groups={universeGroups}
+            onActiveTopicChange={setActiveUniverseTopic}
+          />
+        )}
         {linkedPageGroups.length > 0 && (
           <section className="linked-pages" data-universe-obstacle aria-labelledby="related-pages-heading">
           <h2 id="related-pages-heading">関連する記事</h2>
@@ -987,7 +1783,15 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
           </p>
           </section>
         )}
-        <Universe urls={embedUrls} editor={editor} workspaceRef={workspaceRef} />
+        <Universe
+          urls={[]}
+          topics={universeGroups.map(({ kind, name }) => ({ kind, name }))}
+          activeTopic={activeUniverseTopic}
+          editor={editor}
+          editorContentReady={editorContentReady}
+          enabled={universeEnabled}
+          workspaceRef={workspaceRef}
+        />
       </div>
     </>
   );
