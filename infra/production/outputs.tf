@@ -32,3 +32,18 @@ output "authoring_oauth_secret_arn" {
   description = "ARN of the Secrets Manager secret used by production GitHub OAuth."
   value       = aws_secretsmanager_secret.oauth.arn
 }
+
+output "site_bucket_name" {
+  description = "Name of the private production site bucket."
+  value       = aws_s3_bucket.site.id
+}
+
+output "cloudfront_distribution_id" {
+  description = "ID of the production CloudFront distribution."
+  value       = aws_cloudfront_distribution.weblog.id
+}
+
+output "cloudfront_domain_name" {
+  description = "Domain name of the production CloudFront distribution."
+  value       = aws_cloudfront_distribution.weblog.domain_name
+}
