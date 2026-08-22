@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" data-can-edit="false" data-csrf-token="">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>weblog</title>
+    <title>weblog.ason.as</title>
     <script>
       try {
         document.documentElement.dataset.theme =
@@ -18,8 +18,9 @@
     <a class="skip-link" href="#main">本文へ移動</a>
     <header class="site-header">
       <nav class="header-nav" aria-label="主要ナビゲーション">
-        <a href="/">weblog</a>
+        <a href="/">weblog.ason.as</a>
         <span class="header-actions">
+          <span id="auth-action"></span>
           <button class="header-action universe-toggle" id="universe-toggle" type="button" aria-label="ユニバースを開く" aria-pressed="false">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="2"/>
@@ -34,8 +35,8 @@
               <circle cx="16" cy="12" r="4"/>
             </svg>
           </button>
-          <a class="header-action" href="/?new=1" aria-label="新しい記事を作成">＋</a>
-          <a class="header-action" href="/?new=daily" aria-label="今日の日記を開く">
+          <a class="header-action" id="new-page-action" href="/?new=1" aria-label="新しい記事を作成" hidden>＋</a>
+          <a class="header-action" id="daily-page-action" href="/?new=daily" aria-label="今日の日記を開く" hidden>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M7 2v3M17 2v3M3.5 9h17M5 4h14a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 19 21H5a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 5 4Z"/>
             </svg>

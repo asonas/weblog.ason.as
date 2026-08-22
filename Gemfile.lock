@@ -23,6 +23,7 @@ GEM
       aws-eventstream (~> 1, >= 1.0.2)
     base64 (0.3.0)
     bigdecimal (4.1.2)
+    dotenv (3.2.0)
     drb (2.2.3)
     jmespath (1.6.2)
     json (2.21.2)
@@ -114,6 +115,7 @@ PLATFORMS
 
 DEPENDENCIES
   aws-sdk-s3
+  dotenv
   kramdown
   kramdown-parser-gfm
   minitest

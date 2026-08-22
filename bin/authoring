@@ -4,6 +4,7 @@
 require "optparse"
 require "rackup"
 require "rack/handler/puma"
+require "dotenv/load"
 
 require_relative "../lib/weblog_authoring/development_app"
 

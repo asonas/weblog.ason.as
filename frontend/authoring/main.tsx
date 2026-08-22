@@ -113,6 +113,53 @@ function setupPaletteToggle() {
 
 setupPaletteToggle();
 
+type AuthState = {
+  authenticated: boolean;
+  authentication_required: boolean;
+  can_edit: boolean;
+  login: string | null;
+  csrf_token: string;
+};
+
+async function setupAuthentication() {
+  const auth = await fetchBootstrap<AuthState>("/api/auth/session");
+  document.documentElement.dataset.canEdit = String(auth.can_edit);
+  document.documentElement.dataset.csrfToken = auth.csrf_token;
+
+  document.querySelectorAll<HTMLElement>("#new-page-action, #daily-page-action").forEach((action) => {
+    action.hidden = !auth.can_edit;
+  });
+
+  const container = document.querySelector<HTMLElement>("#auth-action");
+  if (!container) return;
+  container.replaceChildren();
+
+  if (auth.authenticated) {
+    const form = document.createElement("form");
+    form.action = "/api/auth/logout";
+    form.method = "post";
+    const csrf = document.createElement("input");
+    csrf.type = "hidden";
+    csrf.name = "csrf_token";
+    csrf.value = auth.csrf_token;
+    const button = document.createElement("button");
+    button.className = "header-auth";
+    button.type = "submit";
+    button.textContent = `${auth.login || "GitHub"}からログアウト`;
+    form.append(csrf, button);
+    container.append(form);
+    return;
+  }
+
+  if (auth.authentication_required) {
+    const link = document.createElement("a");
+    link.className = "header-auth";
+    link.href = `/api/auth/github?${new URLSearchParams({ return_to: window.location.pathname + window.location.search })}`;
+    link.textContent = "GitHubでログイン";
+    container.append(link);
+  }
+}
+
 function applyUniverse(enabled: boolean) {
   document.documentElement.dataset.universe = enabled ? "on" : "off";
   const button = document.querySelector<HTMLButtonElement>("#universe-toggle");
@@ -367,7 +414,17 @@ function Home({ bootstrap }: { bootstrap: HomeBootstrap }) {
 const root = document.querySelector<HTMLElement>("#authoring-root");
 const data = document.querySelector<HTMLScriptElement>("#authoring-data");
 
-if (root) {
-  const initialBootstrap = data?.textContent ? JSON.parse(data.textContent) as AppBootstrap : undefined;
-  createRoot(root).render(<App initialBootstrap={initialBootstrap} />);
+async function start() {
+  try {
+    await setupAuthentication();
+  } catch (_error) {
+    document.documentElement.dataset.canEdit = "false";
+  }
+
+  if (root) {
+    const initialBootstrap = data?.textContent ? JSON.parse(data.textContent) as AppBootstrap : undefined;
+    createRoot(root).render(<App initialBootstrap={initialBootstrap} />);
+  }
 }
+
+void start();

@@ -12,6 +12,7 @@ gem "kramdown"
 gem "kramdown-parser-gfm"
 gem "rouge"
 gem "aws-sdk-s3"
+gem "dotenv"
 
 group :test do
   gem "minitest"

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "pathname"
+require "dotenv/load"
 
 require_relative "lib/weblog_authoring/development_app"
 

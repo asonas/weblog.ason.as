@@ -58,6 +58,143 @@ class TestDevelopmentApp < Minitest::Test
     end
   end
 
+  class FakeOAuthClient
+    attr_reader :authorization_request, :authentication_request
+
+    def initialize(user_id: 630_181)
+      @user_id = user_id
+    end
+
+    def authorization_url(**request)
+      @authorization_request = request
+      "https://github.com/login/oauth/authorize?#{URI.encode_www_form(state: request.fetch(:state))}"
+    end
+
+    def authenticate(**request)
+      @authentication_request = request
+      { "id" => @user_id, "login" => "asonas" }
+    end
+  end
+
+  def test_oauth_login_authenticates_the_allowed_github_user
+    oauth_client = FakeOAuthClient.new
+    application = authenticated_app(oauth_client:)
+
+    status, headers, _body = request_with(application, "GET", "/api/auth/github?return_to=%2F2026-08-21")
+    cookie = response_cookie(headers)
+    state = oauth_client.authorization_request.fetch(:state)
+
+    assert_equal 302, status
+    assert_equal "http://127.0.0.1:5173/api/auth/github/callback",
+                 oauth_client.authorization_request.fetch(:redirect_uri)
+    refute_empty oauth_client.authorization_request.fetch(:code_challenge)
+
+    status, headers, _body = request_with(
+      application,
+      "GET",
+      "/api/auth/github/callback?code=temporary-code&state=#{CGI.escape(state)}",
+      headers: { "HTTP_COOKIE" => cookie }
+    )
+    cookie = response_cookie(headers)
+
+    assert_equal 302, status
+    assert_equal "http://127.0.0.1:5173/2026-08-21", headers.fetch("location")
+    assert_equal "temporary-code", oauth_client.authentication_request.fetch(:code)
+    refute_empty oauth_client.authentication_request.fetch(:code_verifier)
+
+    status, _headers, body = request_with(
+      application,
+      "GET",
+      "/api/auth/session",
+      headers: { "HTTP_COOKIE" => cookie }
+    )
+
+    assert_equal 200, status
+    assert_equal true, JSON.parse(body).fetch("authenticated")
+    assert_equal "asonas", JSON.parse(body).fetch("login")
+  end
+
+  def test_oauth_callback_rejects_an_unexpected_state
+    oauth_client = FakeOAuthClient.new
+    application = authenticated_app(oauth_client:)
+    _status, headers, _body = request_with(application, "GET", "/api/auth/github")
+
+    status, _headers, body = request_with(
+      application,
+      "GET",
+      "/api/auth/github/callback?code=temporary-code&state=unexpected",
+      headers: { "HTTP_COOKIE" => response_cookie(headers) }
+    )
+
+    assert_equal 422, status
+    assert_includes body, "stateが一致しません"
+    assert_nil oauth_client.authentication_request
+  end
+
+  def test_oauth_callback_rejects_a_github_user_without_edit_permission
+    oauth_client = FakeOAuthClient.new(user_id: 999)
+    application = authenticated_app(oauth_client:)
+    _status, headers, _body = request_with(application, "GET", "/api/auth/github")
+    cookie = response_cookie(headers)
+    state = oauth_client.authorization_request.fetch(:state)
+
+    status, _headers, body = request_with(
+      application,
+      "GET",
+      "/api/auth/github/callback?code=temporary-code&state=#{CGI.escape(state)}",
+      headers: { "HTTP_COOKIE" => cookie }
+    )
+
+    assert_equal 403, status
+    assert_includes body, "編集権限がありません"
+  end
+
+  def test_mutations_require_login_and_a_csrf_token
+    oauth_client = FakeOAuthClient.new
+    application = authenticated_app(oauth_client:)
+
+    status, _headers, body = request_with(
+      application,
+      "POST",
+      "/api/pages",
+      payload: { page_type: "named", title: "private", body: "" }
+    )
+
+    assert_equal 401, status
+    assert_includes body, "GitHubでログイン"
+
+    cookie = login(application, oauth_client)
+    status, _headers, body = request_with(
+      application,
+      "POST",
+      "/api/pages",
+      payload: { page_type: "named", title: "private", body: "" },
+      headers: { "HTTP_COOKIE" => cookie }
+    )
+
+    assert_equal 403, status
+    assert_includes body, "CSRFトークン"
+
+    status, headers, body = request_with(
+      application,
+      "GET",
+      "/api/auth/session",
+      headers: { "HTTP_COOKIE" => cookie }
+    )
+    cookie = response_cookie(headers, fallback: cookie)
+    csrf_token = JSON.parse(body).fetch("csrf_token")
+    status, _headers, body = request_with(
+      application,
+      "POST",
+      "/api/pages",
+      payload: { page_type: "named", title: "private", body: "" },
+      headers: { "HTTP_COOKIE" => cookie, "HTTP_X_CSRF_TOKEN" => csrf_token }
+    )
+
+    assert_equal 201, status
+    assert_equal "private", JSON.parse(body).fetch("route")
+  end
+
   def test_embed_metadata_is_fetched_once_and_cached_in_s3
     url = "https://example.com/article"
 
@@ -470,7 +607,7 @@ class TestDevelopmentApp < Minitest::Test
     request_with(app, method, path, payload:)
   end
 
-  def request_with(application, method, path, payload: nil)
+  def request_with(application, method, path, payload: nil, headers: {})
     env = Rack::MockRequest.env_for(
       path,
       method:,
@@ -478,8 +615,37 @@ class TestDevelopmentApp < Minitest::Test
       "CONTENT_TYPE" => payload.nil? ? nil : "application/json; charset=utf-8",
       "HTTP_HOST" => "127.0.0.1:8000"
     )
+    env.merge!(headers)
     status, headers, response_body = application.call(env)
     [status, headers.transform_keys(&:downcase), response_body.join]
+  end
+
+  def authenticated_app(oauth_client:)
+    WeblogAuthoring::DevelopmentApp.application(
+      root:,
+      clock: -> { FIXED_TIME },
+      s3_client:,
+      oauth_client:,
+      allowed_github_user_id: 630_181,
+      session_secret: "test-session-secret-#{'x' * 64}"
+    )
+  end
+
+  def login(application, oauth_client)
+    _status, headers, _body = request_with(application, "GET", "/api/auth/github")
+    cookie = response_cookie(headers)
+    state = oauth_client.authorization_request.fetch(:state)
+    _status, headers, _body = request_with(
+      application,
+      "GET",
+      "/api/auth/github/callback?code=temporary-code&state=#{CGI.escape(state)}",
+      headers: { "HTTP_COOKIE" => cookie }
+    )
+    response_cookie(headers)
+  end
+
+  def response_cookie(headers, fallback: nil)
+    headers.fetch("set-cookie", fallback).to_s.split(";", 2).first
   end
 
   def json_request(method, path, **payload)

@@ -9,13 +9,17 @@ require "json"
 require "pathname"
 require "rack"
 require "rack/reloader"
+require "rack/session/cookie"
+require "securerandom"
 require "sinatra/base"
 require "time"
 require "uri"
 require "aws-sdk-s3"
+require "base64"
 
 require_relative "development_database"
 require_relative "embed_metadata"
+require_relative "github_oauth"
 require_relative "models"
 require_relative "names"
 
@@ -84,6 +88,8 @@ module WeblogAuthoring
     DEVELOPMENT_ASSET_REGION = "ap-northeast-1"
     ASSET_FILENAME = /\Aasset_[0-9a-f]{16}\.(?:avif|gif|jpe?g|png|webp)\z/i
     EMBED_CACHE_TTL = 7 * 24 * 60 * 60
+    DEFAULT_ALLOWED_GITHUB_USER_ID = 630_181
+    DEFAULT_GITHUB_REDIRECT_URI = "http://127.0.0.1:5173/api/auth/github/callback"
 
     set :environment, :development
     set :show_exceptions, false
@@ -92,6 +98,55 @@ module WeblogAuthoring
 
     before do
       validate_loopback_host!
+      require_authenticated! if settings.authentication_required && mutation_request?
+    end
+
+    get "/api/auth/github" do
+      halt 503, "GitHub OAuthが設定されていません" unless settings.authentication_required
+
+      state = SecureRandom.urlsafe_base64(32)
+      verifier = SecureRandom.urlsafe_base64(64)
+      session[:github_oauth_state] = state
+      session[:github_oauth_verifier] = verifier
+      session[:github_oauth_return_to] = safe_return_to(params["return_to"])
+      redirect settings.oauth_client.authorization_url(
+        redirect_uri: settings.github_redirect_uri,
+        state:,
+        code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false)
+      )
+    end
+
+    get "/api/auth/github/callback" do
+      halt 503, "GitHub OAuthが設定されていません" unless settings.authentication_required
+
+      expected_state = session.delete(:github_oauth_state).to_s
+      verifier = session.delete(:github_oauth_verifier).to_s
+      supplied_state = params["state"].to_s
+      unless valid_oauth_state?(expected_state, supplied_state) && !verifier.empty?
+        halt 422, "GitHub OAuthのstateが一致しません"
+      end
+
+      user = settings.oauth_client.authenticate(
+        code: params.fetch("code", ""),
+        redirect_uri: settings.github_redirect_uri,
+        code_verifier: verifier
+      )
+      halt 403, "このGitHubアカウントには編集権限がありません" unless user.fetch("id") == settings.allowed_github_user_id
+
+      session[:github_user] = user
+      redirect frontend_url(session.delete(:github_oauth_return_to) || "/")
+    rescue GitHubOAuthError => error
+      halt 502, error.message
+    end
+
+    get "/api/auth/session" do
+      json_response(auth_state)
+    end
+
+    post "/api/auth/logout" do
+      require_csrf!
+      session.clear
+      redirect frontend_url("/")
     end
 
     get "/" do
@@ -244,7 +299,10 @@ module WeblogAuthoring
     private
 
     def self.application(root: ROOT, clock: -> { Time.now.getlocal(DevelopmentDatabase::TOKYO_OFFSET) },
-                         s3_client: nil, asset_bucket: DEVELOPMENT_ASSET_BUCKET, embed_fetcher: nil)
+                         s3_client: nil, asset_bucket: DEVELOPMENT_ASSET_BUCKET, embed_fetcher: nil,
+                         oauth_client: default_oauth_client, allowed_github_user_id: default_allowed_github_user_id,
+                         github_redirect_uri: ENV.fetch("GITHUB_REDIRECT_URI", DEFAULT_GITHUB_REDIRECT_URI),
+                         session_secret: SecureRandom.hex(64))
       root_path = Pathname(root).expand_path
       database = DevelopmentDatabase.new(
         root_path.join("data/development/authoring.sqlite3"),
@@ -261,8 +319,32 @@ module WeblogAuthoring
       app.set :asset_bucket, asset_bucket
       app.set :embed_fetcher, embed_fetcher
       app.set :asset_image_paths, asset_image_paths(root_path)
-      reloader = Rack::Reloader.new(app, 0)
+      app.set :authentication_required, !oauth_client.nil?
+      app.set :oauth_client, oauth_client
+      app.set :allowed_github_user_id, allowed_github_user_id
+      app.set :github_redirect_uri, github_redirect_uri
+      session_app = Rack::Session::Cookie.new(
+        app,
+        key: "weblog.authoring.session",
+        secret: session_secret,
+        httponly: true,
+        same_site: :lax,
+        secure: github_redirect_uri.start_with?("https://")
+      )
+      reloader = Rack::Reloader.new(session_app, 0)
       DevelopmentRequestLog.new(reloader, root_path.join("log/authoring-development.log"))
+    end
+
+    def self.default_oauth_client
+      client_id = ENV["GITHUB_CLIENT_ID"]
+      client_secret = ENV["GITHUB_CLIENT_SECRET"]
+      return nil if client_id.to_s.empty? || client_secret.to_s.empty?
+
+      GitHubOAuth.new(client_id:, client_secret:)
+    end
+
+    def self.default_allowed_github_user_id
+      Integer(ENV.fetch("GITHUB_ALLOWED_USER_ID", DEFAULT_ALLOWED_GITHUB_USER_ID.to_s), 10)
     end
 
     def self.asset_image_paths(root_path)
@@ -284,6 +366,58 @@ module WeblogAuthoring
       return if LOOPBACK_HOSTS.include?(request.host)
 
       halt 403, "localhostからのアクセスだけを許可しています"
+    end
+
+    def mutation_request?
+      request.post? || request.patch? || request.put? || request.delete?
+    end
+
+    def require_authenticated!
+      return unless session[:github_user].nil?
+
+      halt 401, json_error(401, "編集するにはGitHubでログインしてください")
+    end
+
+    def require_csrf!
+      supplied = request.env["HTTP_X_CSRF_TOKEN"].to_s
+      supplied = params["csrf_token"].to_s if supplied.empty?
+      expected = session[:csrf_token].to_s
+      return if !expected.empty? && supplied.bytesize == expected.bytesize && Rack::Utils.secure_compare(supplied, expected)
+
+      halt 403, json_error(403, "CSRFトークンが一致しません")
+    end
+
+    def valid_oauth_state?(expected, supplied)
+      !expected.empty? && supplied.bytesize == expected.bytesize && Rack::Utils.secure_compare(supplied, expected)
+    end
+
+    def safe_return_to(value)
+      candidate = value.to_s
+      candidate.start_with?("/") && !candidate.start_with?("//") ? candidate : "/"
+    end
+
+    def frontend_url(path)
+      frontend = URI(settings.github_redirect_uri)
+      destination = URI(safe_return_to(path))
+      frontend.path = destination.path
+      frontend.query = destination.query
+      frontend.fragment = nil
+      frontend.to_s
+    end
+
+    def auth_state
+      user = session[:github_user]
+      {
+        "authenticated" => !user.nil?,
+        "authentication_required" => settings.authentication_required,
+        "can_edit" => !settings.authentication_required || !user.nil?,
+        "login" => user&.fetch("login", nil),
+        "csrf_token" => csrf_token,
+      }
+    end
+
+    def csrf_token
+      session[:csrf_token] ||= SecureRandom.urlsafe_base64(32)
     end
 
     def s3_client
@@ -493,12 +627,17 @@ module WeblogAuthoring
 
     def render_shell(title:, initial_state:)
       template = ERB.new(TEMPLATE_DIR.join("app.html").read(encoding: "UTF-8"))
-      body = template.result_with_hash(title:, initial_state: safe_json(initial_state))
+      body = template.result_with_hash(
+        title:,
+        initial_state: safe_json(initial_state),
+        auth: auth_state
+      )
       content_type "text/html; charset=utf-8"
       body
     end
 
     def api_response(status = 200)
+      require_csrf! if settings.authentication_required
       payload = parse_json
       content_type :json
       self.status status

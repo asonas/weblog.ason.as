@@ -1309,11 +1309,13 @@ function splitEditorDocument(markdown: string): Pick<EditorDraft, "title" | "bod
 }
 
 async function requestJson<T>(url: string, payload: JsonObject, method: HttpMethod = "POST"): Promise<T> {
+  const csrfToken = document.documentElement.dataset.csrfToken;
   const response = await fetch(url, {
     method,
     headers: {
       Accept: "application/json",
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {})
     },
     body: JSON.stringify(payload)
   });
@@ -1605,6 +1607,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     extensions: EDITOR_EXTENSIONS,
     content: editorDocument(bootstrap.title, bootstrap.body),
     contentType: "markdown",
+    editable: document.documentElement.dataset.canEdit === "true",
     editorProps: {
       attributes: {
         role: "textbox",

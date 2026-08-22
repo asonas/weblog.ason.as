@@ -22,6 +22,10 @@ export default defineConfig(({ mode }) => ({
             return;
           }
 
+          if (pathname === "/api" || pathname.startsWith("/api/") || pathname.startsWith("/assets/")) {
+            return next();
+          }
+
           const route = pathname.slice(1).replace(/\/$/, "");
           if (route.includes("/") || /[<>\\]/.test(route)) {
             response.statusCode = 404;

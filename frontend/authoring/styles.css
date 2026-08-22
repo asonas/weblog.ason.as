@@ -328,6 +328,32 @@ select {
   gap: 0.75rem;
 }
 
+.header-actions form {
+  display: contents;
+}
+
+#auth-action {
+  display: contents;
+}
+
+.header-auth {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  padding-inline: 1rem;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.header-auth:hover {
+  background: var(--quiet-fill);
+}
+
 h1,
 h2 {
   line-height: 1.2;
