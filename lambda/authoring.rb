@@ -1,27 +1,24 @@
 # frozen_string_literal: true
 
-require "json"
 require "pathname"
 
 require "weblog_authoring/dsql_database"
+require "weblog_authoring/lambda_api"
 
 module WeblogAuthoring
   module LambdaHandler
     module_function
 
     def call(event:, context:) # rubocop:disable Lint/UnusedMethodArgument
-      database.healthy?
-      {
-        statusCode: 200,
-        headers: { "content-type" => "application/json" },
-        body: JSON.generate(status: "ok"),
-      }
+      api.call(event)
     end
 
-    def database
-      @database ||= DsqlDatabase.new(
-        host: ENV.fetch("DSQL_HOST"),
-        content_dir: Pathname("/tmp/content")
+    def api
+      @api ||= LambdaApi.new(
+        database: DsqlDatabase.new(
+          host: ENV.fetch("DSQL_HOST"),
+          content_dir: Pathname("/tmp/content")
+        )
       )
     end
   end

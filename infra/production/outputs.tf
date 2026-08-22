@@ -22,3 +22,8 @@ output "authoring_lambda_function_name" {
   description = "Name of the production authoring Lambda function."
   value       = aws_lambda_function.authoring.function_name
 }
+
+output "authoring_api_endpoint" {
+  description = "Endpoint of the production authoring API. Page routes require AWS IAM authorization."
+  value       = aws_apigatewayv2_api.authoring.api_endpoint
+}
