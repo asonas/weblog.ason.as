@@ -12,10 +12,14 @@ resource "aws_apigatewayv2_integration" "authoring" {
 
 resource "aws_apigatewayv2_route" "authoring" {
   for_each = {
-    "GET /health"             = "NONE"
-    "GET /api/pages"          = "AWS_IAM"
-    "GET /api/pages/{id}"     = "AWS_IAM"
-    "GET /api/routes/{route}" = "AWS_IAM"
+    "GET /health"                   = "NONE"
+    "GET /api/auth/session"         = "NONE"
+    "GET /api/auth/github"          = "NONE"
+    "GET /api/auth/github/callback" = "NONE"
+    "POST /api/auth/logout"         = "NONE"
+    "GET /api/pages"                = "AWS_IAM"
+    "GET /api/pages/{id}"           = "AWS_IAM"
+    "GET /api/routes/{route}"       = "AWS_IAM"
   }
 
   api_id             = aws_apigatewayv2_api.authoring.id

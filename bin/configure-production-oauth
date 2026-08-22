@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "securerandom"
+require "aws-sdk-secretsmanager"
+require "dotenv/load"
+
+SECRET_ID = "weblog-authoring-production/oauth"
+
+client_id = ENV.fetch("GITHUB_CLIENT_ID")
+client_secret = ENV.fetch("GITHUB_CLIENT_SECRET")
+raise "GITHUB_CLIENT_ID is empty" if client_id.empty?
+raise "GITHUB_CLIENT_SECRET is empty" if client_secret.empty?
+
+client = Aws::SecretsManager::Client.new(region: "ap-northeast-1")
+session_secret = begin
+  current = JSON.parse(client.get_secret_value(secret_id: SECRET_ID).secret_string)
+  current.fetch("session_secret")
+rescue Aws::SecretsManager::Errors::ResourceNotFoundException
+  SecureRandom.hex(64)
+end
+
+client.put_secret_value(
+  secret_id: SECRET_ID,
+  secret_string: JSON.generate(
+    github_client_id: client_id,
+    github_client_secret: client_secret,
+    session_secret:
+  )
+)
+
+puts "Configured #{SECRET_ID}"

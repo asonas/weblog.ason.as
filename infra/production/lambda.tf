@@ -1,7 +1,7 @@
 resource "aws_lambda_function" "authoring" {
   function_name = "weblog-authoring-production"
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.authoring.repository_url}:bootstrap-3"
+  image_uri     = "${aws_ecr_repository.authoring.repository_url}:bootstrap-5"
   role          = aws_iam_role.authoring_runtime.arn
   architectures = ["arm64"]
   memory_size   = 512
@@ -9,12 +9,17 @@ resource "aws_lambda_function" "authoring" {
 
   environment {
     variables = {
-      DSQL_HOST = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
+      DSQL_HOST              = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
+      FRONTEND_URL           = "https://weblog.ason.as"
+      GITHUB_ALLOWED_USER_ID = "630181"
+      GITHUB_REDIRECT_URI    = "https://weblog.ason.as/api/auth/github/callback"
+      OAUTH_SECRET_ID        = aws_secretsmanager_secret.oauth.name
     }
   }
 
   depends_on = [
     aws_iam_role_policy.dsql_connect,
+    aws_iam_role_policy.oauth_secret,
     aws_iam_role_policy_attachment.lambda_basic_execution,
   ]
 }

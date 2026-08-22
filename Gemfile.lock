@@ -26,6 +26,9 @@ GEM
       aws-sdk-core (~> 3, >= 3.254.1)
       aws-sdk-kms (~> 1)
       aws-sigv4 (~> 1.5)
+    aws-sdk-secretsmanager (1.134.0)
+      aws-sdk-core (~> 3, >= 3.254.0)
+      aws-sigv4 (~> 1.5)
     aws-sigv4 (1.12.1)
       aws-eventstream (~> 1, >= 1.0.2)
     base64 (0.3.0)
@@ -131,6 +134,7 @@ PLATFORMS
 DEPENDENCIES
   aurora-dsql-ruby-pg
   aws-sdk-s3
+  aws-sdk-secretsmanager
   dotenv
   kramdown
   kramdown-parser-gfm

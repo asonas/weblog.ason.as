@@ -27,3 +27,8 @@ output "authoring_api_endpoint" {
   description = "Endpoint of the production authoring API. Page routes require AWS IAM authorization."
   value       = aws_apigatewayv2_api.authoring.api_endpoint
 }
+
+output "authoring_oauth_secret_arn" {
+  description = "ARN of the Secrets Manager secret used by production GitHub OAuth."
+  value       = aws_secretsmanager_secret.oauth.arn
+}

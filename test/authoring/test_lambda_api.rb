@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 require_relative "../test_helper"
+require_relative "../../lib/weblog_authoring/github_oauth"
 require_relative "../../lib/weblog_authoring/lambda_api"
+require_relative "../../lib/weblog_authoring/lambda_session"
 
 class LambdaApiTest < Minitest::Test
   class FakeDatabase
@@ -27,6 +29,19 @@ class LambdaApiTest < Minitest::Test
 
     def find_route(route)
       pages.find { |page| page.route == route }
+    end
+  end
+
+  class FakeOAuth
+    attr_reader :authentication_request
+
+    def authorization_url(redirect_uri:, state:, code_challenge:)
+      "https://github.com/login/oauth/authorize?#{URI.encode_www_form(redirect_uri:, state:, code_challenge:)}"
+    end
+
+    def authenticate(**request)
+      @authentication_request = request
+      { "id" => 630_181, "login" => "asonas" }
     end
   end
 
@@ -67,7 +82,7 @@ class LambdaApiTest < Minitest::Test
   end
 
   def test_finds_a_page_by_id
-    response = @api.call(event("GET", "/api/pages/page-id", "id" => "page-id"))
+    response = @api.call(event("GET", "/api/pages/page-id", { "id" => "page-id" }))
     page = JSON.parse(response.fetch(:body)).fetch("page")
 
     assert_equal 200, response.fetch(:statusCode)
@@ -75,7 +90,11 @@ class LambdaApiTest < Minitest::Test
   end
 
   def test_finds_a_page_by_encoded_route
-    response = @api.call(event("GET", "/api/routes/%E8%A8%98%E4%BA%8B%E5%90%8D", "route" => "%E8%A8%98%E4%BA%8B%E5%90%8D"))
+    response = @api.call(event(
+      "GET",
+      "/api/routes/%E8%A8%98%E4%BA%8B%E5%90%8D",
+      { "route" => "%E8%A8%98%E4%BA%8B%E5%90%8D" }
+    ))
 
     assert_equal 200, response.fetch(:statusCode)
     assert_equal "記事名", JSON.parse(response.fetch(:body)).dig("page", "route")
@@ -87,12 +106,99 @@ class LambdaApiTest < Minitest::Test
     assert_equal 404, response.fetch(:statusCode)
   end
 
+  def test_github_oauth_creates_an_authenticated_session
+    oauth = FakeOAuth.new
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      oauth:,
+      session_codec: codec,
+      redirect_uri: "https://weblog.ason.as/api/auth/github/callback",
+      frontend_url: "https://weblog.ason.as",
+      allowed_github_user_id: 630_181
+    )
+
+    login = api.call(event("GET", "/api/auth/github", query: { "return_to" => "/2026-08-22" }))
+    oauth_cookie = login.fetch(:cookies).fetch(0).split(";", 2).fetch(0)
+    oauth_token = oauth_cookie.split("=", 2).fetch(1)
+    oauth_session = codec.read(oauth_token, kind: "oauth")
+    callback = api.call(event(
+      "GET",
+      "/api/auth/github/callback",
+      query: { "code" => "temporary", "state" => oauth_session.fetch("state") },
+      cookies: [oauth_cookie]
+    ))
+
+    assert_equal 302, callback.fetch(:statusCode)
+    assert_equal "https://weblog.ason.as/2026-08-22", callback.dig(:headers, "location")
+    assert_equal "temporary", oauth.authentication_request.fetch(:code)
+
+    session_cookie = callback.fetch(:cookies).find { |cookie| cookie.start_with?("weblog_authoring_session=") }
+    session = api.call(event("GET", "/api/auth/session", cookies: [session_cookie.split(";", 2).fetch(0)]))
+    auth = JSON.parse(session.fetch(:body))
+    assert_equal true, auth.fetch("authenticated")
+    assert_equal true, auth.fetch("can_edit")
+    assert_equal "asonas", auth.fetch("login")
+    refute_empty auth.fetch("csrf_token")
+  end
+
+  def test_rejects_an_oauth_callback_with_mismatched_state
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    token = codec.issue(
+      kind: "oauth",
+      attributes: { "state" => "expected", "verifier" => "verifier", "return_to" => "/" },
+      ttl: 600
+    )
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      oauth: FakeOAuth.new,
+      session_codec: codec,
+      redirect_uri: "https://weblog.ason.as/api/auth/github/callback",
+      frontend_url: "https://weblog.ason.as",
+      allowed_github_user_id: 630_181
+    )
+
+    response = api.call(event(
+      "GET",
+      "/api/auth/github/callback",
+      query: { "code" => "temporary", "state" => "unexpected" },
+      cookies: ["weblog_authoring_oauth=#{token}"]
+    ))
+
+    assert_equal 422, response.fetch(:statusCode)
+  end
+
+  def test_logout_accepts_the_csrf_token_from_a_form_body
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    token = codec.issue(
+      kind: "session",
+      attributes: { "login" => "asonas", "csrf_token" => "csrf-token" },
+      ttl: 600
+    )
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      session_codec: codec,
+      frontend_url: "https://weblog.ason.as"
+    )
+    logout_event = event("POST", "/api/auth/logout", cookies: ["weblog_authoring_session=#{token}"])
+    logout_event["body"] = URI.encode_www_form(csrf_token: "csrf-token")
+
+    response = api.call(logout_event)
+
+    assert_equal 302, response.fetch(:statusCode)
+    assert_equal "https://weblog.ason.as", response.dig(:headers, "location")
+    assert_includes response.fetch(:cookies), "weblog_authoring_session=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+  end
+
   private
 
-  def event(method, path, path_parameters = nil)
+  def event(method, path, path_parameters = nil, query: nil, cookies: nil, headers: nil)
     {
       "rawPath" => path,
       "pathParameters" => path_parameters,
+      "queryStringParameters" => query,
+      "cookies" => cookies,
+      "headers" => headers,
       "requestContext" => { "http" => { "method" => method } },
     }
   end
