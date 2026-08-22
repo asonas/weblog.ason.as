@@ -21,20 +21,21 @@ module WeblogAuthoring
       @api ||= begin
         secrets = ProductionSecrets.new(secret_id: ENV.fetch("OAUTH_SECRET_ID")).fetch
         LambdaApi.new(
-        database: DsqlDatabase.new(
-          host: ENV.fetch("DSQL_HOST"),
-          content_dir: Pathname("/tmp/content")
-        ),
-        asset_bucket: ENV.fetch("ASSET_BUCKET"),
-        embed_fetcher: EmbedMetadataFetcher.new,
-        oauth: GitHubOAuth.new(
-          client_id: secrets.fetch("github_client_id"),
-          client_secret: secrets.fetch("github_client_secret")
-        ),
-        session_codec: LambdaSession.new(secret: secrets.fetch("session_secret")),
-        redirect_uri: ENV.fetch("GITHUB_REDIRECT_URI"),
-        frontend_url: ENV.fetch("FRONTEND_URL"),
-        allowed_github_user_id: Integer(ENV.fetch("GITHUB_ALLOWED_USER_ID"), 10)
+          database: DsqlDatabase.new(
+            host: ENV.fetch("DSQL_HOST"),
+            content_dir: Pathname("/tmp/content")
+          ),
+          s3_client: Aws::S3::Client.new,
+          asset_bucket: ENV.fetch("ASSET_BUCKET"),
+          embed_fetcher: EmbedMetadataFetcher.new,
+          oauth: GitHubOAuth.new(
+            client_id: secrets.fetch("github_client_id"),
+            client_secret: secrets.fetch("github_client_secret")
+          ),
+          session_codec: LambdaSession.new(secret: secrets.fetch("session_secret")),
+          redirect_uri: ENV.fetch("GITHUB_REDIRECT_URI"),
+          frontend_url: ENV.fetch("FRONTEND_URL"),
+          allowed_github_user_id: Integer(ENV.fetch("GITHUB_ALLOWED_USER_ID"), 10)
         )
       end
     end
