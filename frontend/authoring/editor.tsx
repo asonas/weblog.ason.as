@@ -1137,7 +1137,10 @@ function Universe({
         const obstacles = Array.from(workspace.querySelectorAll<HTMLElement>("[data-universe-obstacle]"))
           .map((element) => relativeRect(element, workspaceRect, 20));
         const editorRect = relativeRect(editorShell, workspaceRect, 20);
-        const glassRect = relativeRect(editorShell, workspaceRect, EDITOR_FOCUS_RING_CLEARANCE);
+        const focusRingClearance = editor.view.dom.matches(":focus-visible")
+          ? EDITOR_FOCUS_RING_CLEARANCE
+          : 0;
+        const glassRect = relativeRect(editorShell, workspaceRect, focusRingClearance);
         const width = workspace.clientWidth;
         const height = workspace.scrollHeight;
         setLayout({ editorRect: glassRect, obstacles, width, height });
@@ -1188,6 +1191,8 @@ function Universe({
     workspace.querySelectorAll<HTMLElement>("[data-universe-obstacle]")
       .forEach((element) => observer.observe(element));
     editor.on("update", measure);
+    editor.on("focus", measure);
+    editor.on("blur", measure);
     media.addEventListener("change", measure);
     measure();
 
@@ -1196,6 +1201,8 @@ function Universe({
       window.cancelAnimationFrame(animationFrame);
       observer.disconnect();
       editor.off("update", measure);
+      editor.off("focus", measure);
+      editor.off("blur", measure);
       media.removeEventListener("change", measure);
     };
   }, [editor, editorContentReady, enabled, topics, urls, workspaceRef]);
