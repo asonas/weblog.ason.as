@@ -1443,6 +1443,10 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const savedNameRef = useRef(bootstrap.name || bootstrap.title);
   const loadingLinkedPagesRef = useRef(false);
   const linkedPagesSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    document.title = draft.title ? `${draft.title} : weblog.ason.as` : "weblog.ason.as";
+  }, [draft.title]);
   const initialFocusAppliedRef = useRef(false);
   const editorContentReadyFrameRef = useRef<number | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
