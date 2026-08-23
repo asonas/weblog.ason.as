@@ -102,6 +102,15 @@ function replaceLocalLinks(line: string): string {
       }
     }
 
+    if (codeMarker === null && line.startsWith("!\\[\\](", cursor)) {
+      const imageEnd = line.indexOf(")", cursor + 6);
+      if (imageEnd !== -1) {
+        result += `![](${line.slice(cursor + 6, imageEnd)})`;
+        cursor = imageEnd + 1;
+        continue;
+      }
+    }
+
     if (codeMarker === null && line[cursor] === "[") {
       const labelEnd = line.indexOf("](", cursor + 1);
       if (labelEnd !== -1) {

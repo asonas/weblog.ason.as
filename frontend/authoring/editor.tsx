@@ -1,6 +1,6 @@
 import { Extension, type Editor } from "@tiptap/core";
 import { Markdown } from "@tiptap/markdown";
-import { Plugin, TextSelection } from "@tiptap/pm/state";
+import { NodeSelection, Plugin, TextSelection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import Image from "@tiptap/extension-image";
 import StarterKit from "@tiptap/starter-kit";
@@ -35,6 +35,7 @@ function encodePageName(name: string): string {
 }
 
 const WIKI_LINK_PATTERN = /\[\[([^\[\]]+)\]\]/g;
+const IMAGE_MARKDOWN_PATTERN = /^!\[\]\((.+)\)$/;
 
 const WikiLinks = Extension.create({
   name: "wikiLinks",
@@ -43,12 +44,42 @@ const WikiLinks = Extension.create({
     const linkType = this.editor.schema.marks.link;
     return [
       new Plugin({
-        appendTransaction(transactions, _oldState, newState) {
+        appendTransaction(transactions, oldState, newState) {
           if (!transactions.some((transaction) => transaction.docChanged || transaction.selectionSet)) return null;
           if (transactions.some((transaction) => transaction.getMeta("wikiLinkRawEditing"))) return null;
 
           const cursor = newState.selection.empty ? newState.selection.from : -1;
           if (transactions.some((transaction) => transaction.selectionSet)) {
+            const selectedByCursor = transactions.some(
+              (transaction) => transaction.selectionSet && !transaction.docChanged
+            );
+            if (selectedByCursor) {
+              const selection = newState.selection;
+              const enteredImageFromBefore = selection instanceof NodeSelection
+                && oldState.selection.to <= selection.from;
+              const selectedImage = selection instanceof NodeSelection && selection.node.type.name === "image"
+                ? { from: selection.from, to: selection.to, node: selection.node }
+                : selection.empty && selection.$from.parentOffset === 0 && selection.$from.depth > 0
+                  ? (() => {
+                      const from = selection.$from.before(selection.$from.depth);
+                      const node = newState.doc.resolve(from).nodeBefore;
+                      return node?.type.name === "image" ? { from: from - node.nodeSize, to: from, node } : null;
+                    })()
+                  : null;
+              const src = selectedImage?.node.attrs.src;
+              if (selectedImage && typeof src === "string" && src.length > 0) {
+                const markdown = `![](${src})`;
+                const paragraph = newState.schema.nodes.paragraph.create(null, newState.schema.text(markdown));
+                const transaction = newState.tr.replaceWith(selectedImage.from, selectedImage.to, paragraph);
+                return transaction
+                  .setSelection(TextSelection.create(
+                    transaction.doc,
+                    selectedImage.from + (enteredImageFromBefore ? 1 : markdown.length)
+                  ))
+                  .setMeta("wikiLinkRawEditing", true);
+              }
+            }
+
             const activeLinks: Array<{ from: number; to: number; text: string }> = [];
             newState.doc.descendants((node, from) => {
               if (activeLinks.length > 0 || !node.isText || !node.text || cursor < from || cursor > from + node.nodeSize) {
@@ -78,8 +109,17 @@ const WikiLinks = Extension.create({
           }
 
           const matches: Array<{ from: number; to: number; pageName: string }> = [];
+          const imageMatches: Array<{ from: number; to: number; src: string }> = [];
           const changedLinks: Array<{ from: number; to: number; pageName: string }> = [];
           newState.doc.descendants((node, position) => {
+            if (node.type.name === "paragraph" && node.childCount === 1 && node.firstChild?.isText) {
+              const match = IMAGE_MARKDOWN_PATTERN.exec(node.textContent);
+              const selectionTouchesImageMarkdown = newState.selection.from <= position + node.nodeSize - 1
+                && newState.selection.to >= position + 1;
+              if (match && !selectionTouchesImageMarkdown) {
+                imageMatches.push({ from: position, to: position + node.nodeSize, src: match[1] });
+              }
+            }
             if (!node.isText || !node.text) return;
 
             const link = node.marks.find((mark) => mark.type === linkType);
@@ -105,6 +145,14 @@ const WikiLinks = Extension.create({
               matches.push({ from, to, pageName });
             }
           });
+
+          if (imageMatches.length > 0) {
+            const transaction = newState.tr;
+            for (const match of imageMatches.reverse()) {
+              transaction.replaceWith(match.from, match.to, newState.schema.nodes.image.create({ src: match.src, alt: "" }));
+            }
+            return transaction;
+          }
 
           if (matches.length === 0 && changedLinks.length === 0) return null;
 

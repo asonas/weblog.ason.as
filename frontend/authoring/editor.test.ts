@@ -49,6 +49,7 @@ const {
   internalNodeVisual
 } = await import("./editor");
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
+const { markdownForSource } = await import("./markdown");
 
 test("reads PNG dimensions before decoding the image", () => {
   const bytes = new Uint8Array(24);
@@ -179,6 +180,50 @@ test("deletes a closing wiki bracket from the cursor immediately after the link"
   editor.commands.deleteRange({ from: 11, to: 12 });
 
   assert.equal(editor.getText(), "[[example]test");
+  editor.destroy();
+});
+
+test("edits a selected image as Markdown and renders it again after leaving", () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "title\n\n![](/assets/uploads/2026/08/image.webp)\n\nbody",
+    contentType: "markdown"
+  });
+  const imagePosition = editor.state.doc.firstChild!.nodeSize;
+
+  editor.commands.setTextSelection(imagePosition - 1);
+  editor.commands.setNodeSelection(imagePosition);
+  assert.match(editor.getText(), /!\[\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
+  assert.match(markdownForSource(editor.getMarkdown()), /!\[\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
+  assert.equal(editor.state.selection.empty, true);
+  assert.equal(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.from + 1), "!");
+
+  editor.commands.setTextSelection({
+    from: imagePosition + 1,
+    to: imagePosition + editor.state.doc.child(1).nodeSize - 1
+  });
+  assert.equal(editor.state.doc.child(1).type.name, "paragraph");
+
+  editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+  assert.ok(editor.state.doc.child(1).type.name === "image");
+  assert.equal(editor.state.doc.child(1).attrs.src, "/assets/uploads/2026/08/image.webp");
+  editor.destroy();
+});
+
+test("edits an image as Markdown when the cursor lands to its right", () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "title\n\n![](/assets/uploads/2026/08/image.webp)\n\nbody",
+    contentType: "markdown"
+  });
+  const bodyStart = editor.state.doc.firstChild!.nodeSize + editor.state.doc.child(1).nodeSize + 1;
+
+  editor.commands.setTextSelection(bodyStart);
+
+  assert.match(editor.getText(), /!\[\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
+  assert.equal(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.from + 1), ")");
   editor.destroy();
 });
 
