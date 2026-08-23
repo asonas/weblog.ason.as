@@ -98,6 +98,7 @@ class TestDevelopmentApp < Minitest::Test
     cookie = response_cookie(headers)
 
     assert_equal 302, status
+    assert cookie.start_with?("weblog.authoring.development.session=")
     assert_equal "http://127.0.0.1:5173/2026-08-21", headers.fetch("location")
     assert_equal "temporary-code", oauth_client.authentication_request.fetch(:code)
     refute_empty oauth_client.authentication_request.fetch(:code_verifier)

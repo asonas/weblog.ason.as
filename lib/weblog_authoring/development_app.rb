@@ -374,7 +374,7 @@ module WeblogAuthoring
       app.set :github_redirect_uri, github_redirect_uri
       session_app = Rack::Session::Cookie.new(
         app,
-        key: "weblog.authoring.session",
+        key: "weblog.authoring.development.session",
         secret: session_secret,
         httponly: true,
         same_site: :lax,
