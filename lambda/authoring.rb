@@ -27,6 +27,7 @@ module WeblogAuthoring
           ),
           s3_client: Aws::S3::Client.new,
           asset_bucket: ENV.fetch("ASSET_BUCKET"),
+          site_bucket: ENV.fetch("SITE_BUCKET"),
           embed_fetcher: EmbedMetadataFetcher.new,
           oauth: GitHubOAuth.new(
             client_id: secrets.fetch("github_client_id"),

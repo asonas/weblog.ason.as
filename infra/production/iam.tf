@@ -58,6 +58,20 @@ resource "aws_iam_role_policy" "embed_cache" {
   policy = data.aws_iam_policy_document.embed_cache.json
 }
 
+data "aws_iam_policy_document" "feed_publish" {
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.site.arn}/feed.xml"]
+  }
+}
+
+resource "aws_iam_role_policy" "feed_publish" {
+  name   = "PublishRssFeed"
+  role   = aws_iam_role.authoring_runtime.id
+  policy = data.aws_iam_policy_document.feed_publish.json
+}
+
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   role       = aws_iam_role.authoring_runtime.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"

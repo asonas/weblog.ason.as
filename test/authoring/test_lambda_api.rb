@@ -22,7 +22,7 @@ class LambdaApiTest < Minitest::Test
       ObjectBody.new(StringIO.new(value))
     end
 
-    def put_object(bucket:, key:, body:, content_type:) # rubocop:disable Lint/UnusedMethodArgument
+    def put_object(bucket:, key:, body:, content_type:, cache_control: nil) # rubocop:disable Lint/UnusedMethodArgument
       objects[[bucket, key]] = body
     end
   end
@@ -118,6 +118,24 @@ class LambdaApiTest < Minitest::Test
     assert_equal 200, response.fetch(:statusCode)
     assert_equal({ "status" => "ok" }, JSON.parse(response.fetch(:body)))
     assert_equal 1, @database.health_checks
+  end
+
+  def test_publishes_an_rss_feed_to_s3_for_a_scheduled_event
+    s3 = FakeS3.new
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      frontend_url: "https://weblog.ason.as",
+      s3_client: s3,
+      site_bucket: "production-site"
+    )
+
+    response = api.call("source" => "aws.events", "detail-type" => "Scheduled Event")
+    feed = s3.objects.fetch(["production-site", "feed.xml"])
+
+    assert_equal 200, response.fetch(:statusCode)
+    assert_includes feed, "<title>記事名</title>"
+    assert_includes feed, "&lt;p&gt;本文&lt;/p&gt;"
+    assert_includes feed, "https://weblog.ason.as/%E8%A8%98%E4%BA%8B%E5%90%8D"
   end
 
   def test_lists_page_summaries_without_bodies

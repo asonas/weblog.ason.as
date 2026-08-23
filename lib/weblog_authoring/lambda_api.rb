@@ -13,6 +13,7 @@ require "aws-sdk-s3"
 require_relative "embed_metadata"
 require_relative "models"
 require_relative "names"
+require_relative "rss_feed"
 
 module WeblogAuthoring
   class LambdaApi
@@ -40,7 +41,7 @@ module WeblogAuthoring
 
     def initialize(database:, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
                    allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
-                   clock: Time.method(:now))
+                   site_bucket: nil, clock: Time.method(:now))
       @database = database
       @oauth = oauth
       @session_codec = session_codec
@@ -49,11 +50,14 @@ module WeblogAuthoring
       @allowed_github_user_id = allowed_github_user_id
       @s3_client = s3_client
       @asset_bucket = asset_bucket
+      @site_bucket = site_bucket
       @embed_fetcher = embed_fetcher
       @clock = clock
     end
 
     def call(event)
+      return publish_feed if event["source"] == "aws.events" && event["detail-type"] == "Scheduled Event"
+
       method = event.dig("requestContext", "http", "method").to_s
       path = event.fetch("rawPath", "")
       return health_response if method == "GET" && path == "/health"
@@ -86,6 +90,18 @@ module WeblogAuthoring
     def health_response
       @database.healthy?
       json_response(200, status: "ok")
+    end
+
+    def publish_feed
+      body = RssFeed.new(site_url: @frontend_url).render(@database.list_pages)
+      @s3_client.put_object(
+        bucket: @site_bucket,
+        key: "feed.xml",
+        body:,
+        content_type: "application/rss+xml; charset=utf-8",
+        cache_control: "public, max-age=300"
+      )
+      { statusCode: 200, body: JSON.generate("status" => "published") }
     end
 
     def auth_session_response(event)
