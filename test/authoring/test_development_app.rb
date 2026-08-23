@@ -114,6 +114,37 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "asonas", JSON.parse(body).fetch("login")
   end
 
+  def test_oauth_session_survives_a_development_app_restart
+    oauth_client = FakeOAuthClient.new
+    first_application = WeblogAuthoring::DevelopmentApp.application(
+      root:,
+      clock: -> { FIXED_TIME },
+      s3_client:,
+      oauth_client:,
+      allowed_github_user_id: 630_181
+    )
+    cookie = login(first_application, oauth_client)
+
+    restarted_application = WeblogAuthoring::DevelopmentApp.application(
+      root:,
+      clock: -> { FIXED_TIME },
+      s3_client:,
+      oauth_client: FakeOAuthClient.new,
+      allowed_github_user_id: 630_181
+    )
+    status, _headers, body = request_with(
+      restarted_application,
+      "GET",
+      "/api/auth/session",
+      headers: { "HTTP_COOKIE" => cookie }
+    )
+
+    assert_equal 200, status
+    assert_equal true, JSON.parse(body).fetch("authenticated")
+    assert_equal "asonas", JSON.parse(body).fetch("login")
+    assert_equal 0o600, root.join("data/development/session-secret").stat.mode & 0o777
+  end
+
   def test_oauth_callback_rejects_an_unexpected_state
     oauth_client = FakeOAuthClient.new
     application = authenticated_app(oauth_client:)

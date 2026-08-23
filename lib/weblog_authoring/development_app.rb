@@ -350,8 +350,9 @@ module WeblogAuthoring
                          s3_client: nil, asset_bucket: DEVELOPMENT_ASSET_BUCKET, embed_fetcher: nil,
                          oauth_client: default_oauth_client, allowed_github_user_id: default_allowed_github_user_id,
                          github_redirect_uri: ENV.fetch("GITHUB_REDIRECT_URI", DEFAULT_GITHUB_REDIRECT_URI),
-                         session_secret: SecureRandom.hex(64))
+                         session_secret: nil)
       root_path = Pathname(root).expand_path
+      session_secret ||= development_session_secret(root_path)
       database = DevelopmentDatabase.new(
         root_path.join("data/development/authoring.sqlite3"),
         content_dir: root_path.join("content"),
@@ -381,6 +382,17 @@ module WeblogAuthoring
       )
       reloader = Rack::Reloader.new(session_app, 0)
       DevelopmentRequestLog.new(reloader, root_path.join("log/authoring-development.log"))
+    end
+
+    def self.development_session_secret(root_path)
+      path = root_path.join("data/development/session-secret")
+      FileUtils.mkdir_p(path.dirname)
+      File.open(path, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
+        file.write(SecureRandom.hex(64))
+      end
+      path.read
+    rescue Errno::EEXIST
+      path.read
     end
 
     def self.default_oauth_client
