@@ -272,6 +272,32 @@ function extractWikiLinkNames(body: string): Array<string> {
     .filter((name, index, names) => name && names.indexOf(name) === index);
 }
 
+export function buildInternalUniverseGroups(
+  body: string,
+  route: string,
+  linkedPageGroups: Array<LinkedPageGroup>
+): Array<LinkedPageGroup> {
+  const names = extractWikiLinkNames(body);
+  if (route && !names.includes(route) && linkedPageGroups.some((group) =>
+    group.kind === "wiki" && group.name === route
+  )) {
+    names.push(route);
+  }
+
+  return names.map((name) => {
+    const group = linkedPageGroups.find((candidate) => candidate.kind === "wiki" && candidate.name === name);
+    return group ? {
+      ...group,
+      pages: group.pages.filter((page) => page.route !== name)
+    } : {
+      kind: "wiki" as const,
+      name,
+      pages: [],
+      isTopicOnly: false
+    };
+  });
+}
+
 function externalLinkLabel(url: string): string {
   try {
     return new URL(url).hostname;
@@ -1712,19 +1738,10 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const universeEnabled = useUniverseEnabled();
   const linkedPageGroups = useMemo(() => groupLinkedPages(linkedPages), [linkedPages]);
   const embedUrls = useMemo(() => extractEmbeddableUrls(draft.body), [draft.body]);
-  const internalUniverseGroups = useMemo(() =>
-    extractWikiLinkNames(draft.body).map((name) => {
-      const group = linkedPageGroups.find((candidate) => candidate.kind === "wiki" && candidate.name === name);
-      return group ? {
-        ...group,
-        pages: group.pages.filter((page) => page.route !== name)
-      } : {
-        kind: "wiki" as const,
-        name,
-        pages: [],
-        isTopicOnly: false
-      };
-    }), [draft.body, linkedPageGroups]);
+  const internalUniverseGroups = useMemo(
+    () => buildInternalUniverseGroups(draft.body, draft.name || draft.title, linkedPageGroups),
+    [draft.body, draft.name, draft.title, linkedPageGroups]
+  );
   const externalUniverseGroups = useMemo(() =>
     embedUrls.map((url) => linkedPageGroups.find((group) => group.kind === "url" && group.name === url) || {
       kind: "url" as const,
