@@ -1544,7 +1544,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       setLinkedPages(page.linked_pages || []);
       setLinkedPagesHasMore(page.linked_pages_has_more || false);
       if (!snapshot.pageId) {
-        window.history.pushState(null, "", `/${encodePageName(page.route)}`);
+        window.history.pushState(null, "", `/${encodePageName(page.route || page.name || next.title)}`);
       }
       setErrors({});
       setStatus(statusMessage(page));
@@ -1639,7 +1639,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
         contentType: "markdown",
         emitUpdate: false
       });
-      window.history.replaceState(null, "", `/${encodePageName(page.route)}`);
+      window.history.replaceState(null, "", `/${encodePageName(page.route || page.name || next.title)}`);
       setErrors({});
       setStatus(statusMessage(page));
       setDirtyState(editVersionRef.current !== savedVersion);
