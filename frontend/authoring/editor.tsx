@@ -185,6 +185,7 @@ type PageResponse = {
   title: string | null;
   updated_at: string | null;
   route: string;
+  body?: string;
   linked_pages: EditorBootstrap["linked_pages"];
   linked_pages_has_more: boolean;
 };
@@ -200,6 +201,8 @@ type ApiError = Error & {
 
 type JsonObject = Record<string, unknown>;
 type HttpMethod = "POST" | "PATCH";
+
+const PAGE_REFRESH_INTERVAL = 15_000;
 
 function groupLinkedPages(pages: Array<LinkedPage>): Array<LinkedPageGroup> {
   const grouped = new Map<string, { kind: "wiki" | "url"; name: string; pages: Array<LinkedPage> }>();
@@ -1400,6 +1403,24 @@ async function fetchJson<T>(url: string): Promise<T> {
   return raw as T;
 }
 
+async function fetchPageIfChanged(
+  pageId: string,
+  etag: string | null
+): Promise<{ page: PageResponse | null; etag: string | null }> {
+  const response = await fetch(`/api/pages/${encodeURIComponent(pageId)}`, {
+    headers: {
+      Accept: "application/json",
+      ...(etag ? { "If-None-Match": etag } : {})
+    }
+  });
+  if (response.status === 304) return { page: null, etag };
+
+  const page = await response.json() as PageResponse;
+  if (!response.ok) throw new Error("ページを同期できませんでした");
+
+  return { page, etag: response.headers.get("etag") };
+}
+
 function statusMessage(page: PageResponse): string {
   return page.updated_at ? `保存済み・最終更新 ${page.updated_at}` : "保存済み";
 }
@@ -1424,6 +1445,8 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const savedNameRef = useRef(bootstrap.name || bootstrap.title);
   const loadingLinkedPagesRef = useRef(false);
   const linkedPagesSentinelRef = useRef<HTMLDivElement | null>(null);
+  const pageEtagRef = useRef<string | null>(null);
+  const refreshingPageRef = useRef(false);
 
   useEffect(() => {
     document.title = draft.title ? `${draft.title} : weblog.ason.as` : "weblog.ason.as";
@@ -1673,6 +1696,80 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       void handleEditorBlur(currentEditor);
     }
   });
+
+  const refreshPage = useCallback(async () => {
+    const pageId = draftRef.current.pageId;
+    if (!editor || !pageId || document.hidden || refreshingPageRef.current) return;
+
+    refreshingPageRef.current = true;
+    try {
+      const result = await fetchPageIfChanged(pageId, pageEtagRef.current);
+      pageEtagRef.current = result.etag;
+      const page = result.page;
+      if (!page) return;
+
+      const current = draftRef.current;
+      const contentChanged = page.updated_at !== current.expectedUpdatedAt;
+      if (dirtyRef.current || savingRef.current) {
+        if (contentChanged) {
+          setErrors((currentErrors) => ({
+            ...currentErrors,
+            form: ["ページが別の編集で更新されています"]
+          }));
+        }
+        return;
+      }
+
+      if (contentChanged && page.body !== undefined) {
+        const title = page.name || page.title || current.title;
+        updateDraft({
+          pageType: page.page_type,
+          date: page.date || current.date,
+          name: page.name || current.name,
+          title,
+          body: page.body,
+          expectedUpdatedAt: page.updated_at || ""
+        });
+        savedNameRef.current = page.name || title;
+        editor.commands.setContent(editorDocument(title, page.body), {
+          contentType: "markdown",
+          emitUpdate: false
+        });
+        window.history.replaceState(null, "", `/${encodePageName(page.route)}`);
+        setStatus(statusMessage(page));
+      }
+      setLinkedPages(page.linked_pages || []);
+      setLinkedPagesHasMore(page.linked_pages_has_more || false);
+    } catch (_error) {
+      // A later poll or visibility change retries transient refresh failures.
+    } finally {
+      refreshingPageRef.current = false;
+    }
+  }, [editor, updateDraft]);
+
+  useEffect(() => {
+    if (!editor || !draftRef.current.pageId) return;
+
+    let interval: number | null = null;
+    const stop = () => {
+      if (interval !== null) window.clearInterval(interval);
+      interval = null;
+    };
+    const start = () => {
+      stop();
+      if (document.hidden) return;
+      void refreshPage();
+      interval = window.setInterval(() => void refreshPage(), PAGE_REFRESH_INTERVAL);
+    };
+    const handleVisibilityChange = () => start();
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    start();
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [editor, refreshPage]);
 
   useEffect(() => {
     if (!editor || initialFocusAppliedRef.current) return;

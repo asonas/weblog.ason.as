@@ -194,14 +194,14 @@ module WeblogAuthoring
       page = settings.database.find(params.fetch("id"))
       return json_error(404, "ページが見つかりません") if page.nil?
 
-      json_response(editor_json(page))
+      conditional_json_response(editor_json(page))
     end
 
     get "/api/routes/:route" do
       route = valid_page_route(params.fetch("route"))
       return json_error(404, "ページが見つかりません") if route.nil?
 
-      json_response(editor_state_for_route(route))
+      conditional_json_response(editor_state_for_route(route))
     end
 
     get "/api/related" do
@@ -661,6 +661,19 @@ module WeblogAuthoring
       content_type :json
       self.status status
       JSON.generate(payload)
+    end
+
+    def conditional_json_response(payload)
+      body = JSON.generate(payload)
+      etag = %Q("#{Digest::SHA256.hexdigest(body)}")
+      headers "Cache-Control" => "no-cache", "ETag" => etag
+      if request.env["HTTP_IF_NONE_MATCH"] == etag
+        status 304
+        return ""
+      end
+
+      content_type :json
+      body
     end
 
     def parse_json

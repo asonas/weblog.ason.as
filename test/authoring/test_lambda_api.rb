@@ -179,6 +179,36 @@ class LambdaApiTest < Minitest::Test
     assert_equal ["target"], linked_pages.map { |page| page.fetch("route") }
   end
 
+  def test_route_response_uses_its_full_representation_as_an_etag
+    target = page_document(id: "target", name: "target", body: "")
+    @database.pages.replace([target])
+
+    first = @api.call(event("GET", "/api/routes/target", { "route" => "target" }))
+    etag = first.fetch(:headers).fetch("etag")
+    unchanged = @api.call(event(
+      "GET",
+      "/api/routes/target",
+      { "route" => "target" },
+      headers: { "if-none-match" => etag }
+    ))
+
+    assert_equal 304, unchanged.fetch(:statusCode)
+    assert_empty unchanged.fetch(:body)
+
+    source = page_document(id: "source", name: "source", body: "[[target]]")
+    @database.pages << source
+    changed = @api.call(event(
+      "GET",
+      "/api/routes/target",
+      { "route" => "target" },
+      headers: { "if-none-match" => etag }
+    ))
+
+    assert_equal 200, changed.fetch(:statusCode)
+    refute_equal etag, changed.fetch(:headers).fetch("etag")
+    assert_equal ["source"], JSON.parse(changed.fetch(:body)).fetch("linked_pages").map { |page| page.fetch("route") }
+  end
+
   def test_returns_related_pages_from_the_pagination_endpoint
     target = page_document(id: "target", name: "target", body: "")
     sources = 51.times.map do |index|

@@ -69,7 +69,7 @@ module WeblogAuthoring
       return related_pages_response(event) if method == "GET" && path == "/api/related"
       return embed_response(event) if method == "GET" && path == "/api/embed"
       return new_editor_response(event) if method == "GET" && path == "/api/editor/new"
-      return page_response(@database.find(event.dig("pathParameters", "id"))) if method == "GET" && page_id_path?(path)
+      return page_response(@database.find(event.dig("pathParameters", "id")), event:) if method == "GET" && page_id_path?(path)
       return route_response(event) if method == "GET" && route_path?(path)
       return save_response(event, status: 201) if method == "POST" && path == "/api/pages"
       if method == "PATCH" && page_id_path?(path)
@@ -193,16 +193,16 @@ module WeblogAuthoring
     end
 
     def new_editor_response(event)
-      return daily_editor_response if event.dig("queryStringParameters", "template") == "daily"
+      return daily_editor_response(event) if event.dig("queryStringParameters", "template") == "daily"
 
       json_response(200, editor_json(title: "", name: "", body: ""))
     end
 
-    def daily_editor_response
+    def daily_editor_response(event)
       date = Time.now.getlocal(TOKYO_OFFSET).to_date
       title = date.iso8601
       page = @database.find_route(title)
-      return page_response(page) unless page.nil?
+      return page_response(page, event:) unless page.nil?
 
       links = [
         JAPANESE_WEEKDAYS.fetch(date.wday),
@@ -225,10 +225,10 @@ module WeblogAuthoring
       json_response(status, saved_page_json(page))
     end
 
-    def page_response(page)
+    def page_response(page, event:)
       return json_response(404, error: "Page not found") if page.nil?
 
-      json_response(200, editor_json(page:))
+      conditional_json_response(event, editor_json(page:))
     end
 
     def related_pages_response(event)
@@ -300,7 +300,7 @@ module WeblogAuthoring
       route = URI.decode_www_form_component(route)
       route = WeblogAuthoring.validate_page_name(route)
       page = @database.find_route(route)
-      return page_response(page) unless page.nil?
+      return page_response(page, event:) unless page.nil?
 
       json_response(200, editor_json(title: route, name: route, body: ""))
     rescue ArgumentError
@@ -561,6 +561,15 @@ module WeblogAuthoring
         headers: JSON_HEADERS,
         body: JSON.generate(payload),
       }
+    end
+
+    def conditional_json_response(event, payload)
+      body = JSON.generate(payload)
+      etag = %Q("#{Digest::SHA256.hexdigest(body)}")
+      headers = JSON_HEADERS.merge("cache-control" => "no-cache", "etag" => etag)
+      return { statusCode: 304, headers:, body: "" } if event.fetch("headers", {}).to_h["if-none-match"] == etag
+
+      { statusCode: 200, headers:, body: }
     end
 
     def json_error(status, message, field: nil)

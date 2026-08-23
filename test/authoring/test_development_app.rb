@@ -534,6 +534,25 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal [shared_url], related.fetch(0).fetch("related_urls")
   end
 
+  def test_page_api_returns_not_modified_for_a_matching_etag
+    _status, _headers, body = json_request(
+      "POST", "/api/pages", page_type: "named", title: "target", body: "本文"
+    )
+    page = JSON.parse(body)
+
+    status, headers, _body = request("GET", "/api/pages/#{page.fetch("id")}")
+    unchanged_status, _unchanged_headers, unchanged_body = request_with(
+      app,
+      "GET",
+      "/api/pages/#{page.fetch("id")}",
+      headers: { "HTTP_IF_NONE_MATCH" => headers.fetch("etag") }
+    )
+
+    assert_equal 200, status
+    assert_equal 304, unchanged_status
+    assert_empty unchanged_body
+  end
+
   def test_related_pages_are_returned_fifty_at_a_time
     _status, _headers, target_body = json_request(
       "POST", "/api/pages", page_type: "named", title: "target", body: ""

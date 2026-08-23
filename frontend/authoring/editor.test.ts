@@ -5,6 +5,8 @@ import test from "node:test";
 
 import { Editor } from "@tiptap/core";
 import { JSDOM } from "jsdom";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 
 import type { EditorBootstrap } from "./editor";
 
@@ -37,7 +39,9 @@ function installDom() {
 }
 
 installDom();
-const { buildInternalUniverseGroups, EDITOR_EXTENSIONS } = await import("./editor");
+Object.defineProperty(document, "hidden", { configurable: true, value: false });
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+const { AuthoringEditor, buildInternalUniverseGroups, EDITOR_EXTENSIONS } = await import("./editor");
 
 test("includes pages that link to the current route in the internal universe", () => {
   const backlink: EditorBootstrap["linked_pages"][number] = {
@@ -106,4 +110,50 @@ test("deletes a closing wiki bracket from the cursor immediately after the link"
 
   assert.equal(editor.getText(), "[[example]test");
   editor.destroy();
+});
+
+test("refreshes an unedited page from its public API", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    mode: "editor",
+    id: "page-id",
+    page_type: "named",
+    date: null,
+    name: "current",
+    title: null,
+    updated_at: "2026-08-24T00:00:00.000000000+09:00",
+    route: "current",
+    body: "新しい本文",
+    linked_pages: [],
+    linked_pages_has_more: false
+  }), { headers: { "content-type": "application/json", etag: "\"new\"" } });
+  const bootstrap: EditorBootstrap = {
+    page_id: "page-id",
+    page_type: "named",
+    date: "",
+    name: "current",
+    title: "current",
+    body: "古い本文",
+    expected_updated_at: "2026-08-23T00:00:00.000000000+09:00",
+    save_message: "",
+    linked_pages: [],
+    linked_pages_has_more: false
+  };
+
+  try {
+    await act(async () => {
+      root.render(createElement(AuthoringEditor, { bootstrap }));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    assert.match(container.textContent || "", /新しい本文/);
+    assert.doesNotMatch(container.textContent || "", /古い本文/);
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
 });
