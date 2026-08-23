@@ -157,6 +157,7 @@ test("refreshes an unedited page from its public API", async () => {
 
     assert.match(container.textContent || "", /新しい本文/);
     assert.doesNotMatch(container.textContent || "", /古い本文/);
+    assert.equal(window.location.pathname, "/current");
   } finally {
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;

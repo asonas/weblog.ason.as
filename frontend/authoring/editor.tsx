@@ -184,7 +184,7 @@ type PageResponse = {
   name: string | null;
   title: string | null;
   updated_at: string | null;
-  route: string;
+  route?: string;
   body?: string;
   linked_pages: EditorBootstrap["linked_pages"];
   linked_pages_has_more: boolean;
@@ -1756,7 +1756,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
           contentType: "markdown",
           emitUpdate: false
         });
-        window.history.replaceState(null, "", `/${encodePageName(page.route)}`);
+        window.history.replaceState(null, "", `/${encodePageName(page.route || page.name || current.title)}`);
         setStatus(statusMessage(page));
       }
       setLinkedPages(page.linked_pages || []);
