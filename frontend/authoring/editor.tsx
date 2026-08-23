@@ -253,12 +253,7 @@ export function buildInternalUniverseGroups(
   route: string,
   linkedPageGroups: Array<LinkedPageGroup>
 ): Array<LinkedPageGroup> {
-  const names = extractWikiLinkNames(body);
-  if (route && !names.includes(route) && linkedPageGroups.some((group) =>
-    group.kind === "wiki" && group.name === route
-  )) {
-    names.push(route);
-  }
+  const names = extractWikiLinkNames(body).filter((name) => name !== route);
 
   return names.map((name) => {
     const group = linkedPageGroups.find((candidate) => candidate.kind === "wiki" && candidate.name === name);

@@ -49,7 +49,7 @@ test("emphasizes internal nodes with more connections", () => {
   assert.deepEqual(internalNodeVisual(100), { opacity: 1, size: 26 });
 });
 
-test("includes pages that link to the current route in the internal universe", () => {
+test("omits the current page from internal universe topics", () => {
   const backlink: EditorBootstrap["linked_pages"][number] = {
     id: "daily-page",
     title: "2026-08-23",
@@ -59,19 +59,14 @@ test("includes pages that link to the current route in the internal universe", (
     related_by: ["Calico"]
   };
 
-  const groups = buildInternalUniverseGroups("https://calicocat.app/", "Calico", [{
+  const groups = buildInternalUniverseGroups("[[Calico]]\n\nhttps://calicocat.app/", "Calico", [{
     kind: "wiki",
     name: "Calico",
     pages: [backlink],
     isTopicOnly: false
   }]);
 
-  assert.deepEqual(groups, [{
-    kind: "wiki",
-    name: "Calico",
-    pages: [backlink],
-    isTopicOnly: false
-  }]);
+  assert.deepEqual(groups, []);
 });
 
 test("opens an unfocused wiki link in the same tab", async () => {
