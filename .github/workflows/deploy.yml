@@ -76,6 +76,7 @@ jobs:
       - name: Publish site and existing images
         run: |
           aws s3 sync static/ "s3://$SITE_BUCKET/" --only-show-errors
+          aws s3 sync static/authoring/ "s3://$SITE_BUCKET/static/authoring/" --only-show-errors
           aws s3 sync "s3://$DEVELOPMENT_ASSET_BUCKET/assets/" "s3://$SITE_BUCKET/assets/" --exclude '*' --include 'asset_*' --only-show-errors
 
       - name: Invalidate CloudFront
