@@ -581,7 +581,6 @@ module WeblogAuthoring
         save_message = "保存済み・最終更新 #{format_time(page.updated_at)}"
       end
 
-      related = related_page_result(name.to_s.empty? ? title : name, body, excluding_id: page_id)
       {
         "mode" => "editor",
         "page_id" => page_id,
@@ -592,8 +591,8 @@ module WeblogAuthoring
         "body" => body,
         "expected_updated_at" => expected_updated_at,
         "save_message" => save_message,
-        "linked_pages" => related.fetch("pages"),
-        "linked_pages_has_more" => related.fetch("has_more")
+        "linked_pages" => [],
+        "linked_pages_has_more" => !page.nil?
       }
     end
 

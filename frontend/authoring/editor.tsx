@@ -1684,6 +1684,10 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   }, [linkedPages.length, linkedPagesHasMore]);
 
   useEffect(() => {
+    if (linkedPages.length === 0 && linkedPagesHasMore) void loadMoreLinkedPages();
+  }, [linkedPages.length, linkedPagesHasMore, loadMoreLinkedPages]);
+
+  useEffect(() => {
     const sentinel = linkedPagesSentinelRef.current;
     if (!sentinel || !linkedPagesHasMore) return;
 

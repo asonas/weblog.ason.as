@@ -173,13 +173,17 @@ class LambdaApiTest < Minitest::Test
     target = page_document(id: "target", name: "target", body: "")
     @database.pages.replace([source, target])
 
-    response = @api.call(event("GET", "/api/routes/source", { "route" => "source" }))
-    linked_pages = JSON.parse(response.fetch(:body)).fetch("linked_pages")
+    response = @api.call(event(
+      "GET",
+      "/api/related",
+      query: { "route" => "source", "excluding_id" => "source" }
+    ))
+    linked_pages = JSON.parse(response.fetch(:body)).fetch("pages")
 
     assert_equal ["target"], linked_pages.map { |page| page.fetch("route") }
   end
 
-  def test_route_response_uses_its_full_representation_as_an_etag
+  def test_route_response_etag_does_not_include_deferred_related_pages
     target = page_document(id: "target", name: "target", body: "")
     @database.pages.replace([target])
 
@@ -204,9 +208,8 @@ class LambdaApiTest < Minitest::Test
       headers: { "if-none-match" => etag }
     ))
 
-    assert_equal 200, changed.fetch(:statusCode)
-    refute_equal etag, changed.fetch(:headers).fetch("etag")
-    assert_equal ["source"], JSON.parse(changed.fetch(:body)).fetch("linked_pages").map { |page| page.fetch("route") }
+    assert_equal 304, changed.fetch(:statusCode)
+    assert_empty changed.fetch(:body)
   end
 
   def test_returns_related_pages_from_the_pagination_endpoint
@@ -216,7 +219,11 @@ class LambdaApiTest < Minitest::Test
     end
     @database.pages.replace([target, *sources])
 
-    first = @api.call(event("GET", "/api/routes/target", { "route" => "target" }))
+    first = @api.call(event(
+      "GET",
+      "/api/related",
+      query: { "route" => "target", "excluding_id" => "target", "offset" => "0" }
+    ))
     first_body = JSON.parse(first.fetch(:body))
     second = @api.call(event(
       "GET",
@@ -225,8 +232,8 @@ class LambdaApiTest < Minitest::Test
     ))
     second_body = JSON.parse(second.fetch(:body))
 
-    assert_equal 50, first_body.fetch("linked_pages").length
-    assert first_body.fetch("linked_pages_has_more")
+    assert_equal 50, first_body.fetch("pages").length
+    assert first_body.fetch("has_more")
     assert_equal 1, second_body.fetch("pages").length
     refute second_body.fetch("has_more")
   end

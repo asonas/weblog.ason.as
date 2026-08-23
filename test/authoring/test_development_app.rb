@@ -457,17 +457,21 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal ["target"], source.fetch("linked_pages").map { |page| page.fetch("title") }
     refute source.fetch("linked_pages_has_more")
 
-    status, _headers, body = request("GET", "/api/routes/source")
+    status, _headers, body = request(
+      "GET", "/api/related?route=source&excluding_id=#{source.fetch("id")}&offset=0"
+    )
 
     assert_equal 200, status
-    linked_page = JSON.parse(body).fetch("linked_pages").fetch(0)
+    linked_page = JSON.parse(body).fetch("pages").fetch(0)
     assert_equal target.fetch("id"), linked_page.fetch("id")
     assert_equal "target", linked_page.fetch("route")
 
-    status, _headers, body = request("GET", "/api/routes/target")
+    status, _headers, body = request(
+      "GET", "/api/related?route=target&excluding_id=#{target.fetch("id")}&offset=0"
+    )
 
     assert_equal 200, status
-    related_page = JSON.parse(body).fetch("linked_pages").fetch(0)
+    related_page = JSON.parse(body).fetch("pages").fetch(0)
     assert_equal source.fetch("id"), related_page.fetch("id")
     assert_equal "source", related_page.fetch("route")
   end
@@ -478,12 +482,11 @@ class TestDevelopmentApp < Minitest::Test
     )
     source = JSON.parse(source_body)
 
-    status, _headers, body = request("GET", "/api/routes/202608")
+    status, _headers, body = request("GET", "/api/related?route=202608&offset=0")
 
     assert_equal 200, status
-    editor = JSON.parse(body)
-    assert_empty editor.fetch("page_id")
-    assert_equal [source.fetch("id")], editor.fetch("linked_pages").map { |page| page.fetch("id") }
+    related = JSON.parse(body)
+    assert_equal [source.fetch("id")], related.fetch("pages").map { |page| page.fetch("id") }
   end
 
   def test_editor_returns_other_pages_that_share_its_wiki_links
@@ -503,10 +506,13 @@ class TestDevelopmentApp < Minitest::Test
       "POST", "/api/pages", page_type: "named", title: "unrelated", body: "[[other]]"
     )
 
-    status, _headers, body = request("GET", "/api/routes/2026-08-08")
+    page = app_database.find_route("2026-08-08")
+    status, _headers, body = request(
+      "GET", "/api/related?route=2026-08-08&excluding_id=#{page.id}&offset=0"
+    )
 
     assert_equal 200, status
-    related = JSON.parse(body).fetch("linked_pages")
+    related = JSON.parse(body).fetch("pages")
     assert_includes related.map { |page| page.fetch("id") }, sibling.fetch("id")
     assert_equal ["202608"], related.find { |page| page.fetch("id") == sibling.fetch("id") }.fetch("related_by")
     assert_equal ["日記"], related.find { |page| page.fetch("route") == "日記" }.fetch("related_by")
@@ -526,10 +532,13 @@ class TestDevelopmentApp < Minitest::Test
       "POST", "/api/pages", page_type: "named", title: "unrelated", body: "https://example.net/other"
     )
 
-    status, _headers, body = request("GET", "/api/routes/source")
+    page = app_database.find_route("source")
+    status, _headers, body = request(
+      "GET", "/api/related?route=source&excluding_id=#{page.id}&offset=0"
+    )
 
     assert_equal 200, status
-    related = JSON.parse(body).fetch("linked_pages")
+    related = JSON.parse(body).fetch("pages")
     assert_equal [sibling.fetch("id")], related.map { |page| page.fetch("id") }
     assert_equal [shared_url], related.fetch(0).fetch("related_urls")
   end
@@ -564,12 +573,14 @@ class TestDevelopmentApp < Minitest::Test
       )
     end
 
-    status, _headers, body = request("GET", "/api/routes/target")
+    status, _headers, body = request(
+      "GET", "/api/related?route=target&excluding_id=#{target.fetch("id")}&offset=0"
+    )
 
     assert_equal 200, status
     first_page = JSON.parse(body)
-    assert_equal 50, first_page.fetch("linked_pages").length
-    assert first_page.fetch("linked_pages_has_more")
+    assert_equal 50, first_page.fetch("pages").length
+    assert first_page.fetch("has_more")
 
     status, _headers, body = request(
       "GET", "/api/related?route=target&excluding_id=#{target.fetch("id")}&offset=50"

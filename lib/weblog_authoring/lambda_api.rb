@@ -233,10 +233,11 @@ module WeblogAuthoring
 
     def related_pages_response(event)
       query = event.fetch("queryStringParameters", {}).to_h
+      page = query["excluding_id"].to_s.empty? ? nil : @database.find(query["excluding_id"])
       result = related_page_result(
         query.fetch("route", ""),
-        query.fetch("body", ""),
-        excluding_id: query["excluding_id"],
+        page&.body || query.fetch("body", ""),
+        excluding_id: page&.id,
         offset: Integer(query.fetch("offset", 0))
       )
       json_response(200, result)
@@ -331,11 +332,6 @@ module WeblogAuthoring
       resolved_name = page&.name.to_s.empty? ? name.to_s : page.name.to_s
       resolved_title = page ? page.display_title : title.to_s
       resolved_body = page ? page.body : body.to_s
-      related = related_page_result(
-        resolved_name.empty? ? resolved_title : resolved_name,
-        resolved_body,
-        excluding_id: page&.id
-      )
       {
         "mode" => "editor",
         "page_id" => page&.id.to_s,
@@ -346,8 +342,8 @@ module WeblogAuthoring
         "body" => resolved_body,
         "expected_updated_at" => page&.updated_at&.iso8601(9).to_s,
         "save_message" => "",
-        "linked_pages" => related.fetch("pages"),
-        "linked_pages_has_more" => related.fetch("has_more"),
+        "linked_pages" => [],
+        "linked_pages_has_more" => !page.nil?,
       }
     end
 
