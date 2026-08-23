@@ -61,13 +61,17 @@ const WikiLinks = Extension.create({
             const activeLink = activeLinks[0];
             if (activeLink) {
               const offset = Math.max(0, Math.min(cursor - activeLink.from, activeLink.text.length));
+              const closingBrackets = cursor === activeLink.to ? 2 : 0;
               const transaction = newState.tr.replaceWith(
                 activeLink.from,
                 activeLink.to,
                 newState.schema.text(`[[${activeLink.text}]]`)
               );
               return transaction
-                .setSelection(TextSelection.create(transaction.doc, activeLink.from + 2 + offset))
+                .setSelection(TextSelection.create(
+                  transaction.doc,
+                  activeLink.from + 2 + offset + closingBrackets
+                ))
                 .setMeta("wikiLinkRawEditing", true);
             }
           }
@@ -118,37 +122,6 @@ const WikiLinks = Extension.create({
           }
           return transaction;
         },
-        props: {
-          handleClick(view, position, event) {
-            const link = (event.target as Element | null)?.closest?.('a[href^="/"]');
-            if (!link || event.metaKey || event.ctrlKey) return false;
-            event.preventDefault();
-            const href = link.getAttribute("href");
-            const linkedTexts: Array<{ from: number; to: number; text: string }> = [];
-            view.state.doc.descendants((node, from) => {
-              if (!node.isText || !node.text) return;
-              const mark = node.marks.find((candidate) => candidate.type === linkType);
-              if (mark?.attrs.href === href) {
-                linkedTexts.push({ from, to: from + node.nodeSize, text: node.text });
-              }
-            });
-            const linkedText = linkedTexts.sort((left, right) =>
-              Math.min(Math.abs(position - left.from), Math.abs(position - left.to)) -
-              Math.min(Math.abs(position - right.from), Math.abs(position - right.to))
-            )[0];
-            if (!linkedText) return false;
-            const rawText = `[[${linkedText.text}]]`;
-            const offset = Math.max(0, Math.min(position - linkedText.from, linkedText.text.length));
-            const transaction = view.state.tr
-              .replaceWith(linkedText.from, linkedText.to, view.state.schema.text(rawText));
-            transaction
-              .setSelection(TextSelection.create(transaction.doc, linkedText.from + 2 + offset))
-              .setMeta("wikiLinkRawEditing", true);
-            view.dispatch(transaction);
-            view.focus();
-            return true;
-          }
-        }
       })
     ];
   }
@@ -1326,13 +1299,13 @@ function Universe({
   );
 }
 
-const EDITOR_EXTENSIONS = [
+export const EDITOR_EXTENSIONS = [
   StarterKit.configure({
     dropcursor: false,
     gapcursor: false,
     underline: false,
     link: {
-      openOnClick: true,
+      openOnClick: false,
       autolink: false,
       linkOnPaste: false,
       HTMLAttributes: {

@@ -5,6 +5,7 @@
     "build": "vite build",
     "dev": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
+    "test:authoring": "tsx --test frontend/authoring/editor.test.ts",
     "test:scrapbox": "tsx --test scripts/scrapbox-to-weblog.test.ts",
     "convert:scrapbox:all": "tsx scripts/scrapbox-to-weblog.ts",
     "convert:scrapbox:assets": "tsx scripts/scrapbox-to-weblog.ts --assets-only"
@@ -21,10 +22,12 @@
   },
   "devDependencies": {
     "@types/d3-force": "^3.0.10",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "24.10.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.1.0",
+    "jsdom": "^30.0.1",
     "tsx": "4.20.3",
     "typescript": "7.0.2",
     "vite": "8.2.2"

@@ -44,6 +44,7 @@ jobs:
 
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run test:authoring
       - run: npm run build
       - run: bundle exec ruby -Itest -e 'Dir["test/**/*_test.rb", "test/**/test_*.rb"].uniq.sort.each { |file| require_relative file }'
 
