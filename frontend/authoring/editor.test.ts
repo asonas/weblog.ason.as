@@ -41,7 +41,13 @@ function installDom() {
 installDom();
 Object.defineProperty(document, "hidden", { configurable: true, value: false });
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-const { AuthoringEditor, buildInternalUniverseGroups, EDITOR_EXTENSIONS } = await import("./editor");
+const { AuthoringEditor, buildInternalUniverseGroups, EDITOR_EXTENSIONS, internalNodeVisual } = await import("./editor");
+
+test("emphasizes internal nodes with more connections", () => {
+  assert.deepEqual(internalNodeVisual(1), { opacity: 0.72, size: 14 });
+  assert.deepEqual(internalNodeVisual(10), { opacity: 0.96, size: 23 });
+  assert.deepEqual(internalNodeVisual(100), { opacity: 1, size: 26 });
+});
 
 test("includes pages that link to the current route in the internal universe", () => {
   const backlink: EditorBootstrap["linked_pages"][number] = {

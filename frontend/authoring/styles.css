@@ -679,15 +679,15 @@ h1 {
   inset-block-start: var(--internal-node-y);
   inset-inline-start: var(--internal-node-x);
   display: block;
-  inline-size: 0.875rem;
-  block-size: 0.875rem;
+  inline-size: var(--internal-node-size);
+  block-size: var(--internal-node-size);
   border: 2px solid var(--surface);
   border-radius: 50%;
   background: var(--universe-internal);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--universe-internal) 60%, transparent);
-  opacity: 0.72;
+  opacity: var(--internal-node-opacity);
   transform: translate(-50%, -50%);
-  transition-property: opacity, scale;
+  transition-property: inline-size, block-size, opacity, scale;
   transition-duration: 120ms;
   transition-timing-function: ease-out;
 }

@@ -572,6 +572,14 @@ function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): Int
   };
 }
 
+export function internalNodeVisual(connectionCount: number) {
+  const weight = Math.sqrt(Math.max(0, connectionCount - 1));
+  return {
+    opacity: Math.min(1, 0.72 + weight * 0.08),
+    size: Math.min(26, 14 + weight * 3)
+  };
+}
+
 function InternalUniverseGraph({
   groups,
   onActiveTopicChange
@@ -586,6 +594,11 @@ function InternalUniverseGraph({
   const closeTimerRef = useRef<number | null>(null);
   const graphRef = useRef<HTMLElement | null>(null);
   const layout = useMemo(() => internalGraphLayout(groups, width), [groups, width]);
+  const connectionCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    layout.links.forEach(({ target }) => counts.set(target.id, (counts.get(target.id) || 0) + 1));
+    return counts;
+  }, [layout]);
   const activeNode = layout.pages.find((node) => node.page?.id === activePage?.id);
   const previewY = activeNode
     ? Math.max(112, Math.min((activeNode.y ?? 0) - 80, layout.height - 176))
@@ -711,15 +724,19 @@ function InternalUniverseGraph({
       {layout.pages.map((node) => {
         const page = node.page;
         if (!page) return null;
+        const connectionCount = connectionCounts.get(node.id) || 1;
+        const visual = internalNodeVisual(connectionCount);
         return (
           <a
             className="internal-universe-group__node"
             href={`/${encodePageName(page.route)}`}
-            aria-label={page.title}
+            aria-label={`${page.title}（関連${connectionCount}件）`}
             key={page.id}
             style={{
               "--internal-node-x": `${node.x}px`,
-              "--internal-node-y": `${node.y}px`
+              "--internal-node-y": `${node.y}px`,
+              "--internal-node-size": `${visual.size}px`,
+              "--internal-node-opacity": visual.opacity
             } as CSSProperties}
             onPointerEnter={(event) => showPreviewFromPointer(page, event)}
             onMouseLeave={schedulePreviewClose}
