@@ -11,6 +11,7 @@ require "uri"
 require "aws-sdk-s3"
 
 require_relative "embed_metadata"
+require_relative "image_upload"
 require_relative "models"
 require_relative "names"
 require_relative "rss_feed"
@@ -65,6 +66,7 @@ module WeblogAuthoring
       return github_login_response(event) if method == "GET" && path == "/api/auth/github"
       return github_callback_response(event) if method == "GET" && path == "/api/auth/github/callback"
       return logout_response(event) if method == "POST" && path == "/api/auth/logout"
+      return upload_response(event) if method == "POST" && path == "/api/uploads"
       return pages_response if method == "GET" && path == "/api/pages"
       return related_pages_response(event) if method == "GET" && path == "/api/related"
       return embed_response(event) if method == "GET" && path == "/api/embed"
@@ -223,6 +225,25 @@ module WeblogAuthoring
 
       page = @database.save(save_request(parse_json(event), page_id:))
       json_response(status, saved_page_json(page))
+    end
+
+    def upload_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to upload") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+      expected_csrf_token = session.fetch("csrf_token", "")
+      return json_response(403, error: "CSRF token mismatch") unless secure_equal?(expected_csrf_token, csrf_token_from(event))
+
+      payload = parse_json(event)
+      upload = ImageUpload.new(
+        s3_client: @s3_client,
+        bucket: @asset_bucket,
+        clock: @clock
+      ).create(
+        content_type: payload["content_type"],
+        size: payload["size"]
+      )
+      json_response(200, upload)
     end
 
     def page_response(page, event:)

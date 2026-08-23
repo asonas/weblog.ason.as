@@ -23,6 +23,7 @@ resource "aws_lambda_function" "authoring" {
     aws_iam_role_policy.dsql_connect,
     aws_iam_role_policy.embed_cache,
     aws_iam_role_policy.feed_publish,
+    aws_iam_role_policy.image_upload,
     aws_iam_role_policy.oauth_secret,
     aws_iam_role_policy_attachment.lambda_basic_execution,
   ]

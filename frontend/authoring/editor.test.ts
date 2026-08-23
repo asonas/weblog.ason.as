@@ -41,7 +41,57 @@ function installDom() {
 installDom();
 Object.defineProperty(document, "hidden", { configurable: true, value: false });
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-const { AuthoringEditor, buildInternalUniverseGroups, EDITOR_EXTENSIONS, internalNodeVisual } = await import("./editor");
+const {
+  AuthoringEditor,
+  buildInternalUniverseGroups,
+  EDITOR_EXTENSIONS,
+  ensureBodySelection,
+  internalNodeVisual
+} = await import("./editor");
+const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
+
+test("reads PNG dimensions before decoding the image", () => {
+  const bytes = new Uint8Array(24);
+  new DataView(bytes.buffer).setUint32(0, 0x89504e47);
+  new DataView(bytes.buffer).setUint32(16, 4000);
+  new DataView(bytes.buffer).setUint32(20, 3000);
+
+  assert.deepEqual(imageDimensions(bytes.buffer, "image/png"), { width: 4000, height: 3000 });
+  assert.deepEqual(resizedDimensions({ width: 4000, height: 3000 }), { width: 2560, height: 1920 });
+});
+
+test("round trips an uploaded image as Markdown", () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "title\n\nbody",
+    contentType: "markdown"
+  });
+
+  editor.commands.focus("end");
+  editor.commands.setImage({ src: "/assets/uploads/2026/08/image.webp", alt: "" });
+
+  assert.match(editor.getMarkdown(), /!\[\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
+  editor.destroy();
+});
+
+test("keeps an uploaded image out of the title line", () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "title",
+    contentType: "markdown"
+  });
+
+  ensureBodySelection(editor);
+  editor.commands.setImage({ src: "/assets/uploads/2026/08/image.webp", alt: "" });
+
+  assert.equal(editor.state.doc.childCount, 3);
+  assert.equal(editor.state.doc.firstChild?.type.name, "paragraph");
+  assert.equal(editor.state.doc.firstChild?.textContent, "title");
+  assert.match(editor.getMarkdown(), /^title\n\n!\[\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
+  editor.destroy();
+});
 
 test("emphasizes internal nodes with more connections", () => {
   assert.deepEqual(internalNodeVisual(1), { opacity: 0.72, size: 14 });

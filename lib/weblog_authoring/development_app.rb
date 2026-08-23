@@ -20,6 +20,7 @@ require "base64"
 require_relative "development_database"
 require_relative "embed_metadata"
 require_relative "github_oauth"
+require_relative "image_upload"
 require_relative "models"
 require_relative "names"
 require_relative "rss_feed"
@@ -88,6 +89,7 @@ module WeblogAuthoring
     DEVELOPMENT_ASSET_BUCKET = "weblog-asonas-assets-dev-282782318939"
     DEVELOPMENT_ASSET_REGION = "ap-northeast-1"
     ASSET_FILENAME = /\Aasset_[0-9a-f]{16}\.(?:avif|gif|jpe?g|png|webp)\z/i
+    AUTHORING_ASSET_FILENAME = /\A(?:imageUpload\.worker|webp_enc(?:_simd)?-[A-Za-z0-9_-]+)\.js\z/
     EMBED_CACHE_TTL = 7 * 24 * 60 * 60
     DEFAULT_ALLOWED_GITHUB_USER_ID = 630_181
     DEFAULT_GITHUB_REDIRECT_URI = "http://127.0.0.1:5173/api/auth/github/callback"
@@ -247,10 +249,36 @@ module WeblogAuthoring
       halt 404
     end
 
+    get "/assets/uploads/:year/:month/:filename" do
+      year = params.fetch("year")
+      month = params.fetch("month")
+      filename = params.fetch("filename")
+      halt 404 unless /\A\d{4}\z/.match?(year) && /\A(?:0[1-9]|1[0-2])\z/.match?(month)
+      halt 404 unless /\A[0-9a-f-]{36}\.(?:gif|jpe?g|png|webp)\z/i.match?(filename)
+
+      object = s3_client.get_object(
+        bucket: settings.asset_bucket,
+        key: "assets/uploads/#{year}/#{month}/#{filename}"
+      )
+      content_type object.content_type || "application/octet-stream"
+      cache_control :public, max_age: 31_536_000, immutable: true
+      object.body.read
+    rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
+      halt 404
+    end
+
     get "/static/authoring/:asset" do
       content_type, filename = STATIC_FILES.fetch(params.fetch("asset")) { halt 404 }
       content_type content_type
       send_file STATIC_DIR.join(filename).to_s
+    end
+
+    get "/static/authoring/assets/:asset" do
+      asset = params.fetch("asset")
+      halt 404 unless AUTHORING_ASSET_FILENAME.match?(asset)
+
+      content_type "application/javascript"
+      send_file STATIC_DIR.join("assets", asset).to_s
     end
 
     post "/api/pages" do
@@ -258,6 +286,19 @@ module WeblogAuthoring
         request = save_request(payload)
         page = settings.database.save(request)
         page_json(page)
+      end
+    end
+
+    post "/api/uploads" do
+      api_response do |payload|
+        ImageUpload.new(
+          s3_client: s3_client,
+          bucket: settings.asset_bucket,
+          clock: settings.clock
+        ).create(
+          content_type: payload["content_type"],
+          size: payload["size"]
+        )
       end
     end
 

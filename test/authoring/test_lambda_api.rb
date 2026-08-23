@@ -316,6 +316,48 @@ class LambdaApiTest < Minitest::Test
     assert_equal "本文", @database.saved_requests.fetch(0).body
   end
 
+  def test_creates_an_authenticated_presigned_image_upload
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    token = codec.issue(
+      kind: "session",
+      attributes: { "github_user_id" => 630_181, "login" => "asonas", "csrf_token" => "csrf-token" },
+      ttl: 600
+    )
+    s3 = Aws::S3::Client.new(
+      region: "ap-northeast-1",
+      credentials: Aws::Credentials.new("access-key", "secret-key"),
+      stub_responses: true
+    )
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      session_codec: codec,
+      allowed_github_user_id: 630_181,
+      s3_client: s3,
+      asset_bucket: "production-assets",
+      clock: -> { Time.iso8601("2026-08-24T12:00:00+09:00") }
+    )
+
+    unauthorized = api.call(json_event(
+      "POST",
+      "/api/uploads",
+      { content_type: "image/webp", size: 1024 }
+    ))
+    assert_equal 401, unauthorized.fetch(:statusCode)
+
+    response = api.call(json_event(
+      "POST",
+      "/api/uploads",
+      { content_type: "image/webp", size: 1024 },
+      cookies: ["weblog_authoring_session=#{token}"],
+      headers: { "x-csrf-token" => "csrf-token" }
+    ))
+    body = JSON.parse(response.fetch(:body))
+
+    assert_equal 200, response.fetch(:statusCode)
+    assert_match(%r{\A/assets/uploads/2026/08/[0-9a-f-]+\.webp\z}, body.fetch("public_url"))
+    assert_equal "image/webp", body.dig("fields", "Content-Type")
+  end
+
   def test_github_oauth_creates_an_authenticated_session
     oauth = FakeOAuth.new
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)

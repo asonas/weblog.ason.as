@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig(({ mode }) => ({
+  base: mode === "production" ? "/static/authoring/" : "/",
   plugins: [
     {
       name: "reject-unsafe-page-routes",
@@ -41,6 +42,9 @@ export default defineConfig(({ mode }) => ({
   define: {
     "process.env.NODE_ENV": JSON.stringify(mode === "production" ? "production" : "development")
   },
+  optimizeDeps: {
+    exclude: ["@jsquash/webp", "@jsquash/webp/encode"]
+  },
   server: {
     host: "127.0.0.1",
     port: 5173,
@@ -60,6 +64,14 @@ export default defineConfig(({ mode }) => ({
       }
     }
   },
+  worker: {
+    format: "es",
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/[name].js"
+      }
+    }
+  },
   build: {
     lib: {
       entry: resolve(projectRoot, "frontend/authoring/main.tsx"),
@@ -69,7 +81,7 @@ export default defineConfig(({ mode }) => ({
       cssFileName: "app"
     },
     outDir: resolve(projectRoot, "static/authoring"),
-    emptyOutDir: false,
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         assetFileNames: "app.css"

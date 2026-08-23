@@ -69,6 +69,17 @@ resource "aws_s3_bucket_public_access_block" "site" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_cors_configuration" "site" {
+  bucket = aws_s3_bucket.site.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["POST"]
+    allowed_origins = ["https://weblog.ason.as"]
+    max_age_seconds = 300
+  }
+}
+
 resource "aws_acm_certificate" "weblog" {
   provider          = aws.us_east_1
   domain_name       = "weblog.ason.as"

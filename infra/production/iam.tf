@@ -72,6 +72,20 @@ resource "aws_iam_role_policy" "feed_publish" {
   policy = data.aws_iam_policy_document.feed_publish.json
 }
 
+data "aws_iam_policy_document" "image_upload" {
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.site.arn}/assets/uploads/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "image_upload" {
+  name   = "UploadImages"
+  role   = aws_iam_role.authoring_runtime.id
+  policy = data.aws_iam_policy_document.image_upload.json
+}
+
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   role       = aws_iam_role.authoring_runtime.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"

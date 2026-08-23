@@ -24,6 +24,7 @@ resource "aws_apigatewayv2_route" "authoring" {
     "GET /api/pages/{id}"           = "NONE"
     "GET /api/routes/{route}"       = "NONE"
     "POST /api/pages"               = "NONE"
+    "POST /api/uploads"             = "NONE"
     "PATCH /api/pages/{id}"         = "NONE"
   }
 

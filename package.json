@@ -11,7 +11,9 @@
     "convert:scrapbox:assets": "tsx scripts/scrapbox-to-weblog.ts --assets-only"
   },
   "dependencies": {
+    "@jsquash/webp": "^1.5.0",
     "@progfay/scrapbox-parser": "10.1.1",
+    "@tiptap/extension-image": "^3.30.2",
     "@tiptap/markdown": "3.30.2",
     "@tiptap/pm": "3.30.2",
     "@tiptap/react": "3.30.2",

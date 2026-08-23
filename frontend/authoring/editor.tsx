@@ -2,6 +2,7 @@ import { Extension, type Editor } from "@tiptap/core";
 import { Markdown } from "@tiptap/markdown";
 import { Plugin, TextSelection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
+import Image from "@tiptap/extension-image";
 import StarterKit from "@tiptap/starter-kit";
 import {
   forceCollide,
@@ -193,6 +194,12 @@ type PageResponse = {
 type RelatedPagesResponse = {
   pages: EditorBootstrap["linked_pages"];
   has_more: boolean;
+};
+
+type UploadResponse = {
+  upload_url: string;
+  fields: Record<string, string>;
+  public_url: string;
 };
 
 type ApiError = Error & {
@@ -1336,6 +1343,7 @@ export const EDITOR_EXTENSIONS = [
     }
   }),
   WikiLinks,
+  Image.configure({ allowBase64: false }),
   Markdown.configure({ indentation: { style: "space", size: 2 } })
 ];
 
@@ -1365,6 +1373,16 @@ function splitEditorDocument(markdown: string): Pick<EditorDraft, "title" | "bod
     title: title.trim(),
     body: bodyLines.join("\n").replace(/^\n+/, "")
   };
+}
+
+export function ensureBodySelection(editor: Editor): void {
+  const title = editor.state.doc.firstChild;
+  if (!title || editor.state.selection.from > title.nodeSize) return;
+
+  const bodyStart = title.nodeSize;
+  const transaction = editor.state.tr.insert(bodyStart, editor.schema.nodes.paragraph.create());
+  transaction.setSelection(TextSelection.create(transaction.doc, bodyStart + 1));
+  editor.view.dispatch(transaction);
 }
 
 async function requestJson<T>(url: string, payload: JsonObject, method: HttpMethod = "POST"): Promise<T> {
@@ -1433,6 +1451,19 @@ async function fetchPageIfChanged(
   return { page, etag: response.headers.get("etag") };
 }
 
+async function uploadImage(file: File): Promise<string> {
+  const upload = await requestJson<UploadResponse>("/api/uploads", {
+    content_type: file.type,
+    size: file.size
+  });
+  const form = new FormData();
+  for (const [key, value] of Object.entries(upload.fields)) form.append(key, value);
+  form.append("file", file);
+  const response = await fetch(upload.upload_url, { method: "POST", body: form });
+  if (!response.ok) throw new Error("画像をS3へ送信できませんでした");
+  return upload.public_url;
+}
+
 function statusMessage(page: PageResponse): string {
   return page.updated_at ? `保存済み・最終更新 ${page.updated_at}` : "保存済み";
 }
@@ -1443,6 +1474,8 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const [status, setStatus] = useState(bootstrap.save_message);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [imageUploadStatus, setImageUploadStatus] = useState("");
   const [linkedPages, setLinkedPages] = useState(bootstrap.linked_pages || []);
   const [linkedPagesHasMore, setLinkedPagesHasMore] = useState(bootstrap.linked_pages_has_more || false);
   const [loadingLinkedPages, setLoadingLinkedPages] = useState(false);
@@ -1459,6 +1492,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const linkedPagesSentinelRef = useRef<HTMLDivElement | null>(null);
   const pageEtagRef = useRef<string | null>(null);
   const refreshingPageRef = useRef(false);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     document.title = draft.title ? `${draft.title} : weblog.ason.as` : "weblog.ason.as";
@@ -1787,6 +1821,66 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     };
   }, [editor, refreshPage]);
 
+  const handleImageFiles = useCallback(async (files: Array<File>) => {
+    if (!editor || files.length === 0 || uploadingImages) return;
+    if (!draftRef.current.title.trim()) {
+      const message = "先にタイトルを入力してください";
+      setStatus(message);
+      setImageUploadStatus(message);
+      editor.commands.focus("start");
+      return;
+    }
+    setUploadingImages(true);
+    setImageUploadStatus("画像を処理中…");
+    setStatus("画像を処理中…");
+    try {
+      for (const [index, source] of files.entries()) {
+        setStatus(`画像を処理中… ${index + 1}/${files.length}`);
+        setImageUploadStatus(`画像を処理中… ${index + 1}/${files.length}`);
+        const { prepareImage } = await import("./imageUpload");
+        const prepared = await prepareImage(source);
+        setStatus(`画像をアップロード中… ${index + 1}/${files.length}`);
+        setImageUploadStatus(`画像をアップロード中… ${index + 1}/${files.length}`);
+        const url = await uploadImage(prepared.file);
+        ensureBodySelection(editor);
+        editor.chain().focus().setImage({ src: url, alt: "" }).run();
+      }
+      setStatus("画像を追加しました");
+      setImageUploadStatus("");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "画像を追加できませんでした";
+      setStatus(message);
+      setImageUploadStatus(message);
+    } finally {
+      setUploadingImages(false);
+    }
+  }, [editor, uploadingImages]);
+
+  useEffect(() => {
+    if (!editor || !editor.isEditable) return;
+    const element = editor.view.dom;
+    const paste = (event: ClipboardEvent) => {
+      const files = Array.from(event.clipboardData?.files || []).filter((file) => file.type.startsWith("image/"));
+      if (files.length === 0) return;
+      event.preventDefault();
+      void handleImageFiles(files);
+    };
+    const drop = (event: DragEvent) => {
+      const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith("image/"));
+      if (files.length === 0) return;
+      event.preventDefault();
+      const position = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+      if (position) editor.commands.setTextSelection(position.pos);
+      void handleImageFiles(files);
+    };
+    element.addEventListener("paste", paste);
+    element.addEventListener("drop", drop);
+    return () => {
+      element.removeEventListener("paste", paste);
+      element.removeEventListener("drop", drop);
+    };
+  }, [editor, handleImageFiles]);
+
   useEffect(() => {
     if (!editor || initialFocusAppliedRef.current) return;
 
@@ -1868,6 +1962,35 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
               editor.commands.focus("end");
             }}
           >
+            {editor?.isEditable && (
+              <div className="editor-shell__actions" onClick={(event) => event.stopPropagation()}>
+                {imageUploadStatus && (
+                  <span className="editor-shell__upload-status" role="status">{imageUploadStatus}</span>
+                )}
+                <input
+                  ref={imageInputRef}
+                  className="visually-hidden"
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  multiple
+                  onChange={(event) => {
+                    void handleImageFiles(Array.from(event.currentTarget.files || []));
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <button
+                  className="editor-shell__image-button"
+                  type="button"
+                  aria-label="画像を追加"
+                  disabled={uploadingImages}
+                  onClick={() => imageInputRef.current?.click()}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5zM4 16l4.5-4.5 3 3 2-2 6.5 6.5M15.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3" />
+                  </svg>
+                </button>
+              </div>
+            )}
             <div className="wysiwyg-editor" aria-busy={saving}>
               <EditorContent editor={editor} ref={handleEditorContentRef} />
             </div>
