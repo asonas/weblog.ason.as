@@ -8,9 +8,33 @@ function uint24(data: DataView, offset: number): number {
   return data.getUint8(offset) | (data.getUint8(offset + 1) << 8) | (data.getUint8(offset + 2) << 16);
 }
 
+function exifOrientation(data: DataView, offset: number, length: number): number | null {
+  const payload = offset + 2;
+  const end = offset + length;
+  if (payload + 14 > end) return null;
+  if (data.getUint32(payload) !== 0x45786966 || data.getUint16(payload + 4) !== 0) return null;
+
+  const tiff = payload + 6;
+  const byteOrder = data.getUint16(tiff);
+  if (byteOrder !== 0x4949 && byteOrder !== 0x4d4d) return null;
+  const littleEndian = byteOrder === 0x4949;
+  if (data.getUint16(tiff + 2, littleEndian) !== 42) return null;
+
+  const directory = tiff + data.getUint32(tiff + 4, littleEndian);
+  if (directory + 2 > end) return null;
+  const entries = data.getUint16(directory, littleEndian);
+  for (let index = 0; index < entries; index += 1) {
+    const entry = directory + 2 + index * 12;
+    if (entry + 12 > end) return null;
+    if (data.getUint16(entry, littleEndian) === 0x0112) return data.getUint16(entry + 8, littleEndian);
+  }
+  return null;
+}
+
 function jpegDimensions(data: DataView): ImageDimensions | null {
   if (data.byteLength < 4 || data.getUint16(0) !== 0xffd8) return null;
   let offset = 2;
+  let orientation = 1;
   while (offset + 8 < data.byteLength) {
     if (data.getUint8(offset) !== 0xff) return null;
     const marker = data.getUint8(offset + 1);
@@ -19,8 +43,12 @@ function jpegDimensions(data: DataView): ImageDimensions | null {
     if (offset + 2 > data.byteLength) return null;
     const length = data.getUint16(offset);
     if (length < 2 || offset + length > data.byteLength) return null;
+    if (marker === 0xe1) orientation = exifOrientation(data, offset, length) ?? orientation;
     if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
-      return { height: data.getUint16(offset + 3), width: data.getUint16(offset + 5) };
+      const dimensions = { height: data.getUint16(offset + 3), width: data.getUint16(offset + 5) };
+      return orientation >= 5 && orientation <= 8
+        ? { width: dimensions.height, height: dimensions.width }
+        : dimensions;
     }
     offset += length;
   }
