@@ -804,6 +804,7 @@ type UniverseNode = UniversePoint & {
 const UNIVERSE_NODE_RADIUS = 7;
 const UNIVERSE_NODE_GAP = 15;
 const UNIVERSE_PREVIEW_GAP = 20;
+const EDITOR_FOCUS_RING_CLEARANCE = 6;
 
 function useUniverseEnabled(): boolean {
   const [enabled, setEnabled] = useState(document.documentElement.dataset.universe === "on");
@@ -1163,7 +1164,7 @@ function Universe({
         const obstacles = Array.from(workspace.querySelectorAll<HTMLElement>("[data-universe-obstacle]"))
           .map((element) => relativeRect(element, workspaceRect, 20));
         const editorRect = relativeRect(editorShell, workspaceRect, 20);
-        const glassRect = relativeRect(editorShell, workspaceRect);
+        const glassRect = relativeRect(editorShell, workspaceRect, EDITOR_FOCUS_RING_CLEARANCE);
         const width = workspace.clientWidth;
         const height = workspace.scrollHeight;
         setLayout({ editorRect: glassRect, obstacles, width, height });
