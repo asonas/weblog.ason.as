@@ -352,6 +352,10 @@ h1 {
   text-decoration: none;
 }
 
+.header-action[hidden] {
+  display: none;
+}
+
 .header-action:hover {
   background: var(--quiet-fill);
 }
