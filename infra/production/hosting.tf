@@ -13,6 +13,27 @@ data "aws_cloudfront_cache_policy" "caching_disabled" {
   name = "Managed-CachingDisabled"
 }
 
+resource "aws_cloudfront_cache_policy" "public_api" {
+  name        = "weblog-public-api"
+  min_ttl     = 10
+  default_ttl = 10
+  max_ttl     = 10
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    cookies_config {
+      cookie_behavior = "none"
+    }
+
+    headers_config {
+      header_behavior = "none"
+    }
+
+    query_strings_config {
+      query_string_behavior = "none"
+    }
+  }
+}
+
 data "aws_cloudfront_origin_request_policy" "all_viewer_except_host_header" {
   name = "Managed-AllViewerExceptHostHeader"
 }
@@ -121,6 +142,26 @@ resource "aws_cloudfront_distribution" "weblog" {
     cached_methods         = ["GET", "HEAD"]
     compress               = true
     cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+  }
+
+  ordered_cache_behavior {
+    path_pattern           = "/api/pages"
+    target_origin_id       = "authoring-api"
+    viewer_protocol_policy = "https-only"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = aws_cloudfront_cache_policy.public_api.id
+  }
+
+  ordered_cache_behavior {
+    path_pattern           = "/api/routes/*"
+    target_origin_id       = "authoring-api"
+    viewer_protocol_policy = "https-only"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = aws_cloudfront_cache_policy.public_api.id
   }
 
   ordered_cache_behavior {
