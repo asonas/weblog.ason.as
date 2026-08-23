@@ -50,6 +50,29 @@ resource "aws_s3_bucket_versioning" "site" {
   }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "site" {
+  bucket = aws_s3_bucket.site.id
+
+  depends_on = [aws_s3_bucket_versioning.site]
+
+  rule {
+    id     = "expire-image-inbox"
+    status = "Enabled"
+
+    filter {
+      prefix = "assets/inbox/"
+    }
+
+    expiration {
+      days = 30
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+  }
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
   bucket = aws_s3_bucket.site.id
 

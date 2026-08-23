@@ -358,6 +358,40 @@ class LambdaApiTest < Minitest::Test
     assert_equal "image/webp", body.dig("fields", "Content-Type")
   end
 
+  def test_lists_and_adopts_an_inbox_image
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    token = codec.issue(
+      kind: "session",
+      attributes: { "github_user_id" => 630_181, "login" => "asonas", "csrf_token" => "csrf-token" },
+      ttl: 600
+    )
+    key = "assets/inbox/2026/08/23/11111111-2222-3333-4444-555555555555.webp"
+    s3 = Aws::S3::Client.new(region: "ap-northeast-1", stub_responses: true)
+    s3.stub_responses(:list_objects_v2, contents: [{ key:, last_modified: Time.iso8601("2026-08-23T12:00:00Z") }])
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      session_codec: codec,
+      allowed_github_user_id: 630_181,
+      s3_client: s3,
+      asset_bucket: "production-assets"
+    )
+    cookie = ["weblog_authoring_session=#{token}"]
+
+    listed = api.call(event("GET", "/api/inbox", query: { "date" => "2026-08-23" }, cookies: cookie))
+    adopted = api.call(json_event(
+      "POST",
+      "/api/inbox/adopt",
+      { key: },
+      cookies: cookie,
+      headers: { "x-csrf-token" => "csrf-token" }
+    ))
+
+    assert_equal ["/#{key}"], JSON.parse(listed.fetch(:body)).fetch("images").map { |image| image.fetch("url") }
+    assert_equal "/assets/uploads/2026/08/11111111-2222-3333-4444-555555555555.webp",
+                 JSON.parse(adopted.fetch(:body)).fetch("public_url")
+    assert_equal %i[list_objects_v2 copy_object delete_object], s3.api_requests.map { |request| request.fetch(:operation_name) }
+  end
+
   def test_github_oauth_creates_an_authenticated_session
     oauth = FakeOAuth.new
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)

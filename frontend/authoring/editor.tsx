@@ -263,6 +263,14 @@ type UploadResponse = {
   public_url: string;
 };
 
+type InboxImage = {
+  key: string;
+  url: string;
+  uploaded_at: string | null;
+};
+
+type InboxResponse = { images: Array<InboxImage> };
+
 type ApiError = Error & {
   fields?: Record<string, string[]>;
 };
@@ -1512,10 +1520,11 @@ async function fetchPageIfChanged(
   return { page, etag: response.headers.get("etag") };
 }
 
-async function uploadImage(file: File): Promise<string> {
+async function uploadImage(file: File, inboxDate?: string): Promise<string> {
   const upload = await requestJson<UploadResponse>("/api/uploads", {
     content_type: file.type,
-    size: file.size
+    size: file.size,
+    ...(inboxDate ? { inbox_date: inboxDate } : {})
   });
   const form = new FormData();
   for (const [key, value] of Object.entries(upload.fields)) form.append(key, value);
@@ -1537,6 +1546,8 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const [saving, setSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [imageUploadStatus, setImageUploadStatus] = useState("");
+  const [inboxImages, setInboxImages] = useState<Array<InboxImage>>([]);
+  const [loadingInbox, setLoadingInbox] = useState(false);
   const [linkedPages, setLinkedPages] = useState(bootstrap.linked_pages || []);
   const [linkedPagesHasMore, setLinkedPagesHasMore] = useState(bootstrap.linked_pages_has_more || false);
   const [loadingLinkedPages, setLoadingLinkedPages] = useState(false);
@@ -1554,6 +1565,9 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const pageEtagRef = useRef<string | null>(null);
   const refreshingPageRef = useRef(false);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const inboxInputRef = useRef<HTMLInputElement | null>(null);
+
+  const inboxDate = /^\d{4}-\d{2}-\d{2}$/.test(draft.date) ? draft.date : null;
 
   useEffect(() => {
     document.title = draft.title ? `${draft.title} : weblog.ason.as` : "weblog.ason.as";
@@ -1917,6 +1931,54 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     }
   }, [editor, uploadingImages]);
 
+  const refreshInbox = useCallback(async () => {
+    if (!inboxDate) return;
+    const result = await fetchJson<InboxResponse>(`/api/inbox?date=${encodeURIComponent(inboxDate)}`);
+    setInboxImages(result.images);
+  }, [inboxDate]);
+
+  useEffect(() => {
+    if (!editor?.isEditable || !inboxDate) return;
+    void refreshInbox().catch((error: unknown) => {
+      setImageUploadStatus(error instanceof Error ? error.message : "写真インボックスを読み込めませんでした");
+    });
+  }, [editor?.isEditable, inboxDate, refreshInbox]);
+
+  const handleInboxFiles = useCallback(async (files: Array<File>) => {
+    if (!inboxDate || files.length === 0 || loadingInbox) return;
+    setLoadingInbox(true);
+    try {
+      for (const [index, source] of files.entries()) {
+        setImageUploadStatus(`写真をインボックスへ追加中… ${index + 1}/${files.length}`);
+        const { prepareImage } = await import("./imageUpload");
+        const prepared = await prepareImage(source);
+        await uploadImage(prepared.file, inboxDate);
+      }
+      await refreshInbox();
+      setImageUploadStatus("");
+    } catch (error) {
+      setImageUploadStatus(error instanceof Error ? error.message : "写真を追加できませんでした");
+    } finally {
+      setLoadingInbox(false);
+    }
+  }, [inboxDate, loadingInbox, refreshInbox]);
+
+  const adoptInboxImage = useCallback(async (key: string) => {
+    if (!editor || loadingInbox) return;
+    setLoadingInbox(true);
+    try {
+      const result = await requestJson<{ public_url: string }>("/api/inbox/adopt", { key });
+      ensureBodySelection(editor);
+      editor.chain().focus().setImage({ src: result.public_url, alt: "" }).run();
+      setInboxImages((images) => images.filter((image) => image.key !== key));
+      setImageUploadStatus("");
+    } catch (error) {
+      setImageUploadStatus(error instanceof Error ? error.message : "写真を記事へ追加できませんでした");
+    } finally {
+      setLoadingInbox(false);
+    }
+  }, [editor, loadingInbox]);
+
   useEffect(() => {
     if (!editor || !editor.isEditable) return;
     const element = editor.view.dom;
@@ -1927,6 +1989,14 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       void handleImageFiles(files);
     };
     const drop = (event: DragEvent) => {
+      const inboxKey = event.dataTransfer?.getData("application/x-weblog-inbox-key");
+      if (inboxKey) {
+        event.preventDefault();
+        const position = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+        if (position) editor.commands.setTextSelection(position.pos);
+        void adoptInboxImage(inboxKey);
+        return;
+      }
       const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith("image/"));
       if (files.length === 0) return;
       event.preventDefault();
@@ -1940,7 +2010,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       element.removeEventListener("paste", paste);
       element.removeEventListener("drop", drop);
     };
-  }, [editor, handleImageFiles]);
+  }, [adoptInboxImage, editor, handleImageFiles]);
 
   useEffect(() => {
     if (!editor || initialFocusAppliedRef.current) return;
@@ -2059,6 +2129,49 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
               <p className="input-error" role="alert">{editorErrors.join(" ")}</p>
             )}
           </section>
+          {editor?.isEditable && inboxDate && (
+            <section className="photo-inbox" aria-labelledby="photo-inbox-heading">
+              <div className="photo-inbox__header">
+                <h2 id="photo-inbox-heading">{inboxDate}の写真</h2>
+                <input
+                  ref={inboxInputRef}
+                  className="visually-hidden"
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  multiple
+                  onChange={(event) => {
+                    void handleInboxFiles(Array.from(event.currentTarget.files || []));
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <button type="button" disabled={loadingInbox} onClick={() => inboxInputRef.current?.click()}>
+                  写真を追加
+                </button>
+              </div>
+              {inboxImages.length === 0 ? (
+                <p className="photo-inbox__empty">未使用の写真はありません</p>
+              ) : (
+                <div className="photo-inbox__images">
+                  {inboxImages.map((image) => (
+                    <button
+                      type="button"
+                      className="photo-inbox__image"
+                      key={image.key}
+                      disabled={loadingInbox}
+                      draggable
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData("application/x-weblog-inbox-key", image.key);
+                        event.dataTransfer.effectAllowed = "move";
+                      }}
+                      onClick={() => void adoptInboxImage(image.key)}
+                    >
+                      <img src={image.url} alt="記事へ追加する" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
         </div>
         {universeEnabled && universeGroups.length > 0 && (
           <InternalUniverseGraph

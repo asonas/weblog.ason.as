@@ -1277,6 +1277,52 @@ h2 {
   stroke-width: 1.5;
 }
 
+.photo-inbox {
+  max-inline-size: 52rem;
+  margin: 1rem auto 0;
+  padding: 1rem;
+  border: 1px solid var(--separator);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.photo-inbox__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.photo-inbox__header h2 {
+  margin: 0;
+}
+
+.photo-inbox__empty {
+  margin-block-end: 0;
+  color: var(--muted-ink);
+}
+
+.photo-inbox__images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: 0.5rem;
+  margin-block-start: 1rem;
+}
+
+.photo-inbox__image {
+  overflow: hidden;
+  padding: 0;
+  aspect-ratio: 1;
+  border-color: var(--separator);
+  border-radius: 0.5rem;
+}
+
+.photo-inbox__image img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
 .field-group {
   margin-block-end: 1rem;
 }

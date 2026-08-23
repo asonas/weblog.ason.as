@@ -11,6 +11,7 @@ require "uri"
 require "aws-sdk-s3"
 
 require_relative "embed_metadata"
+require_relative "image_inbox"
 require_relative "image_upload"
 require_relative "models"
 require_relative "names"
@@ -67,6 +68,8 @@ module WeblogAuthoring
       return github_callback_response(event) if method == "GET" && path == "/api/auth/github/callback"
       return logout_response(event) if method == "POST" && path == "/api/auth/logout"
       return upload_response(event) if method == "POST" && path == "/api/uploads"
+      return inbox_response(event) if method == "GET" && path == "/api/inbox"
+      return adopt_inbox_response(event) if method == "POST" && path == "/api/inbox/adopt"
       return pages_response if method == "GET" && path == "/api/pages"
       return related_pages_response(event) if method == "GET" && path == "/api/related"
       return embed_response(event) if method == "GET" && path == "/api/embed"
@@ -241,9 +244,33 @@ module WeblogAuthoring
         clock: @clock
       ).create(
         content_type: payload["content_type"],
-        size: payload["size"]
+        size: payload["size"],
+        inbox_date: payload["inbox_date"]
       )
       json_response(200, upload)
+    end
+
+    def inbox_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to view the inbox") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+
+      images = image_inbox.list(date: event.dig("queryStringParameters", "date"))
+      json_response(200, "images" => images)
+    end
+
+    def adopt_inbox_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to use the inbox") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+      expected_csrf_token = session.fetch("csrf_token", "")
+      return json_response(403, error: "CSRF token mismatch") unless secure_equal?(expected_csrf_token, csrf_token_from(event))
+
+      json_response(200, image_inbox.adopt(key: parse_json(event)["key"]))
+    end
+
+    def image_inbox
+      ImageInbox.new(s3_client: @s3_client, bucket: @asset_bucket)
     end
 
     def page_response(page, event:)

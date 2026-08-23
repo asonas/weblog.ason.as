@@ -20,6 +20,7 @@ require "base64"
 require_relative "development_database"
 require_relative "embed_metadata"
 require_relative "github_oauth"
+require_relative "image_inbox"
 require_relative "image_upload"
 require_relative "models"
 require_relative "names"
@@ -267,6 +268,26 @@ module WeblogAuthoring
       halt 404
     end
 
+    get "/assets/inbox/:year/:month/:day/:filename" do
+      year = params.fetch("year")
+      month = params.fetch("month")
+      day = params.fetch("day")
+      filename = params.fetch("filename")
+      halt 404 unless /\A\d{4}\z/.match?(year) && /\A(?:0[1-9]|1[0-2])\z/.match?(month)
+      halt 404 unless /\A(?:0[1-9]|[12]\d|3[01])\z/.match?(day)
+      halt 404 unless /\A[0-9a-f-]{36}\.(?:gif|jpe?g|png|webp)\z/i.match?(filename)
+
+      object = s3_client.get_object(
+        bucket: settings.asset_bucket,
+        key: "assets/inbox/#{year}/#{month}/#{day}/#{filename}"
+      )
+      content_type object.content_type || "application/octet-stream"
+      cache_control :private, max_age: 300
+      object.body.read
+    rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
+      halt 404
+    end
+
     get "/static/authoring/:asset" do
       content_type, filename = STATIC_FILES.fetch(params.fetch("asset")) { halt 404 }
       content_type content_type
@@ -297,9 +318,20 @@ module WeblogAuthoring
           clock: settings.clock
         ).create(
           content_type: payload["content_type"],
-          size: payload["size"]
+          size: payload["size"],
+          inbox_date: payload["inbox_date"]
         )
       end
+    end
+
+    get "/api/inbox" do
+      require_authenticated! if settings.authentication_required
+      content_type :json
+      JSON.generate("images" => image_inbox.list(date: params["date"]))
+    end
+
+    post "/api/inbox/adopt" do
+      api_response { |payload| image_inbox.adopt(key: payload["key"]) }
     end
 
     patch "/api/pages/:id" do
@@ -393,6 +425,10 @@ module WeblogAuthoring
       path.read
     rescue Errno::EEXIST
       path.read
+    end
+
+    def image_inbox
+      ImageInbox.new(s3_client: s3_client, bucket: settings.asset_bucket)
     end
 
     def self.default_oauth_client

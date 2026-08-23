@@ -36,4 +36,20 @@ class ImageUploadTest < Minitest::Test
       @upload.create(content_type: "image/png", size: WeblogAuthoring::ImageUpload::MAX_BYTES + 1)
     end
   end
+
+  def test_creates_an_inbox_upload_for_the_selected_date
+    result = @upload.create(content_type: "image/webp", size: 1024, inbox_date: "2026-08-23")
+
+    assert_equal "assets/inbox/2026/08/23/11111111-2222-3333-4444-555555555555.webp",
+                 result.dig("fields", "key")
+    assert_equal "/assets/inbox/2026/08/23/11111111-2222-3333-4444-555555555555.webp",
+                 result.fetch("public_url")
+    assert_equal WeblogAuthoring::ImageUpload::INBOX_CACHE_CONTROL, result.dig("fields", "Cache-Control")
+  end
+
+  def test_rejects_an_invalid_inbox_date
+    assert_raises(ArgumentError) do
+      @upload.create(content_type: "image/webp", size: 1024, inbox_date: "2026-02-30")
+    end
+  end
 end

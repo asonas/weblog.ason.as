@@ -76,7 +76,31 @@ data "aws_iam_policy_document" "image_upload" {
   statement {
     effect    = "Allow"
     actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.site.arn}/assets/uploads/*"]
+    resources = [
+      "${aws_s3_bucket.site.arn}/assets/inbox/*",
+      "${aws_s3_bucket.site.arn}/assets/uploads/*",
+    ]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.site.arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["assets/inbox/*"]
+    }
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:DeleteObject",
+      "s3:GetObject",
+    ]
+    resources = ["${aws_s3_bucket.site.arn}/assets/inbox/*"]
   }
 }
 
