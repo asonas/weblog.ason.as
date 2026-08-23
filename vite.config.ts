@@ -46,6 +46,10 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
     strictPort: true,
     proxy: {
+      "/feed.xml": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true
+      },
       "/api": {
         target: "http://127.0.0.1:8000",
         changeOrigin: true
