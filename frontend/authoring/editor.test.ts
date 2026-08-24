@@ -184,6 +184,47 @@ test("deletes a closing wiki bracket from the cursor immediately after the link"
   editor.destroy();
 });
 
+test("keeps a wiki link raw while composing text after it", () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "[example](/example)",
+    contentType: "markdown"
+  });
+
+  editor.commands.setTextSelection(8);
+  editor.view.dom.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+  editor.commands.insertContent("あ");
+
+  assert.equal(editor.view.composing, true);
+  assert.equal(editor.getText(), "[[example]]あ");
+  editor.destroy();
+});
+
+test("wraps selected text in a wiki link with the platform shortcut", () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "example",
+    contentType: "markdown"
+  });
+
+  editor.commands.setTextSelection({ from: 1, to: 8 });
+  const event = new window.KeyboardEvent("keydown", {
+    cancelable: true,
+    key: "k",
+    metaKey: true
+  });
+  let handled = false;
+  editor.view.someProp("handleKeyDown", (handler) => {
+    handled ||= handler(editor.view, event) === true;
+  });
+
+  assert.equal(handled, true);
+  assert.equal(editor.getText(), "[[example]]");
+  editor.destroy();
+});
+
 test("preserves wiki link cursor boundaries and text selections", () => {
   const wikiEditor = new Editor({
     element: document.createElement("div"),

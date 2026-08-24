@@ -40,13 +40,32 @@ const IMAGE_MARKDOWN_PATTERN = /^!\[\]\((.+)\)$/;
 const WikiLinks = Extension.create({
   name: "wikiLinks",
 
+  addKeyboardShortcuts() {
+    return {
+      "Mod-k": () => {
+        const { from, to } = this.editor.state.selection;
+        if (from === to) return false;
+
+        const selectedText = this.editor.state.doc.textBetween(from, to);
+        if (selectedText.length === 0) return false;
+
+        return this.editor.commands.insertContentAt(
+          { from, to },
+          `[[${selectedText}]]`
+        );
+      }
+    };
+  },
+
   addProseMirrorPlugins() {
+    const editor = this.editor;
     const linkType = this.editor.schema.marks.link;
     return [
       new Plugin({
         appendTransaction(transactions, oldState, newState) {
           if (!transactions.some((transaction) => transaction.docChanged || transaction.selectionSet)) return null;
           if (transactions.some((transaction) => transaction.getMeta("wikiLinkRawEditing"))) return null;
+          if (editor.view.composing) return null;
 
           const cursor = newState.selection.empty ? newState.selection.from : -1;
           if (transactions.some((transaction) => transaction.selectionSet)) {
