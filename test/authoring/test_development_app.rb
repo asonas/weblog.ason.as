@@ -32,7 +32,7 @@ class TestDevelopmentApp < Minitest::Test
     entry = JSON.parse(root.join("log/authoring-development.log").read.lines.last)
 
     assert_equal 200, status
-    %w[db tags summaries archive json].each do |name|
+    %w[db summaries json].each do |name|
       assert_match(/(?:\A|, )#{name};dur=\d+(?:\.\d+)?/, server_timing)
     end
     assert_equal server_timing, entry.fetch("server_timing")
@@ -396,7 +396,7 @@ class TestDevelopmentApp < Minitest::Test
 
     assert_equal 200, status
     assert_equal "application/json", headers.fetch("content-type")
-    assert_equal({ "mode" => "home", "tags" => [], "pages" => [], "archive" => [] }, JSON.parse(body))
+    assert_equal({ "mode" => "home", "pages" => [] }, JSON.parse(body))
 
     status, _headers, body = json_request(
       "POST",
@@ -414,8 +414,8 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "2026-08-21T12:00:00.000000000+09:00", summary.fetch("created_at")
     assert_equal "本文 日記", summary.fetch("excerpt")
     assert_equal "https://example.com/photo.jpg", summary.fetch("image_url")
-    assert_equal ["日記", "開発"], JSON.parse(body).fetch("tags")
-    assert_equal [{ "year" => 2026, "months" => [8] }], JSON.parse(body).fetch("archive")
+    assert_equal ["日記", "開発"], JSON.parse(request("GET", "/api/tags").last).fetch("tags")
+    assert_equal [{ "year" => 2026, "months" => [8] }], JSON.parse(request("GET", "/api/archive").last).fetch("archive")
 
     status, _headers, body = request("GET", "/api/pages/#{page.fetch("id")}")
 
@@ -462,7 +462,7 @@ class TestDevelopmentApp < Minitest::Test
 
     assert_equal 200, status
     assert_equal 30, home.fetch("pages").length
-    assert_equal [{ "year" => 2026, "months" => [8] }], home.fetch("archive")
+    assert_equal [{ "year" => 2026, "months" => [8] }], JSON.parse(request("GET", "/api/archive").last).fetch("archive")
   end
 
   def test_named_page_accepts_an_empty_body_and_can_be_loaded_by_route

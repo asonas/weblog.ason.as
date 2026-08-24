@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
 import "./styles.css";
@@ -391,8 +391,29 @@ function GitHubAuthentication({ auth }: { auth: AuthState }) {
 
 function Home({ bootstrap, auth }: { bootstrap: HomeBootstrap; auth: AuthState }) {
   const latestPage = bootstrap.pages[0];
-  const tags = bootstrap.tags ?? [];
-  const archive = bootstrap.archive ?? [];
+  const [tags, setTags] = useState(bootstrap.tags ?? []);
+  const [archive, setArchive] = useState(bootstrap.archive ?? []);
+  const archiveRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    void fetchBootstrap<{ tags: string[] }>("/api/tags")
+      .then((response) => setTags(response.tags))
+      .catch(() => setTags([]));
+  }, []);
+
+  useEffect(() => {
+    const target = archiveRef.current;
+    if (!target) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      void fetchBootstrap<{ archive: NonNullable<HomeBootstrap["archive"]> }>("/api/archive")
+        .then((response) => setArchive(response.archive))
+        .catch(() => setArchive([]));
+    }, { rootMargin: "320px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="home-layout">
@@ -416,7 +437,7 @@ function Home({ bootstrap, auth }: { bootstrap: HomeBootstrap; auth: AuthState }
       )}
 
       <HomePageList pages={bootstrap.pages} />
-      <HomeArchive years={archive} />
+      <div ref={archiveRef}><HomeArchive years={archive} /></div>
       <GitHubAuthentication auth={auth} />
     </div>
   );

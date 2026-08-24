@@ -28,16 +28,16 @@ module WeblogAuthoring
       with_connection { |database| create_schema(database) }
     end
 
-    def list_pages
+    def list_pages(limit: nil)
       with_connection do |database|
-        database.execute(
-          <<~SQL
+        sql = <<~SQL
             SELECT id, page_type, name, page_date, title, status,
                    created_at, updated_at, published_at, path, body
             FROM pages
             ORDER BY created_at DESC, updated_at DESC
-          SQL
-        ).map { |row| page_from_row(row) }
+        SQL
+        sql += "LIMIT ?\n" if limit
+        database.execute(sql, *Array(limit)).map { |row| page_from_row(row) }
       end
     end
 

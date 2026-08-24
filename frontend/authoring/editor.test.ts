@@ -167,7 +167,7 @@ test("omits the current page from internal universe topics", () => {
   assert.deepEqual(groups, []);
 });
 
-test("opens an unfocused wiki link in the same tab", async () => {
+test("opens an unfocused wiki link instead of expanding it for editing", async () => {
   const editor = new Editor({
     element: document.createElement("div"),
     extensions: EDITOR_EXTENSIONS,
@@ -180,16 +180,25 @@ test("opens an unfocused wiki link in the same tab", async () => {
   assert.equal(link.textContent, "example");
   assert.notEqual(link.target, "_blank");
 
+  let opened: { url?: string | URL; target?: string } | undefined;
+  const originalOpen = window.open;
+  window.open = (url, target) => {
+    opened = { url, target };
+    return null;
+  };
   const click = new window.MouseEvent("click", { bubbles: true, cancelable: true });
   Object.defineProperty(click, "target", { value: link });
   let handled = false;
   editor.view.someProp("handleClick", (handler) => {
     handled ||= handler(editor.view, 2, click) === true;
   });
+  window.open = originalOpen;
 
-  assert.equal(handled, false);
-  assert.equal(click.defaultPrevented, false);
+  assert.equal(handled, true);
+  assert.equal(opened?.url, "http://127.0.0.1:5173/example");
+  assert.equal(opened?.target, "_self");
   assert.ok(editor.view.dom.querySelector('a[href="/example"]'));
+  assert.equal(editor.getText(), "example foo bar");
   editor.destroy();
 });
 

@@ -189,10 +189,19 @@ module WeblogAuthoring
 
     get "/api/pages" do
       timings = {}
-      body = measure(timings, "json") { JSON.generate(home_state(timings:)) }
+      payload = home_state(timings:)
+      body = measure(timings, "json") { JSON.generate(payload) }
       headers "Server-Timing" => server_timing(timings)
       content_type :json
       body
+    end
+
+    get "/api/tags" do
+      json_response({ "tags" => recent_tags(settings.database.list_pages) })
+    end
+
+    get "/api/archive" do
+      json_response({ "archive" => archive_years(settings.database.list_pages) })
     end
 
     get "/api/page-names" do
@@ -875,12 +884,10 @@ module WeblogAuthoring
     end
 
     def home_state(timings: {})
-      pages = measure(timings, "db") { settings.database.list_pages }
+      pages = measure(timings, "db") { settings.database.list_pages(limit: 30) }
       {
         "mode" => "home",
-        "tags" => measure(timings, "tags") { recent_tags(pages) },
-        "pages" => measure(timings, "summaries") { pages.first(30).map { |page| page_summary(page) } },
-        "archive" => measure(timings, "archive") { archive_years(pages) }
+        "pages" => measure(timings, "summaries") { pages.map { |page| page_summary(page) } }
       }
     end
 

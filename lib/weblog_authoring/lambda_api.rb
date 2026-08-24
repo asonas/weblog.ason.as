@@ -71,6 +71,8 @@ module WeblogAuthoring
       return inbox_response(event) if method == "GET" && path == "/api/inbox"
       return adopt_inbox_response(event) if method == "POST" && path == "/api/inbox/adopt"
       return pages_response if method == "GET" && path == "/api/pages"
+      return tags_response if method == "GET" && path == "/api/tags"
+      return archive_response if method == "GET" && path == "/api/archive"
       return page_names_response(event) if method == "GET" && path == "/api/page-names"
       return related_pages_response(event) if method == "GET" && path == "/api/related"
       return embed_response(event) if method == "GET" && path == "/api/embed"
@@ -188,14 +190,22 @@ module WeblogAuthoring
     end
 
     def pages_response
-      pages = @database.list_pages
-      json_response(
-        200,
+      timings = {}
+      pages = measure(timings, "db") { @database.list_pages(limit: 30) }
+      payload = {
         "mode" => "home",
-        "tags" => recent_tags(pages),
-        "pages" => pages.first(30).map { |page| page_summary(page) },
-        "archive" => archive_years(pages)
-      )
+        "pages" => measure(timings, "summaries") { pages.map { |page| page_summary(page) } }
+      }
+      body = measure(timings, "json") { JSON.generate(payload) }
+      { statusCode: 200, headers: JSON_HEADERS.merge("server-timing" => server_timing(timings)), body: }
+    end
+
+    def tags_response
+      json_response(200, "tags" => recent_tags(@database.list_pages))
+    end
+
+    def archive_response
+      json_response(200, "archive" => archive_years(@database.list_pages))
     end
 
     def page_names_response(event)
@@ -614,6 +624,17 @@ module WeblogAuthoring
         headers: JSON_HEADERS,
         body: JSON.generate(payload),
       }
+    end
+
+    def measure(timings, name)
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      result = yield
+      timings[name] = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000).round(1)
+      result
+    end
+
+    def server_timing(timings)
+      timings.map { |name, duration| "#{name};dur=#{duration}" }.join(", ")
     end
 
     def conditional_json_response(event, payload)

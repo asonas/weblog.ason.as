@@ -1459,7 +1459,7 @@ export const EDITOR_EXTENSIONS = [
     gapcursor: false,
     underline: false,
     link: {
-      openOnClick: false,
+      openOnClick: true,
       autolink: false,
       linkOnPaste: false,
       HTMLAttributes: {

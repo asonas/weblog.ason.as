@@ -62,8 +62,8 @@ class LambdaApiTest < Minitest::Test
       true
     end
 
-    def list_pages
-      pages
+    def list_pages(limit: nil)
+      limit ? pages.first(limit) : pages
     end
 
     def find(id)
@@ -146,6 +146,17 @@ class LambdaApiTest < Minitest::Test
     assert_equal "記事名", page.fetch("title")
     assert_equal "記事名", page.fetch("route")
     refute page.key?("body")
+    assert_match(/db;dur=.*summaries;dur=.*json;dur=/, response.fetch(:headers).fetch("server-timing"))
+    refute JSON.parse(response.fetch(:body)).key?("tags")
+    refute JSON.parse(response.fetch(:body)).key?("archive")
+  end
+
+  def test_lists_home_tags_and_archive_separately
+    tags = @api.call(event("GET", "/api/tags"))
+    archive = @api.call(event("GET", "/api/archive"))
+
+    assert_equal [], JSON.parse(tags.fetch(:body)).fetch("tags")
+    assert_equal [{ "year" => 2026, "months" => [8] }], JSON.parse(archive.fetch(:body)).fetch("archive")
   end
 
   def test_lists_cacheable_page_names

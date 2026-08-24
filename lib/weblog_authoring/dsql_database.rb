@@ -32,14 +32,17 @@ module WeblogAuthoring
       )
     end
 
-    def list_pages
+    def list_pages(limit: nil)
       with_connection do |connection|
-        connection.exec(<<~SQL).map { |row| page_from_row(row) }
+        sql = <<~SQL
           SELECT id, page_type, name, page_date, title, status,
                  created_at, updated_at, published_at, path, body
           FROM #{SCHEMA}.pages
           ORDER BY created_at DESC, updated_at DESC
         SQL
+        sql += "LIMIT $1\n" if limit
+        result = limit ? connection.exec_params(sql, [limit]) : connection.exec(sql)
+        result.map { |row| page_from_row(row) }
       end
     end
 
