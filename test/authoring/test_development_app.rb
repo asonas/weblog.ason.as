@@ -26,6 +26,18 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal 304, unchanged_status
   end
 
+  def test_reports_page_generation_timings
+    status, headers, _body = request("GET", "/api/pages")
+    server_timing = headers.fetch("server-timing")
+    entry = JSON.parse(root.join("log/authoring-development.log").read.lines.last)
+
+    assert_equal 200, status
+    %w[db tags summaries archive json].each do |name|
+      assert_match(/(?:\A|, )#{name};dur=\d+(?:\.\d+)?/, server_timing)
+    end
+    assert_equal server_timing, entry.fetch("server_timing")
+  end
+
   class FakeEmbedFetcher
     attr_reader :requests
 

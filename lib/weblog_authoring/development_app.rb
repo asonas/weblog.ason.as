@@ -40,16 +40,16 @@ module WeblogAuthoring
       status, headers, body = @app.call(env)
       chunks = body.each.to_a
       body.close if body.respond_to?(:close)
-      write(env, status, chunks.join, started_at)
+      write(env, status, headers, chunks.join, started_at)
       [status, headers, chunks]
     rescue StandardError => error
-      write(env, 500, "#{error.class}: #{error.message}", started_at)
+      write(env, 500, {}, "#{error.class}: #{error.message}", started_at)
       raise
     end
 
     private
 
-    def write(env, status, response_body, started_at)
+    def write(env, status, headers, response_body, started_at)
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
       entry = {
         time: Time.now.iso8601(6),
@@ -58,6 +58,8 @@ module WeblogAuthoring
         status:,
         duration_ms: (elapsed * 1000).round(1)
       }
+      server_timing = headers["server-timing"] || headers["Server-Timing"]
+      entry[:server_timing] = server_timing if server_timing
       entry[:error] = response_body if status >= 400
       @output.puts(JSON.generate(entry))
     end
@@ -186,7 +188,11 @@ module WeblogAuthoring
     end
 
     get "/api/pages" do
-      json_response(home_state)
+      timings = {}
+      body = measure(timings, "json") { JSON.generate(home_state(timings:)) }
+      headers "Server-Timing" => server_timing(timings)
+      content_type :json
+      body
     end
 
     get "/api/page-names" do
@@ -868,14 +874,25 @@ module WeblogAuthoring
       }
     end
 
-    def home_state
-      pages = settings.database.list_pages
+    def home_state(timings: {})
+      pages = measure(timings, "db") { settings.database.list_pages }
       {
         "mode" => "home",
-        "tags" => recent_tags(pages),
-        "pages" => pages.first(30).map { |page| page_summary(page) },
-        "archive" => archive_years(pages)
+        "tags" => measure(timings, "tags") { recent_tags(pages) },
+        "pages" => measure(timings, "summaries") { pages.first(30).map { |page| page_summary(page) } },
+        "archive" => measure(timings, "archive") { archive_years(pages) }
       }
+    end
+
+    def measure(timings, name)
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      result = yield
+      timings[name] = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000).round(1)
+      result
+    end
+
+    def server_timing(timings)
+      timings.map { |name, duration| "#{name};dur=#{duration}" }.join(", ")
     end
 
     def archive_years(pages)
