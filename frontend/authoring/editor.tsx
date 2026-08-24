@@ -38,23 +38,22 @@ function encodePageName(name: string): string {
 const WIKI_LINK_PATTERN = /\[\[([^\[\]]+)\]\]/g;
 const IMAGE_MARKDOWN_PATTERN = /^!\[\]\((.+)\)$/;
 
+export function wrapSelectionInWikiLink(editor: Editor): boolean {
+  const { from, to } = editor.state.selection;
+  if (from === to) return false;
+
+  const selectedText = editor.state.doc.textBetween(from, to);
+  if (selectedText.length === 0) return false;
+
+  return editor.commands.insertContentAt({ from, to }, `[[${selectedText}]]`);
+}
+
 const WikiLinks = Extension.create({
   name: "wikiLinks",
 
   addKeyboardShortcuts() {
     return {
-      "Mod-k": () => {
-        const { from, to } = this.editor.state.selection;
-        if (from === to) return false;
-
-        const selectedText = this.editor.state.doc.textBetween(from, to);
-        if (selectedText.length === 0) return false;
-
-        return this.editor.commands.insertContentAt(
-          { from, to },
-          `[[${selectedText}]]`
-        );
-      }
+      "Mod-k": () => wrapSelectionInWikiLink(this.editor)
     };
   },
 

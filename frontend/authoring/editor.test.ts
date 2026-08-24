@@ -50,6 +50,7 @@ const {
   matchingWikiLinkNames,
   nextWikiLinkSuggestionIndex,
   replaceEditorContentPreservingSelection,
+  wrapSelectionInWikiLink,
   wikiLinkQuery
 } = await import("./editor");
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
@@ -236,17 +237,7 @@ test("wraps selected text in a wiki link with the platform shortcut", () => {
   });
 
   editor.commands.setTextSelection({ from: 1, to: 8 });
-  const event = new window.KeyboardEvent("keydown", {
-    cancelable: true,
-    key: "k",
-    metaKey: true
-  });
-  let handled = false;
-  editor.view.someProp("handleKeyDown", (handler) => {
-    handled ||= handler(editor.view, event) === true;
-  });
-
-  assert.equal(handled, true);
+  assert.equal(wrapSelectionInWikiLink(editor), true);
   assert.equal(editor.getText(), "[[example]]");
   editor.destroy();
 });
