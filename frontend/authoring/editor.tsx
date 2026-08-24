@@ -1235,13 +1235,17 @@ function Universe({
         const width = workspace.clientWidth;
         const height = workspace.scrollHeight;
         setLayout({ editorRect: glassRect, obstacles, width, height });
-        setTopicLines(topics.flatMap(({ kind, name }) => {
+        setTopicLines((currentLines) => topics.flatMap(({ kind, name }) => {
           const href = kind === "url"
             ? name
             : new URL(`/${encodePageName(name)}`, window.location.origin).href;
           const link = links.find((candidate) => candidate.href === href);
           const topic = workspace.querySelector<HTMLElement>(`[data-universe-topic="${CSS.escape(name)}"]`);
-          if (!link || !topic) return [];
+          if (!topic) return [];
+          if (!link) {
+            const currentLine = currentLines.find((line) => line.kind === kind && line.name === name);
+            return currentLine ? [currentLine] : [];
+          }
           const anchor = linkUnderlineAnchor(link, workspaceRect);
           const topicRect = relativeRect(topic, workspaceRect);
           const center = {
@@ -1434,6 +1438,22 @@ function initialDraft(bootstrap: EditorBootstrap): EditorDraft {
 
 function editorDocument(title: string, body: string): string {
   return [title, markdownForEditor(body)].filter((part) => part.length > 0).join("\n\n");
+}
+
+export function replaceEditorContentPreservingSelection(editor: Editor, content: string): void {
+  const { anchor, head } = editor.state.selection;
+  editor.commands.setContent(content, {
+    contentType: "markdown",
+    emitUpdate: false
+  });
+
+  const resolvePosition = (position: number) =>
+    editor.state.doc.resolve(Math.min(position, editor.state.doc.content.size));
+  const transaction = editor.state.tr.setSelection(TextSelection.between(
+    resolvePosition(anchor),
+    resolvePosition(head)
+  ));
+  editor.view.dispatch(transaction);
 }
 
 function splitEditorDocument(markdown: string): Pick<EditorDraft, "title" | "body"> {
@@ -1856,10 +1876,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
           expectedUpdatedAt: page.updated_at || ""
         });
         savedNameRef.current = page.name || title;
-        editor.commands.setContent(editorDocument(title, page.body), {
-          contentType: "markdown",
-          emitUpdate: false
-        });
+        replaceEditorContentPreservingSelection(editor, editorDocument(title, page.body));
         window.history.replaceState(null, "", `/${encodePageName(page.route || page.name || current.title)}`);
         setStatus(statusMessage(page));
       }

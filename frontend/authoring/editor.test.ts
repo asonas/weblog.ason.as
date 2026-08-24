@@ -46,7 +46,8 @@ const {
   buildInternalUniverseGroups,
   EDITOR_EXTENSIONS,
   ensureBodySelection,
-  internalNodeVisual
+  internalNodeVisual,
+  replaceEditorContentPreservingSelection
 } = await import("./editor");
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
 const { markdownForSource } = await import("./markdown");
@@ -214,6 +215,25 @@ test("preserves wiki link cursor boundaries and text selections", () => {
   );
   assert.equal(selectionEditor.state.doc.rangeHasMark(1, 12, selectionEditor.schema.marks.link), false);
   selectionEditor.destroy();
+});
+
+test("preserves the cursor when refreshed content replaces the document", () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "title\n\nbody\n\n[日記](/%E6%97%A5%E8%A8%98)",
+    contentType: "markdown"
+  });
+  const bodyPosition = editor.state.doc.child(0).nodeSize + 2;
+  editor.commands.setTextSelection(bodyPosition);
+
+  replaceEditorContentPreservingSelection(
+    editor,
+    "title\n\nbody\n\n[日記](/%E6%97%A5%E8%A8%98)"
+  );
+
+  assert.equal(editor.state.selection.from, bodyPosition);
+  editor.destroy();
 });
 
 test("edits a selected image as Markdown and renders it again after leaving", () => {
