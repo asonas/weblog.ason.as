@@ -189,6 +189,10 @@ module WeblogAuthoring
       json_response(home_state)
     end
 
+    get "/api/page-names" do
+      conditional_json_response("names" => settings.database.list_pages.map(&:route))
+    end
+
     get "/api/editor/new" do
       json_response(new_editor_state)
     end

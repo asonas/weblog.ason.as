@@ -148,6 +148,16 @@ class LambdaApiTest < Minitest::Test
     refute page.key?("body")
   end
 
+  def test_lists_cacheable_page_names
+    first = @api.call(event("GET", "/api/page-names"))
+    etag = first.fetch(:headers).fetch("etag")
+    unchanged = @api.call(event("GET", "/api/page-names", headers: { "if-none-match" => etag }))
+
+    assert_equal ["記事名"], JSON.parse(first.fetch(:body)).fetch("names")
+    assert_equal "no-cache", first.fetch(:headers).fetch("cache-control")
+    assert_equal 304, unchanged.fetch(:statusCode)
+  end
+
   def test_finds_a_page_by_id
     response = @api.call(event("GET", "/api/pages/page-id", { "id" => "page-id" }))
     page = JSON.parse(response.fetch(:body))

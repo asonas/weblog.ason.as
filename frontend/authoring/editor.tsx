@@ -258,6 +258,35 @@ type EditorDraft = {
   expectedUpdatedAt: string;
 };
 
+type WikiLinkQuery = {
+  from: number;
+  to: number;
+  value: string;
+};
+
+type WikiLinkSuggestionsResponse = {
+  names: Array<string>;
+};
+
+export function wikiLinkQuery(editor: Editor): WikiLinkQuery | null {
+  const selection = editor.state.selection;
+  if (!selection.empty || !(selection instanceof TextSelection)) return null;
+
+  const text = selection.$from.parent.textBetween(0, selection.$from.parentOffset, "\n", "\0");
+  const match = /\[\[([^\[\]\n]*)$/.exec(text);
+  if (!match) return null;
+
+  return {
+    from: selection.from - match[1].length,
+    to: selection.from,
+    value: match[1]
+  };
+}
+
+export function matchingWikiLinkNames(names: Array<string>, query: string): Array<string> {
+  return names.filter((name) => name.startsWith(query)).slice(0, 8);
+}
+
 type PageResponse = {
   id: string;
   page_type: "date" | "named";
@@ -1592,6 +1621,9 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const [loadingLinkedPages, setLoadingLinkedPages] = useState(false);
   const [linkedPagesError, setLinkedPagesError] = useState("");
   const [activeUniverseTopic, setActiveUniverseTopic] = useState<string | null>(null);
+  const [wikiLinkNames, setWikiLinkNames] = useState<Array<string>>([]);
+  const [wikiLinkQueryState, setWikiLinkQueryState] = useState<WikiLinkQuery | null>(null);
+  const [activeWikiLinkSuggestion, setActiveWikiLinkSuggestion] = useState(0);
   const draftRef = useRef(draft);
   const dirtyRef = useRef(false);
   const savingRef = useRef(false);
@@ -1856,10 +1888,72 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     onUpdate: ({ editor: currentEditor }) => {
       handleDocumentChange(currentEditor.getMarkdown(), currentEditor.state.doc.childCount > 1);
     },
+    onTransaction: ({ editor: currentEditor }) => {
+      setWikiLinkQueryState(wikiLinkQuery(currentEditor));
+      setActiveWikiLinkSuggestion(0);
+    },
     onBlur: ({ editor: currentEditor }) => {
       void handleEditorBlur(currentEditor);
     }
   });
+
+  const wikiLinkSuggestions = useMemo(
+    () => wikiLinkQueryState ? matchingWikiLinkNames(wikiLinkNames, wikiLinkQueryState.value) : [],
+    [wikiLinkNames, wikiLinkQueryState]
+  );
+
+  useEffect(() => {
+    if (!editor?.isEditable) return;
+    void fetchJson<WikiLinkSuggestionsResponse>("/api/page-names")
+      .then((response) => setWikiLinkNames(response.names))
+      .catch(() => setWikiLinkNames([]));
+  }, [editor?.isEditable]);
+
+  const acceptWikiLinkSuggestion = useCallback((name: string) => {
+    if (!editor || !wikiLinkQueryState) return;
+    editor.chain()
+      .focus()
+      .insertContentAt({ from: wikiLinkQueryState.from, to: wikiLinkQueryState.to }, `${name}]]`)
+      .run();
+    setWikiLinkQueryState(null);
+  }, [editor, wikiLinkQueryState]);
+
+  useEffect(() => {
+    if (!editor || wikiLinkSuggestions.length === 0) return;
+    editor.view.dom.setAttribute("aria-controls", "wiki-link-suggestions");
+    editor.view.dom.setAttribute("aria-activedescendant", `wiki-link-suggestion-${activeWikiLinkSuggestion}`);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setWikiLinkQueryState(null);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        acceptWikiLinkSuggestion(wikiLinkSuggestions[activeWikiLinkSuggestion]);
+      } else if (event.key === "Tab" || event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const backwards = event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey);
+        setActiveWikiLinkSuggestion((current) => (
+          current + (backwards ? wikiLinkSuggestions.length - 1 : 1)
+        ) % wikiLinkSuggestions.length);
+      }
+    };
+    editor.view.dom.addEventListener("keydown", handleKeyDown);
+    return () => {
+      editor.view.dom.removeEventListener("keydown", handleKeyDown);
+      editor.view.dom.removeAttribute("aria-controls");
+      editor.view.dom.removeAttribute("aria-activedescendant");
+    };
+  }, [acceptWikiLinkSuggestion, activeWikiLinkSuggestion, editor, wikiLinkSuggestions]);
+
+  const wikiLinkSuggestionStyle = useMemo(() => {
+    if (!editor || !wikiLinkQueryState || wikiLinkSuggestions.length === 0 || !workspaceRef.current) return undefined;
+    const caret = editor.view.coordsAtPos(wikiLinkQueryState.to);
+    const workspace = workspaceRef.current.getBoundingClientRect();
+    return {
+      left: caret.left - workspace.left,
+      top: caret.top - workspace.top
+    } satisfies CSSProperties;
+  }, [editor, wikiLinkQueryState, wikiLinkSuggestions.length]);
 
   const refreshPage = useCallback(async () => {
     const pageId = draftRef.current.pageId;
@@ -2119,6 +2213,31 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
         {status}
       </p>
       <div className="article-workspace" ref={workspaceRef}>
+        {wikiLinkSuggestionStyle && (
+          <div
+            className="wiki-link-suggestions"
+            id="wiki-link-suggestions"
+            role="listbox"
+            aria-label="Wikiリンク候補"
+            style={wikiLinkSuggestionStyle}
+          >
+            {wikiLinkSuggestions.map((name, index) => (
+              <button
+                className="wiki-link-suggestions__option"
+                id={`wiki-link-suggestion-${index}`}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                aria-selected={index === activeWikiLinkSuggestion}
+                key={name}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => acceptWikiLinkSuggestion(name)}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="editor-canvas">
           <section
             className="editor-shell"

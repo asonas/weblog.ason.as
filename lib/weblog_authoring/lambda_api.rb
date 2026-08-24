@@ -71,6 +71,7 @@ module WeblogAuthoring
       return inbox_response(event) if method == "GET" && path == "/api/inbox"
       return adopt_inbox_response(event) if method == "POST" && path == "/api/inbox/adopt"
       return pages_response if method == "GET" && path == "/api/pages"
+      return page_names_response(event) if method == "GET" && path == "/api/page-names"
       return related_pages_response(event) if method == "GET" && path == "/api/related"
       return embed_response(event) if method == "GET" && path == "/api/embed"
       return new_editor_response(event) if method == "GET" && path == "/api/editor/new"
@@ -195,6 +196,10 @@ module WeblogAuthoring
         "pages" => pages.first(30).map { |page| page_summary(page) },
         "archive" => archive_years(pages)
       )
+    end
+
+    def page_names_response(event)
+      conditional_json_response(event, "names" => @database.list_pages.map(&:route))
     end
 
     def new_editor_response(event)

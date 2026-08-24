@@ -47,10 +47,29 @@ const {
   EDITOR_EXTENSIONS,
   ensureBodySelection,
   internalNodeVisual,
-  replaceEditorContentPreservingSelection
+  matchingWikiLinkNames,
+  replaceEditorContentPreservingSelection,
+  wikiLinkQuery
 } = await import("./editor");
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
 const { markdownForSource } = await import("./markdown");
+
+test("finds and filters the unfinished Wiki link at the cursor", () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "title\n\n[[2026-",
+    contentType: "markdown"
+  });
+  editor.commands.focus("end");
+
+  assert.equal(wikiLinkQuery(editor)?.value, "2026-");
+  assert.deepEqual(
+    matchingWikiLinkNames(["2026-08-23", "topic", "2026-08-22"], "2026-"),
+    ["2026-08-23", "2026-08-22"]
+  );
+  editor.destroy();
+});
 
 test("reads PNG dimensions before decoding the image", () => {
   const bytes = new Uint8Array(24);

@@ -11,6 +11,21 @@ class TestDevelopmentApp < Minitest::Test
 
   FakeS3Response = Data.define(:content_type, :body)
 
+  def test_lists_cacheable_page_names
+    status, headers, body = request("GET", "/api/page-names")
+    unchanged_status, = request_with(
+      app,
+      "GET",
+      "/api/page-names",
+      headers: { "HTTP_IF_NONE_MATCH" => headers.fetch("etag") }
+    )
+
+    assert_equal 200, status
+    assert_equal [], JSON.parse(body).fetch("names")
+    assert_equal "no-cache", headers.fetch("cache-control")
+    assert_equal 304, unchanged_status
+  end
+
   class FakeEmbedFetcher
     attr_reader :requests
 

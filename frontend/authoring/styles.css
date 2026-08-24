@@ -1365,6 +1365,33 @@ h2 {
   cursor: pointer;
 }
 
+.wiki-link-suggestions {
+  position: absolute;
+  z-index: 10;
+  display: grid;
+  min-inline-size: 12rem;
+  max-block-size: 16rem;
+  overflow-y: auto;
+  border: 1px solid var(--separator);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  box-shadow: 0 0.75rem 2rem color-mix(in oklch, var(--ink) 18%, transparent);
+  transform: translateY(calc(-100% - 0.5rem));
+}
+
+.wiki-link-suggestions__option {
+  padding: 0.45rem 0.65rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: start;
+}
+
+.wiki-link-suggestions__option[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--canvas);
+}
+
 .ProseMirror pre,
 .page-view pre {
   max-inline-size: 100%;
