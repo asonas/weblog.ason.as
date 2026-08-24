@@ -1368,10 +1368,9 @@ h2 {
 .wiki-link-suggestions {
   position: absolute;
   z-index: 10;
-  display: grid;
-  min-inline-size: 12rem;
-  max-block-size: 16rem;
-  overflow-y: auto;
+  display: flex;
+  max-inline-size: calc(100% - 2rem);
+  overflow-x: auto;
   border: 1px solid var(--separator);
   border-radius: 0.5rem;
   background: var(--surface);
@@ -1380,11 +1379,17 @@ h2 {
 }
 
 .wiki-link-suggestions__option {
+  flex: 0 0 auto;
   padding: 0.45rem 0.65rem;
   border: 0;
   background: transparent;
   color: var(--ink);
   text-align: start;
+  white-space: nowrap;
+}
+
+.wiki-link-suggestions__option + .wiki-link-suggestions__option {
+  border-inline-start: 1px solid var(--separator);
 }
 
 .wiki-link-suggestions__option[aria-selected="true"] {

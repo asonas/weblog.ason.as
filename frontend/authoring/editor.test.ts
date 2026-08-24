@@ -48,6 +48,7 @@ const {
   ensureBodySelection,
   internalNodeVisual,
   matchingWikiLinkNames,
+  nextWikiLinkSuggestionIndex,
   replaceEditorContentPreservingSelection,
   wikiLinkQuery
 } = await import("./editor");
@@ -69,6 +70,12 @@ test("finds and filters the unfinished Wiki link at the cursor", () => {
     ["2026-08-23", "2026-08-22"]
   );
   editor.destroy();
+});
+
+test("moves Wiki link suggestions forward and backward", () => {
+  assert.equal(nextWikiLinkSuggestionIndex(0, 5, false), 1);
+  assert.equal(nextWikiLinkSuggestionIndex(4, 5, false), 0);
+  assert.equal(nextWikiLinkSuggestionIndex(0, 5, true), 4);
 });
 
 test("reads PNG dimensions before decoding the image", () => {

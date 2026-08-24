@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject
 } from "react";
@@ -285,6 +286,10 @@ export function wikiLinkQuery(editor: Editor): WikiLinkQuery | null {
 
 export function matchingWikiLinkNames(names: Array<string>, query: string): Array<string> {
   return names.filter((name) => name.startsWith(query)).slice(0, 8);
+}
+
+export function nextWikiLinkSuggestionIndex(current: number, length: number, backwards: boolean): number {
+  return (current + (backwards ? length - 1 : 1)) % length;
 }
 
 type PageResponse = {
@@ -1922,28 +1927,28 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     if (!editor || wikiLinkSuggestions.length === 0) return;
     editor.view.dom.setAttribute("aria-controls", "wiki-link-suggestions");
     editor.view.dom.setAttribute("aria-activedescendant", `wiki-link-suggestion-${activeWikiLinkSuggestion}`);
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setWikiLinkQueryState(null);
-      } else if (event.key === "Enter") {
-        event.preventDefault();
-        acceptWikiLinkSuggestion(wikiLinkSuggestions[activeWikiLinkSuggestion]);
-      } else if (event.key === "Tab" || event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        const backwards = event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey);
-        setActiveWikiLinkSuggestion((current) => (
-          current + (backwards ? wikiLinkSuggestions.length - 1 : 1)
-        ) % wikiLinkSuggestions.length);
-      }
-    };
-    editor.view.dom.addEventListener("keydown", handleKeyDown);
     return () => {
-      editor.view.dom.removeEventListener("keydown", handleKeyDown);
       editor.view.dom.removeAttribute("aria-controls");
       editor.view.dom.removeAttribute("aria-activedescendant");
     };
-  }, [acceptWikiLinkSuggestion, activeWikiLinkSuggestion, editor, wikiLinkSuggestions]);
+  }, [activeWikiLinkSuggestion, editor, wikiLinkSuggestions.length]);
+
+  const handleWikiLinkSuggestionKeyDown = useCallback((event: ReactKeyboardEvent) => {
+    if (wikiLinkSuggestions.length === 0) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setWikiLinkQueryState(null);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      acceptWikiLinkSuggestion(wikiLinkSuggestions[activeWikiLinkSuggestion]);
+    } else if (event.key === "Tab" || event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const backwards = event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey);
+      setActiveWikiLinkSuggestion((current) =>
+        nextWikiLinkSuggestionIndex(current, wikiLinkSuggestions.length, backwards)
+      );
+    }
+  }, [acceptWikiLinkSuggestion, activeWikiLinkSuggestion, wikiLinkSuggestions]);
 
   const wikiLinkSuggestionStyle = useMemo(() => {
     if (!editor || !wikiLinkQueryState || wikiLinkSuggestions.length === 0 || !workspaceRef.current) return undefined;
@@ -2277,7 +2282,11 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
                 </button>
               </div>
             )}
-            <div className="wysiwyg-editor" aria-busy={saving}>
+            <div
+              className="wysiwyg-editor"
+              aria-busy={saving}
+              onKeyDownCapture={handleWikiLinkSuggestionKeyDown}
+            >
               <EditorContent editor={editor} ref={handleEditorContentRef} />
             </div>
             {editorErrors.length > 0 && (
