@@ -189,6 +189,14 @@ class LambdaApiTest < Minitest::Test
     assert_equal "記事名", JSON.parse(response.fetch(:body)).fetch("name")
   end
 
+  def test_missing_route_requests_its_related_pages
+    response = @api.call(event("GET", "/api/routes/202608", { "route" => "202608" }))
+    page = JSON.parse(response.fetch(:body))
+
+    assert_equal 200, response.fetch(:statusCode)
+    assert page.fetch("linked_pages_has_more")
+  end
+
   def test_returns_pages_related_by_wiki_links
     source = page_document(id: "source", name: "source", body: "[[target]]")
     target = page_document(id: "target", name: "target", body: "")

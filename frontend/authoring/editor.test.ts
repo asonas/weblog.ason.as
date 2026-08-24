@@ -190,6 +190,17 @@ test("opens an unfocused wiki link instead of expanding it for editing", async (
   assert.equal(link.textContent, "example");
   assert.notEqual(link.target, "_blank");
 
+  const mouseDown = new window.MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  Object.defineProperty(mouseDown, "target", { value: link });
+  let mouseDownHandled = false;
+  editor.view.someProp("handleDOMEvents", (handlers) => {
+    mouseDownHandled ||= handlers.mousedown?.(editor.view, mouseDown) === true;
+  });
+
+  assert.equal(mouseDownHandled, true);
+  assert.equal(mouseDown.defaultPrevented, true);
+  assert.ok(editor.view.dom.querySelector('a[href="/example"]'));
+
   let opened: { url?: string | URL; target?: string } | undefined;
   const originalOpen = window.open;
   window.open = (url, target) => {

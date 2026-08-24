@@ -666,7 +666,8 @@ module WeblogAuthoring
         title: route,
         body: "",
         expected_updated_at: "",
-        save_message: ""
+        save_message: "",
+        linked_pages_has_more: true
       )
     end
 
@@ -677,7 +678,7 @@ module WeblogAuthoring
     end
 
     def editor_json(page = nil, page_id: nil, page_type: nil, date: nil, name: nil, title: nil, body: nil,
-                    expected_updated_at: nil, save_message: nil)
+                    expected_updated_at: nil, save_message: nil, linked_pages_has_more: nil)
       if page
         page_id = page.id
         page_type = page.page_type
@@ -700,7 +701,7 @@ module WeblogAuthoring
         "expected_updated_at" => expected_updated_at,
         "save_message" => save_message,
         "linked_pages" => [],
-        "linked_pages_has_more" => !page.nil?
+        "linked_pages_has_more" => linked_pages_has_more.nil? ? !page.nil? : linked_pages_has_more
       }
     end
 

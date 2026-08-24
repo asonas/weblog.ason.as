@@ -548,6 +548,13 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal [source.fetch("id")], related.fetch("pages").map { |page| page.fetch("id") }
   end
 
+  def test_missing_route_requests_its_related_pages
+    status, _headers, body = request("GET", "/api/routes/202608")
+
+    assert_equal 200, status
+    assert JSON.parse(body).fetch("linked_pages_has_more")
+  end
+
   def test_editor_returns_other_pages_that_share_its_wiki_links
     json_request(
       "POST", "/api/authoring/pages", page_type: "named", title: "日記", body: ""

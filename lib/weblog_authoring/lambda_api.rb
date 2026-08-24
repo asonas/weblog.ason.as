@@ -366,7 +366,7 @@ module WeblogAuthoring
       page = @database.find_route(route)
       return page_response(page, event:) unless page.nil?
 
-      json_response(200, editor_json(title: route, name: route, body: ""))
+      json_response(200, editor_json(title: route, name: route, body: "", linked_pages_has_more: true))
     rescue ArgumentError
       json_response(422, error: "Invalid route")
     end
@@ -395,7 +395,7 @@ module WeblogAuthoring
       }
     end
 
-    def editor_json(page: nil, title: nil, name: nil, body: nil)
+    def editor_json(page: nil, title: nil, name: nil, body: nil, linked_pages_has_more: nil)
       resolved_name = page&.name.to_s.empty? ? name.to_s : page.name.to_s
       resolved_title = page ? page.display_title : title.to_s
       resolved_body = page ? page.body : body.to_s
@@ -410,7 +410,7 @@ module WeblogAuthoring
         "expected_updated_at" => page&.updated_at&.iso8601(9).to_s,
         "save_message" => "",
         "linked_pages" => [],
-        "linked_pages_has_more" => !page.nil?,
+        "linked_pages_has_more" => linked_pages_has_more.nil? ? !page.nil? : linked_pages_has_more,
       }
     end
 
