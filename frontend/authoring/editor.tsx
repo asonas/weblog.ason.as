@@ -212,6 +212,7 @@ type LinkedPage = {
   id: string;
   title: string;
   route: string;
+  created_at: string;
   excerpt: string;
   image_url: string | null;
   related_by: Array<string>;
@@ -382,6 +383,9 @@ export function buildInternalUniverseGroups(
   linkedPageGroups: Array<LinkedPageGroup>
 ): Array<LinkedPageGroup> {
   const names = extractWikiLinkNames(body).filter((name) => name !== route);
+  if (linkedPageGroups.some((group) => group.kind === "wiki" && group.name === route)) {
+    names.unshift(route);
+  }
 
   return names.map((name) => {
     const group = linkedPageGroups.find((candidate) => candidate.kind === "wiki" && candidate.name === name);
@@ -695,10 +699,17 @@ function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): Int
   };
 }
 
-export function internalNodeVisual(connectionCount: number) {
+export function internalNodeVisual(
+  connectionCount: number,
+  createdAt: number,
+  oldestCreatedAt: number,
+  newestCreatedAt: number
+) {
   const weight = Math.sqrt(Math.max(0, connectionCount - 1));
+  const span = newestCreatedAt - oldestCreatedAt;
+  const recency = span > 0 ? Math.max(0, Math.min(1, (createdAt - oldestCreatedAt) / span)) : 1;
   return {
-    opacity: Math.min(1, 0.72 + weight * 0.08),
+    opacity: 0.35 + recency * 0.65,
     size: Math.min(26, 14 + weight * 3)
   };
 }
@@ -722,6 +733,10 @@ function InternalUniverseGraph({
     layout.links.forEach(({ target }) => counts.set(target.id, (counts.get(target.id) || 0) + 1));
     return counts;
   }, [layout]);
+  const pageCreatedAtRange = useMemo(() => {
+    const timestamps = layout.pages.map((node) => Date.parse(node.page?.created_at || ""));
+    return { oldest: Math.min(...timestamps), newest: Math.max(...timestamps) };
+  }, [layout.pages]);
   const activeNode = layout.pages.find((node) => node.page?.id === activePage?.id);
   const previewY = activeNode
     ? Math.max(112, Math.min((activeNode.y ?? 0) - 80, layout.height - 176))
@@ -848,7 +863,12 @@ function InternalUniverseGraph({
         const page = node.page;
         if (!page) return null;
         const connectionCount = connectionCounts.get(node.id) || 1;
-        const visual = internalNodeVisual(connectionCount);
+        const visual = internalNodeVisual(
+          connectionCount,
+          Date.parse(page.created_at),
+          pageCreatedAtRange.oldest,
+          pageCreatedAtRange.newest
+        );
         return (
           <a
             className="internal-universe-group__node"

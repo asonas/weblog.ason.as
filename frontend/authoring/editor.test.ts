@@ -142,29 +142,39 @@ test("keeps an uploaded image out of the title line", () => {
 });
 
 test("emphasizes internal nodes with more connections", () => {
-  assert.deepEqual(internalNodeVisual(1), { opacity: 0.72, size: 14 });
-  assert.deepEqual(internalNodeVisual(10), { opacity: 0.96, size: 23 });
-  assert.deepEqual(internalNodeVisual(100), { opacity: 1, size: 26 });
+  assert.equal(internalNodeVisual(1, 2, 1, 2).size, 14);
+  assert.equal(internalNodeVisual(10, 2, 1, 2).size, 23);
+  assert.equal(internalNodeVisual(100, 2, 1, 2).size, 26);
 });
 
-test("omits the current page from internal universe topics", () => {
+test("makes newer internal nodes darker than older nodes", () => {
+  assert.equal(internalNodeVisual(1, 1, 1, 3).opacity, 0.35);
+  assert.equal(internalNodeVisual(1, 2, 1, 3).opacity, 0.675);
+  assert.equal(internalNodeVisual(1, 3, 1, 3).opacity, 1);
+});
+
+test("keeps the current page hub while omitting its self node", () => {
   const backlink: EditorBootstrap["linked_pages"][number] = {
     id: "daily-page",
     title: "2026-08-23",
     route: "2026-08-23",
+    created_at: "2026-08-23T00:00:00+09:00",
     excerpt: "Calicoについて",
     image_url: null,
     related_by: ["Calico"]
   };
+  const currentPage = { ...backlink, id: "calico", title: "Calico", route: "Calico" };
 
   const groups = buildInternalUniverseGroups("[[Calico]]\n\nhttps://calicocat.app/", "Calico", [{
     kind: "wiki",
     name: "Calico",
-    pages: [backlink],
+    pages: [currentPage, backlink],
     isTopicOnly: false
   }]);
 
-  assert.deepEqual(groups, []);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].name, "Calico");
+  assert.deepEqual(groups[0].pages, [backlink]);
 });
 
 test("opens an unfocused wiki link instead of expanding it for editing", async () => {
