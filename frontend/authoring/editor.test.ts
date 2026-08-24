@@ -183,6 +183,39 @@ test("deletes a closing wiki bracket from the cursor immediately after the link"
   editor.destroy();
 });
 
+test("preserves wiki link cursor boundaries and text selections", () => {
+  const wikiEditor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "[example](/example)",
+    contentType: "markdown"
+  });
+
+  wikiEditor.commands.setTextSelection(1);
+  assert.equal(wikiEditor.getText(), "[[example]]");
+  assert.equal(wikiEditor.state.doc.textBetween(
+    wikiEditor.state.selection.from,
+    wikiEditor.state.selection.from + 2
+  ), "[[");
+  wikiEditor.destroy();
+
+  const selectionEditor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "[example](/example)",
+    contentType: "markdown"
+  });
+
+  selectionEditor.commands.setTextSelection({ from: 1, to: 8 });
+  assert.equal(selectionEditor.getText(), "[[example]]");
+  assert.deepEqual(
+    { from: selectionEditor.state.selection.from, to: selectionEditor.state.selection.to },
+    { from: 1, to: 12 }
+  );
+  assert.equal(selectionEditor.state.doc.rangeHasMark(1, 12, selectionEditor.schema.marks.link), false);
+  selectionEditor.destroy();
+});
+
 test("edits a selected image as Markdown and renders it again after leaving", () => {
   const editor = new Editor({
     element: document.createElement("div"),
@@ -223,7 +256,7 @@ test("edits an image as Markdown when the cursor lands to its right", () => {
   editor.commands.setTextSelection(bodyStart);
 
   assert.match(editor.getText(), /!\[\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
-  assert.equal(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.from + 1), ")");
+  assert.equal(editor.state.selection.from, editor.state.doc.child(0).nodeSize + editor.state.doc.child(1).nodeSize - 1);
   editor.destroy();
 });
 

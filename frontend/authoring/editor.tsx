@@ -74,7 +74,7 @@ const WikiLinks = Extension.create({
                 return transaction
                   .setSelection(TextSelection.create(
                     transaction.doc,
-                    selectedImage.from + (enteredImageFromBefore ? 1 : markdown.length)
+                    selectedImage.from + (enteredImageFromBefore ? 1 : markdown.length + 1)
                   ))
                   .setMeta("wikiLinkRawEditing", true);
               }
@@ -82,27 +82,40 @@ const WikiLinks = Extension.create({
 
             const activeLinks: Array<{ from: number; to: number; text: string }> = [];
             newState.doc.descendants((node, from) => {
-              if (activeLinks.length > 0 || !node.isText || !node.text || cursor < from || cursor > from + node.nodeSize) {
+              const to = from + node.nodeSize;
+              if (
+                activeLinks.length > 0
+                || !(newState.selection instanceof TextSelection)
+                || !node.isText
+                || !node.text
+                || newState.selection.from > to
+                || newState.selection.to < from
+              ) {
                 return;
               }
               const link = node.marks.find((mark) => mark.type === linkType);
               if (typeof link?.attrs.href === "string" && link.attrs.href.startsWith("/")) {
-                activeLinks.push({ from, to: from + node.nodeSize, text: node.text });
+                activeLinks.push({ from, to, text: node.text });
               }
             });
             const activeLink = activeLinks[0];
             if (activeLink) {
-              const offset = Math.max(0, Math.min(cursor - activeLink.from, activeLink.text.length));
-              const closingBrackets = cursor === activeLink.to ? 2 : 0;
+              const markdown = `[[${activeLink.text}]]`;
               const transaction = newState.tr.replaceWith(
                 activeLink.from,
                 activeLink.to,
-                newState.schema.text(`[[${activeLink.text}]]`)
+                newState.schema.text(markdown)
               );
+              const mapSelectionPosition = (position: number) => {
+                if (position <= activeLink.from) return position;
+                if (position >= activeLink.to) return position + 4;
+                return position + 2;
+              };
               return transaction
                 .setSelection(TextSelection.create(
                   transaction.doc,
-                  activeLink.from + 2 + offset + closingBrackets
+                  mapSelectionPosition(newState.selection.anchor),
+                  mapSelectionPosition(newState.selection.head)
                 ))
                 .setMeta("wikiLinkRawEditing", true);
             }
@@ -141,7 +154,7 @@ const WikiLinks = Extension.create({
 
               const from = position + match.index;
               const to = from + match[0].length;
-              if (cursor >= from && cursor <= to) continue;
+              if (newState.selection.from <= to && newState.selection.to >= from) continue;
               matches.push({ from, to, pageName });
             }
           });
