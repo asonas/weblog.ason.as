@@ -12,22 +12,22 @@ resource "aws_apigatewayv2_integration" "authoring" {
 
 resource "aws_apigatewayv2_route" "authoring" {
   for_each = {
-    "GET /health"                   = "NONE"
-    "GET /api/auth/session"         = "NONE"
-    "GET /api/auth/github"          = "NONE"
-    "GET /api/auth/github/callback" = "NONE"
-    "POST /api/auth/logout"         = "NONE"
-    "GET /api/pages"                = "NONE"
-    "GET /api/related"              = "NONE"
-    "GET /api/embed"                = "NONE"
-    "GET /api/editor/new"           = "NONE"
-    "GET /api/pages/{id}"           = "NONE"
-    "GET /api/routes/{route}"       = "NONE"
-    "POST /api/pages"               = "NONE"
-    "POST /api/uploads"             = "NONE"
-    "GET /api/inbox"                = "NONE"
-    "POST /api/inbox/adopt"         = "NONE"
-    "PATCH /api/pages/{id}"         = "NONE"
+    "GET /health"                     = "NONE"
+    "GET /api/auth/session"           = "NONE"
+    "GET /api/auth/github"            = "NONE"
+    "GET /api/auth/github/callback"   = "NONE"
+    "POST /api/auth/logout"           = "NONE"
+    "GET /api/pages"                  = "NONE"
+    "GET /api/related"                = "NONE"
+    "GET /api/embed"                  = "NONE"
+    "GET /api/editor/new"             = "NONE"
+    "GET /api/pages/{id}"             = "NONE"
+    "GET /api/routes/{route}"         = "NONE"
+    "POST /api/authoring/pages"       = "NONE"
+    "POST /api/uploads"               = "NONE"
+    "GET /api/inbox"                  = "NONE"
+    "POST /api/inbox/adopt"           = "NONE"
+    "PATCH /api/authoring/pages/{id}" = "NONE"
   }
 
   api_id             = aws_apigatewayv2_api.authoring.id

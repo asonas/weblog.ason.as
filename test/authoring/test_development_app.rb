@@ -188,7 +188,7 @@ class TestDevelopmentApp < Minitest::Test
     status, _headers, body = request_with(
       application,
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       payload: { page_type: "named", title: "private", body: "" }
     )
 
@@ -199,7 +199,7 @@ class TestDevelopmentApp < Minitest::Test
     status, _headers, body = request_with(
       application,
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       payload: { page_type: "named", title: "private", body: "" },
       headers: { "HTTP_COOKIE" => cookie }
     )
@@ -218,7 +218,7 @@ class TestDevelopmentApp < Minitest::Test
     status, _headers, body = request_with(
       application,
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       payload: { page_type: "named", title: "private", body: "" },
       headers: { "HTTP_COOKIE" => cookie, "HTTP_X_CSRF_TOKEN" => csrf_token }
     )
@@ -304,7 +304,7 @@ class TestDevelopmentApp < Minitest::Test
     json_request_with(
       application,
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       page_type: "named",
       title: "画像の記事",
       body: "[https://gyazo.com/example]"
@@ -334,7 +334,7 @@ class TestDevelopmentApp < Minitest::Test
 
     status, _headers, body = json_request(
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       page_type: "date",
       date: "2026-08-21",
       title: "最初の記事",
@@ -346,7 +346,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "published", page.fetch("status")
     assert_equal "最初の記事", page.fetch("route")
 
-    status, _headers, body = request("PATCH", "/api/pages/#{page.fetch("id")}", payload: {
+    status, _headers, body = request("PATCH", "/api/authoring/pages/#{page.fetch("id")}", payload: {
       page_type: "date",
       date: "2026-08-21",
       title: "最初の記事",
@@ -373,7 +373,7 @@ class TestDevelopmentApp < Minitest::Test
 
     status, _headers, body = json_request(
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       page_type: "date",
       date: "2026-08-21",
       title: "Viteから開く記事",
@@ -409,8 +409,8 @@ class TestDevelopmentApp < Minitest::Test
   end
 
   def test_rss_feed_contains_article_body_and_excludes_empty_pages
-    json_request("POST", "/api/pages", page_type: "named", title: "記事", body: "本文 **です**")
-    json_request("POST", "/api/pages", page_type: "named", title: "空のハブ", body: "")
+    json_request("POST", "/api/authoring/pages", page_type: "named", title: "記事", body: "本文 **です**")
+    json_request("POST", "/api/authoring/pages", page_type: "named", title: "空のハブ", body: "")
 
     status, headers, body = request("GET", "/feed.xml")
 
@@ -441,7 +441,7 @@ class TestDevelopmentApp < Minitest::Test
   def test_named_page_accepts_an_empty_body_and_can_be_loaded_by_route
     status, _headers, body = json_request(
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       page_type: "named",
       title: "test2",
       body: ""
@@ -478,11 +478,11 @@ class TestDevelopmentApp < Minitest::Test
 
   def test_editor_returns_cards_for_existing_wiki_link_targets
     _status, _headers, target_body = json_request(
-      "POST", "/api/pages", page_type: "named", title: "target", body: ""
+      "POST", "/api/authoring/pages", page_type: "named", title: "target", body: ""
     )
     target = JSON.parse(target_body)
     _status, _headers, source_body = json_request(
-      "POST", "/api/pages", page_type: "named", title: "source", body: "[[target]] [[missing]]"
+      "POST", "/api/authoring/pages", page_type: "named", title: "source", body: "[[target]] [[missing]]"
     )
     source = JSON.parse(source_body)
 
@@ -510,7 +510,7 @@ class TestDevelopmentApp < Minitest::Test
 
   def test_missing_route_returns_pages_that_link_to_its_name
     _status, _headers, source_body = json_request(
-      "POST", "/api/pages", page_type: "named", title: "source", body: "[[202608]]"
+      "POST", "/api/authoring/pages", page_type: "named", title: "source", body: "[[202608]]"
     )
     source = JSON.parse(source_body)
 
@@ -523,19 +523,19 @@ class TestDevelopmentApp < Minitest::Test
 
   def test_editor_returns_other_pages_that_share_its_wiki_links
     json_request(
-      "POST", "/api/pages", page_type: "named", title: "日記", body: ""
+      "POST", "/api/authoring/pages", page_type: "named", title: "日記", body: ""
     )
     json_request(
-      "POST", "/api/pages", page_type: "named", title: "2026-08-08",
+      "POST", "/api/authoring/pages", page_type: "named", title: "2026-08-08",
       body: "[[202608]] [[0808]] [[日記]]"
     )
     _status, _headers, sibling_body = json_request(
-      "POST", "/api/pages", page_type: "named", title: "2026-08-07",
+      "POST", "/api/authoring/pages", page_type: "named", title: "2026-08-07",
       body: "[[202608]] [[0807]] [[日記]]"
     )
     sibling = JSON.parse(sibling_body)
     json_request(
-      "POST", "/api/pages", page_type: "named", title: "unrelated", body: "[[other]]"
+      "POST", "/api/authoring/pages", page_type: "named", title: "unrelated", body: "[[other]]"
     )
 
     page = app_database.find_route("2026-08-08")
@@ -554,14 +554,14 @@ class TestDevelopmentApp < Minitest::Test
   def test_editor_returns_other_pages_that_share_an_external_url
     shared_url = "https://example.com/articles/one"
     json_request(
-      "POST", "/api/pages", page_type: "named", title: "source", body: "[#{shared_url}]"
+      "POST", "/api/authoring/pages", page_type: "named", title: "source", body: "[#{shared_url}]"
     )
     _status, _headers, sibling_body = json_request(
-      "POST", "/api/pages", page_type: "named", title: "sibling", body: "also #{shared_url}"
+      "POST", "/api/authoring/pages", page_type: "named", title: "sibling", body: "also #{shared_url}"
     )
     sibling = JSON.parse(sibling_body)
     json_request(
-      "POST", "/api/pages", page_type: "named", title: "unrelated", body: "https://example.net/other"
+      "POST", "/api/authoring/pages", page_type: "named", title: "unrelated", body: "https://example.net/other"
     )
 
     page = app_database.find_route("source")
@@ -577,7 +577,7 @@ class TestDevelopmentApp < Minitest::Test
 
   def test_page_api_returns_not_modified_for_a_matching_etag
     _status, _headers, body = json_request(
-      "POST", "/api/pages", page_type: "named", title: "target", body: "本文"
+      "POST", "/api/authoring/pages", page_type: "named", title: "target", body: "本文"
     )
     page = JSON.parse(body)
 
@@ -596,12 +596,12 @@ class TestDevelopmentApp < Minitest::Test
 
   def test_related_pages_are_returned_fifty_at_a_time
     _status, _headers, target_body = json_request(
-      "POST", "/api/pages", page_type: "named", title: "target", body: ""
+      "POST", "/api/authoring/pages", page_type: "named", title: "target", body: ""
     )
     target = JSON.parse(target_body)
     51.times do |index|
       json_request(
-        "POST", "/api/pages", page_type: "named", title: "source-#{index}", body: "[[target]]"
+        "POST", "/api/authoring/pages", page_type: "named", title: "source-#{index}", body: "[[target]]"
       )
     end
 
@@ -626,11 +626,11 @@ class TestDevelopmentApp < Minitest::Test
 
   def test_rename_api_updates_the_route_and_existing_references
     _status, _headers, target_body = json_request(
-      "POST", "/api/pages", page_type: "named", title: "old", body: ""
+      "POST", "/api/authoring/pages", page_type: "named", title: "old", body: ""
     )
     target = JSON.parse(target_body)
     _status, _headers, source_body = json_request(
-      "POST", "/api/pages", page_type: "named", title: "source", body: "[[old]]"
+      "POST", "/api/authoring/pages", page_type: "named", title: "source", body: "[[old]]"
     )
     source = JSON.parse(source_body)
 
@@ -664,7 +664,7 @@ class TestDevelopmentApp < Minitest::Test
   def test_failed_requests_are_written_to_the_development_log
     status, _headers, _body = json_request(
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       page_type: "named",
       title: "broken"
     )
@@ -672,7 +672,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal 422, status
     entry = JSON.parse(root.join("log/authoring-development.log").read.lines.last)
     assert_equal "POST", entry.fetch("method")
-    assert_equal "/api/pages", entry.fetch("path")
+    assert_equal "/api/authoring/pages", entry.fetch("path")
     assert_equal 422, entry.fetch("status")
     assert_includes entry.fetch("error"), "body は必須です"
   end

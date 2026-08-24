@@ -275,7 +275,7 @@ class LambdaApiTest < Minitest::Test
       allowed_github_user_id: 630_181
     )
 
-    unauthorized = api.call(json_event("POST", "/api/pages", { title: "new", body: "本文" }))
+    unauthorized = api.call(json_event("POST", "/api/authoring/pages", { title: "new", body: "本文" }))
     assert_equal 401, unauthorized.fetch(:statusCode)
 
     denied_token = codec.issue(
@@ -285,7 +285,7 @@ class LambdaApiTest < Minitest::Test
     )
     denied = api.call(json_event(
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       { title: "new", body: "本文" },
       cookies: ["weblog_authoring_session=#{denied_token}"],
       headers: { "content-type" => "application/json", "x-csrf-token" => "csrf-token" }
@@ -299,7 +299,7 @@ class LambdaApiTest < Minitest::Test
     )
     missing_csrf = api.call(json_event(
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       { title: "new", body: "本文" },
       cookies: ["weblog_authoring_session=#{allowed_token}"]
     ))
@@ -307,7 +307,7 @@ class LambdaApiTest < Minitest::Test
 
     allowed = api.call(json_event(
       "POST",
-      "/api/pages",
+      "/api/authoring/pages",
       { title: "new", body: "本文" },
       cookies: ["weblog_authoring_session=#{allowed_token}"],
       headers: { "x-csrf-token" => "csrf-token" }

@@ -76,8 +76,8 @@ module WeblogAuthoring
       return new_editor_response(event) if method == "GET" && path == "/api/editor/new"
       return page_response(@database.find(event.dig("pathParameters", "id")), event:) if method == "GET" && page_id_path?(path)
       return route_response(event) if method == "GET" && route_path?(path)
-      return save_response(event, status: 201) if method == "POST" && path == "/api/pages"
-      if method == "PATCH" && page_id_path?(path)
+      return save_response(event, status: 201) if method == "POST" && path == "/api/authoring/pages"
+      if method == "PATCH" && authoring_page_id_path?(path)
         return save_response(event, page_id: event.dig("pathParameters", "id"))
       end
 
@@ -358,6 +358,10 @@ module WeblogAuthoring
 
     def page_id_path?(path)
       path.start_with?("/api/pages/")
+    end
+
+    def authoring_page_id_path?(path)
+      path.start_with?("/api/authoring/pages/")
     end
 
     def route_path?(path)

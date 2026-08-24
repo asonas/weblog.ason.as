@@ -302,7 +302,7 @@ module WeblogAuthoring
       send_file STATIC_DIR.join("assets", asset).to_s
     end
 
-    post "/api/pages" do
+    post "/api/authoring/pages" do
       api_response(201) do |payload|
         request = save_request(payload)
         page = settings.database.save(request)
@@ -334,7 +334,7 @@ module WeblogAuthoring
       api_response { |payload| image_inbox.adopt(key: payload["key"]) }
     end
 
-    patch "/api/pages/:id" do
+    patch "/api/authoring/pages/:id" do
       api_response do |payload|
         request = save_request(payload, page_id: params.fetch("id"))
         page = settings.database.save(request)

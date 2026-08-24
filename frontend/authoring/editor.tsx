@@ -1627,8 +1627,8 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
 
     try {
       const endpoint = snapshot.pageId
-        ? `/api/pages/${encodeURIComponent(snapshot.pageId)}`
-        : "/api/pages";
+        ? `/api/authoring/pages/${encodeURIComponent(snapshot.pageId)}`
+        : "/api/authoring/pages";
       const page = await requestJson<PageResponse>(endpoint, {
         page_id: snapshot.pageId,
         page_type: snapshot.pageType,
