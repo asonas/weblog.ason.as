@@ -4,6 +4,7 @@ module WeblogAuthoring
   LINK_PATTERN = /\[\[([^\[\]]+)\]\]/.freeze
   EXTERNAL_URL_PATTERN = %r{https?://[^\s<>\[\]\\"')]+}.freeze
   FENCE_PATTERN = /^\s*(`{3,}|~{3,})/.freeze
+  INLINE_CODE_PATTERN = /(`+).*?\1/.freeze
 
   module_function
 
@@ -41,7 +42,7 @@ module WeblogAuthoring
     each_segment(body) do |line, _offset, fenced|
       next if fenced
 
-      line.scan(EXTERNAL_URL_PATTERN) do |url|
+      line.gsub(INLINE_CODE_PATTERN, "").scan(EXTERNAL_URL_PATTERN) do |url|
         normalized = url.gsub(/\\(?=[^\w\s]|_)/, "").sub(/[.,;:!?]+\z/, "")
         urls << normalized unless urls.include?(normalized)
       end

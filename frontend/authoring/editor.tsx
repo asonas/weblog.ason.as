@@ -379,8 +379,19 @@ function groupLinkedPages(pages: Array<LinkedPage>): Array<LinkedPageGroup> {
   });
 }
 
-function extractEmbeddableUrls(body: string): Array<string> {
-  const matches = body.match(/https?:\/\/[^\s<>\[\]\\"')]+/g) || [];
+export function extractEmbeddableUrls(body: string): Array<string> {
+  let fence: { marker: string; length: number } | null = null;
+  const visibleLines = body.split("\n").filter((line) => {
+    const match = /^\s*(`{3,}|~{3,})/.exec(line);
+    const wasFenced = fence !== null;
+    if (match) {
+      const marker = match[1][0];
+      if (!fence) fence = { marker, length: match[1].length };
+      else if (marker === fence.marker && match[1].length >= fence.length) fence = null;
+    }
+    return !wasFenced && !match;
+  }).map((line) => line.replace(/(`+).*?\1/g, ""));
+  const matches = visibleLines.join("\n").match(/https?:\/\/[^\s<>\[\]\\"')]+/g) || [];
   const normalized = matches.map((url) =>
     url.replace(/\\(?=[^\w\s]|_)/g, "").replace(/[.,;:!?]+$/, "")
   );

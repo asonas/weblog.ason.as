@@ -34,8 +34,9 @@ class TestLinks < Minitest::Test
       https://example.com/article
       [example](https://example.com/article)
       [https://example.net/path?item=1]
+      `https://inline.example.com/full/path`
       ```
-      https://ignored.example.com
+      const endpoint = "https://ignored.example.com/full/path";
       ```
     MARKDOWN
 

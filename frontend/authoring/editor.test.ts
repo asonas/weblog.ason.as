@@ -46,6 +46,7 @@ const {
   buildInternalUniverseGroups,
   EDITOR_EXTENSIONS,
   ensureBodySelection,
+  extractEmbeddableUrls,
   internalNodeVisual,
   matchingWikiLinkNames,
   nextWikiLinkSuggestionIndex,
@@ -55,6 +56,18 @@ const {
 } = await import("./editor");
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
 const { markdownForSource } = await import("./markdown");
+
+test("ignores URLs in inline and fenced code when building embeds", () => {
+  const body = [
+    "https://example.com/article",
+    "`https://inline.example.com/full/path`",
+    "```js",
+    'const endpoint = "https://fenced.example.com/full/path";',
+    "```"
+  ].join("\n");
+
+  assert.deepEqual(extractEmbeddableUrls(body), ["https://example.com/article"]);
+});
 
 test("finds and filters the unfinished Wiki link at the cursor", () => {
   const editor = new Editor({
