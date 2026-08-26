@@ -26,7 +26,10 @@ class DsqlInboxTest < Minitest::Test
     def initialize
       @items = {}
       @consumed = {}
+      @adoptions = {}
     end
+
+    def add_adoption(item_id, expires_at:) = @adoptions[item_id] = expires_at
 
     def transaction = yield
 
@@ -64,6 +67,13 @@ class DsqlInboxTest < Minitest::Test
         before = @items.length
         @items.delete_if { |_key, item| item.fetch("id") == params[0] }
         Result.new([], cmd_tuples: before - @items.length)
+      when /UPDATE weblog_authoring\.inbox_image_adoptions SET committed_at/
+        Result.new
+      when /SELECT 1 FROM weblog_authoring\.inbox_image_adoptions/
+        expires_at = @adoptions[params.fetch(0)]
+        Result.new(expires_at && expires_at > params.fetch(1) ? [{ "?column?" => "1" }] : [])
+      when /DELETE FROM weblog_authoring\.inbox_image_adoptions/
+        Result.new
       when /FROM weblog_authoring\.inbox_items\s+WHERE expires_at/
         rows = @items.values.select { |item| item.fetch("expires_at") > params[0] }
         Result.new(rows.sort_by { |item| [item.fetch("occurred_at"), item.fetch("ingested_at"), item.fetch("id")] }.reverse)
@@ -131,10 +141,12 @@ class DsqlInboxTest < Minitest::Test
   def test_consuming_reingested_item_replaces_expired_suppression
     old_database = database_at(NOW - (8 * 86_400))
     old = old_database.upsert_inbox_item(source: "photo", kind: "photo", source_id: "photo-1", occurred_at: NOW - (8 * 86_400), payload: photo_payload)
+    @pool.connection.add_adoption(old.id, expires_at: old.expires_at)
     old_database.consume_inbox_item(old.id)
 
     current_database = database_at(NOW)
     current = current_database.upsert_inbox_item(source: "photo", kind: "photo", source_id: "photo-1", occurred_at: NOW, payload: photo_payload)
+    @pool.connection.add_adoption(current.id, expires_at: current.expires_at)
     current_database.consume_inbox_item(current.id)
 
     assert_nil current_database.upsert_inbox_item(source: "photo", kind: "photo", source_id: "photo-1", occurred_at: NOW, payload: photo_payload)

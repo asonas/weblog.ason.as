@@ -2,6 +2,7 @@
 
 require "date"
 require "digest"
+require "json"
 require "pathname"
 require "securerandom"
 require "sqlite3"
@@ -13,7 +14,9 @@ require_relative "names"
 
 module WeblogAuthoring
   class DevelopmentDatabase
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
+    INBOX_RETENTION_SECONDS = 7 * 24 * 60 * 60
+    ADOPTION_RETENTION_SECONDS = 14 * 24 * 60 * 60
     TOKYO_OFFSET = "+09:00"
 
     attr_reader :path
@@ -81,12 +84,113 @@ module WeblogAuthoring
             update_page(database, document)
           end
           replace_links(database, document)
+          request.consumed_inbox_item_ids.each do |item_id|
+            consume_inbox_item_with_connection(database, item_id, required: true)
+          end
         end
       rescue SQLite3::ConstraintException => error
         raise ConflictError, "ページの保存に失敗しました: #{error.message}"
       end
 
       find(document.id)
+    end
+
+    def upsert_inbox_item(source:, kind:, source_id:, occurred_at:, payload:)
+      timestamp = now
+      with_connection do |database|
+        suppressed = database.get_first_value(
+          "SELECT 1 FROM consumed_inbox_items WHERE source = ? AND kind = ? AND source_id = ? AND expires_at > ?",
+          [source, kind, source_id, serialize_time(timestamp)]
+        )
+        next nil if suppressed
+
+        id = SecureRandom.uuid.delete("-")
+        database.execute(
+          <<~SQL,
+            INSERT INTO inbox_items (
+              id, source, kind, source_id, occurred_at, ingested_at, expires_at,
+              payload, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source, kind, source_id) DO UPDATE SET
+              occurred_at = excluded.occurred_at,
+              payload = excluded.payload,
+              updated_at = excluded.updated_at
+          SQL
+          [
+            id, source, kind, source_id, serialize_time(occurred_at), serialize_time(timestamp),
+            serialize_time(timestamp + INBOX_RETENTION_SECONDS), JSON.generate(payload),
+            serialize_time(timestamp), serialize_time(timestamp)
+          ]
+        )
+        find_inbox_item_by_identity(database, source, kind, source_id)
+      end
+    end
+
+    def list_inbox_items(source: nil, kind: nil)
+      clauses = ["expires_at > ?"]
+      values = [serialize_time(now)]
+      unless source.nil?
+        clauses << "source = ?"
+        values << source
+      end
+      unless kind.nil?
+        clauses << "kind = ?"
+        values << kind
+      end
+      with_connection do |database|
+        database.execute(
+          "SELECT #{inbox_item_columns} FROM inbox_items WHERE #{clauses.join(' AND ')} ORDER BY occurred_at DESC, ingested_at DESC, id DESC",
+          values
+        ).map { |row| inbox_item_from_row(row) }
+      end
+    end
+
+    def find_inbox_item(id)
+      with_connection do |database|
+        row = database.get_first_row(
+          "SELECT #{inbox_item_columns} FROM inbox_items WHERE id = ? AND expires_at > ?",
+          [id, serialize_time(now)]
+        )
+        row && inbox_item_from_row(row)
+      end
+    end
+
+    def prepare_inbox_image_adoption(item_id:, inbox_key:, public_key:)
+      timestamp = now
+      with_connection do |database|
+        database.execute(
+          <<~SQL,
+            INSERT INTO inbox_image_adoptions (
+              item_id, inbox_key, public_key, prepared_at, committed_at, expires_at
+            ) VALUES (?, ?, ?, ?, NULL, ?)
+            ON CONFLICT(item_id) DO NOTHING
+          SQL
+          [item_id, inbox_key, public_key, serialize_time(timestamp), serialize_time(timestamp + ADOPTION_RETENTION_SECONDS)]
+        )
+        inbox_image_adoption_from_row(database.get_first_row(
+          "SELECT item_id, inbox_key, public_key, prepared_at, committed_at, expires_at FROM inbox_image_adoptions WHERE item_id = ?",
+          item_id
+        ))
+      end
+    end
+
+    def list_pending_inbox_image_finalizations(limit: 100)
+      with_connection do |database|
+        database.execute(
+          <<~SQL,
+            SELECT item_id, inbox_key, public_key, prepared_at, committed_at, expires_at
+            FROM inbox_image_adoptions
+            WHERE committed_at IS NOT NULL AND expires_at > ?
+            ORDER BY committed_at, item_id
+            LIMIT ?
+          SQL
+          [serialize_time(now), limit]
+        ).map { |row| inbox_image_adoption_from_row(row) }
+      end
+    end
+
+    def complete_inbox_image_adoption(item_id:)
+      with_connection { |database| database.execute("DELETE FROM inbox_image_adoptions WHERE item_id = ?", item_id) }
     end
 
     def rename(page_id, new_name, body:, expected_updated_at: nil)
@@ -169,6 +273,13 @@ module WeblogAuthoring
       return if version == SCHEMA_VERSION && table_exists?(database, "pages")
       if version == 1 && table_exists?(database, "pages")
         migrate_date_pages_to_title_routes(database)
+        create_inbox_schema(database)
+        database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
+        return
+      end
+      if version == 2 && table_exists?(database, "pages")
+        create_inbox_schema(database)
+        database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
       raise "unsupported development database schema: #{version}" unless version.zero?
@@ -202,6 +313,7 @@ module WeblogAuthoring
           );
         SQL
       )
+      create_inbox_schema(database)
     end
 
     def table_exists?(database, table)
@@ -209,6 +321,107 @@ module WeblogAuthoring
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
         table
       ) == 1
+    end
+
+    def create_inbox_schema(database)
+      database.execute_batch(
+        <<~SQL
+          CREATE TABLE IF NOT EXISTS inbox_items (
+            id TEXT PRIMARY KEY,
+            source TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            occurred_at TEXT NOT NULL,
+            ingested_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(source, kind, source_id)
+          );
+          CREATE TABLE IF NOT EXISTS consumed_inbox_items (
+            source TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            consumed_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            PRIMARY KEY(source, kind, source_id)
+          );
+          CREATE TABLE IF NOT EXISTS inbox_image_adoptions (
+            item_id TEXT PRIMARY KEY,
+            inbox_key TEXT NOT NULL,
+            public_key TEXT NOT NULL,
+            prepared_at TEXT NOT NULL,
+            committed_at TEXT,
+            expires_at TEXT NOT NULL
+          );
+        SQL
+      )
+    end
+
+    def consume_inbox_item_with_connection(database, id, required:)
+      row = database.get_first_row(
+        "SELECT #{inbox_item_columns} FROM inbox_items WHERE id = ? AND expires_at > ?",
+        [id, serialize_time(now)]
+      )
+      if row.nil?
+        raise ConflictError, "inbox_item_expired" if required
+
+        return false
+      end
+
+      if row.fetch(1) == "photo" && row.fetch(2) == "photo"
+        adoption = database.get_first_value(
+          "SELECT 1 FROM inbox_image_adoptions WHERE item_id = ? AND expires_at > ?",
+          [id, serialize_time(now)]
+        )
+        raise ConflictError, "inbox_item_expired" if adoption.nil?
+      end
+
+      database.execute(
+        <<~SQL,
+          INSERT INTO consumed_inbox_items (source, kind, source_id, consumed_at, expires_at)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(source, kind, source_id) DO UPDATE SET
+            consumed_at = excluded.consumed_at,
+            expires_at = excluded.expires_at
+        SQL
+        [row.fetch(1), row.fetch(2), row.fetch(3), serialize_time(now), row.fetch(6)]
+      )
+      database.execute("UPDATE inbox_image_adoptions SET committed_at = ? WHERE item_id = ?", [serialize_time(now), id])
+      database.execute("DELETE FROM inbox_items WHERE id = ?", id)
+      true
+    end
+
+    def find_inbox_item_by_identity(database, source, kind, source_id)
+      inbox_item_from_row(database.get_first_row(
+        "SELECT #{inbox_item_columns} FROM inbox_items WHERE source = ? AND kind = ? AND source_id = ?",
+        [source, kind, source_id]
+      ))
+    end
+
+    def inbox_item_from_row(row)
+      id, source, kind, source_id, occurred_at, ingested_at, expires_at, payload, created_at, updated_at = row
+      InboxItem.new(
+        id:, source:, kind:, source_id:,
+        occurred_at: Time.iso8601(occurred_at), ingested_at: Time.iso8601(ingested_at),
+        expires_at: Time.iso8601(expires_at), payload: JSON.parse(payload),
+        created_at: Time.iso8601(created_at), updated_at: Time.iso8601(updated_at)
+      )
+    end
+
+    def inbox_image_adoption_from_row(row)
+      item_id, inbox_key, public_key, prepared_at, committed_at, expires_at = row
+      InboxImageAdoption.new(
+        item_id:, inbox_key:, public_key:,
+        prepared_at: Time.iso8601(prepared_at),
+        committed_at: committed_at && Time.iso8601(committed_at),
+        expires_at: Time.iso8601(expires_at)
+      )
+    end
+
+    def inbox_item_columns
+      "id, source, kind, source_id, occurred_at, ingested_at, expires_at, payload, created_at, updated_at"
     end
 
     def migrate_date_pages_to_title_routes(database)

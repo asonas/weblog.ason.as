@@ -51,10 +51,11 @@ class LambdaApiTest < Minitest::Test
   end
 
   class FakeDatabase
-    attr_reader :health_checks, :pages, :saved_requests
+    attr_reader :health_checks, :pages, :saved_requests, :inbox_filters
 
-    def initialize(pages)
+    def initialize(pages, inbox_items: [])
       @pages = pages
+      @inbox_items = inbox_items
       @health_checks = 0
       @saved_requests = []
     end
@@ -79,6 +80,26 @@ class LambdaApiTest < Minitest::Test
     def save(request)
       saved_requests << request
       pages.fetch(0)
+    end
+
+    def list_inbox_items(source: nil, kind: nil)
+      @inbox_filters = { source:, kind: }
+      @inbox_items.select do |item|
+        (source.nil? || item.source == source) && (kind.nil? || item.kind == kind)
+      end
+    end
+
+    def find_inbox_item(id)
+      @inbox_items.find { |item| item.id == id }
+    end
+
+    def prepare_inbox_image_adoption(item_id:, inbox_key:, public_key:)
+      WeblogAuthoring::InboxImageAdoption.new(
+        item_id:, inbox_key:, public_key:,
+        prepared_at: Time.iso8601("2026-08-26T12:00:00+09:00"),
+        committed_at: nil,
+        expires_at: Time.iso8601("2026-09-09T12:00:00+09:00")
+      )
     end
   end
 
@@ -449,9 +470,18 @@ class LambdaApiTest < Minitest::Test
     )
     key = "assets/inbox/2026/08/23/11111111-2222-3333-4444-555555555555.webp"
     s3 = Aws::S3::Client.new(region: "ap-northeast-1", stub_responses: true)
-    s3.stub_responses(:list_objects_v2, contents: [{ key:, last_modified: Time.iso8601("2026-08-23T12:00:00Z") }])
+    item = WeblogAuthoring::InboxItem.new(
+      id: "item-1", source: "photo", kind: "photo", source_id: "photo-1",
+      occurred_at: Time.iso8601("2026-08-23T12:00:00Z"),
+      ingested_at: Time.iso8601("2026-08-23T12:01:00Z"),
+      expires_at: Time.iso8601("2026-08-30T12:01:00Z"),
+      payload: { "inbox_key" => key, "preview_url" => "/#{key}", "captured_at_source" => "exif" },
+      created_at: Time.iso8601("2026-08-23T12:01:00Z"),
+      updated_at: Time.iso8601("2026-08-23T12:01:00Z")
+    )
+    database = FakeDatabase.new([@page], inbox_items: [item])
     api = WeblogAuthoring::LambdaApi.new(
-      database: @database,
+      database:,
       session_codec: codec,
       allowed_github_user_id: 630_181,
       s3_client: s3,
@@ -459,19 +489,54 @@ class LambdaApiTest < Minitest::Test
     )
     cookie = ["weblog_authoring_session=#{token}"]
 
-    listed = api.call(event("GET", "/api/inbox", query: { "date" => "2026-08-23" }, cookies: cookie))
+    listed = api.call(event("GET", "/api/inbox", cookies: cookie))
     adopted = api.call(json_event(
       "POST",
       "/api/inbox/adopt",
-      { key: },
+      { item_id: "item-1" },
       cookies: cookie,
       headers: { "x-csrf-token" => "csrf-token" }
     ))
 
-    assert_equal ["/#{key}"], JSON.parse(listed.fetch(:body)).fetch("images").map { |image| image.fetch("url") }
+    assert_equal ["item-1"], JSON.parse(listed.fetch(:body)).fetch("items").map { |inbox_item| inbox_item.fetch("id") }
     assert_equal "/assets/uploads/2026/08/11111111-2222-3333-4444-555555555555.webp",
                  JSON.parse(adopted.fetch(:body)).fetch("public_url")
-    assert_equal %i[list_objects_v2 copy_object delete_object], s3.api_requests.map { |request| request.fetch(:operation_name) }
+    assert_equal %i[copy_object], s3.api_requests.map { |request| request.fetch(:operation_name) }
+    assert_equal "weblog-inbox-adoption=pending", s3.api_requests.fetch(0).fetch(:params).fetch(:tagging)
+  end
+
+  def test_lists_common_inbox_items_with_kind_filter
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    token = codec.issue(
+      kind: "session",
+      attributes: { "github_user_id" => 630_181, "login" => "asonas", "csrf_token" => "csrf-token" },
+      ttl: 600
+    )
+    item = WeblogAuthoring::InboxItem.new(
+      id: "item-1", source: "photo", kind: "photo", source_id: "photo-1",
+      occurred_at: Time.iso8601("2026-08-26T10:00:00+09:00"),
+      ingested_at: Time.iso8601("2026-08-26T11:00:00+09:00"),
+      expires_at: Time.iso8601("2026-09-02T11:00:00+09:00"),
+      payload: { "inbox_key" => "assets/inbox/photo.jpg", "preview_url" => "/assets/inbox/photo.jpg", "captured_at_source" => "exif" },
+      created_at: Time.iso8601("2026-08-26T11:00:00+09:00"),
+      updated_at: Time.iso8601("2026-08-26T11:00:00+09:00")
+    )
+    database = FakeDatabase.new([@page], inbox_items: [item])
+    api = WeblogAuthoring::LambdaApi.new(
+      database:, session_codec: codec, allowed_github_user_id: 630_181
+    )
+
+    response = api.call(event(
+      "GET", "/api/inbox", query: { "source" => "photo", "kind" => "photo" },
+      cookies: ["weblog_authoring_session=#{token}"]
+    ))
+    body = JSON.parse(response.fetch(:body))
+
+    assert_equal 200, response.fetch(:statusCode)
+    assert_equal({ source: "photo", kind: "photo" }, database.inbox_filters)
+    assert_equal "item-1", body.fetch("items").fetch(0).fetch("id")
+    assert_equal "2026-08-26T10:00:00+09:00", body.fetch("items").fetch(0).fetch("occurred_at")
+    assert_equal "photo", body.fetch("items").fetch(0).fetch("kind")
   end
 
   def test_github_oauth_creates_an_authenticated_session

@@ -27,16 +27,27 @@ class DsqlDatabaseTest < Minitest::Test
   end
 
   class Connection
-    attr_reader :links
+    attr_reader :links, :items, :consumed, :committed_adoptions
 
     def initialize
       @pages = {}
       @links = []
+      @items = {}
+      @consumed = []
+      @committed_adoptions = []
+      @adoptions = {}
     end
 
     def transaction
+      snapshot = Marshal.load(Marshal.dump([@pages, @links, @items, @consumed, @committed_adoptions]))
       yield
+    rescue StandardError
+      @pages, @links, @items, @consumed, @committed_adoptions = snapshot
+      raise
     end
+
+    def add_inbox_item(row) = @items[row.fetch("id")] = row
+    def add_adoption(item_id, expires_at:) = @adoptions[item_id] = expires_at
 
     def exec(statement)
       return Result.new([{ "?column?" => "1" }]) if statement.strip == "SELECT 1"
@@ -47,6 +58,21 @@ class DsqlDatabaseTest < Minitest::Test
 
     def exec_params(statement, params)
       case statement
+      when /\A\s*SELECT.*FROM weblog_authoring\.inbox_items\s+WHERE id/m
+        item = @items[params.fetch(0)]
+        Result.new(item && item.fetch("expires_at") > params.fetch(1) ? [item] : [])
+      when /INSERT INTO weblog_authoring\.consumed_inbox_items/
+        @consumed << params.fetch(0)
+        Result.new
+      when /SELECT 1 FROM weblog_authoring\.inbox_image_adoptions/
+        expires_at = @adoptions[params.fetch(0)]
+        Result.new(expires_at && expires_at > params.fetch(1) ? [{ "?column?" => "1" }] : [])
+      when /UPDATE weblog_authoring\.inbox_image_adoptions SET committed_at/
+        @committed_adoptions << params.fetch(0)
+        Result.new
+      when /DELETE FROM weblog_authoring\.inbox_items WHERE id/
+        @items.delete(params.fetch(0))
+        Result.new
       when /WHERE id = \$1/
         Result.new([@pages[params.fetch(0)]].compact)
       when /WHERE \(page_type = 'date'/
@@ -152,6 +178,49 @@ class DsqlDatabaseTest < Minitest::Test
     assert_equal updated, database.find(page.id)
   end
 
+  def test_page_save_and_inbox_consumption_share_one_transaction
+    database = dsql_database
+    @pool.connection.add_inbox_item(inbox_row("item-1", expires_at: FIXED_TIME + 3600))
+    @pool.connection.add_adoption("item-1", expires_at: FIXED_TIME + 3600)
+
+    page = database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "インボックス採用", body: "本文", consumed_inbox_item_ids: ["item-1"]
+    ))
+
+    assert_equal "インボックス採用", page.name
+    assert_empty @pool.connection.items
+    assert_equal ["item-1"], @pool.connection.consumed
+    assert_equal ["item-1"], @pool.connection.committed_adoptions
+  end
+
+  def test_expired_inbox_item_rejects_page_save
+    database = dsql_database
+    @pool.connection.add_inbox_item(inbox_row("expired", expires_at: FIXED_TIME - 1))
+
+    error = assert_raises(WeblogAuthoring::ConflictError) do
+      database.save(WeblogAuthoring::SaveRequest.new(
+        page_type: "named", name: "保存されない記事", body: "本文", consumed_inbox_item_ids: ["expired"]
+      ))
+    end
+
+    assert_equal "inbox_item_expired", error.message
+    assert_nil database.find_route("保存されない記事")
+  end
+
+  def test_photo_without_pending_adoption_rejects_page_save
+    database = dsql_database
+    @pool.connection.add_inbox_item(inbox_row("unprepared", expires_at: FIXED_TIME + 3600))
+
+    error = assert_raises(WeblogAuthoring::ConflictError) do
+      database.save(WeblogAuthoring::SaveRequest.new(
+        page_type: "named", name: "採用されない記事", body: "本文", consumed_inbox_item_ids: ["unprepared"]
+      ))
+    end
+
+    assert_equal "inbox_item_expired", error.message
+    assert_nil database.find_route("採用されない記事")
+  end
+
   private
 
   def dsql_database
@@ -162,5 +231,13 @@ class DsqlDatabaseTest < Minitest::Test
       clock: -> { FIXED_TIME },
       pool: @pool
     )
+  end
+
+  def inbox_row(id, expires_at:)
+    {
+      "id" => id, "source" => "photo", "kind" => "photo", "source_id" => id,
+      "occurred_at" => FIXED_TIME, "ingested_at" => FIXED_TIME, "expires_at" => expires_at,
+      "payload" => {}, "created_at" => FIXED_TIME, "updated_at" => FIXED_TIME
+    }
   end
 end

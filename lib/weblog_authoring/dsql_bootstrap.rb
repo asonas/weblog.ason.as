@@ -107,6 +107,16 @@ module WeblogAuthoring
           PRIMARY KEY (source, kind, source_id)
         )
       SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.inbox_image_adoptions (
+          item_id TEXT PRIMARY KEY,
+          inbox_key TEXT NOT NULL,
+          public_key TEXT NOT NULL,
+          prepared_at TIMESTAMPTZ NOT NULL,
+          committed_at TIMESTAMPTZ,
+          expires_at TIMESTAMPTZ NOT NULL
+        )
+      SQL
     end
 
     def grant_privileges(connection)

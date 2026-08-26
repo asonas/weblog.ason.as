@@ -85,6 +85,48 @@ class TestDevelopmentDatabase < Minitest::Test
     assert_equal ["newer", "older"], database.list_pages.map(&:name)
   end
 
+  def test_save_consumes_an_inbox_item_and_commits_its_image_adoption_atomically
+    database = development_database
+    item = database.upsert_inbox_item(
+      source: "photo", kind: "photo", source_id: "photo-1", occurred_at: FIXED_TIME,
+      payload: { "inbox_key" => "assets/inbox/photo.webp", "preview_url" => "/assets/inbox/photo.webp", "captured_at_source" => "exif" }
+    )
+    database.prepare_inbox_image_adoption(
+      item_id: item.id, inbox_key: "assets/inbox/photo.webp", public_key: "assets/uploads/2026/08/photo.webp"
+    )
+
+    page = database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "写真の日記", body: "![photo](/assets/uploads/2026/08/photo.webp)",
+      consumed_inbox_item_ids: [item.id]
+    ))
+
+    assert_equal "写真の日記", page.name
+    assert_empty database.list_inbox_items
+    SQLite3::Database.new(database.path.to_s) do |sqlite|
+      refute_nil sqlite.get_first_value("SELECT committed_at FROM inbox_image_adoptions WHERE item_id = ?", item.id)
+    end
+  end
+
+  def test_expired_inbox_item_rolls_back_page_save
+    original = development_database
+    item = original.upsert_inbox_item(
+      source: "photo", kind: "photo", source_id: "photo-1", occurred_at: FIXED_TIME,
+      payload: { "inbox_key" => "assets/inbox/photo.webp", "preview_url" => "/assets/inbox/photo.webp", "captured_at_source" => "exif" }
+    )
+    expired = WeblogAuthoring::DevelopmentDatabase.new(
+      original.path, content_dir: tmpdir.join("content"), clock: -> { FIXED_TIME + (8 * 86_400) }
+    )
+
+    error = assert_raises(WeblogAuthoring::ConflictError) do
+      expired.save(WeblogAuthoring::SaveRequest.new(
+        page_type: "named", name: "保存されない記事", body: "本文", consumed_inbox_item_ids: [item.id]
+      ))
+    end
+
+    assert_equal "inbox_item_expired", error.message
+    assert_nil expired.find_route("保存されない記事")
+  end
+
   def test_version_one_date_pages_are_migrated_to_title_routes
     database = development_database
     database.path.dirname.mkpath

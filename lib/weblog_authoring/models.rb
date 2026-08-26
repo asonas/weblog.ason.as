@@ -74,6 +74,16 @@ module WeblogAuthoring
     end
   end
 
+  InboxImageAdoption = Struct.new(
+    :item_id, :inbox_key, :public_key, :prepared_at, :committed_at, :expires_at,
+    keyword_init: true
+  ) do
+    def initialize(**attributes)
+      super(**attributes)
+      freeze
+    end
+  end
+
   ReleaseSnapshot = Struct.new(:pages, :redirects, :published_at, keyword_init: true) do
     def initialize(pages: [], redirects: [], published_at: nil)
       super(pages: Array(pages).freeze, redirects: Array(redirects).freeze, published_at:)
@@ -89,9 +99,11 @@ module WeblogAuthoring
     :page_date,
     :title,
     :expected_updated_at,
+    :consumed_inbox_item_ids,
     keyword_init: true
   ) do
-    def initialize(page_type:, body:, page_id: nil, name: nil, page_date: nil, title: nil, expected_updated_at: nil)
+    def initialize(page_type:, body:, page_id: nil, name: nil, page_date: nil, title: nil, expected_updated_at: nil,
+                   consumed_inbox_item_ids: [])
       super(
         page_type:,
         body:,
@@ -99,7 +111,8 @@ module WeblogAuthoring
         name:,
         page_date:,
         title:,
-        expected_updated_at:
+        expected_updated_at:,
+        consumed_inbox_item_ids: Array(consumed_inbox_item_ids).freeze
       )
       freeze
     end

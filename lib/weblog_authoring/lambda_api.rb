@@ -59,7 +59,7 @@ module WeblogAuthoring
     end
 
     def call(event)
-      return publish_feed if event["source"] == "aws.events" && event["detail-type"] == "Scheduled Event"
+      return run_scheduled_maintenance if event["source"] == "aws.events" && event["detail-type"] == "Scheduled Event"
 
       method = event.dig("requestContext", "http", "method").to_s
       path = event.fetch("rawPath", "")
@@ -111,6 +111,12 @@ module WeblogAuthoring
         cache_control: "public, max-age=300"
       )
       { statusCode: 200, body: JSON.generate("status" => "published") }
+    end
+
+    def run_scheduled_maintenance
+      response = publish_feed
+      image_inbox.finalize unless @asset_bucket.nil?
+      response
     end
 
     def auth_session_response(event)
@@ -276,8 +282,9 @@ module WeblogAuthoring
       return json_response(401, error: "GitHub login is required to view the inbox") if session.nil?
       return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
 
-      images = image_inbox.list(date: event.dig("queryStringParameters", "date"))
-      json_response(200, "images" => images)
+      query = event.fetch("queryStringParameters", {}).to_h
+      items = @database.list_inbox_items(source: optional_query(query, "source"), kind: optional_query(query, "kind"))
+      json_response(200, "items" => items.map { |item| inbox_item_json(item) })
     end
 
     def adopt_inbox_response(event)
@@ -287,11 +294,31 @@ module WeblogAuthoring
       expected_csrf_token = session.fetch("csrf_token", "")
       return json_response(403, error: "CSRF token mismatch") unless secure_equal?(expected_csrf_token, csrf_token_from(event))
 
-      json_response(200, image_inbox.adopt(key: parse_json(event)["key"]))
+      item_id = optional_string(parse_json(event), "item_id")
+      raise InputError.new("item_id is required", field: "item_id") if item_id.nil?
+      json_response(200, image_inbox.prepare(item_id:))
     end
 
     def image_inbox
-      ImageInbox.new(s3_client: @s3_client, bucket: @asset_bucket)
+      ImageInbox.new(s3_client: @s3_client, bucket: @asset_bucket, database: @database)
+    end
+
+    def inbox_item_json(item)
+      {
+        "id" => item.id,
+        "source" => item.source,
+        "kind" => item.kind,
+        "source_id" => item.source_id,
+        "occurred_at" => item.occurred_at.iso8601,
+        "ingested_at" => item.ingested_at.iso8601,
+        "expires_at" => item.expires_at.iso8601,
+        "payload" => item.payload,
+      }
+    end
+
+    def optional_query(query, key)
+      value = query[key].to_s
+      value.empty? ? nil : value
     end
 
     def page_response(page, event:)
@@ -545,8 +572,19 @@ module WeblogAuthoring
         name:,
         page_date: page_type == "date" ? parse_date(optional_string(payload, "date"), "date") : nil,
         title:,
-        expected_updated_at: parse_time(optional_string(payload, "expected_updated_at"), "expected_updated_at")
+        expected_updated_at: parse_time(optional_string(payload, "expected_updated_at"), "expected_updated_at"),
+        consumed_inbox_item_ids: string_array(payload, "consumed_inbox_item_ids")
       )
+    end
+
+    def string_array(payload, key)
+      value = payload[key]
+      return [] if value.nil?
+      unless value.is_a?(Array) && value.all? { |item| item.is_a?(String) && !item.empty? }
+        raise InputError.new("#{key} must be an array of non-empty strings", field: key)
+      end
+
+      value
     end
 
     def optional_string(payload, key)

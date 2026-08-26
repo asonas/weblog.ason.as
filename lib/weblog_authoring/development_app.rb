@@ -348,11 +348,12 @@ module WeblogAuthoring
     get "/api/inbox" do
       require_authenticated! if settings.authentication_required
       content_type :json
-      JSON.generate("images" => image_inbox.list(date: params["date"]))
+      items = settings.database.list_inbox_items(source: params["source"], kind: params["kind"])
+      JSON.generate("items" => items.map { |item| inbox_item_json(item) })
     end
 
     post "/api/inbox/adopt" do
-      api_response { |payload| image_inbox.adopt(key: payload["key"]) }
+      api_response { |payload| image_inbox.prepare(item_id: required_string(payload, "item_id")) }
     end
 
     patch "/api/authoring/pages/:id" do
@@ -449,7 +450,20 @@ module WeblogAuthoring
     end
 
     def image_inbox
-      ImageInbox.new(s3_client: s3_client, bucket: settings.asset_bucket)
+      ImageInbox.new(s3_client: s3_client, bucket: settings.asset_bucket, database: settings.database)
+    end
+
+    def inbox_item_json(item)
+      {
+        "id" => item.id,
+        "source" => item.source,
+        "kind" => item.kind,
+        "source_id" => item.source_id,
+        "occurred_at" => item.occurred_at.iso8601,
+        "ingested_at" => item.ingested_at.iso8601,
+        "expires_at" => item.expires_at.iso8601,
+        "payload" => item.payload,
+      }
     end
 
     def self.default_oauth_client
@@ -825,8 +839,19 @@ module WeblogAuthoring
         name:,
         page_date:,
         title:,
-        expected_updated_at: expected_updated_at(payload)
+        expected_updated_at: expected_updated_at(payload),
+        consumed_inbox_item_ids: string_array(payload, "consumed_inbox_item_ids")
       )
+    end
+
+    def string_array(payload, key)
+      value = payload[key]
+      return [] if value.nil?
+      unless value.is_a?(Array) && value.all? { |item| item.is_a?(String) && !item.empty? }
+        raise DevelopmentInputError.new("#{key} は空でない文字列の配列にしてください", field: key)
+      end
+
+      value
     end
 
     def optional_string(payload, key)
