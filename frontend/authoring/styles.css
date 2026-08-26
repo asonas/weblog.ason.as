@@ -1250,6 +1250,20 @@ h2 {
   gap: 0.5rem;
 }
 
+.editor-shell__drop-target {
+  position: absolute;
+  z-index: 3;
+  inset: 0.75rem;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+  pointer-events: none;
+}
+
 .editor-shell__upload-status {
   max-inline-size: min(18rem, 50vw);
   color: var(--muted-ink);

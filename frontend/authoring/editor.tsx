@@ -346,8 +346,21 @@ type ApiError = Error & {
 
 type JsonObject = Record<string, unknown>;
 type HttpMethod = "POST" | "PATCH";
+type ImageDragData = {
+  items?: ArrayLike<{ kind: string; type: string }>;
+  types?: ArrayLike<string>;
+};
 
 const PAGE_REFRESH_INTERVAL = 15_000;
+const INBOX_IMAGE_DRAG_TYPE = "application/x-weblog-inbox-key";
+
+export function isImageDrag(dataTransfer: ImageDragData | null): boolean {
+  if (!dataTransfer) return false;
+  if (Array.from(dataTransfer.items || []).some((item) => item.kind === "file" && item.type.startsWith("image/"))) {
+    return true;
+  }
+  return Array.from(dataTransfer.types || []).includes(INBOX_IMAGE_DRAG_TYPE);
+}
 
 function groupLinkedPages(pages: Array<LinkedPage>): Array<LinkedPageGroup> {
   const grouped = new Map<string, { kind: "wiki" | "url"; name: string; pages: Array<LinkedPage> }>();
@@ -1664,6 +1677,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [draggingImages, setDraggingImages] = useState(false);
   const [imageUploadStatus, setImageUploadStatus] = useState("");
   const [inboxImages, setInboxImages] = useState<Array<InboxImage>>([]);
   const [loadingInbox, setLoadingInbox] = useState(false);
@@ -1688,6 +1702,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const refreshingPageRef = useRef(false);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const inboxInputRef = useRef<HTMLInputElement | null>(null);
+  const imageDragDepthRef = useRef(0);
 
   const inboxDate = /^\d{4}-\d{2}-\d{2}$/.test(draft.date) ? draft.date : null;
 
@@ -2163,6 +2178,22 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   useEffect(() => {
     if (!editor || !editor.isEditable) return;
     const element = editor.view.dom;
+    const dragenter = (event: DragEvent) => {
+      if (!isImageDrag(event.dataTransfer)) return;
+      event.preventDefault();
+      imageDragDepthRef.current += 1;
+      setDraggingImages(true);
+    };
+    const dragover = (event: DragEvent) => {
+      if (!isImageDrag(event.dataTransfer)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    };
+    const dragleave = (event: DragEvent) => {
+      if (!isImageDrag(event.dataTransfer)) return;
+      imageDragDepthRef.current = Math.max(0, imageDragDepthRef.current - 1);
+      if (imageDragDepthRef.current === 0) setDraggingImages(false);
+    };
     const paste = (event: ClipboardEvent) => {
       const files = Array.from(event.clipboardData?.files || []).filter((file) => file.type.startsWith("image/"));
       if (files.length === 0) return;
@@ -2170,7 +2201,9 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       void handleImageFiles(files);
     };
     const drop = (event: DragEvent) => {
-      const inboxKey = event.dataTransfer?.getData("application/x-weblog-inbox-key");
+      imageDragDepthRef.current = 0;
+      setDraggingImages(false);
+      const inboxKey = event.dataTransfer?.getData(INBOX_IMAGE_DRAG_TYPE);
       if (inboxKey) {
         event.preventDefault();
         const position = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
@@ -2185,9 +2218,15 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       if (position) editor.commands.setTextSelection(position.pos);
       void handleImageFiles(files);
     };
+    element.addEventListener("dragenter", dragenter);
+    element.addEventListener("dragover", dragover);
+    element.addEventListener("dragleave", dragleave);
     element.addEventListener("paste", paste);
     element.addEventListener("drop", drop);
     return () => {
+      element.removeEventListener("dragenter", dragenter);
+      element.removeEventListener("dragover", dragover);
+      element.removeEventListener("dragleave", dragleave);
       element.removeEventListener("paste", paste);
       element.removeEventListener("drop", drop);
     };
@@ -2299,6 +2338,11 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
               editor.commands.focus("end");
             }}
           >
+            {draggingImages && (
+              <div className="editor-shell__drop-target" role="status">
+                ここにドロップして記事へ追加
+              </div>
+            )}
             {editor?.isEditable && (
               <div className="editor-shell__actions" onClick={(event) => event.stopPropagation()}>
                 {imageUploadStatus && (
@@ -2370,7 +2414,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
                       disabled={loadingInbox}
                       draggable
                       onDragStart={(event) => {
-                        event.dataTransfer.setData("application/x-weblog-inbox-key", image.key);
+                        event.dataTransfer.setData(INBOX_IMAGE_DRAG_TYPE, image.key);
                         event.dataTransfer.effectAllowed = "move";
                       }}
                       onClick={() => void adoptInboxImage(image.key)}

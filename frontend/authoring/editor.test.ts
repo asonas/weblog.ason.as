@@ -48,6 +48,7 @@ const {
   ensureBodySelection,
   extractEmbeddableUrls,
   internalNodeVisual,
+  isImageDrag,
   matchingWikiLinkNames,
   nextWikiLinkSuggestionIndex,
   replaceEditorContentPreservingSelection,
@@ -67,6 +68,12 @@ test("ignores URLs in inline and fenced code when building embeds", () => {
   ].join("\n");
 
   assert.deepEqual(extractEmbeddableUrls(body), ["https://example.com/article"]);
+});
+
+test("recognizes image files and inbox photos as image drags", () => {
+  assert.equal(isImageDrag({ items: [{ kind: "file", type: "image/png" }] }), true);
+  assert.equal(isImageDrag({ items: [{ kind: "file", type: "text/plain" }] }), false);
+  assert.equal(isImageDrag({ types: ["application/x-weblog-inbox-key"] }), true);
 });
 
 test("finds and filters the unfinished Wiki link at the cursor", () => {
