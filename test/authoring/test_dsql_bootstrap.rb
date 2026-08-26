@@ -52,6 +52,8 @@ class DsqlBootstrapTest < Minitest::Test
     assert connection.statements.any? { |statement| statement.to_s.start_with?("AWS IAM GRANT") }
     assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.pages") }
     assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.links") }
+    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_items") }
+    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.consumed_inbox_items") }
     assert_equal :closed, connection.statements.last
   end
 

@@ -62,6 +62,18 @@ module WeblogAuthoring
     end
   end
 
+  InboxItem = Struct.new(
+    :id, :source, :kind, :source_id, :occurred_at, :ingested_at,
+    :expires_at, :payload, :created_at, :updated_at,
+    keyword_init: true
+  ) do
+    def initialize(**attributes)
+      attributes[:payload] = attributes.fetch(:payload).freeze
+      super(**attributes)
+      freeze
+    end
+  end
+
   ReleaseSnapshot = Struct.new(:pages, :redirects, :published_at, keyword_init: true) do
     def initialize(pages: [], redirects: [], published_at: nil)
       super(pages: Array(pages).freeze, redirects: Array(redirects).freeze, published_at:)

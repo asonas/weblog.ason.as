@@ -75,6 +75,38 @@ module WeblogAuthoring
           PRIMARY KEY (source_id, position)
         )
       SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.inbox_items (
+          id TEXT PRIMARY KEY,
+          source TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          source_id TEXT NOT NULL,
+          occurred_at TIMESTAMPTZ NOT NULL,
+          ingested_at TIMESTAMPTZ NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          payload JSONB NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL,
+          UNIQUE (source, kind, source_id),
+          CHECK ((source, kind) IN (
+            ('photo', 'photo'),
+            ('bluesky', 'post'),
+            ('bluesky', 'like'),
+            ('raindrop', 'bookmark'),
+            ('c4p', 'track')
+          ))
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.consumed_inbox_items (
+          source TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          source_id TEXT NOT NULL,
+          consumed_at TIMESTAMPTZ NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          PRIMARY KEY (source, kind, source_id)
+        )
+      SQL
     end
 
     def grant_privileges(connection)

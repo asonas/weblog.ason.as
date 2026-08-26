@@ -2,6 +2,7 @@
 
 require "date"
 require "digest"
+require "json"
 require "openssl"
 require "pathname"
 require "securerandom"
@@ -20,6 +21,27 @@ module WeblogAuthoring
     DATABASE_ROLE = "weblog_authoring"
     SCHEMA = "weblog_authoring"
     TOKYO_OFFSET = "+09:00"
+    INBOX_RETENTION_SECONDS = 7 * 24 * 60 * 60
+    INBOX_KINDS = {
+      "photo" => ["photo"],
+      "bluesky" => %w[post like],
+      "raindrop" => ["bookmark"],
+      "c4p" => ["track"]
+    }.freeze
+    INBOX_PAYLOAD_KEYS = {
+      ["photo", "photo"] => %w[inbox_key preview_url captured_at_source],
+      ["bluesky", "post"] => %w[record_uri record_cid canonical_url author_did],
+      ["bluesky", "like"] => %w[like_uri like_cid subject_uri subject_cid canonical_url author_did],
+      ["raindrop", "bookmark"] => %w[raindrop_id url title],
+      ["c4p", "track"] => %w[guid permalink title audio_url duration_seconds]
+    }.freeze
+    INBOX_PAYLOAD_TYPES = {
+      ["photo", "photo"] => { "inbox_key" => String, "preview_url" => String, "captured_at_source" => String },
+      ["bluesky", "post"] => %w[record_uri record_cid canonical_url author_did].to_h { |key| [key, String] },
+      ["bluesky", "like"] => %w[like_uri like_cid subject_uri subject_cid canonical_url author_did].to_h { |key| [key, String] },
+      ["raindrop", "bookmark"] => { "raindrop_id" => Integer, "url" => String, "title" => String },
+      ["c4p", "track"] => { "guid" => String, "permalink" => String, "title" => String, "audio_url" => String, "duration_seconds" => Integer }
+    }.freeze
 
     def initialize(host:, content_dir:, clock: -> { Time.now.getlocal(TOKYO_OFFSET) }, pool: nil)
       @content_dir = Pathname(content_dir)
@@ -99,7 +121,152 @@ module WeblogAuthoring
       @pool.shutdown
     end
 
+    def upsert_inbox_item(source:, kind:, source_id:, occurred_at:, payload:)
+      validate_inbox_identity!(source, kind, source_id)
+      raise ArgumentError, "occurred_at must be a Time" unless occurred_at.is_a?(Time)
+      raise ArgumentError, "payload must be a Hash" unless payload.is_a?(Hash)
+      missing_keys = INBOX_PAYLOAD_KEYS.fetch([source, kind]) - payload.keys
+      raise ArgumentError, "missing inbox payload keys: #{missing_keys.join(', ')}" unless missing_keys.empty?
+      invalid_keys = INBOX_PAYLOAD_TYPES.fetch([source, kind]).filter_map do |key, type|
+        key unless payload.fetch(key).is_a?(type)
+      end
+      raise ArgumentError, "invalid inbox payload values: #{invalid_keys.join(', ')}" unless invalid_keys.empty?
+
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          consumed = connection.exec_params(
+            <<~SQL,
+              SELECT 1 FROM #{SCHEMA}.consumed_inbox_items
+              WHERE source = $1 AND kind = $2 AND source_id = $3 AND expires_at > $4
+              LIMIT 1
+            SQL
+            [source, kind, source_id, timestamp]
+          )
+          next nil if consumed.ntuples.positive?
+
+          result = connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.inbox_items (
+                source, kind, source_id, occurred_at, payload, id, ingested_at,
+                expires_at, created_at, updated_at
+              ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $7, $7)
+              ON CONFLICT (source, kind, source_id) DO UPDATE
+              SET occurred_at = EXCLUDED.occurred_at,
+                  payload = EXCLUDED.payload,
+                  updated_at = EXCLUDED.updated_at
+              RETURNING id, source, kind, source_id, occurred_at, ingested_at,
+                        expires_at, payload, created_at, updated_at
+            SQL
+            [
+              source, kind, source_id, occurred_at, JSON.generate(payload),
+              SecureRandom.uuid.delete("-"), timestamp, timestamp + INBOX_RETENTION_SECONDS
+            ]
+          )
+          inbox_item_from_row(result[0])
+        end
+      end
+    end
+
+    def list_inbox_items
+      timestamp = now
+      with_connection do |connection|
+        connection.exec_params(
+          <<~SQL,
+            SELECT id, source, kind, source_id, occurred_at, ingested_at,
+                   expires_at, payload, created_at, updated_at
+            FROM #{SCHEMA}.inbox_items
+            WHERE expires_at > $1
+            ORDER BY occurred_at DESC, ingested_at DESC, id DESC
+          SQL
+          [timestamp]
+        ).map { |row| inbox_item_from_row(row) }
+      end
+    end
+
+    def consume_inbox_item(id)
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          result = connection.exec_params(
+            <<~SQL,
+              SELECT id, source, kind, source_id, occurred_at, ingested_at,
+                     expires_at, payload, created_at, updated_at
+              FROM #{SCHEMA}.inbox_items
+              WHERE id = $1 AND expires_at > $2
+              LIMIT 1
+            SQL
+            [id, timestamp]
+          )
+          next false if result.ntuples.zero?
+
+          connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.consumed_inbox_items (
+                source, kind, source_id, consumed_at, expires_at
+              )
+              SELECT source, kind, source_id, $2, expires_at
+              FROM #{SCHEMA}.inbox_items WHERE id = $1
+              ON CONFLICT (source, kind, source_id) DO UPDATE
+              SET consumed_at = EXCLUDED.consumed_at,
+                  expires_at = EXCLUDED.expires_at
+            SQL
+            [id, timestamp]
+          )
+          connection.exec_params("DELETE FROM #{SCHEMA}.inbox_items WHERE id = $1", [id])
+          true
+        end
+      end
+    end
+
+    def cleanup_inbox_items(limit: 100)
+      raise ArgumentError, "limit must be positive" unless limit.is_a?(Integer) && limit.positive?
+
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          inbox = connection.exec_params(
+            <<~SQL,
+              DELETE FROM #{SCHEMA}.inbox_items
+              WHERE id IN (
+                SELECT id FROM #{SCHEMA}.inbox_items
+                WHERE expires_at <= $1 ORDER BY expires_at LIMIT $2
+              )
+            SQL
+            [timestamp, limit]
+          )
+          consumed = connection.exec_params(
+            <<~SQL,
+              DELETE FROM #{SCHEMA}.consumed_inbox_items
+              WHERE (source, kind, source_id) IN (
+                SELECT source, kind, source_id FROM #{SCHEMA}.consumed_inbox_items
+                WHERE expires_at <= $1 ORDER BY expires_at LIMIT $2
+              )
+            SQL
+            [timestamp, limit]
+          )
+          { inbox_items: inbox.cmd_tuples, consumed_items: consumed.cmd_tuples }
+        end
+      end
+    end
+
     private
+
+    def validate_inbox_identity!(source, kind, source_id)
+      raise ArgumentError, "unknown inbox source and kind" unless INBOX_KINDS.fetch(source, []).include?(kind)
+      raise ArgumentError, "source_id must not be empty" if source_id.to_s.empty?
+    end
+
+    def inbox_item_from_row(row)
+      payload = row.fetch("payload")
+      InboxItem.new(
+        id: row.fetch("id"), source: row.fetch("source"), kind: row.fetch("kind"),
+        source_id: row.fetch("source_id"), occurred_at: parse_time(row.fetch("occurred_at")),
+        ingested_at: parse_time(row.fetch("ingested_at")), expires_at: parse_time(row.fetch("expires_at")),
+        payload: payload.is_a?(String) ? JSON.parse(payload) : payload,
+        created_at: parse_time(row.fetch("created_at")), updated_at: parse_time(row.fetch("updated_at"))
+      )
+    end
 
     def new_document(request)
       timestamp = now
