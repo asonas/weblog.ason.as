@@ -9,10 +9,11 @@ class LambdaApiTest < Minitest::Test
   class FakeS3
     ObjectBody = Data.define(:body)
 
-    attr_reader :objects
+    attr_reader :objects, :put_requests
 
     def initialize
       @objects = {}
+      @put_requests = []
     end
 
     def get_object(bucket:, key:)
@@ -22,8 +23,9 @@ class LambdaApiTest < Minitest::Test
       ObjectBody.new(StringIO.new(value))
     end
 
-    def put_object(bucket:, key:, body:, content_type:, cache_control: nil) # rubocop:disable Lint/UnusedMethodArgument
+    def put_object(bucket:, key:, body:, content_type:, cache_control: nil)
       objects[[bucket, key]] = body
+      put_requests << { bucket:, key:, content_type:, cache_control: }
     end
   end
 
@@ -120,7 +122,7 @@ class LambdaApiTest < Minitest::Test
     assert_equal 1, @database.health_checks
   end
 
-  def test_publishes_an_rss_feed_to_s3_for_a_scheduled_event
+  def test_publishes_an_atom_feed_to_s3_for_a_scheduled_event
     s3 = FakeS3.new
     api = WeblogAuthoring::LambdaApi.new(
       database: @database,
@@ -133,6 +135,8 @@ class LambdaApiTest < Minitest::Test
     feed = s3.objects.fetch(["production-site", "feed.xml"])
 
     assert_equal 200, response.fetch(:statusCode)
+    assert_equal "application/atom+xml; charset=utf-8", s3.put_requests.fetch(0).fetch(:content_type)
+    assert_includes feed, '<feed xmlns="http://www.w3.org/2005/Atom">'
     assert_includes feed, "<title>記事名</title>"
     assert_includes feed, "&lt;p&gt;本文&lt;/p&gt;"
     assert_includes feed, "https://weblog.ason.as/%E8%A8%98%E4%BA%8B%E5%90%8D"

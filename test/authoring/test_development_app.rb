@@ -435,14 +435,15 @@ class TestDevelopmentApp < Minitest::Test
     assert_empty fresh_editor.fetch("page_id")
   end
 
-  def test_rss_feed_contains_article_body_and_excludes_empty_pages
+  def test_atom_feed_contains_article_body_and_excludes_empty_pages
     json_request("POST", "/api/authoring/pages", page_type: "named", title: "記事", body: "本文 **です**")
     json_request("POST", "/api/authoring/pages", page_type: "named", title: "空のハブ", body: "")
 
     status, headers, body = request("GET", "/feed.xml")
 
     assert_equal 200, status
-    assert_equal "application/rss+xml; charset=utf-8", headers.fetch("content-type")
+    assert_equal "application/atom+xml; charset=utf-8", headers.fetch("content-type")
+    assert_includes body, '<feed xmlns="http://www.w3.org/2005/Atom">'
     assert_includes body, "<title>記事</title>"
     assert_includes body, "本文 &lt;strong&gt;です&lt;/strong&gt;"
     refute_includes body, "空のハブ"

@@ -1,7 +1,7 @@
 resource "aws_cloudwatch_event_rule" "rss_feed" {
   name                = "weblog-rss-feed-production"
   description         = "Regenerate weblog.ason.as/feed.xml"
-  schedule_expression = "rate(5 minutes)"
+  schedule_expression = "rate(1 hour)"
 }
 
 resource "aws_cloudwatch_event_target" "rss_feed" {

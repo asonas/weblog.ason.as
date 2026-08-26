@@ -24,7 +24,7 @@ require_relative "image_inbox"
 require_relative "image_upload"
 require_relative "models"
 require_relative "names"
-require_relative "rss_feed"
+require_relative "atom_feed"
 
 module WeblogAuthoring
   class DevelopmentRequestLog
@@ -249,9 +249,9 @@ module WeblogAuthoring
     end
 
     get "/feed.xml" do
-      content_type "application/rss+xml; charset=utf-8"
+      content_type "application/atom+xml; charset=utf-8"
       cache_control :public, max_age: 300
-      RssFeed.new(site_url: frontend_url("/").sub(%r{/\z}, "")).render(settings.database.list_pages)
+      AtomFeed.new(site_url: frontend_url("/").sub(%r{/\z}, "")).render(settings.database.list_pages)
     end
 
     get "/assets/:filename" do

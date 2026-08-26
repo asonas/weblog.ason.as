@@ -15,7 +15,7 @@ require_relative "image_inbox"
 require_relative "image_upload"
 require_relative "models"
 require_relative "names"
-require_relative "rss_feed"
+require_relative "atom_feed"
 
 module WeblogAuthoring
   class LambdaApi
@@ -101,12 +101,12 @@ module WeblogAuthoring
     end
 
     def publish_feed
-      body = RssFeed.new(site_url: @frontend_url).render(@database.list_pages)
+      body = AtomFeed.new(site_url: @frontend_url).render(@database.list_pages)
       @s3_client.put_object(
         bucket: @site_bucket,
         key: "feed.xml",
         body:,
-        content_type: "application/rss+xml; charset=utf-8",
+        content_type: "application/atom+xml; charset=utf-8",
         cache_control: "public, max-age=300"
       )
       { statusCode: 200, body: JSON.generate("status" => "published") }
