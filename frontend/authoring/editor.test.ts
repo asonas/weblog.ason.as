@@ -37,6 +37,9 @@ function installDom() {
   dom.window.requestAnimationFrame = (callback: FrameRequestCallback) =>
     setTimeout(() => callback(0), 0) as unknown as number;
   dom.window.cancelAnimationFrame = (handle: number) => clearTimeout(handle);
+  Object.assign(dom.window.document, {
+    elementFromPoint: () => dom.window.document.querySelector(".ProseMirror")
+  });
 }
 
 installDom();
@@ -79,7 +82,127 @@ test("ignores URLs in inline and fenced code when building embeds", () => {
 test("recognizes image files and inbox photos as image drags", () => {
   assert.equal(isImageDrag({ items: [{ kind: "file", type: "image/png" }] }), true);
   assert.equal(isImageDrag({ items: [{ kind: "file", type: "text/plain" }] }), false);
-  assert.equal(isImageDrag({ types: ["application/x-weblog-inbox-key"] }), true);
+  assert.equal(isImageDrag({ types: ["application/x-weblog-inbox-item-id"] }), true);
+});
+
+test("adopts an inbox photo and consumes it with the page save", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const savedPayloads: Array<Record<string, unknown>> = [];
+  let resolveSave: (() => void) | null = null;
+  const waitForSave = () => new Promise<void>((resolve) => { resolveSave = resolve; });
+  const pageResponse = {
+    mode: "editor",
+    id: "page-id",
+    page_type: "named",
+    date: null,
+    name: "current",
+    title: null,
+    updated_at: "2026-08-26T12:00:00+09:00",
+    route: "current",
+    body: "本文",
+    linked_pages: [],
+    linked_pages_has_more: false
+  };
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url === "/api/inbox") {
+      return new Response(JSON.stringify({
+        items: ["item-1", "item-2"].map((id, index) => ({
+          id,
+          source: "photo",
+          kind: "photo",
+          source_id: `photo-${index + 1}`,
+          occurred_at: `2026-08-26T1${index}:00:00+09:00`,
+          ingested_at: "2026-08-26T11:00:00+09:00",
+          expires_at: "2026-09-02T11:00:00+09:00",
+          payload: { preview_url: `/assets/inbox/photo-${index + 1}.webp` }
+        }))
+      }), { headers: { "content-type": "application/json" } });
+    }
+    if (url === "/api/inbox/adopt") {
+      const itemId = JSON.parse(String(init?.body)).item_id;
+      return new Response(JSON.stringify({ public_url: `/assets/uploads/2026/08/${itemId}.webp` }), {
+        headers: { "content-type": "application/json" }
+      });
+    }
+    if (url === "/api/authoring/pages/page-id") {
+      savedPayloads.push(JSON.parse(String(init?.body)));
+      resolveSave?.();
+      resolveSave = null;
+      return new Response(JSON.stringify(pageResponse), { headers: { "content-type": "application/json" } });
+    }
+    if (url.startsWith("/api/page-names")) {
+      return new Response(JSON.stringify({ names: [] }), { headers: { "content-type": "application/json" } });
+    }
+    if (url.startsWith("/api/routes/") || url.startsWith("/api/related")) {
+      return new Response(JSON.stringify(pageResponse), { headers: { "content-type": "application/json", etag: "\"same\"" } });
+    }
+    throw new Error(`unexpected request: ${url}`);
+  };
+  const bootstrap: EditorBootstrap = {
+    page_id: "page-id", page_type: "named", date: "", name: "current", title: "current", body: "本文",
+    expected_updated_at: "2026-08-26T11:00:00+09:00", save_message: "", linked_pages: [], linked_pages_has_more: false
+  };
+
+  try {
+    await act(async () => {
+      root.render(createElement(AuthoringEditor, { bootstrap }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".content-inbox__tab")!.click();
+      await Promise.resolve();
+    });
+    assert.equal(container.querySelector(".content-inbox__kind")?.textContent, "写真");
+
+    const clickSave = waitForSave();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".content-inbox__item")!.click();
+      await clickSave;
+    });
+
+    assert.equal(savedPayloads.length, 1);
+    assert.deepEqual(savedPayloads[0].consumed_inbox_item_ids, ["item-1"]);
+    assert.match(String(savedPayloads[0].body), /\/assets\/uploads\/2026\/08\/item-1\.webp/);
+
+    const transferData = new Map<string, string>();
+    const dataTransfer = {
+      files: [], items: [], types: [] as Array<string>, effectAllowed: "none", dropEffect: "none",
+      setData(type: string, value: string) {
+        transferData.set(type, value);
+        if (!this.types.includes(type)) this.types.push(type);
+      },
+      getData(type: string) { return transferData.get(type) || ""; }
+    };
+    const remainingItem = container.querySelector<HTMLButtonElement>(".content-inbox__item")!;
+    const dragStart = new window.Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragStart, "dataTransfer", { value: dataTransfer });
+    remainingItem.dispatchEvent(dragStart);
+
+    const dropSave = waitForSave();
+    await act(async () => {
+      const drop = new window.Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperties(drop, {
+        dataTransfer: { value: dataTransfer },
+        clientX: { value: 0 },
+        clientY: { value: 0 }
+      });
+      container.querySelector<HTMLElement>(".ProseMirror")!.dispatchEvent(drop);
+      await dropSave;
+    });
+
+    assert.equal(savedPayloads.length, 2);
+    assert.deepEqual(savedPayloads[1].consumed_inbox_item_ids, ["item-2"]);
+    assert.match(String(savedPayloads[1].body), /\/assets\/uploads\/2026\/08\/item-2\.webp/);
+    assert.equal(container.querySelector(".content-inbox__item"), null);
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
 });
 
 test("extracts video IDs from YouTube URLs", () => {

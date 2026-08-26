@@ -410,13 +410,18 @@ type UploadResponse = {
   public_url: string;
 };
 
-type InboxImage = {
-  key: string;
-  url: string;
-  uploaded_at: string | null;
+type InboxItem = {
+  id: string;
+  source: "photo" | "bluesky" | "raindrop" | "c4p";
+  kind: "photo" | "post" | "like" | "bookmark" | "track";
+  source_id: string;
+  occurred_at: string;
+  ingested_at: string;
+  expires_at: string;
+  payload: Record<string, unknown>;
 };
 
-type InboxResponse = { images: Array<InboxImage> };
+type InboxResponse = { items: Array<InboxItem> };
 
 type ApiError = Error & {
   fields?: Record<string, string[]>;
@@ -430,14 +435,27 @@ type ImageDragData = {
 };
 
 const PAGE_REFRESH_INTERVAL = 15_000;
-const INBOX_IMAGE_DRAG_TYPE = "application/x-weblog-inbox-key";
+const INBOX_ITEM_DRAG_TYPE = "application/x-weblog-inbox-item-id";
 
 export function isImageDrag(dataTransfer: ImageDragData | null): boolean {
   if (!dataTransfer) return false;
   if (Array.from(dataTransfer.items || []).some((item) => item.kind === "file" && item.type.startsWith("image/"))) {
     return true;
   }
-  return Array.from(dataTransfer.types || []).includes(INBOX_IMAGE_DRAG_TYPE);
+  return Array.from(dataTransfer.types || []).includes(INBOX_ITEM_DRAG_TYPE);
+}
+
+function inboxPhotoUrl(item: InboxItem): string | null {
+  const url = item.payload.preview_url;
+  return item.source === "photo" && item.kind === "photo" && typeof url === "string" ? url : null;
+}
+
+function inboxItemLabel(item: InboxItem): string {
+  if (item.source === "photo") return "写真";
+  if (item.source === "bluesky" && item.kind === "like") return "Bluesky いいね";
+  if (item.source === "bluesky") return "Bluesky 投稿";
+  if (item.source === "raindrop") return "Raindrop";
+  return "c4p";
 }
 
 function groupLinkedPages(pages: Array<LinkedPage>): Array<LinkedPageGroup> {
@@ -1934,7 +1952,8 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const [uploadingImages, setUploadingImages] = useState(false);
   const [draggingImages, setDraggingImages] = useState(false);
   const [imageUploadStatus, setImageUploadStatus] = useState("");
-  const [inboxImages, setInboxImages] = useState<Array<InboxImage>>([]);
+  const [inboxItems, setInboxItems] = useState<Array<InboxItem>>([]);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [linkedPages, setLinkedPages] = useState(bootstrap.linked_pages || []);
   const [linkedPagesHasMore, setLinkedPagesHasMore] = useState(bootstrap.linked_pages_has_more || false);
@@ -1956,10 +1975,8 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const pageEtagRef = useRef<string | null>(null);
   const refreshingPageRef = useRef(false);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const inboxInputRef = useRef<HTMLInputElement | null>(null);
   const imageDragDepthRef = useRef(0);
-
-  const inboxDate = /^\d{4}-\d{2}-\d{2}$/.test(draft.date) ? draft.date : null;
+  const consumedInboxItemIdsRef = useRef<Array<string>>([]);
 
   useEffect(() => {
     document.title = draft.title ? `${draft.title} : weblog.ason.as` : "weblog.ason.as";
@@ -2012,6 +2029,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     }
 
     const snapshot = { ...draftRef.current };
+    const consumedInboxItemIds = [...consumedInboxItemIdsRef.current];
     const savedVersion = editVersionRef.current;
     savingRef.current = true;
     setSaving(true);
@@ -2028,7 +2046,8 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
         name: snapshot.name || undefined,
         title: snapshot.title || undefined,
         body: snapshot.body,
-        expected_updated_at: snapshot.expectedUpdatedAt || undefined
+        expected_updated_at: snapshot.expectedUpdatedAt || undefined,
+        consumed_inbox_item_ids: consumedInboxItemIds
       }, snapshot.pageId ? "PATCH" : "POST");
       const current = draftRef.current;
       const next = {
@@ -2048,6 +2067,9 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
         window.history.pushState(null, "", `/${encodePageName(page.route || page.name || next.title)}`);
       }
       setErrors({});
+      consumedInboxItemIdsRef.current = consumedInboxItemIdsRef.current.filter(
+        (itemId) => !consumedInboxItemIds.includes(itemId)
+      );
       setStatus(statusMessage(page));
       setDirtyState(editVersionRef.current !== savedVersion);
       if (editVersionRef.current !== savedVersion) pendingSaveRef.current = true;
@@ -2388,45 +2410,27 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   }, [editor, uploadingImages]);
 
   const refreshInbox = useCallback(async () => {
-    if (!inboxDate) return;
-    const result = await fetchJson<InboxResponse>(`/api/inbox?date=${encodeURIComponent(inboxDate)}`);
-    setInboxImages(result.images);
-  }, [inboxDate]);
+    const result = await fetchJson<InboxResponse>("/api/inbox");
+    const consumed = new Set(consumedInboxItemIdsRef.current);
+    setInboxItems(result.items.filter((item) => !consumed.has(item.id)));
+  }, []);
 
   useEffect(() => {
-    if (!editor?.isEditable || !inboxDate) return;
+    if (!editor?.isEditable || !inboxOpen) return;
     void refreshInbox().catch((error: unknown) => {
-      setImageUploadStatus(error instanceof Error ? error.message : "写真インボックスを読み込めませんでした");
+      setImageUploadStatus(error instanceof Error ? error.message : "インボックスを読み込めませんでした");
     });
-  }, [editor?.isEditable, inboxDate, refreshInbox]);
+  }, [editor?.isEditable, inboxOpen, refreshInbox]);
 
-  const handleInboxFiles = useCallback(async (files: Array<File>) => {
-    if (!inboxDate || files.length === 0 || loadingInbox) return;
-    setLoadingInbox(true);
-    try {
-      for (const [index, source] of files.entries()) {
-        setImageUploadStatus(`写真をインボックスへ追加中… ${index + 1}/${files.length}`);
-        const { prepareImage } = await import("./imageUpload");
-        const prepared = await prepareImage(source);
-        await uploadImage(prepared.file, inboxDate);
-      }
-      await refreshInbox();
-      setImageUploadStatus("");
-    } catch (error) {
-      setImageUploadStatus(error instanceof Error ? error.message : "写真を追加できませんでした");
-    } finally {
-      setLoadingInbox(false);
-    }
-  }, [inboxDate, loadingInbox, refreshInbox]);
-
-  const adoptInboxImage = useCallback(async (key: string) => {
+  const adoptInboxImage = useCallback(async (itemId: string) => {
     if (!editor || loadingInbox) return;
     setLoadingInbox(true);
     try {
-      const result = await requestJson<{ public_url: string }>("/api/inbox/adopt", { key });
+      const result = await requestJson<{ public_url: string }>("/api/inbox/adopt", { item_id: itemId });
+      consumedInboxItemIdsRef.current = [...consumedInboxItemIdsRef.current, itemId];
       ensureBodySelection(editor);
       editor.chain().focus().setImage({ src: result.public_url, alt: "" }).run();
-      setInboxImages((images) => images.filter((image) => image.key !== key));
+      setInboxItems((items) => items.filter((item) => item.id !== itemId));
       setImageUploadStatus("");
     } catch (error) {
       setImageUploadStatus(error instanceof Error ? error.message : "写真を記事へ追加できませんでした");
@@ -2463,12 +2467,12 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     const drop = (event: DragEvent) => {
       imageDragDepthRef.current = 0;
       setDraggingImages(false);
-      const inboxKey = event.dataTransfer?.getData(INBOX_IMAGE_DRAG_TYPE);
-      if (inboxKey) {
+      const inboxItemId = event.dataTransfer?.getData(INBOX_ITEM_DRAG_TYPE);
+      if (inboxItemId) {
         event.preventDefault();
         const position = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
         if (position) editor.commands.setTextSelection(position.pos);
-        void adoptInboxImage(inboxKey);
+        void adoptInboxImage(inboxItemId);
         return;
       }
       const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith("image/"));
@@ -2643,48 +2647,52 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
               <p className="input-error" role="alert">{editorErrors.join(" ")}</p>
             )}
           </section>
-          {editor?.isEditable && inboxDate && (
-            <section className="photo-inbox" aria-labelledby="photo-inbox-heading">
-              <div className="photo-inbox__header">
-                <h2 id="photo-inbox-heading">{inboxDate}の写真</h2>
-                <input
-                  ref={inboxInputRef}
-                  className="visually-hidden"
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  multiple
-                  onChange={(event) => {
-                    void handleInboxFiles(Array.from(event.currentTarget.files || []));
-                    event.currentTarget.value = "";
-                  }}
-                />
-                <button type="button" disabled={loadingInbox} onClick={() => inboxInputRef.current?.click()}>
-                  写真を追加
-                </button>
-              </div>
-              {inboxImages.length === 0 ? (
-                <p className="photo-inbox__empty">未使用の写真はありません</p>
-              ) : (
-                <div className="photo-inbox__images">
-                  {inboxImages.map((image) => (
-                    <button
-                      type="button"
-                      className="photo-inbox__image"
-                      key={image.key}
-                      disabled={loadingInbox}
-                      draggable
-                      onDragStart={(event) => {
-                        event.dataTransfer.setData(INBOX_IMAGE_DRAG_TYPE, image.key);
-                        event.dataTransfer.effectAllowed = "move";
-                      }}
-                      onClick={() => void adoptInboxImage(image.key)}
-                    >
-                      <img src={image.url} alt="記事へ追加する" loading="lazy" />
-                    </button>
-                  ))}
-                </div>
+          {editor?.isEditable && (
+            <>
+              <button
+                className="content-inbox__tab"
+                type="button"
+                aria-controls="content-inbox-panel"
+                aria-expanded={inboxOpen}
+                onClick={() => setInboxOpen((open) => !open)}
+              >
+                Inbox
+              </button>
+              {inboxOpen && (
+                <aside id="content-inbox-panel" className="content-inbox" aria-label="コンテンツインボックス">
+                  {inboxItems.length === 0 ? (
+                    <p className="content-inbox__empty">素材はありません</p>
+                  ) : (
+                    <ol className="content-inbox__items">
+                      {inboxItems.map((item) => {
+                        const photoUrl = inboxPhotoUrl(item);
+                        return (
+                          <li key={item.id}>
+                            <button
+                              type="button"
+                              className="content-inbox__item"
+                              disabled={loadingInbox || photoUrl === null}
+                              draggable={photoUrl !== null}
+                              onDragStart={(event) => {
+                                event.dataTransfer.setData(INBOX_ITEM_DRAG_TYPE, item.id);
+                                event.dataTransfer.effectAllowed = "move";
+                              }}
+                              onClick={() => photoUrl && void adoptInboxImage(item.id)}
+                            >
+                              {photoUrl && <img src={photoUrl} alt="" loading="lazy" />}
+                              <span className="content-inbox__kind">{inboxItemLabel(item)}</span>
+                              <time dateTime={item.occurred_at}>
+                                {new Date(item.occurred_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </time>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </aside>
               )}
-            </section>
+            </>
           )}
         </div>
         {universeEnabled && universeGroups.length > 0 && (
