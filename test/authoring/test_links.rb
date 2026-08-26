@@ -55,4 +55,22 @@ class TestLinks < Minitest::Test
       "https://example.com/culture_history.php"
     ], WeblogAuthoring.extract_external_urls(body)
   end
+
+  def test_page_name_entries_include_materialized_pages_and_link_only_hubs
+    source = WeblogAuthoring::PageDocument.new(
+      id: "source-id",
+      page_type: "named",
+      name: "source",
+      body: "[[weblog.ason.asの書き心地]] [[source]]",
+      links: WeblogAuthoring.extract_wiki_links("[[weblog.ason.asの書き心地]] [[source]]")
+    )
+
+    entries = WeblogAuthoring.page_name_entries([source])
+
+    assert_equal ["source", "weblog.ason.asの書き心地"], entries.map { |entry| entry.fetch("name") }
+    assert_equal "source-id", entries.fetch(0).fetch("id")
+    assert entries.fetch(0).fetch("materialized")
+    assert_match(/\Ahub-[0-9a-f]{32}\z/, entries.fetch(1).fetch("id"))
+    refute entries.fetch(1).fetch("materialized")
+  end
 end

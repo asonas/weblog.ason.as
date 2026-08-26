@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "digest"
+
 module WeblogAuthoring
   LINK_PATTERN = /\[\[([^\[\]]+)\]\]/.freeze
   EXTERNAL_URL_PATTERN = %r{https?://[^\s<>\[\]\\"')]+}.freeze
@@ -49,6 +51,34 @@ module WeblogAuthoring
     end
 
     urls.freeze
+  end
+
+  def page_name_entries(pages)
+    entries = []
+    names = {}
+
+    pages.each do |page|
+      name = page.route
+      next if names.key?(name)
+
+      names[name] = true
+      entries << { "id" => page.id, "name" => name, "materialized" => true }
+    end
+
+    pages.each do |page|
+      page.links.each do |link|
+        next if names.key?(link.name)
+
+        names[link.name] = true
+        entries << {
+          "id" => "hub-#{Digest::SHA256.hexdigest(link.name)[0, 32]}",
+          "name" => link.name,
+          "materialized" => false,
+        }
+      end
+    end
+
+    entries.freeze
   end
 
   def each_segment(body)

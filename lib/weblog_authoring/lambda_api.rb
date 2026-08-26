@@ -210,7 +210,12 @@ module WeblogAuthoring
     end
 
     def page_names_response(event)
-      conditional_json_response(event, "names" => @database.list_pages.map(&:route))
+      entries = WeblogAuthoring.page_name_entries(@database.list_pages)
+      conditional_json_response(
+        event,
+        "names" => entries.map { |entry| entry.fetch("name") },
+        "entries" => entries
+      )
     end
 
     def new_editor_response(event)

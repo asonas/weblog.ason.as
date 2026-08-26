@@ -206,7 +206,8 @@ module WeblogAuthoring
     end
 
     get "/api/page-names" do
-      conditional_json_response("names" => settings.database.list_pages.map(&:route))
+      entries = WeblogAuthoring.page_name_entries(settings.database.list_pages)
+      conditional_json_response("names" => entries.map { |entry| entry.fetch("name") }, "entries" => entries)
     end
 
     get "/api/editor/new" do

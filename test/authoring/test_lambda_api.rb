@@ -164,11 +164,19 @@ class LambdaApiTest < Minitest::Test
   end
 
   def test_lists_cacheable_page_names
+    @database.pages.replace([
+      page_document(id: "source", name: "source", body: "[[weblog.ason.asの書き心地]]"),
+      @page,
+    ])
     first = @api.call(event("GET", "/api/page-names"))
     etag = first.fetch(:headers).fetch("etag")
     unchanged = @api.call(event("GET", "/api/page-names", headers: { "if-none-match" => etag }))
 
-    assert_equal ["記事名"], JSON.parse(first.fetch(:body)).fetch("names")
+    payload = JSON.parse(first.fetch(:body))
+
+    assert_equal ["source", "記事名", "weblog.ason.asの書き心地"], payload.fetch("names")
+    assert_equal [true, true, false], payload.fetch("entries").map { |entry| entry.fetch("materialized") }
+    assert_match(/\Ahub-[0-9a-f]{32}\z/, payload.fetch("entries").last.fetch("id"))
     assert_equal "no-cache", first.fetch(:headers).fetch("cache-control")
     assert_equal 304, unchanged.fetch(:statusCode)
   end
