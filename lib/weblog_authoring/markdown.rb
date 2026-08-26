@@ -4,6 +4,7 @@ require "cgi"
 require "kramdown"
 require "kramdown-parser-gfm"
 require "rouge"
+require "uri"
 
 require_relative "links"
 require_relative "models"
@@ -221,6 +222,8 @@ module WeblogAuthoring
       def convert_p(el, indent)
         if el.options[:transparent]
           inner(el, indent)
+        elsif (video_id = youtube_video_id(standalone_url(el)))
+          youtube_player_html(video_id, indent)
         else
           format_as_block_html("p", el.attr, inner(el, indent), indent)
         end
@@ -317,6 +320,43 @@ module WeblogAuthoring
       end
 
       private
+
+      def standalone_url(element)
+        return nil unless element.children.one?
+
+        child = element.children.first
+        return child.value.to_s.strip if child.type == :text
+        return nil unless child.type == :a
+
+        href = child.attr["href"].to_s
+        label = child.children.map { |node| node.value.to_s }.join
+        label == href ? href : nil
+      end
+
+      def youtube_video_id(raw_url)
+        return nil if raw_url.nil? || raw_url.empty?
+
+        url = URI.parse(raw_url)
+        hostname = url.host.to_s.downcase.sub(/\Awww\./, "")
+        video_id = if hostname == "youtu.be"
+                     url.path.split("/").reject(&:empty?).first
+                   elsif hostname == "youtube.com" || hostname.end_with?(".youtube.com")
+                     if url.path == "/watch"
+                       URI.decode_www_form(url.query.to_s).to_h["v"]
+                     elsif url.path.match?(%r{\A/(?:shorts|live|embed)/})
+                       url.path.split("/").reject(&:empty?)[1]
+                     end
+                   end
+        video_id if video_id&.match?(/\A[A-Za-z0-9_-]{11}\z/)
+      rescue URI::InvalidURIError
+        nil
+      end
+
+      def youtube_player_html(video_id, indent)
+        spaces = " " * indent
+        src = "https://www.youtube-nocookie.com/embed/#{video_id}"
+        %(#{spaces}<div class="youtube-player"><iframe src="#{src}" title="YouTube動画" loading="lazy" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>\n)
+      end
 
       def safe_html_element?(el)
         return true if SAFE_INLINE_HTML.include?(el.value) && el.attr.empty?

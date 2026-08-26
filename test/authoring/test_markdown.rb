@@ -49,6 +49,16 @@ class TestMarkdown < Minitest::Test
     assert_includes rendered.problems, "syntax highlighting fallback: unknown"
   end
 
+  def test_standalone_youtube_url_renders_as_a_player
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+
+    rendered = renderer.render("https://youtu.be/dQw4w9WgXcQ\n", mode: "public")
+
+    assert_includes rendered.html, 'class="youtube-player"'
+    assert_includes rendered.html, 'src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"'
+    assert_includes rendered.html, "allowfullscreen"
+  end
+
   def test_raw_html_images_and_unsafe_links_are_not_emitted
     renderer = WeblogAuthoring::MarkdownRenderer.new
 

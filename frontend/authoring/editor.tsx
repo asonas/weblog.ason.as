@@ -449,15 +449,51 @@ function externalLinkLabel(url: string): string {
   }
 }
 
+export function youtubeVideoId(rawUrl: string): string | null {
+  try {
+    const url = new URL(rawUrl);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    let videoId: string | null = null;
+    if (hostname === "youtu.be") videoId = url.pathname.split("/").filter(Boolean)[0] || null;
+    if (hostname === "youtube.com" || hostname.endsWith(".youtube.com")) {
+      if (url.pathname === "/watch") videoId = url.searchParams.get("v");
+      else if (/^\/(?:shorts|live|embed)\//.test(url.pathname)) {
+        videoId = url.pathname.split("/").filter(Boolean)[1] || null;
+      }
+    }
+    return videoId?.match(/^[A-Za-z0-9_-]{11}$/) ? videoId : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
 function EmbedCard({
   url,
   metadata,
-  failed = false
+  failed = false,
+  measureOnly = false
 }: {
   url: string;
   metadata?: EmbedMetadata;
   failed?: boolean;
+  measureOnly?: boolean;
 }) {
+  const videoId = youtubeVideoId(url);
+  if (videoId) {
+    return (
+      <div className="embed-card embed-card--youtube">
+        {!measureOnly && <iframe
+          src={`https://www.youtube-nocookie.com/embed/${videoId}`}
+          title={metadata?.title || "YouTube動画"}
+          loading="lazy"
+          allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+          referrerPolicy="strict-origin-when-cross-origin"
+          allowFullScreen
+        />}
+      </div>
+    );
+  }
+
   if (!metadata) {
     return (
       <div className="embed-card embed-card--loading" role="status">
@@ -858,47 +894,52 @@ function InternalUniverseGraph({
           />
         ))}
       </svg>
-      {layout.topics.map((topic) => (
-        <span
+      {layout.topics.map((topic) => {
+        const name = topic.name || "";
+        const style = {
+          "--internal-topic-x": `${topic.x}px`,
+          "--internal-topic-y": `${topic.y}px`
+        } as CSSProperties;
+        const content = topic.group?.kind === "url" ? (
+          <EmbedCard
+            url={name}
+            metadata={embeds[name] || undefined}
+            failed={embeds[name] === null}
+          />
+        ) : name;
+        return <span
           className="internal-universe-group__topic-wrap"
           key={topic.id}
-          onPointerEnter={() => onActiveTopicChange(topic.name || null)}
+          onPointerEnter={() => onActiveTopicChange(name || null)}
           onPointerLeave={() => onActiveTopicChange(null)}
-          onFocus={() => onActiveTopicChange(topic.name || null)}
+          onFocus={() => onActiveTopicChange(name || null)}
           onBlur={() => onActiveTopicChange(null)}
         >
           <a
             className="internal-universe-group__topic-node"
-            href={topic.group?.kind === "url" ? topic.name : `/${encodePageName(topic.name || "")}`}
-            data-universe-topic={topic.name}
-            aria-label={topic.name}
+            href={topic.group?.kind === "url" ? name : `/${encodePageName(name)}`}
+            data-universe-topic={name}
+            aria-label={name}
             target={topic.group?.kind === "url" ? "_blank" : undefined}
             rel={topic.group?.kind === "url" ? "noreferrer" : undefined}
-            style={{
-              "--internal-topic-x": `${topic.x}px`,
-              "--internal-topic-y": `${topic.y}px`
-            } as CSSProperties}
+            style={style}
           />
-          <a
+          {topic.group?.kind === "url" && youtubeVideoId(name) ? <span
+            className="internal-universe-group__topic internal-universe-group__topic--external"
+            style={style}
+          >
+            {content}
+          </span> : <a
             className={`internal-universe-group__topic${topic.group?.kind === "url" ? " internal-universe-group__topic--external" : ""}`}
-            href={topic.group?.kind === "url" ? topic.name : `/${encodePageName(topic.name || "")}`}
+            href={topic.group?.kind === "url" ? name : `/${encodePageName(name)}`}
             target={topic.group?.kind === "url" ? "_blank" : undefined}
             rel={topic.group?.kind === "url" ? "noreferrer" : undefined}
-            style={{
-              "--internal-topic-x": `${topic.x}px`,
-              "--internal-topic-y": `${topic.y}px`
-            } as CSSProperties}
+            style={style}
           >
-            {topic.group?.kind === "url" ? (
-              <EmbedCard
-                url={topic.name || ""}
-                metadata={embeds[topic.name || ""] || undefined}
-                failed={embeds[topic.name || ""] === null}
-              />
-            ) : topic.name}
-          </a>
+            {content}
+          </a>}
         </span>
-      ))}
+      })}
       {layout.pages.map((node) => {
         const page = node.page;
         if (!page) return null;
@@ -1505,6 +1546,7 @@ function Universe({
               url={url}
               metadata={embeds[url] || undefined}
               failed={failedEmbeds.includes(url)}
+              measureOnly
             />
           </div>
         ))}

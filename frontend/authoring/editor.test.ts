@@ -53,7 +53,8 @@ const {
   nextWikiLinkSuggestionIndex,
   replaceEditorContentPreservingSelection,
   wrapSelectionInWikiLink,
-  wikiLinkQuery
+  wikiLinkQuery,
+  youtubeVideoId
 } = await import("./editor");
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
 const { markdownForSource } = await import("./markdown");
@@ -74,6 +75,13 @@ test("recognizes image files and inbox photos as image drags", () => {
   assert.equal(isImageDrag({ items: [{ kind: "file", type: "image/png" }] }), true);
   assert.equal(isImageDrag({ items: [{ kind: "file", type: "text/plain" }] }), false);
   assert.equal(isImageDrag({ types: ["application/x-weblog-inbox-key"] }), true);
+});
+
+test("extracts video IDs from YouTube URLs", () => {
+  assert.equal(youtubeVideoId("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "dQw4w9WgXcQ");
+  assert.equal(youtubeVideoId("https://youtu.be/dQw4w9WgXcQ?t=42"), "dQw4w9WgXcQ");
+  assert.equal(youtubeVideoId("https://www.youtube.com/shorts/dQw4w9WgXcQ"), "dQw4w9WgXcQ");
+  assert.equal(youtubeVideoId("https://example.com/watch?v=dQw4w9WgXcQ"), null);
 });
 
 test("finds and filters the unfinished Wiki link at the cursor", () => {
