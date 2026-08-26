@@ -94,6 +94,7 @@ module WeblogAuthoring
     ASSET_FILENAME = /\Aasset_[0-9a-f]{16}\.(?:avif|gif|jpe?g|png|webp)\z/i
     AUTHORING_ASSET_FILENAME = /\A(?:imageUpload\.worker|webp_enc(?:_simd)?-[A-Za-z0-9_-]+)\.js\z/
     EMBED_CACHE_TTL = 7 * 24 * 60 * 60
+    EMBED_FALLBACK_CACHE_TTL = 5 * 60
     DEFAULT_ALLOWED_GITHUB_USER_ID = 630_181
     DEFAULT_GITHUB_REDIRECT_URI = "http://127.0.0.1:5173/api/auth/github/callback"
 
@@ -570,7 +571,8 @@ module WeblogAuthoring
       return nil unless metadata["url"] == url
 
       fetched_at = Time.iso8601(metadata.fetch("fetched_at"))
-      settings.clock.call - fetched_at <= EMBED_CACHE_TTL ? metadata : nil
+      ttl = metadata["status"] == "fallback" ? EMBED_FALLBACK_CACHE_TTL : EMBED_CACHE_TTL
+      settings.clock.call - fetched_at <= ttl ? metadata : nil
     rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound, JSON::ParserError, KeyError, ArgumentError
       nil
     end

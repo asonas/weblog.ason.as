@@ -577,7 +577,6 @@ function EmbedCard({
   return (
     <div className="embed-card">
       <span className="embed-card__content">
-        <small>{metadata.site_name || externalLinkLabel(metadata.url)}</small>
         <strong>{metadata.title}</strong>
         {metadata.description && <span>{metadata.description}</span>}
         <span className="embed-card__url">{metadata.url}</span>

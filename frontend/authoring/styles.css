@@ -795,8 +795,8 @@ h1 {
 
 .embed-card img {
   inline-size: 100%;
-  block-size: 7rem;
-  flex: 0 0 7rem;
+  block-size: 9rem;
+  flex: 0 0 9rem;
   object-fit: cover;
   order: -1;
 }

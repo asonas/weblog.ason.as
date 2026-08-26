@@ -40,6 +40,7 @@ module WeblogAuthoring
     JAPANESE_WEEKDAYS = %w[日曜日 月曜日 火曜日 水曜日 木曜日 金曜日 土曜日].freeze
     RELATED_PAGE_LIMIT = 50
     EMBED_CACHE_TTL = 7 * 24 * 60 * 60
+    EMBED_FALLBACK_CACHE_TTL = 5 * 60
 
     def initialize(database:, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
                    allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
@@ -344,7 +345,8 @@ module WeblogAuthoring
       return nil unless metadata["url"] == url
 
       fetched_at = Time.iso8601(metadata.fetch("fetched_at"))
-      @clock.call - fetched_at <= EMBED_CACHE_TTL ? metadata : nil
+      ttl = metadata["status"] == "fallback" ? EMBED_FALLBACK_CACHE_TTL : EMBED_CACHE_TTL
+      @clock.call - fetched_at <= ttl ? metadata : nil
     rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound, JSON::ParserError, KeyError, ArgumentError
       nil
     end
