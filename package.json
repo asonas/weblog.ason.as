@@ -4,6 +4,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite --host 127.0.0.1",
+    "prototype:ios-inbox": "vite --config prototypes/ios-photo-inbox/vite.config.js",
+    "prototype:ios-inbox:build": "vite build --config prototypes/ios-photo-inbox/vite.config.js",
     "typecheck": "tsc --noEmit",
     "test:authoring": "tsx --test frontend/authoring/editor.test.ts",
     "test:scrapbox": "tsx --test scripts/scrapbox-to-weblog.test.ts",
