@@ -190,6 +190,20 @@ class LambdaApiTest < Minitest::Test
     assert_equal "本文", page.fetch("body")
   end
 
+  def test_page_response_accepts_a_weak_matching_etag
+    first = @api.call(event("GET", "/api/pages/page-id", { "id" => "page-id" }))
+    weak_etag = "W/#{first.fetch(:headers).fetch("etag")}"
+    unchanged = @api.call(event(
+      "GET",
+      "/api/pages/page-id",
+      { "id" => "page-id" },
+      headers: { "if-none-match" => weak_etag }
+    ))
+
+    assert_equal 304, unchanged.fetch(:statusCode)
+    assert_empty unchanged.fetch(:body)
+  end
+
   def test_finds_a_page_by_encoded_route
     response = @api.call(event(
       "GET",

@@ -648,7 +648,8 @@ module WeblogAuthoring
       body = JSON.generate(payload)
       etag = %Q("#{Digest::SHA256.hexdigest(body)}")
       headers = JSON_HEADERS.merge("cache-control" => "no-cache", "etag" => etag)
-      return { statusCode: 304, headers:, body: "" } if event.fetch("headers", {}).to_h["if-none-match"] == etag
+      request_etag = event.fetch("headers", {}).to_h["if-none-match"].to_s.delete_prefix("W/")
+      return { statusCode: 304, headers:, body: "" } if request_etag == etag
 
       { statusCode: 200, headers:, body: }
     end
