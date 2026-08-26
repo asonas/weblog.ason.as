@@ -84,6 +84,21 @@ test("extracts video IDs from YouTube URLs", () => {
   assert.equal(youtubeVideoId("https://example.com/watch?v=dQw4w9WgXcQ"), null);
 });
 
+test("renders a standalone YouTube URL in the editor and preserves its Markdown", async () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "title\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    contentType: "markdown"
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(editor.state.doc.child(1).type.name, "youtubePlayer");
+  assert.match(editor.getHTML(), /youtube\.com\/embed\/dQw4w9WgXcQ\?feature=oembed/);
+  assert.match(editor.getMarkdown(), /https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ/);
+  editor.destroy();
+});
+
 test("finds and filters the unfinished Wiki link at the cursor", () => {
   const editor = new Editor({
     element: document.createElement("div"),

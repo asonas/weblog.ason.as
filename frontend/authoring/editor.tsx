@@ -1,6 +1,7 @@
-import { Extension, type Editor } from "@tiptap/core";
+import { Extension, Node as TiptapNode, type Editor } from "@tiptap/core";
 import { Markdown } from "@tiptap/markdown";
-import { NodeSelection, Plugin, TextSelection } from "@tiptap/pm/state";
+import type { NodeType } from "@tiptap/pm/model";
+import { NodeSelection, Plugin, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import Image from "@tiptap/extension-image";
 import StarterKit from "@tiptap/starter-kit";
@@ -470,30 +471,12 @@ export function youtubeVideoId(rawUrl: string): string | null {
 function EmbedCard({
   url,
   metadata,
-  failed = false,
-  measureOnly = false
+  failed = false
 }: {
   url: string;
   metadata?: EmbedMetadata;
   failed?: boolean;
-  measureOnly?: boolean;
 }) {
-  const videoId = youtubeVideoId(url);
-  if (videoId) {
-    return (
-      <div className="embed-card embed-card--youtube">
-        {!measureOnly && <iframe
-          src={`https://www.youtube-nocookie.com/embed/${videoId}`}
-          title={metadata?.title || "YouTube動画"}
-          loading="lazy"
-          allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-          referrerPolicy="strict-origin-when-cross-origin"
-          allowFullScreen
-        />}
-      </div>
-    );
-  }
-
   if (!metadata) {
     return (
       <div className="embed-card embed-card--loading" role="status">
@@ -1546,7 +1529,6 @@ function Universe({
               url={url}
               metadata={embeds[url] || undefined}
               failed={failedEmbeds.includes(url)}
-              measureOnly
             />
           </div>
         ))}
@@ -1554,6 +1536,76 @@ function Universe({
     </div>
   );
 }
+
+function replaceYouTubeParagraphs(state: EditorState, nodeType: NodeType) {
+  const replacements: Array<{ from: number; to: number; url: string }> = [];
+  state.doc.forEach((node, offset, index) => {
+    const url = node.textContent.trim();
+    if (index > 0 && node.type.name === "paragraph" && youtubeVideoId(url)) {
+      replacements.push({ from: offset, to: offset + node.nodeSize, url });
+    }
+  });
+  if (replacements.length === 0) return null;
+
+  const transaction = state.tr;
+  for (const replacement of replacements.reverse()) {
+    transaction.replaceWith(
+      replacement.from,
+      replacement.to,
+      nodeType.create({ url: replacement.url })
+    );
+  }
+  return transaction;
+}
+
+const YouTubePlayer = TiptapNode.create({
+  name: "youtubePlayer",
+  group: "block",
+  atom: true,
+  selectable: true,
+
+  addAttributes() {
+    return { url: { default: "" } };
+  },
+
+  parseHTML() {
+    return [{
+      tag: "div[data-youtube-player]",
+      getAttrs: (element) => ({ url: (element as HTMLElement).dataset.youtubePlayer || "" })
+    }];
+  },
+
+  renderHTML({ node }) {
+    const url = node.attrs.url as string;
+    const videoId = youtubeVideoId(url);
+    return [
+      "div",
+      { class: "youtube-player", "data-youtube-player": url },
+      ["iframe", {
+        src: `https://www.youtube.com/embed/${videoId}?feature=oembed`,
+        title: "YouTube動画",
+        loading: "lazy",
+        allow: "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture",
+        referrerpolicy: "strict-origin-when-cross-origin",
+        allowfullscreen: ""
+      }]
+    ];
+  },
+
+  renderMarkdown: (node) => node.attrs?.url || "",
+
+  onCreate() {
+    const transaction = replaceYouTubeParagraphs(this.editor.state, this.type);
+    if (transaction) this.editor.view.dispatch(transaction);
+  },
+
+  addProseMirrorPlugins() {
+    return [new Plugin({
+      appendTransaction: (_transactions, _oldState, state) =>
+        replaceYouTubeParagraphs(state, this.type)
+    })];
+  }
+});
 
 export const EDITOR_EXTENSIONS = [
   StarterKit.configure({
@@ -1571,6 +1623,7 @@ export const EDITOR_EXTENSIONS = [
   }),
   WikiLinks,
   Image.configure({ allowBase64: false }),
+  YouTubePlayer,
   Markdown.configure({ indentation: { style: "space", size: 2 } })
 ];
 

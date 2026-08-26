@@ -354,7 +354,7 @@ module WeblogAuthoring
 
       def youtube_player_html(video_id, indent)
         spaces = " " * indent
-        src = "https://www.youtube-nocookie.com/embed/#{video_id}"
+        src = "https://www.youtube.com/embed/#{video_id}?feature=oembed"
         %(#{spaces}<div class="youtube-player"><iframe src="#{src}" title="YouTube動画" loading="lazy" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>\n)
       end
 
