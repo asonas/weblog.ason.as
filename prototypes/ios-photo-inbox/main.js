@@ -25,10 +25,10 @@ const photo = (item, selectable = false) => `
     ${selectable ? '<span class="photo__check">' + icon("check") + "</span>" : ""}
   </button>`;
 
-const shell = (body, title = "写真インボックス") => `
-  <section class="phone" aria-label="${title}">
+const shell = (body, title = "写真インボックス", minimal = false) => `
+  <section class="phone${minimal ? " phone--minimal" : ""}" aria-label="${title}">
     <header class="nav-bar">
-      <div><p class="eyebrow">weblog.ason.as</p><h1>${title}</h1></div>
+      ${minimal ? "" : `<div><p class="eyebrow">weblog.ason.as</p><h1>${title}</h1></div>`}
       <button class="avatar" type="button" aria-label="アカウント設定">A</button>
     </header>
     ${body}
@@ -38,12 +38,12 @@ const shell = (body, title = "写真インボックス") => `
 const variants = {
   a: () => shell(`
     <div class="screen screen--selection">
-      <div class="intro"><p>今日の写真を選んで、日記の素材として送ります。</p><span>今日 5枚</span></div>
       <div class="photo-grid photo-grid--large">${photos.slice(0, 5).map((item) => photo(item, true)).join("")}</div>
-      <div class="selection-summary" aria-live="polite"><strong><span data-count>0</span>枚を選択</strong><span>JPEG・位置情報なし</span></div>
-      <button class="primary-action" type="button" data-send disabled>${icon("cloud")}インボックスに送る</button>
-      <p class="footnote">送った写真は自動で公開されません</p>
-    </div>`),
+      <div class="selection-dock">
+        <span class="selection-count" aria-live="polite"><strong data-count>5</strong>枚</span>
+        <button class="primary-action" type="button" data-send>${icon("cloud")}すべて送る</button>
+      </div>
+    </div>`, "今日の写真", true),
   b: () => shell(`
     <div class="screen screen--queue">
       <div class="status-hero"><span class="status-hero__icon">${icon("cloud")}</span><div><strong>転送は自動で続きます</strong><p>アプリを閉じても問題ありません</p></div></div>
@@ -81,7 +81,7 @@ const render = (variant) => {
   document.querySelector("#app").innerHTML = variants[variant]();
   document.body.dataset.variant = variant;
   document.querySelectorAll("[data-variant]").forEach((button) => button.classList.toggle("is-active", button.dataset.variant === variant));
-  const selected = new Set();
+  const selected = new Set(variant === "a" ? photos.slice(0, 5).map(({ id }) => String(id)) : []);
   document.querySelectorAll("[data-photo]").forEach((button) => button.addEventListener("click", () => {
     const id = button.dataset.photo;
     selected.has(id) ? selected.delete(id) : selected.add(id);
@@ -90,6 +90,9 @@ const render = (variant) => {
     const send = document.querySelector("[data-send]");
     if (send) send.disabled = selected.size === 0;
   }));
+  if (variant === "a") {
+    document.querySelectorAll("[data-photo]").forEach((button) => button.classList.add("is-selected"));
+  }
 };
 
 const selectVariant = (variant) => {
