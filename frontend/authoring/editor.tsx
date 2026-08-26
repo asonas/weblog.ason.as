@@ -46,7 +46,10 @@ export function wrapSelectionInWikiLink(editor: Editor): boolean {
   const selectedText = editor.state.doc.textBetween(from, to);
   if (selectedText.length === 0) return false;
 
-  return editor.commands.insertContentAt({ from, to }, `[[${selectedText}]]`);
+  return editor.chain()
+    .insertContentAt({ from, to }, `[[${selectedText}]]`)
+    .setTextSelection(from + selectedText.length + 2)
+    .run();
 }
 
 const WikiLinks = Extension.create({
@@ -124,8 +127,9 @@ const WikiLinks = Extension.create({
                 || !(newState.selection instanceof TextSelection)
                 || !node.isText
                 || !node.text
-                || newState.selection.from > to
-                || newState.selection.to < from
+                || (newState.selection.empty
+                  ? newState.selection.from <= from || newState.selection.from >= to
+                  : newState.selection.from >= to || newState.selection.to <= from)
               ) {
                 return;
               }
@@ -190,7 +194,10 @@ const WikiLinks = Extension.create({
 
               const from = position + match.index;
               const to = from + match[0].length;
-              if (newState.selection.from <= to && newState.selection.to >= from) continue;
+              const selectionIsInside = newState.selection.empty
+                ? newState.selection.from > from && newState.selection.from < to
+                : newState.selection.from < to && newState.selection.to > from;
+              if (selectionIsInside) continue;
               matches.push({ from, to, pageName });
             }
           });

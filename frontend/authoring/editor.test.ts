@@ -325,7 +325,7 @@ test("opens an unfocused wiki link instead of expanding it for editing", async (
   editor.destroy();
 });
 
-test("deletes a closing wiki bracket from the cursor immediately after the link", () => {
+test("keeps a wiki link collapsed when the cursor is immediately after it", () => {
   const editor = new Editor({
     element: document.createElement("div"),
     extensions: EDITOR_EXTENSIONS,
@@ -334,16 +334,12 @@ test("deletes a closing wiki bracket from the cursor immediately after the link"
   });
 
   editor.commands.setTextSelection(8);
-  assert.equal(editor.getText(), "[[example]]test");
-  assert.equal(editor.state.selection.from, 12);
-
-  editor.commands.deleteRange({ from: 11, to: 12 });
-
-  assert.equal(editor.getText(), "[[example]test");
+  assert.equal(editor.getText(), "exampletest");
+  assert.ok(editor.view.dom.querySelector('a[href="/example"]'));
   editor.destroy();
 });
 
-test("keeps a wiki link raw while composing text after it", () => {
+test("keeps composing text after a collapsed wiki link", () => {
   const editor = new Editor({
     element: document.createElement("div"),
     extensions: EDITOR_EXTENSIONS,
@@ -356,7 +352,8 @@ test("keeps a wiki link raw while composing text after it", () => {
   editor.commands.insertContent("あ");
 
   assert.equal(editor.view.composing, true);
-  assert.equal(editor.getText(), "[[example]]あ");
+  assert.equal(editor.getText(), "exampleあ");
+  assert.equal(editor.view.dom.querySelector('a[href="/example"]')?.textContent, "example");
   editor.destroy();
 });
 
@@ -374,7 +371,7 @@ test("wraps selected text in a wiki link with the platform shortcut", () => {
   editor.destroy();
 });
 
-test("preserves wiki link cursor boundaries and text selections", () => {
+test("expands a wiki link only after the cursor enters its text", () => {
   const wikiEditor = new Editor({
     element: document.createElement("div"),
     extensions: EDITOR_EXTENSIONS,
@@ -383,11 +380,12 @@ test("preserves wiki link cursor boundaries and text selections", () => {
   });
 
   wikiEditor.commands.setTextSelection(1);
+  assert.equal(wikiEditor.getText(), "example");
+  assert.ok(wikiEditor.view.dom.querySelector('a[href="/example"]'));
+
+  wikiEditor.commands.setTextSelection(2);
   assert.equal(wikiEditor.getText(), "[[example]]");
-  assert.equal(wikiEditor.state.doc.textBetween(
-    wikiEditor.state.selection.from,
-    wikiEditor.state.selection.from + 2
-  ), "[[");
+  assert.equal(wikiEditor.state.selection.from, 4);
   wikiEditor.destroy();
 
   const selectionEditor = new Editor({
