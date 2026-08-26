@@ -64,7 +64,30 @@ resource "aws_s3_bucket_lifecycle_configuration" "site" {
     }
 
     expiration {
-      days = 30
+      days = 14
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+  }
+
+  rule {
+    id     = "expire-pending-inbox-adoptions"
+    status = "Enabled"
+
+    filter {
+      and {
+        prefix = "assets/uploads/"
+
+        tags = {
+          "weblog-inbox-adoption" = "pending"
+        }
+      }
+    }
+
+    expiration {
+      days = 14
     }
 
     noncurrent_version_expiration {
