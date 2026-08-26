@@ -30,6 +30,76 @@ import {
 
 import { markdownForEditor, markdownForSource } from "./markdown";
 
+declare global {
+  interface Window {
+    YT?: {
+      Player: new (element: HTMLIFrameElement, options: {
+        events: { onError: () => void };
+      }) => unknown;
+    };
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+let youtubeApiPromise: Promise<NonNullable<Window["YT"]>> | null = null;
+
+function loadYouTubeApi(): Promise<NonNullable<Window["YT"]>> {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeApiPromise) return youtubeApiPromise;
+
+  youtubeApiPromise = new Promise((resolve) => {
+    const previousReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previousReady?.();
+      if (window.YT) resolve(window.YT);
+    };
+    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      script.async = true;
+      document.head.append(script);
+    }
+  });
+  return youtubeApiPromise;
+}
+
+export function showYouTubeFallback(iframe: HTMLIFrameElement): void {
+  iframe.closest<HTMLElement>(".youtube-player")?.classList.add("youtube-player--fallback");
+}
+
+export function useYouTubeThumbnailFallback(image: HTMLImageElement): void {
+  const fallback = image.dataset.youtubeThumbnailFallback;
+  if (!fallback || image.src === fallback) return;
+  delete image.dataset.youtubeThumbnailFallback;
+  image.src = fallback;
+}
+
+function observeYouTubePlayers(root: HTMLElement): () => void {
+  const fallbackThumbnail = (event: Event) => {
+    if (event.target instanceof HTMLImageElement) useYouTubeThumbnailFallback(event.target);
+  };
+  const register = () => {
+    const iframes = Array.from(root.querySelectorAll<HTMLIFrameElement>("iframe[data-youtube-player-frame]"))
+      .filter((iframe) => iframe.dataset.youtubePlayerObserved !== "true");
+    if (iframes.length === 0) return;
+    for (const iframe of iframes) iframe.dataset.youtubePlayerObserved = "true";
+    void loadYouTubeApi().then(({ Player }) => {
+      for (const iframe of iframes) {
+        if (!iframe.isConnected) continue;
+        new Player(iframe, { events: { onError: () => showYouTubeFallback(iframe) } });
+      }
+    });
+  };
+  const observer = new MutationObserver(register);
+  observer.observe(root, { childList: true, subtree: true });
+  root.addEventListener("error", fallbackThumbnail, true);
+  register();
+  return () => {
+    observer.disconnect();
+    root.removeEventListener("error", fallbackThumbnail, true);
+  };
+}
+
 function encodePageName(name: string): string {
   return encodeURIComponent(name).replace(/[!'()*]/g, (character) =>
     `%${character.charCodeAt(0).toString(16).toUpperCase()}`
@@ -478,7 +548,7 @@ export function youtubeVideoId(rawUrl: string): string | null {
 export function embedImageUrl(url: string, metadata?: EmbedMetadata): string | null {
   if (metadata?.image_url) return metadata.image_url;
   const videoId = youtubeVideoId(url);
-  return videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+  return videoId ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` : null;
 }
 
 function EmbedCard({
@@ -491,6 +561,10 @@ function EmbedCard({
   failed?: boolean;
 }) {
   const imageUrl = embedImageUrl(url, metadata);
+  const videoId = youtubeVideoId(url);
+  const fallbackImageUrl = !metadata?.image_url && videoId
+    ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+    : undefined;
   if (!metadata) {
     return (
       <div className="embed-card embed-card--loading" role="status">
@@ -509,7 +583,14 @@ function EmbedCard({
         <span className="embed-card__url">{metadata.url}</span>
       </span>
       {imageUrl && (
-        <img src={imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />
+        <img
+          src={imageUrl}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          data-youtube-thumbnail-fallback={fallbackImageUrl}
+          onError={(event) => useYouTubeThumbnailFallback(event.currentTarget)}
+        />
       )}
     </div>
   );
@@ -1261,15 +1342,18 @@ export function topicSourceElement(
   kind: LinkedPageGroup["kind"],
   name: string
 ): HTMLElement | null {
+  if (kind === "url" && youtubeVideoId(name)) {
+    const player = Array.from(editorRoot.querySelectorAll<HTMLElement>("[data-youtube-player]"))
+      .find((candidate) => candidate.dataset.youtubePlayer === name);
+    if (player) return player;
+  }
   const href = kind === "url"
     ? name
     : new URL(`/${encodePageName(name)}`, window.location.origin).href;
   const link = Array.from(editorRoot.querySelectorAll<HTMLAnchorElement>("a[href]"))
     .find((candidate) => candidate.href === href);
   if (link) return link;
-  if (kind !== "url" || !youtubeVideoId(name)) return null;
-  return Array.from(editorRoot.querySelectorAll<HTMLElement>("[data-youtube-player]"))
-    .find((candidate) => candidate.dataset.youtubePlayer === name) || null;
+  return null;
 }
 
 function elementCenter(element: HTMLElement, workspaceRect: DOMRect): UniversePoint {
@@ -1388,7 +1472,7 @@ function Universe({
         if (!editorShell) return;
 
         const anchors = new Map<string, UniversePoint>();
-        const links = Array.from(editor.view.dom.querySelectorAll<HTMLAnchorElement>("a[href]"));
+        const links = Array.from(editor.view.dom.querySelectorAll<HTMLAnchorElement>("a[href]:not(.youtube-player__fallback)"));
         for (const url of urls) {
           const link = links.find((candidate) => candidate.href === url);
           if (!link) continue;
@@ -1615,17 +1699,37 @@ const YouTubePlayer = TiptapNode.create({
   renderHTML({ node }) {
     const url = node.attrs.url as string;
     const videoId = youtubeVideoId(url);
+    const thumbnailUrl = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+    const fallbackThumbnailUrl = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
     return [
       "div",
       { class: "youtube-player", "data-youtube-player": url },
       ["iframe", {
-        src: `https://www.youtube.com/embed/${videoId}`,
+        src: `https://www.youtube.com/embed/${videoId}?enablejsapi=1`,
+        "data-youtube-player-frame": "",
         title: "YouTube動画",
         loading: "lazy",
         allow: "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture",
         referrerpolicy: "strict-origin-when-cross-origin",
         allowfullscreen: ""
-      }]
+      }],
+      ["a", {
+        class: "youtube-player__fallback",
+        href: url,
+        target: "_blank",
+        rel: "noreferrer",
+        "aria-label": "YouTubeで動画を見る"
+      },
+      ["img", {
+        src: thumbnailUrl,
+        alt: "",
+        loading: "lazy",
+        "data-youtube-thumbnail-fallback": fallbackThumbnailUrl
+      }],
+      ["span", { class: "youtube-player__brand", "aria-hidden": "true" }, "YouTube"],
+      ["span", { class: "youtube-player__details" },
+        ["strong", {}, "YouTubeで見る"],
+        ["span", { class: "youtube-player__url" }, url]]]
     ];
   },
 
@@ -2114,6 +2218,11 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       void handleEditorBlur(currentEditor);
     }
   });
+
+  useEffect(() => {
+    if (!editor) return;
+    return observeYouTubePlayers(editor.view.dom);
+  }, [editor]);
 
   const wikiLinkSuggestions = useMemo(
     () => wikiLinkQueryState ? matchingWikiLinkNames(wikiLinkNames, wikiLinkQueryState.value) : [],

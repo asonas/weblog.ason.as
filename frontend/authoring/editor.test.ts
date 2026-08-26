@@ -57,6 +57,8 @@ const {
   wrapSelectionInWikiLink,
   wikiLinkQuery,
   topicSourceElement,
+  showYouTubeFallback,
+  useYouTubeThumbnailFallback,
   youtubeVideoId
 } = await import("./editor");
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
@@ -99,8 +101,31 @@ test("uses the YouTube thumbnail when OGP has no image", () => {
       image_url: "",
       status: "ready"
     }),
-    "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+    "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"
   );
+});
+
+test("falls back when a maximum resolution YouTube thumbnail is unavailable", () => {
+  const image = document.createElement("img");
+  image.src = "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg";
+  image.dataset.youtubeThumbnailFallback = "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg";
+
+  useYouTubeThumbnailFallback(image);
+
+  assert.equal(image.src, "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg");
+  assert.equal(image.dataset.youtubeThumbnailFallback, undefined);
+});
+
+test("shows the YouTube thumbnail and URL after a player error", () => {
+  const wrapper = document.createElement("div");
+  wrapper.className = "youtube-player";
+  wrapper.innerHTML = '<iframe data-youtube-player-frame></iframe><a class="youtube-player__fallback" href="https://www.youtube.com/watch?v=dQw4w9WgXcQ">URL</a>';
+  const iframe = wrapper.querySelector("iframe")!;
+
+  showYouTubeFallback(iframe);
+
+  assert.equal(wrapper.classList.contains("youtube-player--fallback"), true);
+  assert.equal(wrapper.querySelector<HTMLAnchorElement>(".youtube-player__fallback")?.href, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 });
 
 test("renders a standalone YouTube URL in the editor and preserves its Markdown", async () => {
@@ -114,6 +139,8 @@ test("renders a standalone YouTube URL in the editor and preserves its Markdown"
 
   assert.equal(editor.state.doc.child(1).type.name, "youtubePlayer");
   assert.match(editor.getHTML(), /youtube\.com\/embed\/dQw4w9WgXcQ/);
+  assert.match(editor.getHTML(), /YouTubeで見る/);
+  assert.match(editor.getHTML(), /aria-label="YouTubeで動画を見る"/);
   assert.match(editor.getMarkdown(), /https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ/);
   editor.destroy();
 });

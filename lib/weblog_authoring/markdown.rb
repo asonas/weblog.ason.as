@@ -222,8 +222,8 @@ module WeblogAuthoring
       def convert_p(el, indent)
         if el.options[:transparent]
           inner(el, indent)
-        elsif (video_id = youtube_video_id(standalone_url(el)))
-          youtube_player_html(video_id, indent)
+        elsif (url = standalone_url(el)) && (video_id = youtube_video_id(url))
+          youtube_player_html(video_id, url, indent)
         else
           format_as_block_html("p", el.attr, inner(el, indent), indent)
         end
@@ -352,10 +352,13 @@ module WeblogAuthoring
         nil
       end
 
-      def youtube_player_html(video_id, indent)
+      def youtube_player_html(video_id, url, indent)
         spaces = " " * indent
-        src = "https://www.youtube.com/embed/#{video_id}"
-        %(#{spaces}<div class="youtube-player"><iframe src="#{src}" title="YouTube動画" loading="lazy" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>\n)
+        src = "https://www.youtube.com/embed/#{video_id}?enablejsapi=1"
+        thumbnail = "https://i.ytimg.com/vi/#{video_id}/maxresdefault.jpg"
+        fallback_thumbnail = "https://i.ytimg.com/vi/#{video_id}/hqdefault.jpg"
+        escaped_url = CGI.escapeHTML(url)
+        %(#{spaces}<div class="youtube-player"><iframe src="#{src}" data-youtube-player-frame title="YouTube動画" loading="lazy" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe><a class="youtube-player__fallback" href="#{escaped_url}" target="_blank" rel="noreferrer" aria-label="YouTubeで動画を見る"><img src="#{thumbnail}" data-youtube-thumbnail-fallback="#{fallback_thumbnail}" alt="" loading="lazy"><span class="youtube-player__brand" aria-hidden="true">YouTube</span><span class="youtube-player__details"><strong>YouTubeで見る</strong><span class="youtube-player__url">#{escaped_url}</span></span></a></div>\n)
       end
 
       def safe_html_element?(el)

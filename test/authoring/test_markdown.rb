@@ -55,7 +55,13 @@ class TestMarkdown < Minitest::Test
     rendered = renderer.render("https://youtu.be/dQw4w9WgXcQ\n", mode: "public")
 
     assert_includes rendered.html, 'class="youtube-player"'
-    assert_includes rendered.html, 'src="https://www.youtube.com/embed/dQw4w9WgXcQ"'
+    assert_includes rendered.html, 'src="https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1"'
+    assert_includes rendered.html, 'class="youtube-player__fallback"'
+    assert_includes rendered.html, 'href="https://youtu.be/dQw4w9WgXcQ"'
+    assert_includes rendered.html, '>YouTubeで見る<'
+    assert_includes rendered.html, 'aria-label="YouTubeで動画を見る"'
+    assert_includes rendered.html, 'src="https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"'
+    assert_includes rendered.html, 'data-youtube-thumbnail-fallback="https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"'
     assert_includes rendered.html, "allowfullscreen"
   end
 
