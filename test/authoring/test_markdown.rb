@@ -55,7 +55,7 @@ class TestMarkdown < Minitest::Test
     rendered = renderer.render("https://youtu.be/dQw4w9WgXcQ\n", mode: "public")
 
     assert_includes rendered.html, 'class="youtube-player"'
-    assert_includes rendered.html, 'src="https://www.youtube.com/embed/dQw4w9WgXcQ?feature=oembed"'
+    assert_includes rendered.html, 'src="https://www.youtube.com/embed/dQw4w9WgXcQ"'
     assert_includes rendered.html, "allowfullscreen"
   end
 

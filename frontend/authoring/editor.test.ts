@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { Editor } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -45,6 +46,7 @@ const {
   AuthoringEditor,
   buildInternalUniverseGroups,
   EDITOR_EXTENSIONS,
+  embedImageUrl,
   ensureBodySelection,
   extractEmbeddableUrls,
   internalNodeVisual,
@@ -54,6 +56,7 @@ const {
   replaceEditorContentPreservingSelection,
   wrapSelectionInWikiLink,
   wikiLinkQuery,
+  topicSourceElement,
   youtubeVideoId
 } = await import("./editor");
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
@@ -84,6 +87,22 @@ test("extracts video IDs from YouTube URLs", () => {
   assert.equal(youtubeVideoId("https://example.com/watch?v=dQw4w9WgXcQ"), null);
 });
 
+test("uses the YouTube thumbnail when OGP has no image", () => {
+  const url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  assert.equal(
+    embedImageUrl(url, {
+      url,
+      canonical_url: url,
+      title: "YouTube",
+      description: "",
+      site_name: "YouTube",
+      image_url: "",
+      status: "ready"
+    }),
+    "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+  );
+});
+
 test("renders a standalone YouTube URL in the editor and preserves its Markdown", async () => {
   const editor = new Editor({
     element: document.createElement("div"),
@@ -94,8 +113,48 @@ test("renders a standalone YouTube URL in the editor and preserves its Markdown"
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.equal(editor.state.doc.child(1).type.name, "youtubePlayer");
-  assert.match(editor.getHTML(), /youtube\.com\/embed\/dQw4w9WgXcQ\?feature=oembed/);
+  assert.match(editor.getHTML(), /youtube\.com\/embed\/dQw4w9WgXcQ/);
   assert.match(editor.getMarkdown(), /https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ/);
+  editor.destroy();
+});
+
+test("edits a selected YouTube player as its original URL", async () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "title\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ\n\nbody",
+    contentType: "markdown"
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const playerPosition = editor.state.doc.firstChild!.nodeSize;
+
+  editor.commands.setNodeSelection(playerPosition);
+
+  assert.equal(editor.state.doc.child(1).type.name, "paragraph");
+  assert.equal(editor.state.doc.child(1).textContent, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+  assert.ok(editor.state.selection instanceof TextSelection);
+
+  editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+  assert.equal(editor.state.doc.child(1).type.name, "youtubePlayer");
+  editor.destroy();
+});
+
+test("uses an inline YouTube player as the universe line source", async () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "title\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    contentType: "markdown"
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const source = topicSourceElement(
+    editor.view.dom,
+    "url",
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  );
+
+  assert.equal(source?.dataset.youtubePlayer, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
   editor.destroy();
 });
 

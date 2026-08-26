@@ -468,6 +468,12 @@ export function youtubeVideoId(rawUrl: string): string | null {
   }
 }
 
+export function embedImageUrl(url: string, metadata?: EmbedMetadata): string | null {
+  if (metadata?.image_url) return metadata.image_url;
+  const videoId = youtubeVideoId(url);
+  return videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+}
+
 function EmbedCard({
   url,
   metadata,
@@ -477,6 +483,7 @@ function EmbedCard({
   metadata?: EmbedMetadata;
   failed?: boolean;
 }) {
+  const imageUrl = embedImageUrl(url, metadata);
   if (!metadata) {
     return (
       <div className="embed-card embed-card--loading" role="status">
@@ -494,8 +501,8 @@ function EmbedCard({
         {metadata.description && <span>{metadata.description}</span>}
         <span className="embed-card__url">{metadata.url}</span>
       </span>
-      {metadata.image_url && (
-        <img src={metadata.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
+      {imageUrl && (
+        <img src={imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />
       )}
     </div>
   );
@@ -1242,6 +1249,30 @@ function linkUnderlineAnchor(link: HTMLAnchorElement, workspaceRect: DOMRect): U
   };
 }
 
+export function topicSourceElement(
+  editorRoot: HTMLElement,
+  kind: LinkedPageGroup["kind"],
+  name: string
+): HTMLElement | null {
+  const href = kind === "url"
+    ? name
+    : new URL(`/${encodePageName(name)}`, window.location.origin).href;
+  const link = Array.from(editorRoot.querySelectorAll<HTMLAnchorElement>("a[href]"))
+    .find((candidate) => candidate.href === href);
+  if (link) return link;
+  if (kind !== "url" || !youtubeVideoId(name)) return null;
+  return Array.from(editorRoot.querySelectorAll<HTMLElement>("[data-youtube-player]"))
+    .find((candidate) => candidate.dataset.youtubePlayer === name) || null;
+}
+
+function elementCenter(element: HTMLElement, workspaceRect: DOMRect): UniversePoint {
+  const rect = element.getBoundingClientRect();
+  return {
+    x: rect.left - workspaceRect.left + rect.width / 2,
+    y: rect.top - workspaceRect.top + rect.height / 2
+  };
+}
+
 function Universe({
   urls,
   topics,
@@ -1372,17 +1403,16 @@ function Universe({
         const height = workspace.scrollHeight;
         setLayout({ editorRect: glassRect, obstacles, width, height });
         setTopicLines((currentLines) => topics.flatMap(({ kind, name }) => {
-          const href = kind === "url"
-            ? name
-            : new URL(`/${encodePageName(name)}`, window.location.origin).href;
-          const link = links.find((candidate) => candidate.href === href);
+          const source = topicSourceElement(editor.view.dom, kind, name);
           const topic = workspace.querySelector<HTMLElement>(`[data-universe-topic="${CSS.escape(name)}"]`);
           if (!topic) return [];
-          if (!link) {
+          if (!source) {
             const currentLine = currentLines.find((line) => line.kind === kind && line.name === name);
             return currentLine ? [currentLine] : [];
           }
-          const anchor = linkUnderlineAnchor(link, workspaceRect);
+          const anchor = source instanceof HTMLAnchorElement
+            ? linkUnderlineAnchor(source, workspaceRect)
+            : elementCenter(source, workspaceRect);
           const topicRect = relativeRect(topic, workspaceRect);
           const center = {
             x: (topicRect.left + topicRect.right) / 2,
@@ -1582,7 +1612,7 @@ const YouTubePlayer = TiptapNode.create({
       "div",
       { class: "youtube-player", "data-youtube-player": url },
       ["iframe", {
-        src: `https://www.youtube.com/embed/${videoId}?feature=oembed`,
+        src: `https://www.youtube.com/embed/${videoId}`,
         title: "YouTube動画",
         loading: "lazy",
         allow: "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture",
@@ -1601,8 +1631,28 @@ const YouTubePlayer = TiptapNode.create({
 
   addProseMirrorPlugins() {
     return [new Plugin({
-      appendTransaction: (_transactions, _oldState, state) =>
-        replaceYouTubeParagraphs(state, this.type)
+      appendTransaction: (transactions, oldState, state) => {
+        if (transactions.some((transaction) => transaction.getMeta("youtubePlayerRawEditing"))) return null;
+        if (transactions.some((transaction) => transaction.selectionSet)) {
+          const selection = state.selection;
+          const enteredFromBefore = selection instanceof NodeSelection
+            && oldState.selection.to <= selection.from;
+          if (selection instanceof NodeSelection && selection.node.type === this.type) {
+            const url = selection.node.attrs.url;
+            if (typeof url === "string" && url.length > 0) {
+              const paragraph = state.schema.nodes.paragraph.create(null, state.schema.text(url));
+              const transaction = state.tr.replaceWith(selection.from, selection.to, paragraph);
+              return transaction
+                .setSelection(TextSelection.create(
+                  transaction.doc,
+                  selection.from + (enteredFromBefore ? 1 : url.length + 1)
+                ))
+                .setMeta("youtubePlayerRawEditing", true);
+            }
+          }
+        }
+        return replaceYouTubeParagraphs(state, this.type);
+      }
     })];
   }
 });
