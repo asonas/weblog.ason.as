@@ -18,6 +18,7 @@ env:
   AWS_ACCOUNT_ID: "282782318939"
   DSQL_HOST: zjuauvwetzvab4i3bdfd47e3yu.dsql.ap-northeast-1.on.aws
   DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-authoring-production-runtime
+  SEARCH_INDEXER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-search-indexer-production-runtime
   ECR_REPOSITORY: weblog-authoring-production
   LAMBDA_FUNCTION: weblog-authoring-production
   SEARCH_INDEXER_ECR_REPOSITORY: weblog-search-indexer-production
@@ -82,7 +83,9 @@ jobs:
           fi
 
       - name: Apply database schema
-        run: bundle exec ruby bin/bootstrap-dsql
+        run: |
+          bundle exec ruby bin/bootstrap-dsql
+          DSQL_RUNTIME_ROLE_ARN="$SEARCH_INDEXER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql
 
       - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
         if: steps.lambda-changes.outputs.changed == 'true'

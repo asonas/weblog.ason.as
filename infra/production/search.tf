@@ -77,6 +77,18 @@ data "aws_iam_policy_document" "search_indexer_runtime" {
   }
 
   statement {
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.site.arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["search/*"]
+    }
+  }
+
+  statement {
     effect = "Allow"
     actions = [
       "s3:GetObject",
