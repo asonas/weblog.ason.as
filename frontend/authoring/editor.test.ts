@@ -181,6 +181,7 @@ test("adopts an inbox photo and consumes it with the page save", async () => {
     const dragStart = new window.Event("dragstart", { bubbles: true, cancelable: true });
     Object.defineProperty(dragStart, "dataTransfer", { value: dataTransfer });
     remainingItem.dispatchEvent(dragStart);
+    assert.equal(dataTransfer.effectAllowed, "copy");
 
     const dropSave = waitForSave();
     await act(async () => {

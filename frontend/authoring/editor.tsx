@@ -2675,7 +2675,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
                               draggable={photoUrl !== null}
                               onDragStart={(event) => {
                                 event.dataTransfer.setData(INBOX_ITEM_DRAG_TYPE, item.id);
-                                event.dataTransfer.effectAllowed = "move";
+                                event.dataTransfer.effectAllowed = "copy";
                               }}
                               onClick={() => photoUrl && void adoptInboxImage(item.id)}
                             >
