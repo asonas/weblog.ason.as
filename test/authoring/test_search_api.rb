@@ -92,6 +92,23 @@ class SearchApiTest < Minitest::Test
     end
   end
 
+  def test_prefers_the_newer_page_when_scores_are_equal
+    index = search_index_fixture
+    Dir.mktmpdir("search-cache-") do |cache_dir|
+      search_index = WeblogAuthoring::SearchIndex.new(
+        s3_client: FakeS3.new(manifest: manifest_for("fixture", index), index:),
+        bucket: "site",
+        cache_dir:
+      )
+      api = WeblogAuthoring::LambdaApi.new(database: Object.new, search_index:, logger: StringIO.new)
+
+      response = api.call(event(query: { "q" => "同点", "limit" => "2" }))
+      routes = JSON.parse(response.fetch(:body)).fetch("results").map { |result| result.fetch("route") }
+
+      assert_equal %w[newest-tie newer-tie], routes
+    end
+  end
+
   def test_rejects_an_invalid_limit_without_caching_the_error
     api = WeblogAuthoring::LambdaApi.new(database: Object.new)
 
@@ -166,6 +183,36 @@ class SearchApiTest < Minitest::Test
         body: "新しい本文にも全文検索という言葉があります",
         fts_title: "別 の 記 事",
         fts_body: "新 し い 本 文 に も 全 文 検 索 と い う 言 葉 が あ り ま す"
+      )
+      insert_document(
+        database,
+        id: 3,
+        route: "older-tie",
+        title: "旧同点記録",
+        updated_at: "2026-08-20T12:00:00+09:00",
+        body: "同点",
+        fts_title: "旧 同 点 記 録",
+        fts_body: "同 点"
+      )
+      insert_document(
+        database,
+        id: 4,
+        route: "newer-tie",
+        title: "新同点記録",
+        updated_at: "2026-08-27T12:00:00+09:00",
+        body: "同点",
+        fts_title: "新 同 点 記 録",
+        fts_body: "同 点"
+      )
+      insert_document(
+        database,
+        id: 5,
+        route: "newest-tie",
+        title: "現同点記録",
+        updated_at: "2026-08-28T12:00:00+09:00",
+        body: "同点",
+        fts_title: "現 同 点 記 録",
+        fts_body: "同 点"
       )
       database.close
       File.binread(path)

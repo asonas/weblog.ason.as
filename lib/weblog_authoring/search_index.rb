@@ -13,20 +13,13 @@ module WeblogAuthoring
 
     MANIFEST_KEY = "search/manifest.json"
     QUERY = <<~SQL
-      WITH fts_matches AS (
-        SELECT rowid, bm25(documents_fts, 0.0, 5.0, 1.0) AS score
-        FROM documents_fts
-        WHERE documents_fts MATCH ?
-        ORDER BY score ASC
-        LIMIT ?
-      )
       SELECT p.route, p.title, p.updated_at, c.doc AS body
-      FROM fts_matches AS matches
-      JOIN documents AS documents ON documents.id = matches.rowid
+      FROM documents_fts
+      JOIN documents AS documents ON documents.id = documents_fts.rowid
       JOIN content AS c ON c.hash = documents.hash
       JOIN weblog_pages AS p ON p.document_id = documents.id
-      WHERE documents.active = 1
-      ORDER BY matches.score ASC, p.updated_at DESC
+      WHERE documents_fts MATCH ? AND documents.active = 1
+      ORDER BY bm25(documents_fts, 0.0, 5.0, 1.0) ASC, p.updated_at DESC
       LIMIT ?
     SQL
 
@@ -41,7 +34,7 @@ module WeblogAuthoring
       expression = fts_query(query)
       return Result.new(results: [], generated_at: @generated_at) if expression.nil?
 
-      results = @database.execute(QUERY, [expression, limit, limit]).map do |row|
+      results = @database.execute(QUERY, [expression, limit]).map do |row|
         {
           "route" => row.fetch("route"),
           "title" => row.fetch("title"),

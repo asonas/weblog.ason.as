@@ -1,0 +1,52 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "net/http"
+require "timeout"
+require "uri"
+
+CASES = [
+  { label: "日本語", query: "日記", expected_route: "VPSC Virgo MK-1カスタム日記" },
+  {
+    label: "英数字",
+    query: "YouTube",
+    expected_route: "(384) Polyend Tracker Quick Guide - Japanese Subtitles (クイックガイド-日本語字幕) - YouTube",
+  },
+  { label: "1文字", query: "子", expected_route: "子どもを持つことについて - PG" },
+  { label: "2文字", query: "検索", expected_route: "ブラウザのタブについて" },
+].freeze
+
+base_url = ARGV.fetch(0, "https://weblog.ason.as")
+failures = []
+
+CASES.each do |evaluation|
+  uri = URI.join(base_url, "/api/search")
+  uri.query = URI.encode_www_form(q: evaluation.fetch(:query), limit: 10)
+  started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  response = Net::HTTP.get_response(uri)
+  duration_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000
+
+  unless response.is_a?(Net::HTTPSuccess)
+    failures << "#{evaluation.fetch(:label)}: HTTP #{response.code}"
+    next
+  end
+
+  payload = JSON.parse(response.body)
+  routes = payload.fetch("results").map { |result| result.fetch("route") }
+  expected_route = evaluation.fetch(:expected_route)
+  failures << "#{evaluation.fetch(:label)}: #{expected_route.inspect} が上位10件にありません" unless routes.include?(expected_route)
+  failures << "#{evaluation.fetch(:label)}: Cache-Control が private, no-store ではありません" unless response["cache-control"] == "private, no-store"
+
+  puts format("%-4s %-10s %6.1f ms  %s", evaluation.fetch(:label), evaluation.fetch(:query), duration_ms, routes.first)
+rescue JSON::ParserError, KeyError, SystemCallError, Timeout::Error => error
+  failures << "#{evaluation.fetch(:label)}: #{error.class}: #{error.message}"
+end
+
+if failures.empty?
+  puts "Search quality check passed"
+  exit 0
+end
+
+warn failures.join("\n")
+exit 1
