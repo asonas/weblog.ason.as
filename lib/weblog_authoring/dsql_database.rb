@@ -125,6 +125,229 @@ module WeblogAuthoring
       @pool.shutdown
     end
 
+    def create_mobile_pairing(code_digest:, expires_at:)
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          connection.exec_params(
+            "UPDATE #{SCHEMA}.mobile_pairings SET used_at = $1 WHERE used_at IS NULL",
+            [timestamp]
+          )
+          connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.mobile_pairings (
+                id, code_digest, attempts, expires_at, used_at, created_at
+              ) VALUES ($1, $2, 0, $3, NULL, $4)
+            SQL
+            [SecureRandom.uuid.delete("-"), code_digest, expires_at, timestamp]
+          )
+        end
+      end
+    end
+
+    def exchange_mobile_pairing(code_digest:, device_name:, token_digest:)
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          pairing = connection.exec_params(
+            <<~SQL,
+              SELECT id FROM #{SCHEMA}.mobile_pairings
+              WHERE code_digest = $1 AND used_at IS NULL AND expires_at > $2 AND attempts < 5
+              LIMIT 1 FOR UPDATE
+            SQL
+            [code_digest, timestamp]
+          )
+          if pairing.ntuples.zero?
+            candidate = connection.exec_params(
+              <<~SQL,
+                SELECT id, attempts FROM #{SCHEMA}.mobile_pairings
+                WHERE used_at IS NULL AND expires_at > $1
+                ORDER BY created_at DESC LIMIT 1 FOR UPDATE
+              SQL
+              [timestamp]
+            )
+            next nil if candidate.ntuples.zero?
+
+            attempts = Integer(candidate[0].fetch("attempts")) + 1
+            connection.exec_params(
+              "UPDATE #{SCHEMA}.mobile_pairings SET attempts = $2 WHERE id = $1",
+              [candidate[0].fetch("id"), attempts]
+            )
+            next(attempts >= 5 ? :too_many_attempts : nil)
+          end
+
+          device = {
+            "id" => SecureRandom.uuid.delete("-"), "name" => device_name,
+            "created_at" => timestamp.iso8601, "last_used_at" => nil, "revoked_at" => nil,
+          }
+          connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.mobile_devices (
+                id, name, token_digest, created_at, last_used_at, revoked_at
+              ) VALUES ($1, $2, $3, $4, NULL, NULL)
+            SQL
+            [device.fetch("id"), device_name, token_digest, timestamp]
+          )
+          connection.exec_params(
+            "UPDATE #{SCHEMA}.mobile_pairings SET used_at = $2 WHERE id = $1",
+            [pairing[0].fetch("id"), timestamp]
+          )
+          device
+        end
+      end
+    end
+
+    def revoke_mobile_device(id)
+      with_connection do |connection|
+        result = connection.exec_params(
+          "UPDATE #{SCHEMA}.mobile_devices SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL",
+          [id, now]
+        )
+        result.cmd_tuples.positive?
+      end
+    end
+
+    def active_mobile_devices
+      with_connection do |connection|
+        connection.exec(
+          "SELECT id, name, token_digest, created_at, last_used_at, revoked_at FROM #{SCHEMA}.mobile_devices WHERE revoked_at IS NULL"
+        ).map do |row|
+          {
+            "id" => row.fetch("id"), "name" => row.fetch("name"), "token_digest" => row.fetch("token_digest"),
+            "created_at" => row.fetch("created_at"), "last_used_at" => row["last_used_at"], "revoked_at" => row["revoked_at"],
+          }
+        end
+      end
+    end
+
+    def touch_mobile_device(id)
+      with_connection do |connection|
+        connection.exec_params("UPDATE #{SCHEMA}.mobile_devices SET last_used_at = $2 WHERE id = $1", [id, now])
+      end
+    end
+
+    def create_mobile_upload(device_id:, upload_id:, s3_key:, client_upload_id:, content_type:, size:, sha256:,
+                             captured_at:, captured_at_source:)
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          existing = connection.exec_params(
+            "SELECT #{mobile_upload_columns} FROM #{SCHEMA}.mobile_uploads WHERE device_id = $1 AND client_upload_id = $2 LIMIT 1 FOR UPDATE",
+            [device_id, client_upload_id]
+          )
+          if existing.ntuples.positive?
+            upload = mobile_upload_from_row(existing[0])
+            expected = [content_type, size, sha256, captured_at&.iso8601, captured_at_source]
+            actual = upload.values_at("content_type", "size", "sha256", "captured_at", "captured_at_source")
+            raise ConflictError, "client_upload_id metadata conflict" unless actual == expected
+
+            next [upload, false]
+          end
+
+          result = connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.mobile_uploads (
+                id, device_id, client_upload_id, s3_key, content_type, size, sha256,
+                captured_at, captured_at_source, state, created_at, completed_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'awaiting_upload', $10, NULL)
+              RETURNING #{mobile_upload_columns}
+            SQL
+            [upload_id, device_id, client_upload_id, s3_key, content_type, size, sha256,
+             captured_at, captured_at_source, timestamp]
+          )
+          [mobile_upload_from_row(result[0]), true]
+        end
+      end
+    end
+
+    def find_mobile_upload(upload_id:, device_id:)
+      with_connection do |connection|
+        result = connection.exec_params(
+          "SELECT #{mobile_upload_columns} FROM #{SCHEMA}.mobile_uploads WHERE id = $1 AND device_id = $2 LIMIT 1",
+          [upload_id, device_id]
+        )
+        result.ntuples.zero? ? nil : mobile_upload_from_row(result[0])
+      end
+    end
+
+    def find_inbox_item_by_source(source:, kind:, source_id:)
+      with_connection do |connection|
+        result = connection.exec_params(
+          "SELECT id, source, kind, source_id, occurred_at, ingested_at, expires_at, payload, created_at, updated_at FROM #{SCHEMA}.inbox_items WHERE source = $1 AND kind = $2 AND source_id = $3 LIMIT 1",
+          [source, kind, source_id]
+        )
+        result.ntuples.zero? ? nil : inbox_item_from_row(result[0])
+      end
+    end
+
+    def complete_mobile_upload(upload_id:, device_id:)
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          result = connection.exec_params(
+            "SELECT #{mobile_upload_columns} FROM #{SCHEMA}.mobile_uploads WHERE id = $1 AND device_id = $2 LIMIT 1 FOR UPDATE",
+            [upload_id, device_id]
+          )
+          next nil if result.ntuples.zero?
+
+          upload = mobile_upload_from_row(result[0])
+          existing = connection.exec_params(
+            "SELECT id, source, kind, source_id, occurred_at, ingested_at, expires_at, payload, created_at, updated_at FROM #{SCHEMA}.inbox_items WHERE source = 'photo' AND kind = 'photo' AND source_id = $1 LIMIT 1",
+            [upload_id]
+          )
+          next [inbox_item_from_row(existing[0]), false] if existing.ntuples.positive?
+
+          payload = JSON.generate(
+            "inbox_key" => upload.fetch("s3_key"), "preview_url" => "/#{upload.fetch("s3_key")}",
+            "captured_at_source" => upload.fetch("captured_at_source")
+          )
+          item = connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.inbox_items (
+                id, source, kind, source_id, occurred_at, ingested_at, expires_at,
+                payload, created_at, updated_at
+              ) VALUES ($1, 'photo', 'photo', $2, $3, $4, $5, $6::jsonb, $4, $4)
+              RETURNING id, source, kind, source_id, occurred_at, ingested_at,
+                        expires_at, payload, created_at, updated_at
+            SQL
+            [SecureRandom.uuid.delete("-"), upload_id, upload.fetch("captured_at") ? parse_time(upload.fetch("captured_at")) : timestamp, timestamp,
+             timestamp + INBOX_RETENTION_SECONDS, payload]
+          )
+          connection.exec_params(
+            "UPDATE #{SCHEMA}.mobile_uploads SET state = 'completed', captured_at = COALESCE(captured_at, $2), completed_at = $2 WHERE id = $1",
+            [upload_id, timestamp]
+          )
+          [inbox_item_from_row(item[0]), true]
+        end
+      end
+    end
+
+    def cleanup_mobile_uploads(limit: 100)
+      raise ArgumentError, "limit must be positive" unless limit.is_a?(Integer) && limit.positive?
+
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          uploads = connection.exec_params(
+            <<~SQL,
+              DELETE FROM #{SCHEMA}.mobile_uploads
+              WHERE id IN (
+                SELECT id FROM #{SCHEMA}.mobile_uploads
+                WHERE state != 'completed' AND created_at <= $1
+                ORDER BY created_at LIMIT $2
+              )
+            SQL
+            [timestamp - INBOX_RETENTION_SECONDS, limit]
+          )
+          connection.exec_params(
+            "DELETE FROM #{SCHEMA}.mobile_pairings WHERE expires_at <= $1",
+            [timestamp]
+          )
+          uploads.cmd_tuples
+        end
+      end
+    end
+
     def upsert_inbox_item(source:, kind:, source_id:, occurred_at:, payload:)
       validate_inbox_identity!(source, kind, source_id)
       raise ArgumentError, "occurred_at must be a Time" unless occurred_at.is_a?(Time)
@@ -378,6 +601,23 @@ module WeblogAuthoring
         committed_at: row["committed_at"] && parse_time(row.fetch("committed_at")),
         expires_at: parse_time(row.fetch("expires_at"))
       )
+    end
+
+    def mobile_upload_columns
+      "id, device_id, client_upload_id, s3_key, content_type, size, sha256, captured_at, captured_at_source, state, created_at, completed_at"
+    end
+
+    def mobile_upload_from_row(row)
+      {
+        "id" => row.fetch("id"), "device_id" => row.fetch("device_id"),
+        "client_upload_id" => row.fetch("client_upload_id"), "s3_key" => row.fetch("s3_key"),
+        "content_type" => row.fetch("content_type"), "size" => Integer(row.fetch("size")),
+        "sha256" => row.fetch("sha256"),
+        "captured_at" => row["captured_at"] && parse_time(row.fetch("captured_at")).iso8601,
+        "captured_at_source" => row.fetch("captured_at_source"), "state" => row.fetch("state"),
+        "created_at" => parse_time(row.fetch("created_at")).iso8601,
+        "completed_at" => row["completed_at"] && parse_time(row.fetch("completed_at")).iso8601,
+      }
     end
 
     def new_document(request)

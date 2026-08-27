@@ -22,6 +22,7 @@ require_relative "embed_metadata"
 require_relative "github_oauth"
 require_relative "image_inbox"
 require_relative "image_upload"
+require_relative "mobile_upload"
 require_relative "models"
 require_relative "names"
 require_relative "atom_feed"
@@ -105,7 +106,9 @@ module WeblogAuthoring
 
     before do
       validate_loopback_host!
-      require_authenticated! if settings.authentication_required && mutation_request?
+      if settings.authentication_required && mutation_request? && !mobile_device_request?
+        require_authenticated!
+      end
     end
 
     get "/api/auth/github" do
@@ -345,6 +348,53 @@ module WeblogAuthoring
       end
     end
 
+    post "/api/mobile/pairings" do
+      api_response(201) { |_payload| mobile_upload.issue_pairing }
+    end
+
+    post "/api/mobile/pairings/exchange" do
+      mobile_api_response do |payload|
+        result = mobile_upload.exchange_pairing(
+          code: required_string(payload, "code"),
+          device_name: required_string(payload, "device_name")
+        )
+        [result, 201]
+      end
+    end
+
+    get "/api/mobile/devices" do
+      require_authenticated! if settings.authentication_required
+      json_response("devices" => mobile_upload.devices)
+    end
+
+    post "/api/mobile/uploads" do
+      mobile_api_response do |payload|
+        result = mobile_upload.create_upload(token: mobile_bearer_token, payload:)
+        halt 401, JSON.generate(error: "A valid device token is required") if result.nil?
+
+        upload, created = result
+        [upload, created ? 201 : 200]
+      end
+    end
+
+    post "/api/mobile/uploads/:upload_id/complete" do
+      mobile_api_response do |_payload|
+        result = mobile_upload.complete_upload(token: mobile_bearer_token, upload_id: params.fetch("upload_id"))
+        halt 401, JSON.generate(error: "A valid device token is required") if result.nil?
+
+        item, created = result
+        [{ "item" => inbox_item_json(item) }, created ? 201 : 200]
+      end
+    end
+
+    delete "/api/mobile/devices/:device_id" do
+      api_response do |_payload|
+        halt 404 unless mobile_upload.revoke_device(device_id: params.fetch("device_id"))
+
+        { "revoked" => true }
+      end
+    end
+
     get "/api/inbox" do
       require_authenticated! if settings.authentication_required
       content_type :json
@@ -451,6 +501,40 @@ module WeblogAuthoring
 
     def image_inbox
       ImageInbox.new(s3_client: s3_client, bucket: settings.asset_bucket, database: settings.database)
+    end
+
+    def mobile_upload
+      MobileUpload.new(
+        database: settings.database,
+        s3_client: s3_client,
+        bucket: settings.asset_bucket,
+        clock: settings.clock
+      )
+    end
+
+    def mobile_device_request?
+      request.path_info == "/api/mobile/pairings/exchange" || request.path_info.start_with?("/api/mobile/uploads")
+    end
+
+    def mobile_bearer_token
+      match = /\ABearer ([^\s]+)\z/.match(request.env.fetch("HTTP_AUTHORIZATION", ""))
+      match&.captures&.first
+    end
+
+    def mobile_api_response
+      payload = parse_json
+      body, response_status = yield(payload)
+      json_response(body, status: response_status)
+    rescue MobileUpload::PairingUnavailable
+      json_error(410, "Pairing code is expired or already used")
+    rescue MobileUpload::PairingAttemptsExceeded
+      json_error(429, "Pairing exchange attempts exceeded")
+    rescue MobileUpload::UnsupportedContentType => error
+      json_error(415, error.message)
+    rescue ConflictError => error
+      json_error(409, error.message)
+    rescue ArgumentError, TypeError => error
+      json_error(422, error.message)
     end
 
     def inbox_item_json(item)

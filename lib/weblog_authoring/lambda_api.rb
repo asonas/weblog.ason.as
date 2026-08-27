@@ -13,6 +13,7 @@ require "aws-sdk-s3"
 require_relative "embed_metadata"
 require_relative "image_inbox"
 require_relative "image_upload"
+require_relative "mobile_upload"
 require_relative "models"
 require_relative "names"
 require_relative "atom_feed"
@@ -69,6 +70,16 @@ module WeblogAuthoring
       return github_callback_response(event) if method == "GET" && path == "/api/auth/github/callback"
       return logout_response(event) if method == "POST" && path == "/api/auth/logout"
       return upload_response(event) if method == "POST" && path == "/api/uploads"
+      return issue_mobile_pairing_response(event) if method == "POST" && path == "/api/mobile/pairings"
+      return exchange_mobile_pairing_response(event) if method == "POST" && path == "/api/mobile/pairings/exchange"
+      return mobile_devices_response(event) if method == "GET" && path == "/api/mobile/devices"
+      return create_mobile_upload_response(event) if method == "POST" && path == "/api/mobile/uploads"
+      if method == "POST" && %r{\A/api/mobile/uploads/[^/]+/complete\z}.match?(path)
+        return complete_mobile_upload_response(event)
+      end
+      if method == "DELETE" && %r{\A/api/mobile/devices/[^/]+\z}.match?(path)
+        return revoke_mobile_device_response(event)
+      end
       return inbox_response(event) if method == "GET" && path == "/api/inbox"
       return adopt_inbox_response(event) if method == "POST" && path == "/api/inbox/adopt"
       return pages_response if method == "GET" && path == "/api/pages"
@@ -90,6 +101,12 @@ module WeblogAuthoring
       json_error(error.status, error.message, field: error.field)
     rescue ConflictError => error
       json_error(409, error.message)
+    rescue MobileUpload::PairingUnavailable
+      json_error(410, "Pairing code is expired or already used")
+    rescue MobileUpload::PairingAttemptsExceeded
+      json_error(429, "Pairing exchange attempts exceeded")
+    rescue MobileUpload::UnsupportedContentType => error
+      json_error(415, error.message)
     rescue ArgumentError, TypeError => error
       json_error(422, error.message)
     end
@@ -116,6 +133,7 @@ module WeblogAuthoring
     def run_scheduled_maintenance
       response = publish_feed
       image_inbox.finalize unless @asset_bucket.nil?
+      @database.cleanup_mobile_uploads if @database.respond_to?(:cleanup_mobile_uploads)
       response
     end
 
@@ -275,6 +293,78 @@ module WeblogAuthoring
         inbox_date: payload["inbox_date"]
       )
       json_response(200, upload)
+    end
+
+    def issue_mobile_pairing_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to pair a device") if session.nil?
+      return json_response(403, error: "Pairing is not allowed for this GitHub account") unless allowed_session?(session)
+      expected_csrf_token = session.fetch("csrf_token", "")
+      return json_response(403, error: "CSRF token mismatch") unless secure_equal?(expected_csrf_token, csrf_token_from(event))
+
+      json_response(201, mobile_upload.issue_pairing)
+    end
+
+    def exchange_mobile_pairing_response(event)
+      payload = parse_json(event)
+      code = optional_string(payload, "code")
+      device_name = optional_string(payload, "device_name")
+      raise InputError.new("code is required", field: "code") if code.nil?
+      raise InputError.new("device_name is required", field: "device_name") if device_name.nil?
+
+      json_response(201, mobile_upload.exchange_pairing(code:, device_name:))
+    end
+
+    def mobile_upload
+      MobileUpload.new(database: @database, s3_client: @s3_client, bucket: @asset_bucket, clock: @clock)
+    end
+
+    def create_mobile_upload_response(event)
+      token = bearer_token(event)
+      return json_response(401, error: "A valid device token is required") if token.nil?
+
+      result = mobile_upload.create_upload(token:, payload: parse_json(event))
+      return json_response(401, error: "A valid device token is required") if result.nil?
+
+      upload, created = result
+      json_response(created ? 201 : 200, upload)
+    end
+
+    def bearer_token(event)
+      authorization = event.fetch("headers", {}).to_h.find { |key, _value| key.to_s.downcase == "authorization" }&.last.to_s
+      match = /\ABearer ([^\s]+)\z/.match(authorization)
+      match&.captures&.first
+    end
+
+    def complete_mobile_upload_response(event)
+      token = bearer_token(event)
+      return json_response(401, error: "A valid device token is required") if token.nil?
+
+      upload_id = event.dig("pathParameters", "upload_id").to_s
+      result = mobile_upload.complete_upload(token:, upload_id:)
+      return json_response(401, error: "A valid device token is required") if result.nil?
+
+      item, created = result
+      json_response(created ? 201 : 200, "item" => inbox_item_json(item))
+    end
+
+    def revoke_mobile_device_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to revoke a device") if session.nil?
+      return json_response(403, error: "Revocation is not allowed for this GitHub account") unless allowed_session?(session)
+      expected_csrf_token = session.fetch("csrf_token", "")
+      return json_response(403, error: "CSRF token mismatch") unless secure_equal?(expected_csrf_token, csrf_token_from(event))
+
+      revoked = mobile_upload.revoke_device(device_id: event.dig("pathParameters", "device_id").to_s)
+      revoked ? json_response(200, "revoked" => true) : json_response(404, error: "Device not found")
+    end
+
+    def mobile_devices_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to view devices") if session.nil?
+      return json_response(403, error: "Device access is not allowed for this GitHub account") unless allowed_session?(session)
+
+      json_response(200, "devices" => mobile_upload.devices)
     end
 
     def inbox_response(event)

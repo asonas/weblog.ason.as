@@ -54,6 +54,9 @@ class DsqlBootstrapTest < Minitest::Test
     assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.links") }
     assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_items") }
     assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.consumed_inbox_items") }
+    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.mobile_pairings") }
+    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.mobile_devices") }
+    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.mobile_uploads") }
     assert_equal :closed, connection.statements.last
   end
 

@@ -142,6 +142,50 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "asonas", JSON.parse(body).fetch("login")
   end
 
+  def test_mobile_upload_uses_bearer_auth_without_weakening_other_mutations
+    oauth_client = FakeOAuthClient.new
+    upload_s3 = Aws::S3::Client.new(
+      region: "ap-northeast-1",
+      credentials: Aws::Credentials.new("access-key", "secret-key"),
+      stub_responses: true
+    )
+    application = WeblogAuthoring::DevelopmentApp.application(
+      root:, clock: -> { FIXED_TIME }, s3_client: upload_s3,
+      oauth_client:, allowed_github_user_id: 630_181,
+      session_secret: "test-session-secret-#{'x' * 64}"
+    )
+    cookie = login(application, oauth_client)
+    _status, session_headers, session_body = request_with(
+      application, "GET", "/api/auth/session", headers: { "HTTP_COOKIE" => cookie }
+    )
+    cookie = response_cookie(session_headers, fallback: cookie)
+    csrf_token = JSON.parse(session_body).fetch("csrf_token")
+    pairing_status, _headers, pairing_body = request_with(
+      application, "POST", "/api/mobile/pairings", payload: {},
+      headers: { "HTTP_COOKIE" => cookie, "HTTP_X_CSRF_TOKEN" => csrf_token }
+    )
+    assert_equal 201, pairing_status, pairing_body
+    exchange_status, _headers, exchange_body = request_with(
+      application, "POST", "/api/mobile/pairings/exchange",
+      payload: { code: JSON.parse(pairing_body).fetch("code"), device_name: "iPhone" }
+    )
+    token = JSON.parse(exchange_body).fetch("token")
+    upload_status, = request_with(
+      application, "POST", "/api/mobile/uploads", payload: {
+        client_upload_id: "11111111-2222-4333-8444-555555555555",
+        content_type: "image/jpeg", size: 1024, sha256: "a" * 64,
+        captured_at: FIXED_TIME.iso8601, captured_at_source: "photos"
+      }, headers: { "HTTP_AUTHORIZATION" => "Bearer #{token}" }
+    )
+    ordinary_mutation_status, = request_with(
+      application, "POST", "/api/authoring/pages", payload: { title: "blocked", body: "body" }
+    )
+
+    assert_equal 201, exchange_status
+    assert_equal 201, upload_status
+    assert_equal 401, ordinary_mutation_status
+  end
+
   def test_oauth_session_survives_a_development_app_restart
     oauth_client = FakeOAuthClient.new
     first_application = WeblogAuthoring::DevelopmentApp.application(

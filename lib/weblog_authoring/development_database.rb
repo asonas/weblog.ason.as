@@ -14,7 +14,7 @@ require_relative "names"
 
 module WeblogAuthoring
   class DevelopmentDatabase
-    SCHEMA_VERSION = 3
+    SCHEMA_VERSION = 4
     INBOX_RETENTION_SECONDS = 7 * 24 * 60 * 60
     ADOPTION_RETENTION_SECONDS = 14 * 24 * 60 * 60
     TOKYO_OFFSET = "+09:00"
@@ -126,6 +126,185 @@ module WeblogAuthoring
       end
     end
 
+    def create_mobile_pairing(code_digest:, expires_at:)
+      timestamp = now
+      with_connection do |database|
+        database.transaction do
+          database.execute(
+            "UPDATE mobile_pairings SET used_at = ? WHERE used_at IS NULL",
+            serialize_time(timestamp)
+          )
+          database.execute(
+            "INSERT INTO mobile_pairings (id, code_digest, attempts, expires_at, used_at, created_at) VALUES (?, ?, 0, ?, NULL, ?)",
+            [new_id, code_digest, serialize_time(expires_at), serialize_time(timestamp)]
+          )
+        end
+      end
+    end
+
+    def exchange_mobile_pairing(code_digest:, device_name:, token_digest:)
+      timestamp = now
+      with_connection do |database|
+        database.transaction do
+          row = database.get_first_row(
+            "SELECT id FROM mobile_pairings WHERE code_digest = ? AND used_at IS NULL AND expires_at > ? AND attempts < 5",
+            [code_digest, serialize_time(timestamp)]
+          )
+          if row.nil?
+            candidate = database.get_first_row(
+              "SELECT id, attempts FROM mobile_pairings WHERE used_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1",
+              serialize_time(timestamp)
+            )
+            next nil if candidate.nil?
+
+            attempts = candidate.fetch(1) + 1
+            database.execute("UPDATE mobile_pairings SET attempts = ? WHERE id = ?", [attempts, candidate.fetch(0)])
+            next(attempts >= 5 ? :too_many_attempts : nil)
+          end
+
+          device = {
+            "id" => new_id,
+            "name" => device_name,
+            "created_at" => timestamp.iso8601,
+            "last_used_at" => nil,
+            "revoked_at" => nil,
+          }
+          database.execute(
+            "INSERT INTO mobile_devices (id, name, token_digest, created_at, last_used_at, revoked_at) VALUES (?, ?, ?, ?, NULL, NULL)",
+            [device.fetch("id"), device_name, token_digest, serialize_time(timestamp)]
+          )
+          database.execute("UPDATE mobile_pairings SET used_at = ? WHERE id = ?", [serialize_time(timestamp), row.fetch(0)])
+          device
+        end
+      end
+    end
+
+    def revoke_mobile_device(id)
+      with_connection do |database|
+        database.execute(
+          "UPDATE mobile_devices SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
+          [serialize_time(now), id]
+        )
+        database.changes.positive?
+      end
+    end
+
+    def active_mobile_devices
+      with_connection do |database|
+        database.execute(
+          "SELECT id, name, token_digest, created_at, last_used_at, revoked_at FROM mobile_devices WHERE revoked_at IS NULL"
+        ).map do |row|
+          {
+            "id" => row.fetch(0), "name" => row.fetch(1), "token_digest" => row.fetch(2),
+            "created_at" => row.fetch(3), "last_used_at" => row.fetch(4), "revoked_at" => row.fetch(5),
+          }
+        end
+      end
+    end
+
+    def touch_mobile_device(id)
+      with_connection do |database|
+        database.execute("UPDATE mobile_devices SET last_used_at = ? WHERE id = ?", [serialize_time(now), id])
+      end
+    end
+
+    def create_mobile_upload(device_id:, upload_id:, s3_key:, client_upload_id:, content_type:, size:, sha256:,
+                             captured_at:, captured_at_source:)
+      timestamp = now
+      with_connection do |database|
+        existing = database.get_first_row(
+          "SELECT #{mobile_upload_columns} FROM mobile_uploads WHERE device_id = ? AND client_upload_id = ?",
+          [device_id, client_upload_id]
+        )
+        unless existing.nil?
+          upload = mobile_upload_from_row(existing)
+          expected = [content_type, size, sha256, serialize_time(captured_at), captured_at_source]
+          actual = upload.values_at("content_type", "size", "sha256", "captured_at", "captured_at_source")
+          raise ConflictError, "client_upload_id metadata conflict" unless actual == expected
+
+          next [upload, false]
+        end
+
+        database.execute(
+          <<~SQL,
+            INSERT INTO mobile_uploads (
+              id, device_id, client_upload_id, s3_key, content_type, size, sha256,
+              captured_at, captured_at_source, state, created_at, completed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_upload', ?, NULL)
+          SQL
+          [upload_id, device_id, client_upload_id, s3_key, content_type, size, sha256,
+           serialize_time(captured_at), captured_at_source, serialize_time(timestamp)]
+        )
+        [mobile_upload_from_row(database.get_first_row(
+          "SELECT #{mobile_upload_columns} FROM mobile_uploads WHERE id = ?",
+          upload_id
+        )), true]
+      end
+    end
+
+    def find_mobile_upload(upload_id:, device_id:)
+      with_connection do |database|
+        row = database.get_first_row(
+          "SELECT #{mobile_upload_columns} FROM mobile_uploads WHERE id = ? AND device_id = ?",
+          [upload_id, device_id]
+        )
+        row && mobile_upload_from_row(row)
+      end
+    end
+
+    def complete_mobile_upload(upload_id:, device_id:)
+      timestamp = now
+      with_connection do |database|
+        database.transaction do
+          row = database.get_first_row(
+            "SELECT #{mobile_upload_columns} FROM mobile_uploads WHERE id = ? AND device_id = ?",
+            [upload_id, device_id]
+          )
+          next nil if row.nil?
+
+          upload = mobile_upload_from_row(row)
+          existing = find_inbox_item_by_identity(database, "photo", "photo", upload_id)
+          next [existing, false] unless existing.nil?
+
+          item_id = new_id
+          payload = {
+            "inbox_key" => upload.fetch("s3_key"),
+            "preview_url" => "/#{upload.fetch("s3_key")}",
+            "captured_at_source" => upload.fetch("captured_at_source"),
+          }
+          occurred_at = upload.fetch("captured_at") || serialize_time(timestamp)
+          database.execute(
+            <<~SQL,
+              INSERT INTO inbox_items (
+                id, source, kind, source_id, occurred_at, ingested_at, expires_at,
+                payload, created_at, updated_at
+              ) VALUES (?, 'photo', 'photo', ?, ?, ?, ?, ?, ?, ?)
+            SQL
+            [item_id, upload_id, occurred_at, serialize_time(timestamp),
+             serialize_time(timestamp + INBOX_RETENTION_SECONDS), JSON.generate(payload),
+             serialize_time(timestamp), serialize_time(timestamp)]
+          )
+          database.execute(
+            "UPDATE mobile_uploads SET state = 'completed', captured_at = COALESCE(captured_at, ?), completed_at = ? WHERE id = ?",
+            [serialize_time(timestamp), serialize_time(timestamp), upload_id]
+          )
+          [find_inbox_item_by_identity(database, "photo", "photo", upload_id), true]
+        end
+      end
+    end
+
+    def cleanup_mobile_uploads
+      cutoff = now - INBOX_RETENTION_SECONDS
+      with_connection do |database|
+        database.execute(
+          "DELETE FROM mobile_uploads WHERE state != 'completed' AND created_at <= ?",
+          serialize_time(cutoff)
+        )
+        database.execute("DELETE FROM mobile_pairings WHERE expires_at <= ?", serialize_time(now))
+        database.changes
+      end
+    end
+
     def list_inbox_items(source: nil, kind: nil)
       clauses = ["expires_at > ?"]
       values = [serialize_time(now)]
@@ -143,6 +322,10 @@ module WeblogAuthoring
           values
         ).map { |row| inbox_item_from_row(row) }
       end
+    end
+
+    def find_inbox_item_by_source(source:, kind:, source_id:)
+      with_connection { |database| find_inbox_item_by_identity(database, source, kind, source_id) }
     end
 
     def find_inbox_item(id)
@@ -274,11 +457,18 @@ module WeblogAuthoring
       if version == 1 && table_exists?(database, "pages")
         migrate_date_pages_to_title_routes(database)
         create_inbox_schema(database)
+        create_mobile_upload_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
       if version == 2 && table_exists?(database, "pages")
         create_inbox_schema(database)
+        create_mobile_upload_schema(database)
+        database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
+        return
+      end
+      if version == 3 && table_exists?(database, "pages")
+        create_mobile_upload_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
@@ -314,6 +504,7 @@ module WeblogAuthoring
         SQL
       )
       create_inbox_schema(database)
+      create_mobile_upload_schema(database)
     end
 
     def table_exists?(database, table)
@@ -359,6 +550,57 @@ module WeblogAuthoring
       )
     end
 
+    def create_mobile_upload_schema(database)
+      database.execute_batch(
+        <<~SQL
+          CREATE TABLE IF NOT EXISTS mobile_pairings (
+            id TEXT PRIMARY KEY,
+            code_digest TEXT NOT NULL UNIQUE,
+            attempts INTEGER NOT NULL,
+            expires_at TEXT NOT NULL,
+            used_at TEXT,
+            created_at TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS mobile_devices (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            token_digest TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            last_used_at TEXT,
+            revoked_at TEXT
+          );
+          CREATE TABLE IF NOT EXISTS mobile_uploads (
+            id TEXT PRIMARY KEY,
+            device_id TEXT NOT NULL,
+            client_upload_id TEXT NOT NULL,
+            s3_key TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            sha256 TEXT NOT NULL,
+            captured_at TEXT,
+            captured_at_source TEXT NOT NULL,
+            state TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            UNIQUE(device_id, client_upload_id)
+          );
+        SQL
+      )
+    end
+
+    def mobile_upload_from_row(row)
+      {
+        "id" => row.fetch(0), "device_id" => row.fetch(1), "client_upload_id" => row.fetch(2),
+        "s3_key" => row.fetch(3), "content_type" => row.fetch(4), "size" => row.fetch(5),
+        "sha256" => row.fetch(6), "captured_at" => row.fetch(7), "captured_at_source" => row.fetch(8),
+        "state" => row.fetch(9), "created_at" => row.fetch(10), "completed_at" => row.fetch(11),
+      }
+    end
+
+    def mobile_upload_columns
+      "id, device_id, client_upload_id, s3_key, content_type, size, sha256, captured_at, captured_at_source, state, created_at, completed_at"
+    end
+
     def consume_inbox_item_with_connection(database, id, required:)
       row = database.get_first_row(
         "SELECT #{inbox_item_columns} FROM inbox_items WHERE id = ? AND expires_at > ?",
@@ -394,10 +636,11 @@ module WeblogAuthoring
     end
 
     def find_inbox_item_by_identity(database, source, kind, source_id)
-      inbox_item_from_row(database.get_first_row(
+      row = database.get_first_row(
         "SELECT #{inbox_item_columns} FROM inbox_items WHERE source = ? AND kind = ? AND source_id = ?",
         [source, kind, source_id]
-      ))
+      )
+      row && inbox_item_from_row(row)
     end
 
     def inbox_item_from_row(row)

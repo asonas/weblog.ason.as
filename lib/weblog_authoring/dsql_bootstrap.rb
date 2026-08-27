@@ -117,6 +117,43 @@ module WeblogAuthoring
           expires_at TIMESTAMPTZ NOT NULL
         )
       SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.mobile_pairings (
+          id TEXT PRIMARY KEY,
+          code_digest TEXT NOT NULL UNIQUE,
+          attempts INTEGER NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          used_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.mobile_devices (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          token_digest TEXT NOT NULL UNIQUE,
+          created_at TIMESTAMPTZ NOT NULL,
+          last_used_at TIMESTAMPTZ,
+          revoked_at TIMESTAMPTZ
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.mobile_uploads (
+          id TEXT PRIMARY KEY,
+          device_id TEXT NOT NULL,
+          client_upload_id TEXT NOT NULL,
+          s3_key TEXT NOT NULL,
+          content_type TEXT NOT NULL,
+          size INTEGER NOT NULL,
+          sha256 TEXT NOT NULL,
+          captured_at TIMESTAMPTZ,
+          captured_at_source TEXT NOT NULL,
+          state TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL,
+          completed_at TIMESTAMPTZ,
+          UNIQUE (device_id, client_upload_id)
+        )
+      SQL
     end
 
     def grant_privileges(connection)
