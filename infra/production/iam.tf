@@ -74,12 +74,18 @@ resource "aws_iam_role_policy" "feed_publish" {
 
 data "aws_iam_policy_document" "image_upload" {
   statement {
-    effect    = "Allow"
-    actions   = ["s3:PutObject"]
+    effect  = "Allow"
+    actions = ["s3:PutObject"]
     resources = [
       "${aws_s3_bucket.site.arn}/assets/inbox/*",
       "${aws_s3_bucket.site.arn}/assets/uploads/*",
     ]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:PutObjectTagging"]
+    resources = ["${aws_s3_bucket.site.arn}/assets/uploads/*"]
   }
 
   statement {
