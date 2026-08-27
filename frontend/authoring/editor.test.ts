@@ -67,6 +67,111 @@ const {
 } = await import("./editor");
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
 const { markdownForSource } = await import("./markdown");
+const { SearchPage, SiteSearch } = await import("./search");
+
+test("searches from the shared search field and renders article links", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  globalThis.fetch = async (input) => {
+    requests.push(String(input));
+    return new Response(JSON.stringify({
+      results: [{
+        route: "検索の仕組み",
+        title: "検索の仕組み",
+        excerpt: "BM25で記事を検索する",
+        updated_at: "2026-08-27T00:00:00Z"
+      }]
+    }), { headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    window.history.pushState({}, "", "/search?q=%E6%A4%9C%E7%B4%A2");
+    await act(async () => root.render(createElement(SearchPage)));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 220));
+    });
+
+    assert.deepEqual(requests, ["/api/search?q=%E6%A4%9C%E7%B4%A2&limit=10"]);
+    const result = container.querySelector<HTMLAnchorElement>(".site-search__results a");
+    assert.equal(result?.textContent, "検索の仕組みBM25で記事を検索する");
+    assert.equal(result?.getAttribute("href"), "/%E6%A4%9C%E7%B4%A2%E3%81%AE%E4%BB%95%E7%B5%84%E3%81%BF");
+  } finally {
+    await act(async () => root.unmount());
+    window.history.pushState({}, "", "/current");
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
+test("keeps the desktop search prompt hidden until the user engages the field", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const prototype = window.HTMLElement.prototype as typeof window.HTMLElement.prototype & {
+    attachEvent?: () => void;
+    detachEvent?: () => void;
+  };
+  prototype.attachEvent = () => {};
+  prototype.detachEvent = () => {};
+  try {
+    await act(async () => root.render(createElement(SiteSearch)));
+    assert.equal(container.querySelector(".site-search__message"), null);
+    const input = container.querySelector<HTMLInputElement>(".site-search__desktop input");
+    assert.ok(input);
+    await act(async () => input.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true })));
+    assert.equal(container.querySelector(".site-search__message"), null);
+    await act(async () => input.dispatchEvent(new window.Event("pointerdown", { bubbles: true })));
+    assert.equal(container.querySelector(".site-search__message")?.textContent, "キーワードを入力してください");
+    await act(async () => input.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true, relatedTarget: document.body })));
+    assert.equal(container.querySelector(".site-search__message"), null);
+  } finally {
+    await act(async () => root.unmount());
+    delete prototype.attachEvent;
+    delete prototype.detachEvent;
+    container.remove();
+  }
+});
+
+test("opens and closes the mobile search dialog without leaving background controls active", async () => {
+  const container = document.createElement("div");
+  const main = document.createElement("main");
+  main.id = "main";
+  const navigation = document.createElement("nav");
+  navigation.className = "header-nav";
+  document.body.append(main, navigation, container);
+  const root = createRoot(container);
+  const prototype = window.HTMLElement.prototype as typeof window.HTMLElement.prototype & {
+    attachEvent?: () => void;
+    detachEvent?: () => void;
+  };
+  prototype.attachEvent = () => {};
+  prototype.detachEvent = () => {};
+
+  try {
+    await act(async () => root.render(createElement(SiteSearch)));
+    const trigger = container.querySelector<HTMLButtonElement>(".site-search__mobile-button");
+    assert.ok(trigger);
+    await act(async () => trigger.click());
+    assert.ok(container.querySelector('[role="dialog"][aria-modal="true"]'));
+    assert.equal(main.hasAttribute("inert"), true);
+    assert.equal(navigation.hasAttribute("inert"), true);
+
+    await act(async () => document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    assert.equal(container.querySelector('[role="dialog"]'), null);
+    assert.equal(main.hasAttribute("inert"), false);
+    assert.equal(navigation.hasAttribute("inert"), false);
+  } finally {
+    await act(async () => root.unmount());
+    delete prototype.attachEvent;
+    delete prototype.detachEvent;
+    main.remove();
+    navigation.remove();
+    container.remove();
+  }
+});
 
 test("ignores URLs in inline and fenced code when building embeds", () => {
   const body = [

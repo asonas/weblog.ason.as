@@ -1,7 +1,9 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
+import { SearchPage, SiteSearch } from "./search";
 import "./styles.css";
 
 const PALETTES = {
@@ -297,6 +299,16 @@ function App({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; auth
   return bootstrap.mode === "home" ? <Home bootstrap={bootstrap} auth={auth} /> : <AuthoringEditor bootstrap={bootstrap} />;
 }
 
+function RootApp({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; auth: AuthState }) {
+  const header = document.querySelector<HTMLElement>(".site-header");
+  return <>
+    {header && createPortal(<SiteSearch />, header)}
+    {window.location.pathname === "/search"
+      ? <SearchPage />
+      : <App initialBootstrap={initialBootstrap} auth={auth} />}
+  </>;
+}
+
 function HomePageList({ pages }: { pages: HomePage[] }) {
   return pages.length === 0 ? (
     <p className="empty-home">まだ記事がありません</p>
@@ -456,7 +468,7 @@ async function start() {
 
   if (root) {
     const initialBootstrap = data?.textContent ? JSON.parse(data.textContent) as AppBootstrap : undefined;
-    createRoot(root).render(<App initialBootstrap={initialBootstrap} auth={auth} />);
+    createRoot(root).render(<RootApp initialBootstrap={initialBootstrap} auth={auth} />);
   }
 }
 
