@@ -68,6 +68,24 @@ class SearchApiTest < Minitest::Test
     end
   end
 
+  def test_searches_a_dotted_title_by_partial_domain
+    index = search_index_fixture
+    Dir.mktmpdir("search-cache-") do |cache_dir|
+      search_index = WeblogAuthoring::SearchIndex.new(
+        s3_client: FakeS3.new(manifest: manifest_for("fixture", index), index:),
+        bucket: "site",
+        cache_dir:
+      )
+      api = WeblogAuthoring::LambdaApi.new(database: Object.new, search_index:, logger: StringIO.new)
+
+      response = api.call(event(query: { "q" => "weblog.ason" }))
+
+      assert_equal 200, response.fetch(:statusCode)
+      results = JSON.parse(response.fetch(:body)).fetch("results")
+      assert_equal "weblog.ason.asの書き心地", results.fetch(0).fetch("title")
+    end
+  end
+
   def test_keeps_the_loaded_generation_when_a_new_download_is_invalid
     index = search_index_fixture
     s3 = FakeS3.new(manifest: manifest_for("first", index), index:)
@@ -213,6 +231,16 @@ class SearchApiTest < Minitest::Test
         body: "同点",
         fts_title: "現 同 点 記 録",
         fts_body: "同 点"
+      )
+      insert_document(
+        database,
+        id: 6,
+        route: "weblog.ason.asの書き心地",
+        title: "weblog.ason.asの書き心地",
+        updated_at: "2026-08-27T13:00:00+09:00",
+        body: "個人ブログの編集体験について書いた記事です",
+        fts_title: "weblog ason as の 書 き 心 地",
+        fts_body: "個 人 ブ ロ グ の 編 集 体 験 に つ い て 書 い た 記 事 で す"
       )
       database.close
       File.binread(path)

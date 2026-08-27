@@ -93,8 +93,8 @@ module WeblogAuthoring
           .filter_map { |token| search_token(token) }
         %Q("#{tokens.join(" ")}")
       else
-        token = search_token(query)
-        token.nil? ? nil : %Q("#{token}"*)
+        tokens = query.scan(/[\p{L}\p{N}'_]+/).filter_map { |token| search_token(token) }
+        tokens.empty? ? nil : %Q("#{tokens.join(" ")}"*)
       end
     end
 
