@@ -1,17 +1,10 @@
 <!doctype html>
-<html lang="ja" data-can-edit="false" data-csrf-token="">
+<html lang="ja" data-theme="teal" data-can-edit="false" data-csrf-token="">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>weblog.ason.as</title>
     <link rel="alternate" type="application/atom+xml" title="weblog.ason.as" href="/feed.xml">
-    <script>
-      try {
-        document.documentElement.dataset.theme = localStorage.getItem("weblog-palette") || "teal";
-      } catch (_error) {
-        document.documentElement.dataset.theme = "teal";
-      }
-    </script>
     <link rel="stylesheet" href="/static/authoring/app.css?v=2">
     <script src="/static/authoring/app.js?v=2" defer></script>
   </head>
@@ -27,12 +20,6 @@
               <ellipse cx="12" cy="12" rx="9" ry="4.5"/>
               <ellipse cx="12" cy="12" rx="4.5" ry="9" transform="rotate(42 12 12)"/>
               <circle cx="20" cy="12" r="1.25"/>
-            </svg>
-          </button>
-          <button class="header-action theme-toggle" id="theme-toggle" type="button" aria-label="配色を切り替える">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="8" cy="12" r="4"/>
-              <circle cx="16" cy="12" r="4"/>
             </svg>
           </button>
           <a class="header-action" id="new-page-action" href="/?new=1" aria-label="新しい記事を作成" hidden>＋</a>
