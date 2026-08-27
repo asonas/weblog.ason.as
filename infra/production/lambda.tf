@@ -16,6 +16,7 @@ resource "aws_lambda_function" "authoring" {
       OAUTH_SECRET_ID        = aws_secretsmanager_secret.oauth.name
       ASSET_BUCKET           = aws_s3_bucket.site.id
       SITE_BUCKET            = aws_s3_bucket.site.id
+      SEARCH_INDEX_QUEUE_URL = aws_sqs_queue.search_index.url
     }
   }
 
@@ -25,6 +26,7 @@ resource "aws_lambda_function" "authoring" {
     aws_iam_role_policy.feed_publish,
     aws_iam_role_policy.image_upload,
     aws_iam_role_policy.oauth_secret,
+    aws_iam_role_policy.search_index_notify,
     aws_iam_role_policy_attachment.lambda_basic_execution,
   ]
 

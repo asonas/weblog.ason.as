@@ -47,6 +47,13 @@ data "aws_iam_policy_document" "github_deploy" {
   }
 
   statement {
+    sid       = "InspectLambdaRepositories"
+    effect    = "Allow"
+    actions   = ["ecr:DescribeRepositories"]
+    resources = ["*"]
+  }
+
+  statement {
     sid    = "PublishLambdaImage"
     effect = "Allow"
     actions = [
@@ -59,6 +66,7 @@ data "aws_iam_policy_document" "github_deploy" {
     ]
     resources = [
       "arn:aws:ecr:ap-northeast-1:${data.aws_caller_identity.current.account_id}:repository/weblog-authoring-production",
+      "arn:aws:ecr:ap-northeast-1:${data.aws_caller_identity.current.account_id}:repository/weblog-search-indexer-production",
     ]
   }
 
@@ -72,6 +80,7 @@ data "aws_iam_policy_document" "github_deploy" {
     ]
     resources = [
       "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-authoring-production",
+      "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-search-indexer-production",
     ]
   }
 
@@ -157,6 +166,12 @@ data "aws_iam_policy_document" "github_terraform" {
       "acm:*",
       "apigateway:*",
       "cloudfront:*",
+      "cloudwatch:DeleteAlarms",
+      "cloudwatch:DescribeAlarms",
+      "cloudwatch:ListTagsForResource",
+      "cloudwatch:PutMetricAlarm",
+      "cloudwatch:TagResource",
+      "cloudwatch:UntagResource",
       "dsql:*",
       "ecr:*",
       "events:DeleteRule",
@@ -187,6 +202,7 @@ data "aws_iam_policy_document" "github_terraform" {
       "secretsmanager:UntagResource",
       "secretsmanager:UpdateSecret",
       "secretsmanager:UpdateSecretVersionStage",
+      "sqs:*",
       "sts:GetCallerIdentity",
     ]
     resources = ["*"]

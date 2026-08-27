@@ -116,6 +116,21 @@ class LambdaApiTest < Minitest::Test
     end
   end
 
+  class FakeSqs
+    attr_reader :messages
+
+    def initialize(error: nil)
+      @error = error
+      @messages = []
+    end
+
+    def send_message(**message)
+      raise @error unless @error.nil?
+
+      messages << message
+    end
+  end
+
   def setup
     @page = WeblogAuthoring::PageDocument.new(
       id: "page-id",
@@ -419,6 +434,41 @@ class LambdaApiTest < Minitest::Test
     assert_equal "本文", @database.saved_requests.fetch(0).body
   end
 
+  def test_successful_save_requests_a_debounced_search_index_update
+    sqs = FakeSqs.new
+    api, token = authenticated_api(sqs:)
+
+    response = api.call(json_event(
+      "POST",
+      "/api/authoring/pages",
+      { title: "new", body: "本文" },
+      cookies: ["weblog_authoring_session=#{token}"],
+      headers: { "x-csrf-token" => "csrf-token" }
+    ))
+
+    assert_equal 201, response.fetch(:statusCode)
+    assert_equal "search-index", sqs.messages.fetch(0).fetch(:message_group_id)
+    assert_equal "search-index", sqs.messages.fetch(0).fetch(:message_deduplication_id)
+  end
+
+  def test_search_notification_failure_does_not_fail_the_save
+    error = Aws::SQS::Errors::ServiceError.new(nil, "unavailable")
+    sqs = FakeSqs.new(error:)
+    log = StringIO.new
+    api, token = authenticated_api(sqs:, logger: log)
+
+    response = api.call(json_event(
+      "POST",
+      "/api/authoring/pages",
+      { title: "new", body: "本文" },
+      cookies: ["weblog_authoring_session=#{token}"],
+      headers: { "x-csrf-token" => "csrf-token" }
+    ))
+
+    assert_equal 201, response.fetch(:statusCode)
+    assert_equal "search_index_notification_failed", JSON.parse(log.string).fetch("event")
+  end
+
   def test_creates_an_authenticated_presigned_image_upload
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
     token = codec.issue(
@@ -624,6 +674,24 @@ class LambdaApiTest < Minitest::Test
   end
 
   private
+
+  def authenticated_api(sqs:, logger: $stderr)
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    token = codec.issue(
+      kind: "session",
+      attributes: { "github_user_id" => 630_181, "login" => "asonas", "csrf_token" => "csrf-token" },
+      ttl: 600
+    )
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      session_codec: codec,
+      allowed_github_user_id: 630_181,
+      sqs_client: sqs,
+      search_queue_url: "https://sqs.example/search.fifo",
+      logger:
+    )
+    [api, token]
+  end
 
   def page_document(id:, name:, body:)
     WeblogAuthoring::PageDocument.new(

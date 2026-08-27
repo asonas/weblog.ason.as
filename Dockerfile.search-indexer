@@ -1,0 +1,21 @@
+FROM node:24-bookworm-slim AS qmd
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends python3 make g++ \
+    && command rm -rf /var/lib/apt/lists/*
+RUN npm install --global @tobilu/qmd@2.5.3
+
+FROM public.ecr.aws/lambda/ruby:4.0
+
+RUN dnf install -y gcc make && dnf clean all
+
+COPY --from=qmd /usr/local/ /usr/local/
+COPY Gemfile Gemfile.lock ./
+RUN bundle config set without "development test" && bundle install
+
+COPY lib/ ${LAMBDA_TASK_ROOT}/lib/
+COPY lambda/search_indexer.rb ${LAMBDA_TASK_ROOT}/lambda_function.rb
+
+ENV RUBYLIB=${LAMBDA_TASK_ROOT}/lib
+
+CMD ["lambda_function.WeblogAuthoring::SearchIndexerHandler.call"]

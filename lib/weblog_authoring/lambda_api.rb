@@ -9,6 +9,7 @@ require "securerandom"
 require "time"
 require "uri"
 require "aws-sdk-s3"
+require "aws-sdk-sqs"
 
 require_relative "embed_metadata"
 require_relative "image_inbox"
@@ -45,7 +46,8 @@ module WeblogAuthoring
 
     def initialize(database:, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
                    allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
-                   site_bucket: nil, clock: Time.method(:now))
+                   site_bucket: nil, search_queue_url: nil, sqs_client: nil, logger: $stderr,
+                   clock: Time.method(:now))
       @database = database
       @oauth = oauth
       @session_codec = session_codec
@@ -56,6 +58,9 @@ module WeblogAuthoring
       @asset_bucket = asset_bucket
       @site_bucket = site_bucket
       @embed_fetcher = embed_fetcher
+      @search_queue_url = search_queue_url
+      @sqs_client = sqs_client
+      @logger = logger
       @clock = clock
     end
 
@@ -272,7 +277,26 @@ module WeblogAuthoring
       return json_response(404, error: "Page not found") if page_id && @database.find(page_id).nil?
 
       page = @database.save(save_request(parse_json(event), page_id:))
+      notify_search_index
       json_response(status, saved_page_json(page))
+    end
+
+    def notify_search_index
+      return if @search_queue_url.nil? || @sqs_client.nil?
+
+      @sqs_client.send_message(
+        queue_url: @search_queue_url,
+        message_body: JSON.generate("reason" => "page_saved"),
+        message_group_id: "search-index",
+        message_deduplication_id: "search-index"
+      )
+    rescue Aws::SQS::Errors::ServiceError => error
+      @logger.puts(JSON.generate(
+        "level" => "warn",
+        "event" => "search_index_notification_failed",
+        "error" => error.class.name,
+        "message" => error.message
+      ))
     end
 
     def upload_response(event)

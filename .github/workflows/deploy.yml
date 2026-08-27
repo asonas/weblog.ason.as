@@ -20,6 +20,8 @@ env:
   DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-authoring-production-runtime
   ECR_REPOSITORY: weblog-authoring-production
   LAMBDA_FUNCTION: weblog-authoring-production
+  SEARCH_INDEXER_ECR_REPOSITORY: weblog-search-indexer-production
+  SEARCH_INDEXER_LAMBDA_FUNCTION: weblog-search-indexer-production
   SITE_BUCKET: weblog-asonas-site-production-282782318939
   DEVELOPMENT_ASSET_BUCKET: weblog-asonas-assets-dev-282782318939
   CLOUDFRONT_DISTRIBUTION_ID: E3BCWEKGAG5LSG
@@ -42,7 +44,7 @@ jobs:
         run: |
           if [[ "$BEFORE_SHA" == "0000000000000000000000000000000000000000" ]] || ! git cat-file -e "${BEFORE_SHA}^{commit}"; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet "$BEFORE_SHA" "$AFTER_SHA" -- Dockerfile.lambda Gemfile Gemfile.lock lib/ lambda/; then
+          elif git diff --quiet "$BEFORE_SHA" "$AFTER_SHA" -- Dockerfile.lambda Dockerfile.search-indexer Gemfile Gemfile.lock lib/ lambda/; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -69,6 +71,16 @@ jobs:
           role-to-assume: arn:aws:iam::282782318939:role/WeblogGitHubDeploy
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Detect search indexer infrastructure
+        id: search-infra
+        run: |
+          if aws ecr describe-repositories --repository-names "$SEARCH_INDEXER_ECR_REPOSITORY" >/dev/null 2>&1 \
+            && aws lambda get-function --function-name "$SEARCH_INDEXER_LAMBDA_FUNCTION" >/dev/null 2>&1; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Apply database schema
         run: bundle exec ruby bin/bootstrap-dsql
 
@@ -94,6 +106,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and publish search indexer Lambda image
+        if: steps.lambda-changes.outputs.changed == 'true' && steps.search-infra.outputs.ready == 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: Dockerfile.search-indexer
+          platforms: linux/arm64
+          provenance: false
+          push: true
+          tags: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.SEARCH_INDEXER_ECR_REPOSITORY }}:${{ github.sha }}-${{ github.run_attempt }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Deploy Lambda image
         if: steps.lambda-changes.outputs.changed == 'true'
         env:
@@ -101,6 +126,14 @@ jobs:
         run: |
           aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" --image-uri "$IMAGE_URI"
           aws lambda wait function-updated-v2 --function-name "$LAMBDA_FUNCTION"
+
+      - name: Deploy search indexer Lambda image
+        if: steps.lambda-changes.outputs.changed == 'true' && steps.search-infra.outputs.ready == 'true'
+        env:
+          IMAGE_URI: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.SEARCH_INDEXER_ECR_REPOSITORY }}:${{ github.sha }}-${{ github.run_attempt }}
+        run: |
+          aws lambda update-function-code --function-name "$SEARCH_INDEXER_LAMBDA_FUNCTION" --image-uri "$IMAGE_URI"
+          aws lambda wait function-updated-v2 --function-name "$SEARCH_INDEXER_LAMBDA_FUNCTION"
 
       - name: Publish site and existing images
         run: |

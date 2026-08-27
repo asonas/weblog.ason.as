@@ -23,6 +23,16 @@ output "authoring_lambda_function_name" {
   value       = aws_lambda_function.authoring.function_name
 }
 
+output "search_indexer_ecr_repository_url" {
+  description = "ECR repository URL for the production search indexer Lambda image."
+  value       = aws_ecr_repository.search_indexer.repository_url
+}
+
+output "search_indexer_lambda_function_name" {
+  description = "Name of the production search indexer Lambda function."
+  value       = aws_lambda_function.search_indexer.function_name
+}
+
 output "authoring_api_endpoint" {
   description = "Endpoint of the production authoring API. Reads are public and mutations require an application session."
   value       = aws_apigatewayv2_api.authoring.api_endpoint
