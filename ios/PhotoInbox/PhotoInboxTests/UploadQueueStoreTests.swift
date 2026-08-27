@@ -25,15 +25,27 @@ final class UploadQueueStoreTests: XCTestCase {
         XCTAssertEqual(restored[0].stage, .uploading(uploadID: "server-upload"))
     }
 
-    func testEnqueueDoesNotDuplicateAClientID() async throws {
+    func testEnqueueKeepsTheFirstUploadForAnAsset() async throws {
         let fileURL = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString)
-        let item = UploadItem(assetLocalIdentifier: "asset-1", capturedAt: .now)
+        let firstID = UUID()
+        let first = UploadItem(
+            clientUploadID: firstID,
+            assetLocalIdentifier: "asset-1",
+            capturedAt: .now
+        )
+        let duplicate = UploadItem(
+            clientUploadID: UUID(),
+            assetLocalIdentifier: "asset-1",
+            capturedAt: .now
+        )
         let store = UploadQueueStore(fileURL: fileURL)
 
-        try await store.enqueue([item, item])
+        try await store.enqueue([first])
+        try await store.enqueue([duplicate])
 
         let stored = try await store.items()
         XCTAssertEqual(stored.count, 1)
+        XCTAssertEqual(stored[0].clientUploadID, firstID)
     }
 }

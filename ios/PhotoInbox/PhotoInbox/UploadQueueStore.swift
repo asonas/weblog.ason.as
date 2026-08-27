@@ -56,8 +56,8 @@ actor UploadQueueStore {
 
     func enqueue(_ newItems: [UploadItem]) throws {
         var current = try load()
-        var existing = Set(current.map(\.clientUploadID))
-        for item in newItems where existing.insert(item.clientUploadID).inserted {
+        var existing = Set(current.map(\.assetLocalIdentifier))
+        for item in newItems where existing.insert(item.assetLocalIdentifier).inserted {
             current.append(item)
         }
         try save(current)
