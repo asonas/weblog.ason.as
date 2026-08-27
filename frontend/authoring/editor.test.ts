@@ -60,6 +60,7 @@ const {
   wrapSelectionInWikiLink,
   wikiLinkQuery,
   topicSourceElement,
+  universeReferences,
   showYouTubeFallback,
   useYouTubeThumbnailFallback,
   youtubeVideoId
@@ -77,6 +78,16 @@ test("ignores URLs in inline and fenced code when building embeds", () => {
   ].join("\n");
 
   assert.deepEqual(extractEmbeddableUrls(body), ["https://example.com/article"]);
+});
+
+test("keeps universe references stable while editing prose", () => {
+  const before = universeReferences("日記の本文 [[Calico]] https://example.com/article");
+  const after = universeReferences("日記の本文を追記した [[Calico]] https://example.com/article");
+
+  assert.equal(after.wikiLinkKey, before.wikiLinkKey);
+  assert.equal(after.externalUrlKey, before.externalUrlKey);
+  assert.notEqual(universeReferences("[[Calico]] [[TipTap]]").wikiLinkKey, before.wikiLinkKey);
+  assert.notEqual(universeReferences("[[Calico]] https://example.com/other").externalUrlKey, before.externalUrlKey);
 });
 
 test("recognizes image files and inbox photos as image drags", () => {

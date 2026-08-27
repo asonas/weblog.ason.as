@@ -513,12 +513,23 @@ function extractWikiLinkNames(body: string): Array<string> {
     .filter((name, index, names) => name && names.indexOf(name) === index);
 }
 
-export function buildInternalUniverseGroups(
-  body: string,
+export function universeReferences(body: string) {
+  const wikiLinkNames = extractWikiLinkNames(body);
+  const externalUrls = extractEmbeddableUrls(body);
+  return {
+    wikiLinkNames,
+    externalUrls,
+    wikiLinkKey: JSON.stringify(wikiLinkNames),
+    externalUrlKey: JSON.stringify(externalUrls)
+  };
+}
+
+function buildInternalUniverseGroupsFromNames(
+  wikiLinkNames: Array<string>,
   route: string,
   linkedPageGroups: Array<LinkedPageGroup>
 ): Array<LinkedPageGroup> {
-  const names = extractWikiLinkNames(body).filter((name) => name !== route);
+  const names = wikiLinkNames.filter((name) => name !== route);
   if (linkedPageGroups.some((group) => group.kind === "wiki" && group.name === route)) {
     names.unshift(route);
   }
@@ -535,6 +546,14 @@ export function buildInternalUniverseGroups(
       isTopicOnly: false
     };
   });
+}
+
+export function buildInternalUniverseGroups(
+  body: string,
+  route: string,
+  linkedPageGroups: Array<LinkedPageGroup>
+): Array<LinkedPageGroup> {
+  return buildInternalUniverseGroupsFromNames(extractWikiLinkNames(body), route, linkedPageGroups);
 }
 
 function externalLinkLabel(url: string): string {
@@ -643,6 +662,13 @@ type InternalGraphLayout = {
   links: Array<{ source: InternalGraphNode; target: InternalGraphNode }>;
   pages: Array<InternalGraphNode>;
   topics: Array<InternalGraphNode>;
+};
+
+const EMPTY_INTERNAL_GRAPH_LAYOUT: InternalGraphLayout = {
+  height: 520,
+  links: [],
+  pages: [],
+  topics: []
 };
 
 type InternalGraphRect = {
@@ -898,7 +924,7 @@ function InternalUniverseGraph({
   const [embeds, setEmbeds] = useState<Record<string, EmbedMetadata | null>>({});
   const closeTimerRef = useRef<number | null>(null);
   const graphRef = useRef<HTMLElement | null>(null);
-  const layout = useMemo(() => internalGraphLayout(groups, width), [groups, width]);
+  const [layout, setLayout] = useState<InternalGraphLayout>(EMPTY_INTERNAL_GRAPH_LAYOUT);
   const connectionCounts = useMemo(() => {
     const counts = new Map<string, number>();
     layout.links.forEach(({ target }) => counts.set(target.id, (counts.get(target.id) || 0) + 1));
@@ -916,6 +942,13 @@ function InternalUniverseGraph({
     () => groups.filter((group) => group.kind === "url").map((group) => group.name),
     [groups]
   );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setLayout(internalGraphLayout(groups, width));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [groups, width]);
 
   useEffect(() => {
     let active = true;
@@ -1535,6 +1568,11 @@ function Universe({
           }];
         }));
         const nextNodes = initialUniverseNodes(urls, anchors, editorRect, width);
+
+        if (nextNodes.length === 0) {
+          setNodes([]);
+          return;
+        }
 
         if (reducedMotion.matches) {
           for (let iteration = 0; iteration < 100; iteration += 1) {
@@ -2544,21 +2582,29 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   ];
   const universeEnabled = useUniverseEnabled();
   const linkedPageGroups = useMemo(() => groupLinkedPages(linkedPages), [linkedPages]);
-  const embedUrls = useMemo(() => extractEmbeddableUrls(draft.body), [draft.body]);
+  const references = useMemo(() => universeReferences(draft.body), [draft.body]);
   const internalUniverseGroups = useMemo(
-    () => buildInternalUniverseGroups(draft.body, draft.name || draft.title, linkedPageGroups),
-    [draft.body, draft.name, draft.title, linkedPageGroups]
+    () => buildInternalUniverseGroupsFromNames(
+      references.wikiLinkNames,
+      draft.name || draft.title,
+      linkedPageGroups
+    ),
+    [references.wikiLinkKey, draft.name, draft.title, linkedPageGroups]
   );
   const externalUniverseGroups = useMemo(() =>
-    embedUrls.map((url) => linkedPageGroups.find((group) => group.kind === "url" && group.name === url) || {
+    references.externalUrls.map((url) => linkedPageGroups.find((group) => group.kind === "url" && group.name === url) || {
       kind: "url" as const,
       name: url,
       pages: [],
       isTopicOnly: false
-    }), [embedUrls, linkedPageGroups]);
+    }), [references.externalUrlKey, linkedPageGroups]);
   const universeGroups = useMemo(
     () => [...internalUniverseGroups, ...externalUniverseGroups],
     [externalUniverseGroups, internalUniverseGroups]
+  );
+  const universeTopics = useMemo(
+    () => universeGroups.map(({ kind, name }) => ({ kind, name })),
+    [universeGroups]
   );
 
   return (
@@ -2762,7 +2808,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
         )}
         <Universe
           urls={[]}
-          topics={universeGroups.map(({ kind, name }) => ({ kind, name }))}
+          topics={universeTopics}
           activeTopic={activeUniverseTopic}
           editor={editor}
           editorContentReady={editorContentReady}
