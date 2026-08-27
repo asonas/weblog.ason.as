@@ -18,6 +18,7 @@
 		8842F378B7EAC85A131B8BFB /* MobileAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F16457BB7277740D16B9D288 /* MobileAPIClient.swift */; };
 		97FD3E974FDFAFE75185B7A4 /* PhotoInboxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04CFDDC9D2E3AAC96227E66F /* PhotoInboxApp.swift */; };
 		99057B0889B20218B8550F54 /* PhotoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4828FFD0831C7037B81F58C0 /* PhotoLibrary.swift */; };
+		A3ECA7881C421C1E402AB100 /* ImagePreparerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CC3C5E40305AB8A4CF5650E /* ImagePreparerTests.swift */; };
 		A6DE86C5CAFAC7AEE8D77DA0 /* Credentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0EFD085D7B1C2409F13D455 /* Credentials.swift */; };
 		DA071F6D12C7AFCE38684430 /* PhotoSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 433EA4E6EEB52379675BFC5F /* PhotoSelectionTests.swift */; };
 		E75173C91B3553F38813D39F /* PhotoGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E695CDFA49BD1A344193C1E /* PhotoGridView.swift */; };
@@ -44,6 +45,7 @@
 		673BFB3CF5754736C1CF01D9 /* UploadCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadCoordinator.swift; sourceTree = "<group>"; };
 		6E695CDFA49BD1A344193C1E /* PhotoGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGridView.swift; sourceTree = "<group>"; };
 		89641E3BEA3AC64983BAEDBE /* UploadQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadQueueStore.swift; sourceTree = "<group>"; };
+		8CC3C5E40305AB8A4CF5650E /* ImagePreparerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreparerTests.swift; sourceTree = "<group>"; };
 		A5E9B543553C7865D4AB5DD6 /* UploadQueueStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadQueueStoreTests.swift; sourceTree = "<group>"; };
 		BB556A9ECA2876981B156690 /* PhotoSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoSelection.swift; sourceTree = "<group>"; };
 		C593E5A71696A2A11BE7DEFA /* BackgroundUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundUploader.swift; sourceTree = "<group>"; };
@@ -57,6 +59,7 @@
 		0FC36690642E015453FD4AE4 /* PhotoInboxTests */ = {
 			isa = PBXGroup;
 			children = (
+				8CC3C5E40305AB8A4CF5650E /* ImagePreparerTests.swift */,
 				17C13FB1693AC8EDFBAFF07E /* MobileAPIClientTests.swift */,
 				433EA4E6EEB52379675BFC5F /* PhotoSelectionTests.swift */,
 				A5E9B543553C7865D4AB5DD6 /* UploadQueueStoreTests.swift */,
@@ -179,6 +182,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A3ECA7881C421C1E402AB100 /* ImagePreparerTests.swift in Sources */,
 				487BB8CB088FA9FEF2C49F88 /* MobileAPIClientTests.swift in Sources */,
 				DA071F6D12C7AFCE38684430 /* PhotoSelectionTests.swift in Sources */,
 				6DF6AE1102FD822C943F814F /* UploadQueueStoreTests.swift in Sources */,

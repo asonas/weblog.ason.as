@@ -15,8 +15,19 @@ enum ImagePreparationError: Error { case unavailable, conversionFailed }
 struct ImagePreparer {
     func prepare(asset: PHAsset, directory: URL, id: UUID) async throws -> PreparedPhoto {
         let data = try await imageData(asset: asset)
+        return try prepare(data: data, directory: directory, id: id)
+    }
+
+    func prepare(data: Data, directory: URL, id: UUID) throws -> PreparedPhoto {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+              let sourceProperties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = sourceProperties[kCGImagePropertyPixelWidth] as? Int,
+              let height = sourceProperties[kCGImagePropertyPixelHeight] as? Int,
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceThumbnailMaxPixelSize: max(width, height),
+              ] as CFDictionary) else {
             throw ImagePreparationError.conversionFailed
         }
         let hasAlpha = image.alphaInfo == .first || image.alphaInfo == .last ||
