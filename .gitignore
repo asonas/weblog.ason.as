@@ -5,6 +5,7 @@
 *.tfstate.*
 .env
 node_modules/
+xcuserdata/
 data/raw/
 data/normalized/
 data/index/

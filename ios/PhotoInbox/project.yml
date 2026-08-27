@@ -1,0 +1,38 @@
+name: PhotoInbox
+options:
+  bundleIdPrefix: com.asonas.weblog
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+targets:
+  PhotoInbox:
+    type: application
+    platform: iOS
+    sources: [PhotoInbox]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.asonas.weblog.PhotoInbox
+        DEVELOPMENT_TEAM: QYP65434UW
+        TARGETED_DEVICE_FAMILY: 1
+        INFOPLIST_FILE: PhotoInbox/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: false
+  PhotoInboxTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [PhotoInboxTests]
+    dependencies:
+      - target: PhotoInbox
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.asonas.weblog.PhotoInboxTests
+schemes:
+  PhotoInbox:
+    build:
+      targets:
+        PhotoInbox: all
+        PhotoInboxTests: [test]
+    test:
+      targets: [PhotoInboxTests]
