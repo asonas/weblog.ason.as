@@ -322,7 +322,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_includes body, 'href="/?new=1"'
     assert_includes body, 'href="/?new=daily"'
     assert_includes body, 'href="/feed.xml"'
-    assert_includes body, 'id="theme-toggle"'
+    refute_includes body, 'id="theme-toggle"'
     assert database_path.file?
   end
 
