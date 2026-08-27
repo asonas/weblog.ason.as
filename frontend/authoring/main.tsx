@@ -297,17 +297,24 @@ function App({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; auth
     return <p className="loading-state" role="status">記事を読み込んでいます</p>;
   }
 
-  return bootstrap.mode === "home" ? <Home bootstrap={bootstrap} auth={auth} /> : <AuthoringEditor bootstrap={bootstrap} />;
+  if (bootstrap.mode === "home") return <Home bootstrap={bootstrap} auth={auth} />;
+
+  const header = document.querySelector<HTMLElement>(".site-header");
+  return <>
+    {header && createPortal(<SiteSearch />, header)}
+    <AuthoringEditor bootstrap={bootstrap} />
+  </>;
 }
 
 function RootApp({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; auth: AuthState }) {
   const header = document.querySelector<HTMLElement>(".site-header");
-  return <>
-    {header && createPortal(<SiteSearch />, header)}
-    {window.location.pathname === "/search"
-      ? <SearchPage />
-      : <App initialBootstrap={initialBootstrap} auth={auth} />}
-  </>;
+  if (window.location.pathname === "/search") {
+    return <>
+      {header && createPortal(<SiteSearch />, header)}
+      <SearchPage />
+    </>;
+  }
+  return <App initialBootstrap={initialBootstrap} auth={auth} />;
 }
 
 function HomeTags({ tags, fitMobileRows = false }: { tags: string[]; fitMobileRows?: boolean }) {
@@ -416,23 +423,18 @@ function GitHubAuthentication({ auth }: { auth: AuthState }) {
 
 function HeaderDock() {
   const actionsDockRef = useRef<HTMLDivElement | null>(null);
-  const searchDockRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const dock = actionsDockRef.current;
-    const searchDock = searchDockRef.current;
     const header = document.querySelector<HTMLElement>(".site-header");
     const navigation = header?.querySelector<HTMLElement>(".header-nav");
     const actions = navigation?.querySelector<HTMLElement>(".header-actions");
-    const search = header?.querySelector<HTMLElement>(".site-search");
-    if (!dock || !searchDock || !header || !navigation || !actions || !search) return;
+    if (!dock || !header || !navigation || !actions) return;
 
     dock.append(actions);
-    searchDock.append(search);
     header.hidden = true;
     return () => {
       navigation.append(actions);
-      header.append(search);
       header.hidden = false;
     };
   }, []);
@@ -441,7 +443,7 @@ function HeaderDock() {
     <div className="atlas-header">
       <h1><a href="/">weblog.ason.as</a></h1>
       <div className="atlas-header__actions" ref={actionsDockRef} />
-      <div className="atlas-header__search" ref={searchDockRef} />
+      <div className="atlas-header__search"><SiteSearch /></div>
     </div>
   );
 }
