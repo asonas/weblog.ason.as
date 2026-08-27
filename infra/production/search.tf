@@ -180,3 +180,37 @@ resource "aws_cloudwatch_metric_alarm" "search_index_dead_letters" {
     QueueName = aws_sqs_queue.search_index_dead_letter.name
   }
 }
+
+resource "aws_cloudwatch_metric_alarm" "search_index_queue_age" {
+  alarm_name          = "weblog-search-index-queue-age-production"
+  alarm_description   = "Search index updates have not completed within 15 minutes"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 900
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.search_index.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "search_index_generation_errors" {
+  alarm_name          = "weblog-search-index-generation-errors-production"
+  alarm_description   = "Search index generation failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.search_indexer.function_name
+  }
+}
