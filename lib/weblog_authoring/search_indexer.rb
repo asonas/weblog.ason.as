@@ -11,6 +11,7 @@ require "sqlite3"
 module WeblogAuthoring
   class SearchIndexer
     MANIFEST_KEY = "search/manifest.json"
+    INDEX_FORMAT_VERSION = 1
 
     class QmdRunner
       def build(workdir:, corpus_dir:)
@@ -61,6 +62,7 @@ module WeblogAuthoring
         FileUtils.mkdir(corpus_dir)
         write_corpus(pages, corpus_dir)
         index_path = @runner.build(workdir:, corpus_dir:)
+        write_page_metadata(index_path, pages)
         validate_index(index_path, expected_documents: pages.length)
         publish(index_path, corpus_hash, pages.length)
       end
@@ -72,7 +74,7 @@ module WeblogAuthoring
       records = pages.sort_by(&:id).map do |page|
         [page.id, page.route, page.updated_at&.iso8601, Digest::SHA256.hexdigest(page.body.to_s)]
       end
-      Digest::SHA256.hexdigest(JSON.generate(records))
+      Digest::SHA256.hexdigest(JSON.generate("format_version" => INDEX_FORMAT_VERSION, "pages" => records))
     end
 
     def read_manifest
@@ -86,6 +88,36 @@ module WeblogAuthoring
       pages.each do |page|
         content = "# #{page.display_title}\n\nURL: /#{page.route}\n\n#{page.body}\n"
         File.write(File.join(corpus_dir, "#{page.id}.md"), content)
+      end
+    end
+
+    def write_page_metadata(index_path, pages)
+      database = SQLite3::Database.new(index_path)
+      begin
+        database.execute(<<~SQL)
+          CREATE TABLE weblog_pages (
+            document_id INTEGER PRIMARY KEY,
+            route TEXT NOT NULL,
+            title TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+        SQL
+        database.transaction do
+          pages.each do |page|
+            document_id = database.get_first_value(
+              "SELECT id FROM documents WHERE collection = ? AND path = ? AND active = 1",
+              ["weblog", "#{page.id}.md"]
+            )
+            raise "generated search index is missing page #{page.id}" if document_id.nil?
+
+            database.execute(
+              "INSERT INTO weblog_pages(document_id, route, title, updated_at) VALUES (?, ?, ?, ?)",
+              [document_id, page.route, page.display_title, page.updated_at.iso8601]
+            )
+          end
+        end
+      ensure
+        database.close
       end
     end
 

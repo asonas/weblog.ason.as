@@ -128,6 +128,20 @@ resource "aws_iam_role_policy" "search_index_notify" {
   policy = data.aws_iam_policy_document.search_index_notify.json
 }
 
+data "aws_iam_policy_document" "search_index_read" {
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.site.arn}/search/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "search_index_read" {
+  name   = "ReadSearchIndex"
+  role   = aws_iam_role.authoring_runtime.id
+  policy = data.aws_iam_policy_document.search_index_read.json
+}
+
 resource "aws_lambda_function" "search_indexer" {
   function_name = "weblog-search-indexer-production"
   package_type  = "Image"

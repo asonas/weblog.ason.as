@@ -18,6 +18,7 @@ require_relative "mobile_upload"
 require_relative "models"
 require_relative "names"
 require_relative "atom_feed"
+require_relative "search_index"
 
 module WeblogAuthoring
   class LambdaApi
@@ -47,7 +48,7 @@ module WeblogAuthoring
     def initialize(database:, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
                    allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
                    site_bucket: nil, search_queue_url: nil, sqs_client: nil, logger: $stderr,
-                   clock: Time.method(:now))
+                   search_index: nil, clock: Time.method(:now))
       @database = database
       @oauth = oauth
       @session_codec = session_codec
@@ -61,6 +62,7 @@ module WeblogAuthoring
       @search_queue_url = search_queue_url
       @sqs_client = sqs_client
       @logger = logger
+      @search_index = search_index
       @clock = clock
     end
 
@@ -87,6 +89,7 @@ module WeblogAuthoring
       end
       return inbox_response(event) if method == "GET" && path == "/api/inbox"
       return adopt_inbox_response(event) if method == "POST" && path == "/api/inbox/adopt"
+      return search_response(event) if method == "GET" && path == "/api/search"
       return pages_response if method == "GET" && path == "/api/pages"
       return tags_response if method == "GET" && path == "/api/tags"
       return archive_response if method == "GET" && path == "/api/archive"
@@ -399,6 +402,43 @@ module WeblogAuthoring
       query = event.fetch("queryStringParameters", {}).to_h
       items = @database.list_inbox_items(source: optional_query(query, "source"), kind: optional_query(query, "kind"))
       json_response(200, "items" => items.map { |item| inbox_item_json(item) })
+    end
+
+    def search_response(event)
+      query = event.fetch("queryStringParameters", {}).to_h
+      text = query.fetch("q", "").to_s.strip
+      limit = Integer(query.fetch("limit", "10").to_s, 10)
+      return search_error_response(422, "limit must be between 1 and 20", field: "limit") unless (1..20).cover?(limit)
+
+      return search_json_response(200, "results" => []) if text.empty?
+
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      result = @search_index.search(query: text, limit:)
+      duration_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000
+      @logger.puts(JSON.generate(
+        "event" => "search_completed",
+        "duration_ms" => duration_ms.round(1),
+        "index_age_seconds" => [(@clock.call - Time.iso8601(result.generated_at)).round, 0].max,
+        "result_count" => result.results.length
+      ))
+      results = result.results
+      search_json_response(200, "results" => results)
+    rescue ArgumentError
+      search_error_response(422, "limit must be between 1 and 20", field: "limit")
+    rescue SearchIndex::Unavailable
+      search_error_response(503, "Search is temporarily unavailable")
+    end
+
+    def search_json_response(status, payload)
+      response = json_response(status, payload)
+      response[:headers] = response.fetch(:headers).merge("cache-control" => "private, no-store")
+      response
+    end
+
+    def search_error_response(status, message, field: nil)
+      response = json_error(status, message, field:)
+      response[:headers] = response.fetch(:headers).merge("cache-control" => "private, no-store")
+      response
     end
 
     def adopt_inbox_response(event)

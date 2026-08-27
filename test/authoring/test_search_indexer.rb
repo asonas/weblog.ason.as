@@ -3,6 +3,8 @@
 require_relative "../test_helper"
 require_relative "../../lib/weblog_authoring/search_indexer"
 
+require "tempfile"
+
 class SearchIndexerTest < Minitest::Test
   Page = Data.define(:id, :route, :display_title, :status, :updated_at, :body)
 
@@ -43,8 +45,15 @@ class SearchIndexerTest < Minitest::Test
 
       @corpus_files = Dir.children(corpus_dir).sort.map { |name| File.read(File.join(corpus_dir, name)) }
       database = SQLite3::Database.new(File.join(workdir, "index.sqlite3"))
-      database.execute("CREATE TABLE documents (id TEXT PRIMARY KEY, active INTEGER NOT NULL)")
-      database.execute("INSERT INTO documents VALUES ('page-id', 1)")
+      database.execute(<<~SQL)
+        CREATE TABLE documents (
+          id INTEGER PRIMARY KEY,
+          collection TEXT NOT NULL,
+          path TEXT NOT NULL,
+          active INTEGER NOT NULL
+        )
+      SQL
+      database.execute("INSERT INTO documents VALUES (1, 'weblog', 'page-id.md', 1)")
       database.close
       File.join(workdir, "index.sqlite3")
     end
@@ -94,6 +103,22 @@ class SearchIndexerTest < Minitest::Test
 
     assert_equal "unchanged", result.fetch("status")
     assert_empty @s3.puts.drop(2)
+  end
+
+  def test_adds_page_metadata_to_the_search_generation
+    indexer(runner: FakeRunner.new).call
+    generation = @s3.puts.fetch(0).fetch(:body)
+
+    Tempfile.create(["search-index", ".sqlite3"]) do |file|
+      file.binmode
+      file.write(generation)
+      file.flush
+      database = SQLite3::Database.new(file.path, readonly: true)
+      row = database.get_first_row("SELECT route, title, updated_at FROM weblog_pages")
+      database.close
+
+      assert_equal ["2026-08-27", "2026-08-27", "2026-08-27T12:00:00+09:00"], row
+    end
   end
 
   def test_keeps_the_previous_manifest_when_qmd_fails

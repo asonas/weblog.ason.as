@@ -21,6 +21,7 @@ resource "aws_apigatewayv2_route" "authoring" {
     "GET /api/tags"                                 = "NONE"
     "GET /api/archive"                              = "NONE"
     "GET /api/page-names"                           = "NONE"
+    "GET /api/search"                               = "NONE"
     "GET /api/related"                              = "NONE"
     "GET /api/embed"                                = "NONE"
     "GET /api/editor/new"                           = "NONE"
@@ -58,11 +59,12 @@ resource "aws_apigatewayv2_stage" "authoring" {
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.authoring_api.arn
     format = jsonencode({
-      requestId        = "$context.requestId"
-      requestMethod    = "$context.httpMethod"
-      routeKey         = "$context.routeKey"
-      status           = "$context.status"
-      integrationError = "$context.integrationErrorMessage"
+      requestId          = "$context.requestId"
+      requestMethod      = "$context.httpMethod"
+      routeKey           = "$context.routeKey"
+      status             = "$context.status"
+      integrationLatency = "$context.integrationLatency"
+      integrationError   = "$context.integrationErrorMessage"
     })
   }
 }

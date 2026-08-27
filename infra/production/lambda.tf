@@ -27,6 +27,7 @@ resource "aws_lambda_function" "authoring" {
     aws_iam_role_policy.image_upload,
     aws_iam_role_policy.oauth_secret,
     aws_iam_role_policy.search_index_notify,
+    aws_iam_role_policy.search_index_read,
     aws_iam_role_policy_attachment.lambda_basic_execution,
   ]
 
