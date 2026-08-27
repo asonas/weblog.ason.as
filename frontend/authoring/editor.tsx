@@ -1506,18 +1506,12 @@ function Universe({
 
     let animationFrame = 0;
     let measureFrame = 0;
-    const media = window.matchMedia("(min-width: 68.8125rem)");
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     const measure = () => {
       window.cancelAnimationFrame(measureFrame);
       window.cancelAnimationFrame(animationFrame);
       measureFrame = window.requestAnimationFrame(() => {
-        if (!media.matches) {
-          setNodes([]);
-          return;
-        }
-
         const workspaceRect = workspace.getBoundingClientRect();
         const editorShell = workspace.querySelector<HTMLElement>(".editor-shell");
         if (!editorShell) return;
@@ -1601,7 +1595,6 @@ function Universe({
     editor.on("update", measure);
     editor.on("focus", measure);
     editor.on("blur", measure);
-    media.addEventListener("change", measure);
     measure();
 
     return () => {
@@ -1611,7 +1604,6 @@ function Universe({
       editor.off("update", measure);
       editor.off("focus", measure);
       editor.off("blur", measure);
-      media.removeEventListener("change", measure);
     };
   }, [editor, editorContentReady, enabled, topics, urls, workspaceRef]);
 

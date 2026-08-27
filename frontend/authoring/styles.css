@@ -898,10 +898,8 @@ h1 {
   transform: translateX(calc(-100% - 1.125rem));
 }
 
-@media (min-width: 68.8125rem) {
-  html[data-universe="on"] .linked-pages {
-    display: none;
-  }
+html[data-universe="on"] .linked-pages {
+  display: none;
 }
 
 .embed-card {
@@ -2095,14 +2093,6 @@ td {
 }
 
 @media (max-width: 68.75rem) {
-  .universe {
-    display: none;
-  }
-
-  .internal-universe-groups {
-    display: none;
-  }
-
   .home-page-list {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }

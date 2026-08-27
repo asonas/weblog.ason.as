@@ -78,7 +78,7 @@ function setupPaletteToggle() {
   const storedPalette = window.localStorage.getItem(PALETTE_STORAGE_KEY);
   let palette: Palette = storedPalette && storedPalette in PALETTES
     ? storedPalette as Palette
-    : "departure";
+    : "teal";
   applyPalette(palette);
 
   const closeMenu = () => {
@@ -157,7 +157,7 @@ function setupUniverseToggle() {
   const button = document.querySelector<HTMLButtonElement>("#universe-toggle");
   if (!button) return;
 
-  let enabled = window.localStorage.getItem(UNIVERSE_STORAGE_KEY) === "on";
+  let enabled = window.localStorage.getItem(UNIVERSE_STORAGE_KEY) !== "off";
   applyUniverse(enabled);
   button.addEventListener("click", () => {
     enabled = !enabled;
