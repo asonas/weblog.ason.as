@@ -1045,6 +1045,9 @@ module WeblogAuthoring
     end
 
     def page_image_url(page)
+      markdown_image = page.body.to_s[/!\[[^\]]*\]\((https?:\/\/[^\s)]+|\/assets\/[^\s)]+)(?:\s+[^)]*)?\)/, 1]
+      return markdown_image if markdown_image
+
       urls = page.body.to_s.scan(/\[(https?:\/\/[^\]\s]+)(?:\s+[^\]]+)?\]/).flatten
       urls.each do |url|
         local_path = settings.asset_image_paths[url]

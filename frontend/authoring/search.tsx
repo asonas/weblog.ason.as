@@ -184,7 +184,22 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
     if (!mobileOpen) return;
     const main = document.querySelector<HTMLElement>("#main");
     const navigation = document.querySelector<HTMLElement>(".header-nav");
-    main?.setAttribute("inert", "");
+    const searchRoot = mobileButtonRef.current?.closest<HTMLElement>(".site-search");
+    const inertTargets: HTMLElement[] = [];
+    if (main && searchRoot && main.contains(searchRoot)) {
+      let current: HTMLElement | null = searchRoot;
+      while (current && current !== main) {
+        const parent: HTMLElement | null = current.parentElement;
+        if (!parent) break;
+        Array.from(parent.children).forEach((sibling) => {
+          if (sibling !== current && sibling instanceof HTMLElement) inertTargets.push(sibling);
+        });
+        current = parent;
+      }
+    } else if (main) {
+      inertTargets.push(main);
+    }
+    inertTargets.forEach((target) => target.setAttribute("inert", ""));
     navigation?.setAttribute("inert", "");
     document.body.style.overflow = "hidden";
     const close = (event: globalThis.KeyboardEvent) => {
@@ -193,7 +208,7 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
     document.addEventListener("keydown", close);
     return () => {
       document.removeEventListener("keydown", close);
-      main?.removeAttribute("inert");
+      inertTargets.forEach((target) => target.removeAttribute("inert"));
       navigation?.removeAttribute("inert");
       document.body.style.removeProperty("overflow");
     };

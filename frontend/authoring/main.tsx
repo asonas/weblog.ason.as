@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import type { RefObject } from "react";
 
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
 import { SearchPage, SiteSearch } from "./search";
@@ -309,43 +310,55 @@ function RootApp({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; 
   </>;
 }
 
-function HomePageList({ pages }: { pages: HomePage[] }) {
-  return pages.length === 0 ? (
-    <p className="empty-home">まだ記事がありません</p>
-  ) : (
-    <ul className="home-page-list">
-      {pages.map((page) => (
-        <li className="home-page-card" key={page.id}>
-          <a className="home-page-card__link" href={`/${encodeURIComponent(page.route)}`}>
-            {page.image_url && (
-              <img
-                className="home-page-card__image"
-                src={page.image_url}
-                alt=""
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
-            )}
-            <span className="home-page-card__content">
-              <span className="home-page-card__title">{page.title}</span>
-              {page.excerpt && <span className="home-page-card__excerpt">{page.excerpt}</span>}
-              <time className="home-page-card__date" dateTime={page.created_at}>
-                {formatDate(page.created_at)}
-              </time>
-            </span>
-          </a>
-        </li>
+function HomeTags({ tags, fitMobileRows = false }: { tags: string[]; fitMobileRows?: boolean }) {
+  const tagsRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!fitMobileRows) return;
+    const tagsElement = tagsRef.current;
+    if (!tagsElement) return;
+
+    const fitRows = () => {
+      const links = Array.from(tagsElement.querySelectorAll<HTMLAnchorElement>("a"));
+      links.forEach((link) => { link.hidden = false; });
+      if (!window.matchMedia("(max-width: 36rem)").matches) return;
+
+      const rowStarts: number[] = [];
+      links.forEach((link) => {
+        if (!rowStarts.includes(link.offsetTop)) rowStarts.push(link.offsetTop);
+        if (rowStarts.length > 2) link.hidden = true;
+      });
+    };
+
+    fitRows();
+    window.addEventListener("resize", fitRows);
+    return () => window.removeEventListener("resize", fitRows);
+  }, [fitMobileRows, tags]);
+
+  if (tags.length === 0) return null;
+
+  return (
+    <nav className="home-tags" aria-label="最近更新されたタグ" ref={tagsRef}>
+      {tags.map((tag) => (
+        <a href={`/${encodeURIComponent(tag)}`} key={tag}>{tag}</a>
       ))}
-    </ul>
+    </nav>
   );
 }
 
-function HomeArchive({ years }: { years: NonNullable<HomeBootstrap["archive"]> }) {
+function HomeArchive({ years, heading = "過去の記事" }: {
+  years: NonNullable<HomeBootstrap["archive"]>;
+  heading?: string;
+}) {
   if (years.length === 0) return null;
 
   return (
-    <section className="home-archive" aria-labelledby="archive-heading">
-      <h2 id="archive-heading">過去の記事</h2>
+    <section
+      className="home-archive"
+      aria-label={heading ? undefined : "記事の年月アーカイブ"}
+      aria-labelledby={heading ? "archive-heading" : undefined}
+    >
+      {heading && <h2 id="archive-heading">{heading}</h2>}
       <div className="home-archive__years">
         {years.map(({ year, months }) => (
           <section className="home-archive__year" aria-labelledby={`archive-${year}`} key={year}>
@@ -401,8 +414,95 @@ function GitHubAuthentication({ auth }: { auth: AuthState }) {
   );
 }
 
+function HeaderDock() {
+  const actionsDockRef = useRef<HTMLDivElement | null>(null);
+  const searchDockRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const dock = actionsDockRef.current;
+    const searchDock = searchDockRef.current;
+    const header = document.querySelector<HTMLElement>(".site-header");
+    const navigation = header?.querySelector<HTMLElement>(".header-nav");
+    const actions = navigation?.querySelector<HTMLElement>(".header-actions");
+    const search = header?.querySelector<HTMLElement>(".site-search");
+    if (!dock || !searchDock || !header || !navigation || !actions || !search) return;
+
+    dock.append(actions);
+    searchDock.append(search);
+    header.hidden = true;
+    return () => {
+      navigation.append(actions);
+      header.append(search);
+      header.hidden = false;
+    };
+  }, []);
+
+  return (
+    <div className="atlas-header">
+      <h1><a href="/">weblog.ason.as</a></h1>
+      <div className="atlas-header__actions" ref={actionsDockRef} />
+      <div className="atlas-header__search" ref={searchDockRef} />
+    </div>
+  );
+}
+
+function AtlasHome({ pages, tags, archive, archiveRef }: {
+  pages: HomePage[];
+  tags: string[];
+  archive: NonNullable<HomeBootstrap["archive"]>;
+  archiveRef: RefObject<HTMLDivElement | null>;
+}) {
+  const [calendarOpen, setCalendarOpen] = useState(() => !window.matchMedia("(max-width: 36rem)").matches);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 36rem)");
+    const update = () => setCalendarOpen(!media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return (
+    <div className="home-variant home-variant--atlas">
+      <aside className="atlas-rail">
+        <HeaderDock />
+        <HomeTags tags={tags} fitMobileRows />
+        <div className="atlas-calendar" ref={archiveRef}>
+          <details
+            className="atlas-calendar__details"
+            open={calendarOpen}
+            onToggle={(event) => setCalendarOpen(event.currentTarget.open)}
+          >
+            <summary aria-label={calendarOpen ? "年月アーカイブを閉じる" : "年月アーカイブを開く"}>
+              <svg className="atlas-calendar__open-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 2v3M17 2v3M3.5 9h17M5 4h14a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 19 21H5a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 5 4Z" />
+              </svg>
+              <svg className="atlas-calendar__close-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </summary>
+            <HomeArchive years={archive} heading="" />
+          </details>
+        </div>
+      </aside>
+      <section className="atlas-stream" aria-label="最近の記事">
+        {pages.length === 0 ? <p className="empty-home">まだ記事がありません</p> : pages.map((page) => (
+          <article className="atlas-entry" key={page.id}>
+            <a href={`/${encodeURIComponent(page.route)}`}>
+              {page.image_url && <img src={page.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />}
+              <span className="atlas-entry__body">
+                <time dateTime={page.created_at}>{formatDate(page.created_at)}</time>
+                <strong>{page.title}</strong>
+                {page.excerpt && <span>{page.excerpt}</span>}
+              </span>
+            </a>
+          </article>
+        ))}
+      </section>
+    </div>
+  );
+}
+
 function Home({ bootstrap, auth }: { bootstrap: HomeBootstrap; auth: AuthState }) {
-  const latestPage = bootstrap.pages[0];
   const [tags, setTags] = useState(bootstrap.tags ?? []);
   const [archive, setArchive] = useState(bootstrap.archive ?? []);
   const archiveRef = useRef<HTMLDivElement | null>(null);
@@ -429,27 +529,7 @@ function Home({ bootstrap, auth }: { bootstrap: HomeBootstrap; auth: AuthState }
 
   return (
     <div className="home-layout">
-      <section className="home-intro" aria-label="概要と最近の記事">
-        <div className="home-intro__panel home-intro__blank" aria-hidden="true" />
-        {latestPage && (
-          <a className="home-intro__panel home-intro__latest" href={`/${encodeURIComponent(latestPage.route)}`}>
-            <span className="home-intro__label">最近の記事</span>
-            <strong>{latestPage.title}</strong>
-            {latestPage.excerpt && <span>{latestPage.excerpt}</span>}
-          </a>
-        )}
-      </section>
-
-      {tags.length > 0 && (
-        <nav className="home-tags" aria-label="最近更新されたタグ">
-          {tags.map((tag) => (
-            <a href={`/${encodeURIComponent(tag)}`} key={tag}>{tag}</a>
-          ))}
-        </nav>
-      )}
-
-      <HomePageList pages={bootstrap.pages} />
-      <div ref={archiveRef}><HomeArchive years={archive} /></div>
+      <AtlasHome pages={bootstrap.pages} tags={tags} archive={archive} archiveRef={archiveRef} />
       <GitHubAuthentication auth={auth} />
     </div>
   );

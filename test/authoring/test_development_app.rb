@@ -387,6 +387,22 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "/assets/asset_00685adfb0b588d4.jpg", JSON.parse(body).fetch("pages").fetch(0).fetch("image_url")
   end
 
+  def test_first_uploaded_markdown_image_is_used_for_the_page_card
+    json_request(
+      "POST",
+      "/api/authoring/pages",
+      page_type: "named",
+      title: "アップロード画像の記事",
+      body: "本文\n\n![](/assets/uploads/2026/08/example.webp)"
+    )
+
+    status, _headers, body = request("GET", "/api/pages")
+
+    assert_equal 200, status
+    assert_equal "/assets/uploads/2026/08/example.webp",
+                 JSON.parse(body).fetch("pages").fetch(0).fetch("image_url")
+  end
+
   def test_unsafe_asset_filenames_are_rejected_before_s3
     status, _headers, _body = request("GET", "/assets/not-an-asset.jpg")
 
