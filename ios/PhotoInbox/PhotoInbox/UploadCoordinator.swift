@@ -11,12 +11,14 @@ final class UploadCoordinator {
     private(set) var lastError: String?
     private let store: UploadQueueStore
     private let library: PhotoLibrary
+    private let selection: PhotoSelectionStore
     private let preparer = ImagePreparer()
     private let uploader = BackgroundUploader.shared
     private let queueDirectory: URL
 
-    init(library: PhotoLibrary) {
+    init(library: PhotoLibrary, selection: PhotoSelectionStore) {
         self.library = library
+        self.selection = selection
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         queueDirectory = support.appending(path: "PhotoInbox", directoryHint: .isDirectory)
         store = UploadQueueStore(fileURL: queueDirectory.appending(path: "queue.json"))
@@ -98,6 +100,7 @@ final class UploadCoordinator {
         try await uploader.upload(fileURL: prepared.fileURL, to: signed)
         try await store.updateStage(item.clientUploadID, stage: .completing(uploadID: signed.uploadID))
         try await api.complete(uploadID: signed.uploadID)
+        selection.markUploaded([item.assetLocalIdentifier])
         try? FileManager.default.removeItem(at: prepared.fileURL)
     }
 

@@ -5,12 +5,15 @@ import SwiftUI
 struct PhotoInboxApp: App {
     @State private var library: PhotoLibrary
     @State private var uploads: UploadCoordinator
+    @State private var selection: PhotoSelectionStore
 
     init() {
         let library = PhotoLibrary()
-        let coordinator = UploadCoordinator(library: library)
+        let selection = PhotoSelectionStore()
+        let coordinator = UploadCoordinator(library: library, selection: selection)
         _library = State(initialValue: library)
         _uploads = State(initialValue: coordinator)
+        _selection = State(initialValue: selection)
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: "com.asonas.weblog.PhotoInbox.retry-uploads",
             using: nil
@@ -29,7 +32,7 @@ struct PhotoInboxApp: App {
 
     var body: some Scene {
         WindowGroup {
-            PhotoGridView(library: library, uploads: uploads)
+            PhotoGridView(library: library, uploads: uploads, selection: selection)
                 .task { await uploads.restoreAndRetry() }
         }
     }

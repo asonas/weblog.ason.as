@@ -4,7 +4,7 @@ struct PhotoGridView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Bindable var library: PhotoLibrary
     @Bindable var uploads: UploadCoordinator
-    @State private var selection = PhotoSelection(assetIDs: [])
+    @Bindable var selection: PhotoSelectionStore
     @State private var showingSettings = false
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
@@ -32,7 +32,7 @@ struct PhotoGridView: View {
             }
         }
         .onChange(of: library.photos.map(\.id)) { _, identifiers in
-            selection = PhotoSelection(assetIDs: identifiers)
+            selection.updatePhotos(identifiers)
         }
     }
 
@@ -44,7 +44,7 @@ struct PhotoGridView: View {
                         PhotoCell(
                             photo: photo,
                             library: library,
-                            selected: selection.selectedIDs.contains(photo.id)
+                            status: selection.status(of: photo.id)
                         ) { selection.toggle(photo.id) }
                     }
                 }
@@ -75,7 +75,7 @@ struct PhotoGridView: View {
 private struct PhotoCell: View {
     let photo: LibraryPhoto
     let library: PhotoLibrary
-    let selected: Bool
+    let status: PhotoSelectionStatus
     let toggle: () -> Void
     @State private var image: UIImage?
 
@@ -94,12 +94,18 @@ private struct PhotoCell: View {
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
-                    .opacity(selected ? 1 : 0.55)
-                    if selected {
+                    .opacity(status == .selected ? 1 : 0.55)
+                    if status == .selected {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title3)
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(.white, .blue)
+                            .padding(6)
+                    } else if status == .uploaded {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, .green)
                             .padding(6)
                     } else {
                         Image(systemName: "circle")
@@ -113,11 +119,20 @@ private struct PhotoCell: View {
             .aspectRatio(1, contentMode: .fit)
         }
         .buttonStyle(.plain)
+        .disabled(status == .uploaded)
         .accessibilityLabel("\(photo.capturedAt.formatted(date: .omitted, time: .shortened))の写真")
-        .accessibilityValue(selected ? "選択中" : "除外")
+        .accessibilityValue(accessibilityValue)
         .task {
             let scale = UIScreen.main.scale
             image = await library.thumbnail(for: photo, size: CGSize(width: 240 * scale, height: 240 * scale))
+        }
+    }
+
+    private var accessibilityValue: String {
+        switch status {
+        case .selected: "選択中"
+        case .excluded: "除外"
+        case .uploaded: "アップロード済み"
         }
     }
 }
