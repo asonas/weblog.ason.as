@@ -419,6 +419,7 @@ type InboxItem = {
   ingested_at: string;
   expires_at: string;
   payload: Record<string, unknown>;
+  used_in_pages: Array<{ id: string; route: string }>;
 };
 
 type InboxResponse = { items: Array<InboxItem> };
@@ -2468,7 +2469,12 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       consumedInboxItemIdsRef.current = [...consumedInboxItemIdsRef.current, itemId];
       ensureBodySelection(editor);
       editor.chain().focus().setImage({ src: result.public_url, alt: "" }).run();
-      setInboxItems((items) => items.filter((item) => item.id !== itemId));
+      setInboxItems((items) => items.map((item) => item.id === itemId ? {
+        ...item,
+        used_in_pages: item.used_in_pages.some((page) => page.id === draftRef.current.pageId)
+          ? item.used_in_pages
+          : [...item.used_in_pages, { id: draftRef.current.pageId, route: draftRef.current.name || draftRef.current.title }]
+      } : item));
       setImageUploadStatus("");
     } catch (error) {
       setImageUploadStatus(error instanceof Error ? error.message : "写真を記事へ追加できませんでした");
@@ -2508,6 +2514,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       const inboxItemId = event.dataTransfer?.getData(INBOX_ITEM_DRAG_TYPE);
       if (inboxItemId) {
         event.preventDefault();
+        event.stopImmediatePropagation();
         const position = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
         if (position) editor.commands.setTextSelection(position.pos);
         void adoptInboxImage(inboxItemId);
@@ -2520,17 +2527,17 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       if (position) editor.commands.setTextSelection(position.pos);
       void handleImageFiles(files);
     };
-    element.addEventListener("dragenter", dragenter);
-    element.addEventListener("dragover", dragover);
-    element.addEventListener("dragleave", dragleave);
+    element.addEventListener("dragenter", dragenter, true);
+    element.addEventListener("dragover", dragover, true);
+    element.addEventListener("dragleave", dragleave, true);
     element.addEventListener("paste", paste);
-    element.addEventListener("drop", drop);
+    element.addEventListener("drop", drop, true);
     return () => {
-      element.removeEventListener("dragenter", dragenter);
-      element.removeEventListener("dragover", dragover);
-      element.removeEventListener("dragleave", dragleave);
+      element.removeEventListener("dragenter", dragenter, true);
+      element.removeEventListener("dragover", dragover, true);
+      element.removeEventListener("dragleave", dragleave, true);
       element.removeEventListener("paste", paste);
-      element.removeEventListener("drop", drop);
+      element.removeEventListener("drop", drop, true);
     };
   }, [adoptInboxImage, editor, handleImageFiles]);
 
@@ -2727,6 +2734,9 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
                             >
                               {photoUrl && <img src={photoUrl} alt="" loading="lazy" />}
                               <span className="content-inbox__kind">{inboxItemLabel(item)}</span>
+                              {item.used_in_pages.map((page) => (
+                                <span className="content-inbox__usage" key={page.id}>{page.route}で使用済み</span>
+                              ))}
                               <time dateTime={item.occurred_at}>
                                 {new Date(item.occurred_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                               </time>

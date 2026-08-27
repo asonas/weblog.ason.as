@@ -55,7 +55,6 @@ module WeblogAuthoring
           key: adoption.public_key,
           tagging: { tag_set: [] }
         )
-        @s3_client.delete_object(bucket: @bucket, key: adoption.inbox_key)
         @database.complete_inbox_image_adoption(item_id: adoption.item_id)
       end.length
     end

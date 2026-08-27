@@ -53,9 +53,10 @@ class LambdaApiTest < Minitest::Test
   class FakeDatabase
     attr_reader :health_checks, :pages, :saved_requests, :inbox_filters
 
-    def initialize(pages, inbox_items: [])
+    def initialize(pages, inbox_items: [], inbox_item_usages: [])
       @pages = pages
       @inbox_items = inbox_items
+      @inbox_item_usages = inbox_item_usages
       @health_checks = 0
       @saved_requests = []
     end
@@ -91,6 +92,10 @@ class LambdaApiTest < Minitest::Test
 
     def find_inbox_item(id)
       @inbox_items.find { |item| item.id == id }
+    end
+
+    def list_inbox_item_usages
+      @inbox_item_usages
     end
 
     def prepare_inbox_image_adoption(item_id:, inbox_key:, public_key:)
@@ -529,7 +534,11 @@ class LambdaApiTest < Minitest::Test
       created_at: Time.iso8601("2026-08-23T12:01:00Z"),
       updated_at: Time.iso8601("2026-08-23T12:01:00Z")
     )
-    database = FakeDatabase.new([@page], inbox_items: [item])
+    usage = WeblogAuthoring::InboxItemUsage.new(
+      item_id: "item-1", page_id: @page.id, page_route: "2026-08-27",
+      used_at: Time.iso8601("2026-08-27T12:00:00Z")
+    )
+    database = FakeDatabase.new([@page], inbox_items: [item], inbox_item_usages: [usage])
     api = WeblogAuthoring::LambdaApi.new(
       database:,
       session_codec: codec,
@@ -549,6 +558,8 @@ class LambdaApiTest < Minitest::Test
     ))
 
     assert_equal ["item-1"], JSON.parse(listed.fetch(:body)).fetch("items").map { |inbox_item| inbox_item.fetch("id") }
+    assert_equal [{ "id" => @page.id, "route" => "2026-08-27" }],
+                 JSON.parse(listed.fetch(:body)).dig("items", 0, "used_in_pages")
     assert_equal "/assets/uploads/2026/08/11111111-2222-3333-4444-555555555555.webp",
                  JSON.parse(adopted.fetch(:body)).fetch("public_url")
     assert_equal %i[copy_object], s3.api_requests.map { |request| request.fetch(:operation_name) }

@@ -27,7 +27,7 @@ class DsqlDatabaseTest < Minitest::Test
   end
 
   class Connection
-    attr_reader :links, :items, :consumed, :committed_adoptions
+    attr_reader :links, :items, :consumed, :committed_adoptions, :usages
 
     def initialize
       @pages = {}
@@ -35,14 +35,15 @@ class DsqlDatabaseTest < Minitest::Test
       @items = {}
       @consumed = []
       @committed_adoptions = []
+      @usages = []
       @adoptions = {}
     end
 
     def transaction
-      snapshot = Marshal.load(Marshal.dump([@pages, @links, @items, @consumed, @committed_adoptions]))
+      snapshot = Marshal.load(Marshal.dump([@pages, @links, @items, @consumed, @committed_adoptions, @usages]))
       yield
     rescue StandardError
-      @pages, @links, @items, @consumed, @committed_adoptions = snapshot
+      @pages, @links, @items, @consumed, @committed_adoptions, @usages = snapshot
       raise
     end
 
@@ -64,6 +65,14 @@ class DsqlDatabaseTest < Minitest::Test
       when /INSERT INTO weblog_authoring\.consumed_inbox_items/
         @consumed << params.fetch(0)
         Result.new
+      when /INSERT INTO weblog_authoring\.inbox_item_usages/
+        @usages << params.first(2)
+        Result.new
+      when /FROM weblog_authoring\.inbox_item_usages usage/
+        Result.new(@usages.map do |item_id, page_id|
+          page = @pages.fetch(page_id)
+          { "item_id" => item_id, "page_id" => page_id, "page_route" => page.fetch("name"), "used_at" => FIXED_TIME }
+        end)
       when /SELECT 1 FROM weblog_authoring\.inbox_image_adoptions/
         expires_at = @adoptions[params.fetch(0)]
         Result.new(expires_at && expires_at > params.fetch(1) ? [{ "?column?" => "1" }] : [])
@@ -178,7 +187,7 @@ class DsqlDatabaseTest < Minitest::Test
     assert_equal updated, database.find(page.id)
   end
 
-  def test_page_save_and_inbox_consumption_share_one_transaction
+  def test_page_save_records_inbox_usage_without_removing_the_item
     database = dsql_database
     @pool.connection.add_inbox_item(inbox_row("item-1", expires_at: FIXED_TIME + 3600))
     @pool.connection.add_adoption("item-1", expires_at: FIXED_TIME + 3600)
@@ -188,9 +197,12 @@ class DsqlDatabaseTest < Minitest::Test
     ))
 
     assert_equal "インボックス採用", page.name
-    assert_empty @pool.connection.items
-    assert_equal ["item-1"], @pool.connection.consumed
+    assert_equal ["item-1"], @pool.connection.items.keys
+    assert_empty @pool.connection.consumed
+    assert_equal [["item-1", page.id]], @pool.connection.usages
     assert_equal ["item-1"], @pool.connection.committed_adoptions
+    assert_equal [["item-1", page.id, "インボックス採用"]],
+                 database.list_inbox_item_usages.map { |usage| [usage.item_id, usage.page_id, usage.page_route] }
   end
 
   def test_expired_inbox_item_rejects_page_save

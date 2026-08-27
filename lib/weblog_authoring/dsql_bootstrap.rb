@@ -108,6 +108,15 @@ module WeblogAuthoring
         )
       SQL
       connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.inbox_item_usages (
+          item_id TEXT NOT NULL,
+          page_id TEXT NOT NULL,
+          used_at TIMESTAMPTZ NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          PRIMARY KEY (item_id, page_id)
+        )
+      SQL
+      connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.inbox_image_adoptions (
           item_id TEXT PRIMARY KEY,
           inbox_key TEXT NOT NULL,

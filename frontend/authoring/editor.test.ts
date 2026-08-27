@@ -96,7 +96,7 @@ test("recognizes image files and inbox photos as image drags", () => {
   assert.equal(isImageDrag({ types: ["application/x-weblog-inbox-item-id"] }), true);
 });
 
-test("adopts an inbox photo and consumes it with the page save", async () => {
+test("adopts an inbox photo and marks it as used by the current page", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -121,16 +121,17 @@ test("adopts an inbox photo and consumes it with the page save", async () => {
     const url = String(input);
     if (url === "/api/inbox") {
       return new Response(JSON.stringify({
-        items: ["item-1", "item-2"].map((id, index) => ({
-          id,
+        items: [{
+          id: "item-1",
           source: "photo",
           kind: "photo",
-          source_id: `photo-${index + 1}`,
-          occurred_at: `2026-08-26T1${index}:00:00+09:00`,
+          source_id: "photo-1",
+          occurred_at: "2026-08-26T11:00:00+09:00",
           ingested_at: "2026-08-26T11:00:00+09:00",
           expires_at: "2026-09-02T11:00:00+09:00",
-          payload: { preview_url: `/assets/inbox/photo-${index + 1}.webp` }
-        }))
+          payload: { preview_url: "/assets/inbox/photo-1.webp" },
+          used_in_pages: []
+        }]
       }), { headers: { "content-type": "application/json" } });
     }
     if (url === "/api/inbox/adopt") {
@@ -169,16 +170,6 @@ test("adopts an inbox photo and consumes it with the page save", async () => {
     });
     assert.equal(container.querySelector(".content-inbox__kind")?.textContent, "写真");
 
-    const clickSave = waitForSave();
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>(".content-inbox__item")!.click();
-      await clickSave;
-    });
-
-    assert.equal(savedPayloads.length, 1);
-    assert.deepEqual(savedPayloads[0].consumed_inbox_item_ids, ["item-1"]);
-    assert.match(String(savedPayloads[0].body), /\/assets\/uploads\/2026\/08\/item-1\.webp/);
-
     const transferData = new Map<string, string>();
     const dataTransfer = {
       files: [], items: [], types: [] as Array<string>, effectAllowed: "none", dropEffect: "none",
@@ -194,6 +185,9 @@ test("adopts an inbox photo and consumes it with the page save", async () => {
     remainingItem.dispatchEvent(dragStart);
     assert.equal(dataTransfer.effectAllowed, "copy");
 
+    let nativeDropObserved = false;
+    const editorElement = container.querySelector<HTMLElement>(".ProseMirror")!;
+    editorElement.addEventListener("drop", () => { nativeDropObserved = true; });
     const dropSave = waitForSave();
     await act(async () => {
       const drop = new window.Event("drop", { bubbles: true, cancelable: true });
@@ -202,14 +196,16 @@ test("adopts an inbox photo and consumes it with the page save", async () => {
         clientX: { value: 0 },
         clientY: { value: 0 }
       });
-      container.querySelector<HTMLElement>(".ProseMirror")!.dispatchEvent(drop);
+      editorElement.dispatchEvent(drop);
       await dropSave;
     });
 
-    assert.equal(savedPayloads.length, 2);
-    assert.deepEqual(savedPayloads[1].consumed_inbox_item_ids, ["item-2"]);
-    assert.match(String(savedPayloads[1].body), /\/assets\/uploads\/2026\/08\/item-2\.webp/);
-    assert.equal(container.querySelector(".content-inbox__item"), null);
+    assert.equal(nativeDropObserved, false);
+    assert.equal(savedPayloads.length, 1);
+    assert.deepEqual(savedPayloads[0].consumed_inbox_item_ids, ["item-1"]);
+    assert.match(String(savedPayloads[0].body), /\/assets\/uploads\/2026\/08\/item-1\.webp/);
+    assert.notEqual(container.querySelector(".content-inbox__item"), null);
+    assert.equal(container.querySelector(".content-inbox__usage")?.textContent, "currentで使用済み");
   } finally {
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;

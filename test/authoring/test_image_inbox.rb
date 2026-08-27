@@ -44,7 +44,7 @@ class ImageInboxTest < Minitest::Test
     assert_raises(WeblogAuthoring::ConflictError) { @inbox.prepare(item_id: "missing") }
   end
 
-  def test_finalizes_committed_copies_and_removes_the_adoption_after_s3_succeeds
+  def test_finalizes_the_public_copy_without_deleting_the_inbox_image
     adoption = WeblogAuthoring::InboxImageAdoption.new(
       item_id: "item-1", inbox_key: "assets/inbox/2026/08/23/photo.webp",
       public_key: "assets/uploads/2026/08/photo.webp", prepared_at: Time.now,
@@ -55,7 +55,7 @@ class ImageInboxTest < Minitest::Test
     @database.define_singleton_method(:complete_inbox_image_adoption) { |item_id:| completed << item_id }
 
     assert_equal 1, @inbox.finalize(limit: 10)
-    assert_equal %i[put_object_tagging delete_object], @s3.api_requests.map { |request| request.fetch(:operation_name) }
+    assert_equal [:put_object_tagging], @s3.api_requests.map { |request| request.fetch(:operation_name) }
     assert_empty @s3.api_requests.fetch(0).fetch(:params).fetch(:tagging).fetch(:tag_set)
     assert_equal ["item-1"], completed
   end
@@ -69,12 +69,12 @@ class ImageInboxTest < Minitest::Test
     completed = []
     @database.define_singleton_method(:list_pending_inbox_image_finalizations) { |limit:| [adoption].take(limit) }
     @database.define_singleton_method(:complete_inbox_image_adoption) { |item_id:| completed << item_id }
-    @s3.stub_responses(:delete_object, "InternalError")
+    @s3.stub_responses(:put_object_tagging, "InternalError")
 
     assert_raises(Aws::S3::Errors::InternalError) { @inbox.finalize }
     assert_empty completed
 
-    @s3.stub_responses(:delete_object, {})
+    @s3.stub_responses(:put_object_tagging, {})
     assert_equal 1, @inbox.finalize
     assert_equal ["item-1"], completed
   end

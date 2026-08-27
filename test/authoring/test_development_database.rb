@@ -85,7 +85,7 @@ class TestDevelopmentDatabase < Minitest::Test
     assert_equal ["newer", "older"], database.list_pages.map(&:name)
   end
 
-  def test_save_consumes_an_inbox_item_and_commits_its_image_adoption_atomically
+  def test_save_records_inbox_usage_and_commits_its_image_adoption_atomically
     database = development_database
     item = database.upsert_inbox_item(
       source: "photo", kind: "photo", source_id: "photo-1", occurred_at: FIXED_TIME,
@@ -101,9 +101,12 @@ class TestDevelopmentDatabase < Minitest::Test
     ))
 
     assert_equal "写真の日記", page.name
-    assert_empty database.list_inbox_items
+    assert_equal [item.id], database.list_inbox_items.map(&:id)
+    assert_equal [[item.id, page.id, "写真の日記"]],
+                 database.list_inbox_item_usages.map { |usage| [usage.item_id, usage.page_id, usage.page_route] }
     SQLite3::Database.new(database.path.to_s) do |sqlite|
       refute_nil sqlite.get_first_value("SELECT committed_at FROM inbox_image_adoptions WHERE item_id = ?", item.id)
+      assert_equal page.id, sqlite.get_first_value("SELECT page_id FROM inbox_item_usages WHERE item_id = ?", item.id)
     end
   end
 

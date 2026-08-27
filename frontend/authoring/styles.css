@@ -1362,6 +1362,7 @@ h2 {
 }
 
 .content-inbox__kind,
+.content-inbox__usage,
 .content-inbox__item time {
   padding-inline: 0.65rem;
 }
@@ -1370,6 +1371,12 @@ h2 {
   margin-block-start: 0.5rem;
   font-size: 0.8rem;
   font-weight: 650;
+}
+
+.content-inbox__usage {
+  margin-block-start: 0.2rem;
+  color: var(--accent);
+  font-size: 0.72rem;
 }
 
 .content-inbox__item time {

@@ -85,7 +85,7 @@ module WeblogAuthoring
           end
           replace_links(database, document)
           request.consumed_inbox_item_ids.each do |item_id|
-            consume_inbox_item_with_connection(database, item_id, required: true)
+            record_inbox_item_usage_with_connection(database, item_id, document.id)
           end
         end
       rescue SQLite3::ConstraintException => error
@@ -324,6 +324,26 @@ module WeblogAuthoring
       end
     end
 
+    def list_inbox_item_usages
+      with_connection do |database|
+        database.execute(
+          <<~SQL,
+            SELECT usage.item_id, usage.page_id, COALESCE(page.name, page.page_date), usage.used_at
+            FROM inbox_item_usages usage
+            JOIN pages page ON page.id = usage.page_id
+            WHERE usage.expires_at > ?
+            ORDER BY usage.used_at, usage.item_id, usage.page_id
+          SQL
+          serialize_time(now)
+        ).map do |row|
+          InboxItemUsage.new(
+            item_id: row.fetch(0), page_id: row.fetch(1), page_route: row.fetch(2),
+            used_at: Time.iso8601(row.fetch(3))
+          )
+        end
+      end
+    end
+
     def find_inbox_item_by_source(source:, kind:, source_id:)
       with_connection { |database| find_inbox_item_by_identity(database, source, kind, source_id) }
     end
@@ -538,6 +558,13 @@ module WeblogAuthoring
             expires_at TEXT NOT NULL,
             PRIMARY KEY(source, kind, source_id)
           );
+          CREATE TABLE IF NOT EXISTS inbox_item_usages (
+            item_id TEXT NOT NULL,
+            page_id TEXT NOT NULL,
+            used_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            PRIMARY KEY(item_id, page_id)
+          );
           CREATE TABLE IF NOT EXISTS inbox_image_adoptions (
             item_id TEXT PRIMARY KEY,
             inbox_key TEXT NOT NULL,
@@ -599,6 +626,32 @@ module WeblogAuthoring
 
     def mobile_upload_columns
       "id, device_id, client_upload_id, s3_key, content_type, size, sha256, captured_at, captured_at_source, state, created_at, completed_at"
+    end
+
+    def record_inbox_item_usage_with_connection(database, id, page_id)
+      row = database.get_first_row(
+        "SELECT #{inbox_item_columns} FROM inbox_items WHERE id = ? AND expires_at > ?",
+        [id, serialize_time(now)]
+      )
+      raise ConflictError, "inbox_item_expired" if row.nil?
+
+      if row.fetch(1) == "photo" && row.fetch(2) == "photo"
+        adoption = database.get_first_value(
+          "SELECT 1 FROM inbox_image_adoptions WHERE item_id = ? AND expires_at > ?",
+          [id, serialize_time(now)]
+        )
+        raise ConflictError, "inbox_item_expired" if adoption.nil?
+      end
+
+      database.execute(
+        <<~SQL,
+          INSERT INTO inbox_item_usages (item_id, page_id, used_at, expires_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(item_id, page_id) DO UPDATE SET used_at = excluded.used_at
+        SQL
+        [id, page_id, serialize_time(now), row.fetch(6)]
+      )
+      database.execute("UPDATE inbox_image_adoptions SET committed_at = ? WHERE item_id = ?", [serialize_time(now), id])
     end
 
     def consume_inbox_item_with_connection(database, id, required:)

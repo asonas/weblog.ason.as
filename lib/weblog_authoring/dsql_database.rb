@@ -111,7 +111,7 @@ module WeblogAuthoring
           current.nil? ? insert_page(connection, document) : update_page(connection, document)
           replace_links(connection, document)
           request.consumed_inbox_item_ids.each do |item_id|
-            consume_inbox_item_with_connection(connection, item_id, required: true)
+            record_inbox_item_usage_with_connection(connection, item_id, document.id)
           end
         end
       end
@@ -421,6 +421,28 @@ module WeblogAuthoring
       end
     end
 
+    def list_inbox_item_usages
+      with_connection do |connection|
+        connection.exec_params(
+          <<~SQL,
+            SELECT usage.item_id, usage.page_id,
+                   COALESCE(page.name, page.page_date::text) AS page_route,
+                   usage.used_at
+            FROM #{SCHEMA}.inbox_item_usages usage
+            JOIN #{SCHEMA}.pages page ON page.id = usage.page_id
+            WHERE usage.expires_at > $1
+            ORDER BY usage.used_at, usage.item_id, usage.page_id
+          SQL
+          [now]
+        ).map do |row|
+          InboxItemUsage.new(
+            item_id: row.fetch("item_id"), page_id: row.fetch("page_id"),
+            page_route: row.fetch("page_route"), used_at: parse_time(row.fetch("used_at"))
+          )
+        end
+      end
+    end
+
     def find_inbox_item(id)
       timestamp = now
       with_connection do |connection|
@@ -516,12 +538,57 @@ module WeblogAuthoring
             "DELETE FROM #{SCHEMA}.inbox_image_adoptions WHERE expires_at <= $1",
             [timestamp]
           )
+          connection.exec_params(
+            "DELETE FROM #{SCHEMA}.inbox_item_usages WHERE expires_at <= $1",
+            [timestamp]
+          )
           { inbox_items: inbox.cmd_tuples, consumed_items: consumed.cmd_tuples }
         end
       end
     end
 
     private
+
+    def record_inbox_item_usage_with_connection(connection, id, page_id)
+      timestamp = now
+      result = connection.exec_params(
+        <<~SQL,
+          SELECT id, source, kind, expires_at
+          FROM #{SCHEMA}.inbox_items
+          WHERE id = $1 AND expires_at > $2
+          LIMIT 1
+          FOR UPDATE
+        SQL
+        [id, timestamp]
+      )
+      raise ConflictError, "inbox_item_expired" if result.ntuples.zero?
+
+      item = result[0]
+      if item.fetch("source") == "photo" && item.fetch("kind") == "photo"
+        adoption = connection.exec_params(
+          <<~SQL,
+            SELECT 1 FROM #{SCHEMA}.inbox_image_adoptions
+            WHERE item_id = $1 AND expires_at > $2
+            LIMIT 1
+          SQL
+          [id, timestamp]
+        )
+        raise ConflictError, "inbox_item_expired" if adoption.ntuples.zero?
+      end
+
+      connection.exec_params(
+        <<~SQL,
+          INSERT INTO #{SCHEMA}.inbox_item_usages (item_id, page_id, used_at, expires_at)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (item_id, page_id) DO UPDATE SET used_at = EXCLUDED.used_at
+        SQL
+        [id, page_id, timestamp, item.fetch("expires_at")]
+      )
+      connection.exec_params(
+        "UPDATE #{SCHEMA}.inbox_image_adoptions SET committed_at = $2 WHERE item_id = $1",
+        [id, timestamp]
+      )
+    end
 
     def consume_inbox_item_with_connection(connection, id, required:)
       timestamp = now

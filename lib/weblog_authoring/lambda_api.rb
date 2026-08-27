@@ -401,7 +401,8 @@ module WeblogAuthoring
 
       query = event.fetch("queryStringParameters", {}).to_h
       items = @database.list_inbox_items(source: optional_query(query, "source"), kind: optional_query(query, "kind"))
-      json_response(200, "items" => items.map { |item| inbox_item_json(item) })
+      usages = @database.list_inbox_item_usages.group_by(&:item_id)
+      json_response(200, "items" => items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, [])) })
     end
 
     def search_response(event)
@@ -457,7 +458,7 @@ module WeblogAuthoring
       ImageInbox.new(s3_client: @s3_client, bucket: @asset_bucket, database: @database)
     end
 
-    def inbox_item_json(item)
+    def inbox_item_json(item, usages: [])
       {
         "id" => item.id,
         "source" => item.source,
@@ -467,6 +468,7 @@ module WeblogAuthoring
         "ingested_at" => item.ingested_at.iso8601,
         "expires_at" => item.expires_at.iso8601,
         "payload" => item.payload,
+        "used_in_pages" => usages.map { |usage| { "id" => usage.page_id, "route" => usage.page_route } },
       }
     end
 

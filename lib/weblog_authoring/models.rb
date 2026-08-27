@@ -84,6 +84,13 @@ module WeblogAuthoring
     end
   end
 
+  InboxItemUsage = Struct.new(:item_id, :page_id, :page_route, :used_at, keyword_init: true) do
+    def initialize(**attributes)
+      super(**attributes)
+      freeze
+    end
+  end
+
   ReleaseSnapshot = Struct.new(:pages, :redirects, :published_at, keyword_init: true) do
     def initialize(pages: [], redirects: [], published_at: nil)
       super(pages: Array(pages).freeze, redirects: Array(redirects).freeze, published_at:)

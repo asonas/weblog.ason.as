@@ -399,7 +399,8 @@ module WeblogAuthoring
       require_authenticated! if settings.authentication_required
       content_type :json
       items = settings.database.list_inbox_items(source: params["source"], kind: params["kind"])
-      JSON.generate("items" => items.map { |item| inbox_item_json(item) })
+      usages = settings.database.list_inbox_item_usages.group_by(&:item_id)
+      JSON.generate("items" => items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, [])) })
     end
 
     post "/api/inbox/adopt" do
@@ -537,7 +538,7 @@ module WeblogAuthoring
       json_error(422, error.message)
     end
 
-    def inbox_item_json(item)
+    def inbox_item_json(item, usages: [])
       {
         "id" => item.id,
         "source" => item.source,
@@ -547,6 +548,7 @@ module WeblogAuthoring
         "ingested_at" => item.ingested_at.iso8601,
         "expires_at" => item.expires_at.iso8601,
         "payload" => item.payload,
+        "used_in_pages" => usages.map { |usage| { "id" => usage.page_id, "route" => usage.page_route } },
       }
     end
 
