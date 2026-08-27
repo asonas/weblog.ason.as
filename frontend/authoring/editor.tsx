@@ -2648,7 +2648,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
             )}
           </section>
           {editor?.isEditable && (
-            <>
+            <div className="content-inbox-drawer">
               <button
                 className="content-inbox__tab"
                 type="button"
@@ -2656,7 +2656,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
                 aria-expanded={inboxOpen}
                 onClick={() => setInboxOpen((open) => !open)}
               >
-                Inbox
+                INBOX
               </button>
               {inboxOpen && (
                 <aside id="content-inbox-panel" className="content-inbox" aria-label="コンテンツインボックス">
@@ -2692,7 +2692,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
                   )}
                 </aside>
               )}
-            </>
+            </div>
           )}
         </div>
         {universeEnabled && universeGroups.length > 0 && (

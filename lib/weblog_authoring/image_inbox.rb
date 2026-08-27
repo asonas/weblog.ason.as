@@ -7,7 +7,7 @@ require_relative "models"
 
 module WeblogAuthoring
   class ImageInbox
-    KEY_PATTERN = %r{\Aassets/inbox/(\d{4})/(\d{2})/(\d{2})/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(gif|jpg|png|webp)\z}
+    KEY_PATTERN = %r{\Aassets/inbox/(\d{4})/(\d{2})/(\d{2})/([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(gif|jpg|png|webp)\z}
     CONTENT_TYPES = {
       "gif" => "image/gif",
       "jpg" => "image/jpeg",
