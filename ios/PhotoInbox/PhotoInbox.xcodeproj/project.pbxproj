@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		09F323D47A96730B8584C7A7 /* ImagePreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BE564DF757B5E5BFB8534C1 /* ImagePreparer.swift */; };
 		130A2177A00B6BC4BCD6E3EF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F27AC789E5B1CE7C60C1A644 /* SettingsView.swift */; };
+		279ECCF9CCB841E92E414769 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EF99C83CF5F932944C8723C8 /* Assets.xcassets */; };
 		3555513EC39B0D03C4797638 /* UploadQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89641E3BEA3AC64983BAEDBE /* UploadQueueStore.swift */; };
 		35D02B202DD1084DF81795AA /* PhotoSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB556A9ECA2876981B156690 /* PhotoSelection.swift */; };
 		487BB8CB088FA9FEF2C49F88 /* MobileAPIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17C13FB1693AC8EDFBAFF07E /* MobileAPIClientTests.swift */; };
@@ -50,6 +51,7 @@
 		BB556A9ECA2876981B156690 /* PhotoSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoSelection.swift; sourceTree = "<group>"; };
 		C593E5A71696A2A11BE7DEFA /* BackgroundUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundUploader.swift; sourceTree = "<group>"; };
 		C6402C5FB52E5355B3C4442B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		EF99C83CF5F932944C8723C8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F0EFD085D7B1C2409F13D455 /* Credentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Credentials.swift; sourceTree = "<group>"; };
 		F16457BB7277740D16B9D288 /* MobileAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAPIClient.swift; sourceTree = "<group>"; };
 		F27AC789E5B1CE7C60C1A644 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -70,6 +72,7 @@
 		1BBDD22CDCD545B7ABB5F099 /* PhotoInbox */ = {
 			isa = PBXGroup;
 			children = (
+				EF99C83CF5F932944C8723C8 /* Assets.xcassets */,
 				C593E5A71696A2A11BE7DEFA /* BackgroundUploader.swift */,
 				F0EFD085D7B1C2409F13D455 /* Credentials.swift */,
 				3BE564DF757B5E5BFB8534C1 /* ImagePreparer.swift */,
@@ -112,6 +115,7 @@
 			buildConfigurationList = A4A4322220DB591C32DC99B1 /* Build configuration list for PBXNativeTarget "PhotoInbox" */;
 			buildPhases = (
 				EC7F1E474199ADDDEF46A103 /* Sources */,
+				5127E7505A3513F21A7EB165 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -176,6 +180,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5127E7505A3513F21A7EB165 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				279ECCF9CCB841E92E414769 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		348FD58B5A6C1248D55E666D /* Sources */ = {
