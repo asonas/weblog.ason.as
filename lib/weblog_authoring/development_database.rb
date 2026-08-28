@@ -14,7 +14,7 @@ require_relative "names"
 
 module WeblogAuthoring
   class DevelopmentDatabase
-    SCHEMA_VERSION = 4
+    SCHEMA_VERSION = 5
     INBOX_RETENTION_SECONDS = 7 * 24 * 60 * 60
     ADOPTION_RETENTION_SECONDS = 14 * 24 * 60 * 60
     TOKYO_OFFSET = "+09:00"
@@ -489,6 +489,11 @@ module WeblogAuthoring
       end
       if version == 3 && table_exists?(database, "pages")
         create_mobile_upload_schema(database)
+        database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
+        return
+      end
+      if version == 4 && table_exists?(database, "pages")
+        create_inbox_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end

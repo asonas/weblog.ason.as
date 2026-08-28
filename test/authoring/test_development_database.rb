@@ -164,6 +164,27 @@ class TestDevelopmentDatabase < Minitest::Test
     assert_nil database.find_route("/2026-08-21")
   end
 
+  def test_version_four_database_gains_inbox_usage_schema
+    database = development_database
+    database.path.dirname.mkpath
+    SQLite3::Database.new(database.path.to_s) do |sqlite|
+      sqlite.execute_batch(<<~SQL)
+        PRAGMA user_version = 4;
+        CREATE TABLE pages (
+          id TEXT PRIMARY KEY,
+          name TEXT,
+          page_date TEXT
+        );
+        CREATE TABLE inbox_items (id TEXT PRIMARY KEY);
+        CREATE TABLE inbox_image_adoptions (item_id TEXT PRIMARY KEY);
+      SQL
+    end
+
+    database.setup!
+
+    assert_equal [], database.list_inbox_item_usages
+  end
+
   def test_rename_updates_incoming_and_self_wiki_links
     database = development_database
     target = database.save(
