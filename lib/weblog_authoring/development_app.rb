@@ -87,6 +87,7 @@ module WeblogAuthoring
     }.freeze
     ALLOWED_PAGE_TYPES = %w[date named].freeze
     JAPANESE_WEEKDAYS = %w[日曜日 月曜日 火曜日 水曜日 木曜日 金曜日 土曜日].freeze
+    DIARY_DATE_TAG = /\A(?:\d{4}(?:0[1-9]|1[0-2])|(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))\z/
     IMAGE_EXTENSIONS = /\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|\z)/i
     HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]]+)/
     RELATED_PAGE_LIMIT = 50
@@ -1063,7 +1064,7 @@ module WeblogAuthoring
         names.concat(page.body.to_s.scan(HASHTAG_PATTERN).flatten)
         names.each do |name|
           tag = name.strip
-          tags << tag unless tag.empty? || tags.include?(tag)
+          tags << tag unless tag.empty? || JAPANESE_WEEKDAYS.include?(tag) || DIARY_DATE_TAG.match?(tag) || tags.include?(tag)
           return tags if tags.length == 20
         end
       end

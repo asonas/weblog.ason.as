@@ -197,10 +197,17 @@ class LambdaApiTest < Minitest::Test
   end
 
   def test_lists_home_tags_and_archive_separately
+    @database.pages.replace([
+      page_document(
+        id: "diary",
+        name: "日記",
+        body: "[[日記]] [[月曜日]] [[火曜日]] [[202608]] [[0827]] #開発"
+      ),
+    ])
     tags = @api.call(event("GET", "/api/tags"))
     archive = @api.call(event("GET", "/api/archive"))
 
-    assert_equal [], JSON.parse(tags.fetch(:body)).fetch("tags")
+    assert_equal %w[日記 開発], JSON.parse(tags.fetch(:body)).fetch("tags")
     assert_equal [{ "year" => 2026, "months" => [8] }], JSON.parse(archive.fetch(:body)).fetch("archive")
   end
 
