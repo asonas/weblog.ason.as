@@ -542,9 +542,11 @@ test("keeps the current page hub while omitting its self node", () => {
   assert.deepEqual(groups[0].pages, [backlink]);
 });
 
-test("opens an unfocused wiki link instead of expanding it for editing", async () => {
+test("navigates an unfocused wiki link through the editor mouse event path", () => {
+  const editorElement = document.createElement("div");
+  document.body.append(editorElement);
   const editor = new Editor({
-    element: document.createElement("div"),
+    element: editorElement,
     extensions: EDITOR_EXTENSIONS,
     content: "[example](/example) foo bar",
     contentType: "markdown"
@@ -555,37 +557,45 @@ test("opens an unfocused wiki link instead of expanding it for editing", async (
   assert.equal(link.textContent, "example");
   assert.notEqual(link.target, "_blank");
 
-  const mouseDown = new window.MouseEvent("mousedown", { bubbles: true, cancelable: true });
-  Object.defineProperty(mouseDown, "target", { value: link });
-  let mouseDownHandled = false;
-  editor.view.someProp("handleDOMEvents", (handlers) => {
-    mouseDownHandled ||= handlers.mousedown?.(editor.view, mouseDown) === true;
-  });
-
-  assert.equal(mouseDownHandled, true);
-  assert.equal(mouseDown.defaultPrevented, true);
-  assert.ok(editor.view.dom.querySelector('a[href="/example"]'));
-
   let opened: { url?: string | URL; target?: string } | undefined;
   const originalOpen = window.open;
+  const originalPosAtCoords = editor.view.posAtCoords;
   window.open = (url, target) => {
     opened = { url, target };
     return null;
   };
-  const click = new window.MouseEvent("click", { bubbles: true, cancelable: true });
-  Object.defineProperty(click, "target", { value: link });
-  let handled = false;
-  editor.view.someProp("handleClick", (handler) => {
-    handled ||= handler(editor.view, 2, click) === true;
-  });
-  window.open = originalOpen;
+  editor.view.posAtCoords = () => ({ pos: 2, inside: -1 });
 
-  assert.equal(handled, true);
-  assert.equal(opened?.url, "http://127.0.0.1:5173/example");
-  assert.equal(opened?.target, "_self");
-  assert.ok(editor.view.dom.querySelector('a[href="/example"]'));
-  assert.equal(editor.getText(), "example foo bar");
-  editor.destroy();
+  try {
+    const mouseDown = new window.MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: 2,
+      clientY: 2
+    });
+    link.dispatchEvent(mouseDown);
+
+    const mouseUp = new window.MouseEvent("mouseup", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: 2,
+      clientY: 2
+    });
+    link.dispatchEvent(mouseUp);
+
+    assert.equal(mouseDown.defaultPrevented, false);
+    assert.equal(opened?.url, "http://127.0.0.1:5173/example");
+    assert.equal(opened?.target, "_self");
+    assert.ok(editor.view.dom.querySelector('a[href="/example"]'));
+    assert.equal(editor.getText(), "example foo bar");
+  } finally {
+    editor.view.posAtCoords = originalPosAtCoords;
+    window.open = originalOpen;
+    editor.destroy();
+    editorElement.remove();
+  }
 });
 
 test("keeps a wiki link collapsed when the cursor is immediately after it", () => {

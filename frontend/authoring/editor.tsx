@@ -136,22 +136,6 @@ const WikiLinks = Extension.create({
     const linkType = this.editor.schema.marks.link;
     return [
       new Plugin({
-        props: {
-          handleDOMEvents: {
-            mousedown(view, event) {
-              const target = event.target;
-              const link = target instanceof HTMLAnchorElement
-                ? target
-                : target instanceof Element
-                  ? target.closest<HTMLAnchorElement>("a")
-                  : null;
-              if (!link || !view.dom.contains(link) || !link.getAttribute("href")?.startsWith("/")) return false;
-
-              event.preventDefault();
-              return true;
-            }
-          }
-        },
         appendTransaction(transactions, oldState, newState) {
           if (!transactions.some((transaction) => transaction.docChanged || transaction.selectionSet)) return null;
           if (transactions.some((transaction) => transaction.getMeta("wikiLinkRawEditing"))) return null;
