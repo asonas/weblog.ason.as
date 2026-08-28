@@ -195,11 +195,28 @@ function App({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; auth
   const header = document.querySelector<HTMLElement>(".site-header");
   return <>
     {header && createPortal(<SiteSearch />, header)}
-    <AuthoringEditor bootstrap={bootstrap} />
+    <AuthoringEditor key={auth.can_edit ? "editable" : "readonly"} bootstrap={bootstrap} />
   </>;
 }
 
-function RootApp({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; auth: AuthState }) {
+function RootApp({ initialBootstrap, initialAuth }: { initialBootstrap?: AppBootstrap; initialAuth: AuthState }) {
+  const [auth, setAuth] = useState(initialAuth);
+
+  useEffect(() => {
+    let active = true;
+    void setupAuthentication()
+      .then((nextAuth) => {
+        if (active) setAuth(nextAuth);
+      })
+      .catch(() => {
+        document.documentElement.dataset.canEdit = "false";
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const header = document.querySelector<HTMLElement>(".site-header");
   if (window.location.pathname === "/search") {
     return <>
@@ -433,18 +450,11 @@ function Home({ bootstrap, auth }: { bootstrap: HomeBootstrap; auth: AuthState }
 const root = document.querySelector<HTMLElement>("#authoring-root");
 const data = document.querySelector<HTMLScriptElement>("#authoring-data");
 
-async function start() {
-  let auth = DEFAULT_AUTH_STATE;
-  try {
-    auth = await setupAuthentication();
-  } catch (_error) {
-    document.documentElement.dataset.canEdit = "false";
-  }
-
+function start() {
   if (root) {
     const initialBootstrap = data?.textContent ? JSON.parse(data.textContent) as AppBootstrap : undefined;
-    createRoot(root).render(<RootApp initialBootstrap={initialBootstrap} auth={auth} />);
+    createRoot(root).render(<RootApp initialBootstrap={initialBootstrap} initialAuth={DEFAULT_AUTH_STATE} />);
   }
 }
 
-void start();
+start();

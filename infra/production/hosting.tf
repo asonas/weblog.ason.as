@@ -15,9 +15,9 @@ data "aws_cloudfront_cache_policy" "caching_disabled" {
 
 resource "aws_cloudfront_cache_policy" "public_api" {
   name        = "weblog-public-api"
-  min_ttl     = 10
-  default_ttl = 10
-  max_ttl     = 10
+  min_ttl     = 300
+  default_ttl = 300
+  max_ttl     = 300
 
   parameters_in_cache_key_and_forwarded_to_origin {
     cookies_config {
