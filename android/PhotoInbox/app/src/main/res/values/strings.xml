@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">Photo Inbox</string>
+    <string name="today_photos">今日の写真</string>
+    <string name="settings">設定</string>
+    <string name="photo_permission_required">写真へのアクセスを許可してください</string>
+    <string name="no_photos_today">今日の写真はありません</string>
+    <string name="photo_count">%1$d枚</string>
+    <string name="photo_count_zero">0枚</string>
+    <string name="send_all">すべて送る</string>
+    <string name="photo">写真</string>
+    <string name="selected">選択</string>
+    <string name="excluded">除外</string>
+    <string name="uploaded">送信済み</string>
+    <string name="not_connected">未接続</string>
+    <string name="connected">接続済み</string>
+    <string name="pairing_code_hint">12文字のペアリングコード</string>
+    <string name="cancel">キャンセル</string>
+    <string name="connect">接続</string>
+    <string name="pairing_code_error">12文字で入力してください</string>
+    <string name="pairing_failed">接続できませんでした。コードを確認してください。</string>
+    <string name="pairing_succeeded">接続しました</string>
+    <string name="queued_photos">%1$d枚を送信キューに追加しました</string>
+</resources>

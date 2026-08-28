@@ -1,4 +1,5 @@
 .worktrees/
+.tools/
 .playwright-mcp/
 .terraform/
 *.tfstate
@@ -8,6 +9,9 @@ node_modules/
 dist/
 coverage/
 tmp/
+.gradle/
+**/build/
+local.properties
 xcuserdata/
 ios/PhotoInbox/PhotoInbox.xcodeproj/*
 !ios/PhotoInbox/PhotoInbox.xcodeproj/project.xcworkspace/
