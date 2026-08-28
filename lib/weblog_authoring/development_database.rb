@@ -31,16 +31,28 @@ module WeblogAuthoring
       with_connection { |database| create_schema(database) }
     end
 
-    def list_pages(limit: nil)
+    def list_pages(limit: nil, before: nil, after: nil)
       with_connection do |database|
         sql = <<~SQL
             SELECT id, page_type, name, page_date, title, status,
                    created_at, updated_at, published_at, path, body
             FROM pages
-            ORDER BY created_at DESC, updated_at DESC
         SQL
-        sql += "LIMIT ?\n" if limit
-        database.execute(sql, *Array(limit)).map { |row| page_from_row(row) }
+        values = []
+        if before
+          sql += "WHERE (created_at < ? OR (created_at = ? AND id < ?))\n"
+          values.concat([before.fetch(:created_at).iso8601(9), before.fetch(:created_at).iso8601(9), before.fetch(:id)])
+        elsif after
+          sql += "WHERE (created_at > ? OR (created_at = ? AND id > ?))\n"
+          values.concat([after.fetch(:created_at).iso8601(9), after.fetch(:created_at).iso8601(9), after.fetch(:id)])
+        end
+        sql += "ORDER BY created_at #{after ? 'ASC' : 'DESC'}, id #{after ? 'ASC' : 'DESC'}\n"
+        if limit
+          sql += "LIMIT ?\n"
+          values << limit
+        end
+        pages = database.execute(sql, values).map { |row| page_from_row(row) }
+        after ? pages.reverse : pages
       end
     end
 

@@ -195,7 +195,7 @@ module WeblogAuthoring
 
     get "/api/pages" do
       timings = {}
-      payload = home_state(timings:)
+      payload = page_window(params, timings:).merge("mode" => "home")
       body = measure(timings, "json") { JSON.generate(payload) }
       headers "Server-Timing" => server_timing(timings)
       content_type :json
@@ -1025,11 +1025,65 @@ module WeblogAuthoring
     end
 
     def home_state(timings: {})
-      pages = measure(timings, "db") { settings.database.list_pages(limit: 30) }
+      page_window({}, timings:).merge("mode" => "home")
+    end
+
+    def page_window(query, timings: {})
+      before = decode_page_cursor(query["before"])
+      after = decode_page_cursor(query["after"])
+      before ||= month_boundary(query["month"]) if query["month"]
+      halt 422, "beforeとafterは同時に指定できません" if before && after
+
+      pages = measure(timings, "db") do
+        settings.database.list_pages(limit: 31, before:, after:)
+      end
+      has_more = pages.length > 30
+      pages = pages.first(30)
       {
-        "mode" => "home",
-        "pages" => measure(timings, "summaries") { pages.map { |page| page_summary(page) } }
+        "pages" => measure(timings, "summaries") { pages.map { |page| page_summary(page) } },
+        "newer_cursor" => pages.empty? ? nil : encode_page_cursor(pages.first),
+        "older_cursor" => pages.empty? ? nil : encode_page_cursor(pages.last),
+        "has_newer" => after ? has_more : newer_pages?(pages, before:),
+        "has_older" => after ? older_pages?(pages) : has_more
       }
+    end
+
+    def newer_pages?(pages, before:)
+      return false if pages.empty? && before.nil?
+
+      cursor = pages.empty? ? before : page_cursor(pages.first)
+      settings.database.list_pages(limit: 1, after: cursor).any?
+    end
+
+    def older_pages?(pages)
+      return false if pages.empty?
+
+      settings.database.list_pages(limit: 1, before: page_cursor(pages.last)).any?
+    end
+
+    def page_cursor(page)
+      { created_at: page.created_at, id: page.id }
+    end
+
+    def encode_page_cursor(page)
+      Base64.urlsafe_encode64(JSON.generate([page.created_at.iso8601(9), page.id]), padding: false)
+    end
+
+    def decode_page_cursor(value)
+      return nil if value.to_s.empty?
+
+      created_at, id = JSON.parse(Base64.urlsafe_decode64(value.to_s))
+      halt 422, "カーソルが不正です" unless created_at.is_a?(String) && id.is_a?(String)
+      { created_at: Time.iso8601(created_at), id: }
+    rescue ArgumentError, JSON::ParserError
+      halt 422, "カーソルが不正です"
+    end
+
+    def month_boundary(value)
+      match = /\A(\d{4})-(0[1-9]|1[0-2])\z/.match(value.to_s)
+      halt 422, "monthはYYYY-MM形式で指定してください" unless match
+      date = Date.new(match[1].to_i, match[2].to_i, 1) >> 1
+      { created_at: Time.new(date.year, date.month, 1, 0, 0, 0, DevelopmentDatabase::TOKYO_OFFSET), id: "" }
     end
 
     def measure(timings, name)

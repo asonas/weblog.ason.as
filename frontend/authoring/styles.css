@@ -1445,6 +1445,12 @@ html[data-universe="on"] .linked-pages {
   color: var(--atlas-warm);
 }
 
+.atlas-rail .home-archive__months a[aria-current="true"] {
+  color: var(--atlas-warm);
+  font-weight: 700;
+  text-decoration-thickness: 0.15em;
+}
+
 .atlas-rail .home-archive__months span {
   color: var(--atlas-paper);
 }
@@ -1453,6 +1459,40 @@ html[data-universe="on"] .linked-pages {
   display: grid;
   grid-template-columns: 1fr;
   gap: 0;
+}
+
+.atlas-stream__sentinel {
+  display: grid;
+  min-block-size: 1px;
+  place-items: center;
+  color: var(--muted-ink);
+  font-size: 0.75rem;
+}
+
+.atlas-stream__sentinel span {
+  padding-block: 1rem;
+}
+
+.atlas-stream__error {
+  margin: 0;
+  padding: 1rem;
+  color: var(--accent);
+}
+
+.atlas-calendar .home-auth {
+  justify-content: flex-start;
+  margin-block: 1rem 0;
+}
+
+.atlas-calendar .home-auth a,
+.atlas-calendar .home-auth button {
+  color: var(--atlas-paper);
+}
+
+.atlas-calendar .home-auth a:hover,
+.atlas-calendar .home-auth button:hover {
+  background: color-mix(in oklch, var(--atlas-navy) 35%, transparent);
+  color: var(--atlas-warm);
 }
 
 .atlas-entry a {

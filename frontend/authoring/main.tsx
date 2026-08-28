@@ -75,6 +75,10 @@ type HomeBootstrap = {
   mode: "home";
   tags?: string[];
   pages: HomePage[];
+  newer_cursor?: string | null;
+  older_cursor?: string | null;
+  has_newer?: boolean;
+  has_older?: boolean;
   archive?: Array<{
     year: number;
     months: number[];
@@ -263,9 +267,11 @@ function HomeTags({ tags, fitMobileRows = false }: { tags: string[]; fitMobileRo
   );
 }
 
-function HomeArchive({ years, heading = "過去の記事" }: {
+function HomeArchive({ years, heading = "過去の記事", selectedMonth, onSelectMonth }: {
   years: NonNullable<HomeBootstrap["archive"]>;
   heading?: string;
+  selectedMonth?: string | null;
+  onSelectMonth?: (month: string) => void;
 }) {
   if (years.length === 0) return null;
 
@@ -283,11 +289,17 @@ function HomeArchive({ years, heading = "過去の記事" }: {
             <div className="home-archive__months">
               {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => {
                 const label = String(month).padStart(2, "0");
+                const monthKey = `${year}-${label}`;
                 return months.includes(month) ? (
                   <a
                     href={`/${year}${label}`}
                     aria-label={`${year}年${month}月の記事`}
+                    aria-current={selectedMonth === monthKey ? "true" : undefined}
                     key={month}
+                    onClick={onSelectMonth ? (event) => {
+                      event.preventDefault();
+                      onSelectMonth(monthKey);
+                    } : undefined}
                   >
                     {label}
                   </a>
@@ -358,13 +370,30 @@ function HeaderDock() {
   );
 }
 
-function AtlasHome({ pages, tags, archive, archiveRef }: {
-  pages: HomePage[];
+type PageWindow = Pick<HomeBootstrap,
+  "pages" | "newer_cursor" | "older_cursor" | "has_newer" | "has_older"
+>;
+
+function AtlasHome({ initialWindow, tags, archive, archiveRef, auth }: {
+  initialWindow: PageWindow;
   tags: string[];
   archive: NonNullable<HomeBootstrap["archive"]>;
   archiveRef: RefObject<HTMLDivElement | null>;
+  auth: AuthState;
 }) {
   const [calendarOpen, setCalendarOpen] = useState(() => !window.matchMedia("(max-width: 36rem)").matches);
+  const [pages, setPages] = useState(initialWindow.pages);
+  const [newerCursor, setNewerCursor] = useState(initialWindow.newer_cursor ?? null);
+  const [olderCursor, setOlderCursor] = useState(initialWindow.older_cursor ?? null);
+  const [hasNewer, setHasNewer] = useState(initialWindow.has_newer ?? false);
+  const [hasOlder, setHasOlder] = useState(initialWindow.has_older ?? false);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadingRef = useRef(false);
+  const streamRef = useRef<HTMLElement | null>(null);
+  const newerRef = useRef<HTMLDivElement | null>(null);
+  const olderRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 36rem)");
@@ -372,6 +401,68 @@ function AtlasHome({ pages, tags, archive, archiveRef }: {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
+
+  const loadWindow = async (url: string, direction: "replace" | "newer" | "older") => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setIsLoading(true);
+    setLoadError(null);
+    const previousHeight = streamRef.current?.scrollHeight ?? 0;
+    try {
+      const response = await fetchBootstrap<PageWindow>(url);
+      if (direction === "replace") {
+        setPages(response.pages);
+        setSelectedMonth(new URL(url, window.location.href).searchParams.get("month"));
+      } else if (direction === "newer") {
+        setPages((current) => [...response.pages, ...current]);
+      } else {
+        setPages((current) => [...current, ...response.pages]);
+      }
+      if (direction !== "older") {
+        setNewerCursor(response.newer_cursor ?? null);
+        setHasNewer(response.has_newer ?? false);
+      }
+      if (direction !== "newer") {
+        setOlderCursor(response.older_cursor ?? null);
+        setHasOlder(response.has_older ?? false);
+      }
+
+      if (direction === "replace") {
+        requestAnimationFrame(() => streamRef.current?.scrollIntoView({ block: "start" }));
+      } else if (direction === "newer") {
+        requestAnimationFrame(() => {
+          const nextHeight = streamRef.current?.scrollHeight ?? previousHeight;
+          window.scrollBy({ top: nextHeight - previousHeight });
+        });
+      }
+    } catch (reason: unknown) {
+      setLoadError(reason instanceof Error ? reason.message : "記事を読み込めませんでした");
+    } finally {
+      loadingRef.current = false;
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const newerTarget = newerRef.current;
+    const olderTarget = olderRef.current;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting || loadingRef.current) continue;
+        if (entry.target === newerTarget && hasNewer && newerCursor) {
+          void loadWindow(`/api/pages?after=${encodeURIComponent(newerCursor)}`, "newer");
+          return;
+        }
+        if (entry.target === olderTarget && hasOlder && olderCursor) {
+          void loadWindow(`/api/pages?before=${encodeURIComponent(olderCursor)}`, "older");
+          return;
+        }
+      }
+    }, { rootMargin: "480px 0px" });
+    if (newerTarget) observer.observe(newerTarget);
+    if (olderTarget) observer.observe(olderTarget);
+    return () => observer.disconnect();
+  }, [hasNewer, hasOlder, newerCursor, olderCursor]);
 
   return (
     <div className="home-variant home-variant--atlas">
@@ -392,11 +483,21 @@ function AtlasHome({ pages, tags, archive, archiveRef }: {
                 <path d="m6 6 12 12M18 6 6 18" />
               </svg>
             </summary>
-            <HomeArchive years={archive} heading="" />
+            <HomeArchive
+              years={archive}
+              heading=""
+              selectedMonth={selectedMonth}
+              onSelectMonth={(month) => void loadWindow(`/api/pages?month=${month}`, "replace")}
+            />
+            <GitHubAuthentication auth={auth} />
           </details>
         </div>
       </aside>
-      <section className="atlas-stream" aria-label="最近の記事">
+      <section className="atlas-stream" aria-label="記事" aria-busy={isLoading} ref={streamRef}>
+        {loadError && <p className="atlas-stream__error" role="alert">{loadError}</p>}
+        <div className="atlas-stream__sentinel" ref={newerRef}>
+          {!hasNewer && selectedMonth && <span>最新の記事まで表示しています</span>}
+        </div>
         {pages.length === 0 ? <p className="empty-home">まだ記事がありません</p> : pages.map((page) => (
           <article className="atlas-entry" key={page.id}>
             <a href={`/${encodeURIComponent(page.route)}`}>
@@ -409,6 +510,9 @@ function AtlasHome({ pages, tags, archive, archiveRef }: {
             </a>
           </article>
         ))}
+        <div className="atlas-stream__sentinel" ref={olderRef}>
+          {!hasOlder && <span>最初の記事まで表示しています</span>}
+        </div>
       </section>
     </div>
   );
@@ -441,8 +545,7 @@ function Home({ bootstrap, auth }: { bootstrap: HomeBootstrap; auth: AuthState }
 
   return (
     <div className="home-layout">
-      <AtlasHome pages={bootstrap.pages} tags={tags} archive={archive} archiveRef={archiveRef} />
-      <GitHubAuthentication auth={auth} />
+      <AtlasHome initialWindow={bootstrap} tags={tags} archive={archive} archiveRef={archiveRef} auth={auth} />
     </div>
   );
 }

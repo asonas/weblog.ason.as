@@ -539,7 +539,11 @@ class TestDevelopmentApp < Minitest::Test
 
     assert_equal 200, status
     assert_equal "application/json", headers.fetch("content-type")
-    assert_equal({ "mode" => "home", "pages" => [] }, JSON.parse(body))
+    home = JSON.parse(body)
+    assert_equal "home", home.fetch("mode")
+    assert_equal [], home.fetch("pages")
+    assert_equal false, home.fetch("has_newer")
+    assert_equal false, home.fetch("has_older")
 
     status, _headers, body = json_request(
       "POST",
@@ -607,6 +611,30 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal 200, status
     assert_equal 30, home.fetch("pages").length
     assert_equal [{ "year" => 2026, "months" => [8] }], JSON.parse(request("GET", "/api/archive").last).fetch("archive")
+  end
+
+  def test_month_window_can_page_toward_newer_and_older_articles
+    january = app_database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "january", body: ""))
+    february = app_database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "february", body: ""))
+    march = app_database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "march", body: ""))
+    SQLite3::Database.new(database_path.to_s) do |sqlite|
+      sqlite.execute("UPDATE pages SET created_at = ? WHERE id = ?", ["2025-01-31T12:00:00.000000000+09:00", january.id])
+      sqlite.execute("UPDATE pages SET created_at = ? WHERE id = ?", ["2025-02-01T12:00:00.000000000+09:00", february.id])
+      sqlite.execute("UPDATE pages SET created_at = ? WHERE id = ?", ["2025-03-01T12:00:00.000000000+09:00", march.id])
+    end
+
+    status, _headers, body = request("GET", "/api/pages?month=2025-01")
+    january_window = JSON.parse(body)
+
+    assert_equal 200, status
+    assert_equal ["january"], january_window.fetch("pages").map { |page| page.fetch("title") }
+    assert_equal true, january_window.fetch("has_newer")
+    assert_equal false, january_window.fetch("has_older")
+
+    cursor = CGI.escape(january_window.fetch("newer_cursor"))
+    newer_window = JSON.parse(request("GET", "/api/pages?after=#{cursor}").last)
+    assert_equal ["march", "february"], newer_window.fetch("pages").map { |page| page.fetch("title") }
+    assert_equal false, newer_window.fetch("has_newer")
   end
 
   def test_named_page_accepts_an_empty_body_and_can_be_loaded_by_route

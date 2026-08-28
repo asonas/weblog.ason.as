@@ -85,6 +85,24 @@ class TestDevelopmentDatabase < Minitest::Test
     assert_equal ["newer", "older"], database.list_pages.map(&:name)
   end
 
+  def test_list_pages_reads_only_the_records_next_to_a_cursor
+    current_time = Time.iso8601("2025-01-31T12:00:00+09:00")
+    database = WeblogAuthoring::DevelopmentDatabase.new(
+      tmpdir.join("data/development/authoring.sqlite3"),
+      content_dir: tmpdir.join("content"),
+      clock: -> { current_time }
+    )
+    database.setup!
+    january = database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "january", body: ""))
+    current_time = Time.iso8601("2025-02-01T12:00:00+09:00")
+    february = database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "february", body: ""))
+    current_time = Time.iso8601("2025-03-01T12:00:00+09:00")
+    database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "march", body: ""))
+
+    assert_equal ["january"], database.list_pages(limit: 1, before: { created_at: february.created_at, id: february.id }).map(&:name)
+    assert_equal ["february"], database.list_pages(limit: 1, after: { created_at: january.created_at, id: january.id }).map(&:name)
+  end
+
   def test_save_records_inbox_usage_and_commits_its_image_adoption_atomically
     database = development_database
     item = database.upsert_inbox_item(

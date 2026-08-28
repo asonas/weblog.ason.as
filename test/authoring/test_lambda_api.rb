@@ -66,8 +66,16 @@ class LambdaApiTest < Minitest::Test
       true
     end
 
-    def list_pages(limit: nil)
-      limit ? pages.first(limit) : pages
+    def list_pages(limit: nil, before: nil, after: nil)
+      selected = pages.sort_by { |page| [page.created_at, page.id] }.reverse
+      selected = selected.select do |page|
+        ([page.created_at, page.id] <=> [before.fetch(:created_at), before.fetch(:id)]).negative?
+      end if before
+      selected = selected.select do |page|
+        ([page.created_at, page.id] <=> [after.fetch(:created_at), after.fetch(:id)]).positive?
+      end if after
+      selected = selected.first(limit) if limit
+      selected
     end
 
     def find(id)
