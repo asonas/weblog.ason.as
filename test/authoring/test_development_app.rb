@@ -424,6 +424,20 @@ class TestDevelopmentApp < Minitest::Test
     }], s3_client.requests
   end
 
+  def test_uploaded_images_with_generated_hex_names_are_read_from_the_development_bucket
+    filename = "becf3f799d14482090060d487cb9b952.png"
+
+    status, headers, body = request("GET", "/assets/uploads/2026/08/#{filename}")
+
+    assert_equal 200, status
+    assert_equal "image/jpeg", headers.fetch("content-type")
+    assert_equal "image-data", body
+    assert_equal [{
+      bucket: "weblog-asonas-assets-dev-282782318939",
+      key: "assets/uploads/2026/08/#{filename}"
+    }], s3_client.requests
+  end
+
   def test_first_downloaded_image_is_used_for_the_page_card
     FileUtils.mkdir_p(root.join("data/normalized"))
     FileUtils.mkdir_p(root.join("data/reports"))
