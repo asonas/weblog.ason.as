@@ -301,7 +301,7 @@ module WeblogAuthoring
       filename = params.fetch("filename")
       halt 404 unless /\A\d{4}\z/.match?(year) && /\A(?:0[1-9]|1[0-2])\z/.match?(month)
       halt 404 unless /\A(?:0[1-9]|[12]\d|3[01])\z/.match?(day)
-      halt 404 unless /\A[0-9a-f-]{36}\.(?:gif|jpe?g|png|webp)\z/i.match?(filename)
+      halt 404 unless /\A(?:[0-9a-f]{32}|[0-9a-f-]{36})\.(?:gif|jpe?g|png|webp)\z/i.match?(filename)
 
       object = s3_client.get_object(
         bucket: settings.asset_bucket,
