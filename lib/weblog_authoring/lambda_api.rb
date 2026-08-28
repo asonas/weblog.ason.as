@@ -47,7 +47,7 @@ module WeblogAuthoring
 
     def initialize(database:, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
                    allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
-                   site_bucket: nil, search_queue_url: nil, sqs_client: nil, logger: $stderr,
+                   development_asset_bucket: nil, site_bucket: nil, search_queue_url: nil, sqs_client: nil, logger: $stderr,
                    search_index: nil, clock: Time.method(:now))
       @database = database
       @oauth = oauth
@@ -57,6 +57,7 @@ module WeblogAuthoring
       @allowed_github_user_id = allowed_github_user_id
       @s3_client = s3_client
       @asset_bucket = asset_bucket
+      @development_asset_bucket = development_asset_bucket
       @site_bucket = site_bucket
       @embed_fetcher = embed_fetcher
       @search_queue_url = search_queue_url
@@ -343,7 +344,13 @@ module WeblogAuthoring
     end
 
     def mobile_upload
-      MobileUpload.new(database: @database, s3_client: @s3_client, bucket: @asset_bucket, clock: @clock)
+      MobileUpload.new(
+        database: @database,
+        s3_client: @s3_client,
+        bucket: @asset_bucket,
+        development_bucket: @development_asset_bucket,
+        clock: @clock
+      )
     end
 
     def create_mobile_upload_response(event)

@@ -30,6 +30,7 @@ module WeblogAuthoring
           ),
           s3_client:,
           asset_bucket: ENV.fetch("ASSET_BUCKET"),
+          development_asset_bucket: ENV["DEVELOPMENT_ASSET_BUCKET"],
           site_bucket: ENV.fetch("SITE_BUCKET"),
           sqs_client: Aws::SQS::Client.new,
           search_queue_url: ENV["SEARCH_INDEX_QUEUE_URL"],

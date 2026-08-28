@@ -89,6 +89,14 @@ data "aws_iam_policy_document" "image_upload" {
   }
 
   statement {
+    effect  = "Allow"
+    actions = ["s3:PutObject"]
+    resources = [
+      "arn:aws:s3:::weblog-asonas-assets-dev-${data.aws_caller_identity.current.account_id}/assets/inbox/*",
+    ]
+  }
+
+  statement {
     effect    = "Allow"
     actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.site.arn]

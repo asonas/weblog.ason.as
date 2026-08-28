@@ -96,6 +96,7 @@ module WeblogAuthoring
     AUTHORING_ASSET_FILENAME = /\A(?:imageUpload\.worker|webp_enc(?:_simd)?-[A-Za-z0-9_-]+)\.js\z/
     EMBED_CACHE_TTL = 7 * 24 * 60 * 60
     EMBED_FALLBACK_CACHE_TTL = 5 * 60
+    INBOX_METADATA_PREFIX = "assets/inbox/.metadata/"
     DEFAULT_ALLOWED_GITHUB_USER_ID = 630_181
     DEFAULT_GITHUB_REDIRECT_URI = "http://127.0.0.1:5173/api/auth/github/callback"
 
@@ -398,6 +399,7 @@ module WeblogAuthoring
     get "/api/inbox" do
       require_authenticated! if settings.authentication_required
       content_type :json
+      sync_development_inbox
       items = settings.database.list_inbox_items(source: params["source"], kind: params["kind"])
       usages = settings.database.list_inbox_item_usages.group_by(&:item_id)
       JSON.generate("items" => items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, [])) })
@@ -502,6 +504,29 @@ module WeblogAuthoring
 
     def image_inbox
       ImageInbox.new(s3_client: s3_client, bucket: settings.asset_bucket, database: settings.database)
+    end
+
+    def sync_development_inbox
+      objects = s3_client.list_objects_v2(
+        bucket: settings.asset_bucket,
+        prefix: INBOX_METADATA_PREFIX
+      )
+      objects.contents.each do |object|
+        manifest = JSON.parse(s3_client.get_object(bucket: settings.asset_bucket, key: object.key).body.read)
+        occurred_at = Time.iso8601(manifest.fetch("occurred_at"))
+        next if occurred_at < settings.clock.call - DevelopmentDatabase::INBOX_RETENTION_SECONDS
+
+        settings.database.upsert_inbox_item(
+          source: manifest.fetch("source"),
+          kind: manifest.fetch("kind"),
+          source_id: manifest.fetch("source_id"),
+          occurred_at:,
+          payload: manifest.fetch("payload")
+        )
+      rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound,
+             JSON::ParserError, KeyError, ArgumentError, TypeError
+        next
+      end
     end
 
     def mobile_upload

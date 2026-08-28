@@ -10,6 +10,8 @@ class TestDevelopmentApp < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-08-21T12:00:00+09:00")
 
   FakeS3Response = Data.define(:content_type, :body)
+  FakeS3Object = Data.define(:key)
+  FakeS3List = Data.define(:contents)
 
   def test_lists_cacheable_page_names
     status, headers, body = request("GET", "/api/page-names")
@@ -69,7 +71,7 @@ class TestDevelopmentApp < Minitest::Test
 
     def get_object(bucket:, key:)
       @requests << { bucket:, key: }
-      if key.start_with?("assets/embed-cache/")
+      if key.start_with?("assets/embed-cache/") || key.start_with?("assets/inbox/.metadata/")
         body = @objects[key]
         raise Aws::S3::Errors::NoSuchKey.new(nil, "missing") if body.nil?
 
@@ -79,8 +81,17 @@ class TestDevelopmentApp < Minitest::Test
       FakeS3Response.new(content_type: "image/jpeg", body: StringIO.new("image-data"))
     end
 
+    def list_objects_v2(bucket:, prefix:)
+      @requests << { bucket:, prefix: }
+      FakeS3List.new(@objects.keys.grep(/^#{Regexp.escape(prefix)}/).sort.map { |key| FakeS3Object.new(key) })
+    end
+
     def put_object(bucket:, key:, body:, content_type:)
       @requests << { bucket:, key:, body:, content_type: }
+      @objects[key] = body
+    end
+
+    def add_object(key, body)
       @objects[key] = body
     end
   end
@@ -184,6 +195,50 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal 201, exchange_status
     assert_equal 201, upload_status
     assert_equal 401, ordinary_mutation_status
+  end
+
+  def test_inbox_imports_recent_development_s3_manifests_idempotently
+    key = "assets/inbox/2026/08/21/photo.jpg"
+    s3_client.add_object(
+      "assets/inbox/.metadata/upload-1.json",
+      JSON.generate(
+        "source" => "photo",
+        "kind" => "photo",
+        "source_id" => "upload-1",
+        "occurred_at" => "2026-08-21T11:00:00+09:00",
+        "payload" => {
+          "inbox_key" => key,
+          "preview_url" => "/#{key}",
+          "captured_at_source" => "photos",
+        }
+      )
+    )
+    s3_client.add_object(
+      "assets/inbox/.metadata/expired.json",
+      JSON.generate(
+        "source" => "photo",
+        "kind" => "photo",
+        "source_id" => "expired",
+        "occurred_at" => "2026-08-14T11:59:59+09:00",
+        "payload" => {
+          "inbox_key" => "assets/inbox/2026/08/14/expired.jpg",
+          "preview_url" => "/assets/inbox/2026/08/14/expired.jpg",
+          "captured_at_source" => "photos",
+        }
+      )
+    )
+
+    first_status, _headers, first_body = request("GET", "/api/inbox")
+    second_status, _headers, second_body = request("GET", "/api/inbox")
+
+    assert_equal 200, first_status
+    assert_equal 200, second_status
+    first_items = JSON.parse(first_body).fetch("items")
+    second_items = JSON.parse(second_body).fetch("items")
+    assert_equal 1, first_items.length
+    assert_equal first_items, second_items
+    assert_equal "upload-1", first_items.fetch(0).fetch("source_id")
+    assert_equal key, first_items.fetch(0).dig("payload", "inbox_key")
   end
 
   def test_oauth_session_survives_a_development_app_restart

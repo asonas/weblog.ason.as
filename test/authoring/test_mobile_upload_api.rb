@@ -167,6 +167,75 @@ class MobileUploadApiTest < Minitest::Test
     assert_equal "2026-08-27T08:30:00+09:00", first_item.fetch("occurred_at")
   end
 
+  def test_completion_mirrors_the_photo_and_manifest_to_development_s3
+    token = paired_device_token
+    s3 = Aws::S3::Client.new(
+      region: "ap-northeast-1",
+      credentials: Aws::Credentials.new("access-key", "secret-key"),
+      stub_responses: true
+    )
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      s3_client: s3,
+      asset_bucket: "production-assets",
+      development_asset_bucket: "development-assets",
+      clock: -> { NOW }
+    )
+    headers = { "authorization" => "Bearer #{token}" }
+    created = api.call(json_event("POST", "/api/mobile/uploads", mobile_upload_payload, headers:))
+    upload = JSON.parse(created.fetch(:body))
+    upload_id = upload.fetch("upload_id")
+    key = upload.dig("fields", "key")
+    s3.stub_responses(:head_object, {
+      content_type: "image/jpeg",
+      content_length: 1024,
+      metadata: { "sha256" => "a" * 64 },
+    })
+
+    response = api.call(json_event(
+      "POST", "/api/mobile/uploads/#{upload_id}/complete", {}, headers:,
+      path_parameters: { "upload_id" => upload_id }
+    ))
+    repeated = api.call(json_event(
+      "POST", "/api/mobile/uploads/#{upload_id}/complete", {}, headers:,
+      path_parameters: { "upload_id" => upload_id }
+    ))
+
+    assert_equal 201, response.fetch(:statusCode), response.fetch(:body)
+    assert_equal 200, repeated.fetch(:statusCode), repeated.fetch(:body)
+    copy = s3.api_requests.find { |request| request.fetch(:operation_name) == :copy_object }
+    assert_equal({
+      bucket: "development-assets",
+      key:,
+      copy_source: "production-assets/#{key}",
+    }, copy.fetch(:params).slice(:bucket, :key, :copy_source))
+    manifest = s3.api_requests.find do |request|
+      request.fetch(:operation_name) == :put_object && request.dig(:params, :key)&.end_with?(".json")
+    end
+    assert_equal "development-assets", manifest.dig(:params, :bucket)
+    assert_equal "assets/inbox/.metadata/#{upload_id}.json", manifest.dig(:params, :key)
+    assert_equal "application/json", manifest.dig(:params, :content_type)
+    assert_equal({
+      "source" => "photo",
+      "kind" => "photo",
+      "source_id" => upload_id,
+      "occurred_at" => "2026-08-27T08:30:00+09:00",
+      "payload" => {
+        "inbox_key" => key,
+        "preview_url" => "/#{key}",
+        "captured_at_source" => "photos",
+      },
+    }, JSON.parse(manifest.dig(:params, :body)))
+    copied_keys = s3.api_requests.filter_map do |request|
+      request.dig(:params, :key) if request.fetch(:operation_name) == :copy_object
+    end
+    manifest_keys = s3.api_requests.filter_map do |request|
+      request.dig(:params, :key) if request.fetch(:operation_name) == :put_object
+    end
+    assert_equal [key], copied_keys.uniq
+    assert_equal ["assets/inbox/.metadata/#{upload_id}.json"], manifest_keys.uniq
+  end
+
   def test_completion_rejects_an_s3_object_with_different_metadata
     token = paired_device_token
     s3 = Aws::S3::Client.new(

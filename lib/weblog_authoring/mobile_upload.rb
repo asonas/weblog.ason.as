@@ -2,6 +2,7 @@
 
 require "base64"
 require "digest"
+require "json"
 require "securerandom"
 require "time"
 require "aws-sdk-s3"
@@ -25,11 +26,12 @@ module WeblogAuthoring
     }.freeze
     CAPTURE_SOURCES = %w[photos exif uploaded].freeze
 
-    def initialize(database:, s3_client: nil, bucket: nil, clock: Time.method(:now),
+    def initialize(database:, s3_client: nil, bucket: nil, development_bucket: nil, clock: Time.method(:now),
                    random_bytes: SecureRandom.method(:random_bytes), random_uuid: -> { SecureRandom.uuid.delete("-") })
       @database = database
       @s3_client = s3_client
       @bucket = bucket
+      @development_bucket = development_bucket
       @clock = clock
       @random_bytes = random_bytes
       @random_uuid = random_uuid
@@ -87,6 +89,7 @@ module WeblogAuthoring
 
       if upload.fetch("state") == "completed"
         item = @database.find_inbox_item_by_source(source: "photo", kind: "photo", source_id: upload_id)
+        mirror_to_development(upload:, item:) unless item.nil?
         return [item, false]
       end
 
@@ -96,12 +99,37 @@ module WeblogAuthoring
                 object.metadata.fetch("sha256", nil) == upload.fetch("sha256")
       raise ConflictError, "s3_upload_incomplete" unless matches
 
-      @database.complete_mobile_upload(upload_id:, device_id: device.fetch("id"))
+      item, created = @database.complete_mobile_upload(upload_id:, device_id: device.fetch("id"))
+      mirror_to_development(upload:, item:)
+      [item, created]
     rescue Aws::S3::Errors::NotFound, Aws::S3::Errors::NoSuchKey
       raise ConflictError, "s3_upload_incomplete"
     end
 
     private
+
+    def mirror_to_development(upload:, item:)
+      return if @development_bucket.nil?
+
+      key = upload.fetch("s3_key")
+      @s3_client.copy_object(
+        bucket: @development_bucket,
+        key:,
+        copy_source: "#{@bucket}/#{key}"
+      )
+      @s3_client.put_object(
+        bucket: @development_bucket,
+        key: "assets/inbox/.metadata/#{upload.fetch('id')}.json",
+        content_type: "application/json",
+        body: JSON.generate(
+          "source" => item.source,
+          "kind" => item.kind,
+          "source_id" => item.source_id,
+          "occurred_at" => item.occurred_at.iso8601,
+          "payload" => item.payload
+        )
+      )
+    end
 
     def random_byte
       @random_bytes.call(1).unpack1("C")
