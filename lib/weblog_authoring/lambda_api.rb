@@ -564,7 +564,9 @@ module WeblogAuthoring
       page = @database.find_route(route)
       return page_response(page, event:) unless page.nil?
 
-      json_response(200, editor_json(title: route, name: route, body: "", linked_pages_has_more: true))
+      response = json_response(200, editor_json(title: route, name: route, body: "", linked_pages_has_more: true))
+      response[:headers] = response.fetch(:headers).merge("cache-control" => "no-store")
+      response
     rescue ArgumentError
       json_response(422, error: "Invalid route")
     end

@@ -263,6 +263,18 @@ class LambdaApiTest < Minitest::Test
     assert_equal "記事名", JSON.parse(response.fetch(:body)).fetch("name")
   end
 
+  def test_missing_route_is_not_cached
+    response = @api.call(event(
+      "GET",
+      "/api/routes/missing-hub",
+      { "route" => "missing-hub" }
+    ))
+
+    assert_equal 200, response.fetch(:statusCode)
+    assert_equal "no-store", response.fetch(:headers).fetch("cache-control")
+    assert_empty JSON.parse(response.fetch(:body)).fetch("page_id")
+  end
+
   def test_missing_route_requests_its_related_pages
     response = @api.call(event("GET", "/api/routes/202608", { "route" => "202608" }))
     page = JSON.parse(response.fetch(:body))
