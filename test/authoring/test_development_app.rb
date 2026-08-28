@@ -424,6 +424,19 @@ class TestDevelopmentApp < Minitest::Test
     }], s3_client.requests
   end
 
+  def test_manually_runs_the_same_inbox_sync_contract_in_development
+    status, _headers, body = request("POST", "/api/inbox/sync", payload: {})
+    run_id = JSON.parse(body).fetch("run_id")
+
+    sync_status, _headers, sync_body = request("GET", "/api/inbox/sync/#{run_id}")
+    run = JSON.parse(sync_body)
+
+    assert_equal 202, status
+    assert_equal 200, sync_status
+    assert_equal "succeeded", run.fetch("status")
+    assert_equal %w[bluesky raindrop c4p], run.fetch("sources").map { |source| source.fetch("source") }
+  end
+
   def test_uploaded_images_with_generated_hex_names_are_read_from_the_development_bucket
     filename = "becf3f799d14482090060d487cb9b952.png"
 

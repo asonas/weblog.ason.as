@@ -114,6 +114,20 @@ class LambdaApiTest < Minitest::Test
         expires_at: Time.iso8601("2026-09-09T12:00:00+09:00")
       )
     end
+
+    def queue_inbox_sync_run(run_id:, trigger:, queued_at:)
+      return false if @inbox_sync_run && %w[queued running].include?(@inbox_sync_run.fetch("status"))
+
+      @inbox_sync_run = {
+        "id" => run_id, "trigger" => trigger, "status" => "queued",
+        "started_at" => queued_at.iso8601, "completed_at" => nil, "sources" => [],
+      }
+      true
+    end
+
+    def inbox_sync_run(run_id:)
+      @inbox_sync_run if @inbox_sync_run&.fetch("id") == run_id
+    end
   end
 
   class FakeOAuth
@@ -141,6 +155,18 @@ class LambdaApiTest < Minitest::Test
       raise @error unless @error.nil?
 
       messages << message
+    end
+  end
+
+  class FakeLambda
+    attr_reader :invocations
+
+    def initialize
+      @invocations = []
+    end
+
+    def invoke(**request)
+      invocations << request
     end
   end
 
@@ -625,6 +651,45 @@ class LambdaApiTest < Minitest::Test
     assert_equal "item-1", body.fetch("items").fetch(0).fetch("id")
     assert_equal "2026-08-26T10:00:00+09:00", body.fetch("items").fetch(0).fetch("occurred_at")
     assert_equal "photo", body.fetch("items").fetch(0).fetch("kind")
+  end
+
+  def test_authenticated_editor_starts_and_reads_an_asynchronous_inbox_sync
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    token = codec.issue(
+      kind: "session",
+      attributes: { "github_user_id" => 630_181, "login" => "asonas", "csrf_token" => "csrf-token" },
+      ttl: 600
+    )
+    lambda_client = FakeLambda.new
+    database = FakeDatabase.new([@page])
+    api = WeblogAuthoring::LambdaApi.new(
+      database:, session_codec: codec, allowed_github_user_id: 630_181,
+      lambda_client:, inbox_sync_function_name: "weblog-inbox-sync-production",
+      clock: -> { Time.iso8601("2026-08-28T12:00:00Z") }
+    )
+    cookie = ["weblog_authoring_session=#{token}"]
+
+    started = api.call(json_event(
+      "POST", "/api/inbox/sync", {}, cookies: cookie,
+      headers: { "x-csrf-token" => "csrf-token" }
+    ))
+    started_body = JSON.parse(started.fetch(:body))
+    duplicate = api.call(json_event(
+      "POST", "/api/inbox/sync", {}, cookies: cookie,
+      headers: { "x-csrf-token" => "csrf-token" }
+    ))
+    status = api.call(event(
+      "GET", "/api/inbox/sync/#{started_body.fetch('run_id')}",
+      { "run_id" => started_body.fetch("run_id") }, cookies: cookie
+    ))
+
+    assert_equal 202, started.fetch(:statusCode)
+    assert_match(/\A[0-9a-f]{32}\z/, started_body.fetch("run_id"))
+    assert_equal "Event", lambda_client.invocations.fetch(0).fetch(:invocation_type)
+    assert_equal "manual", JSON.parse(lambda_client.invocations.fetch(0).fetch(:payload)).fetch("trigger")
+    assert_equal 409, duplicate.fetch(:statusCode)
+    assert_equal 1, lambda_client.invocations.length
+    assert_equal "queued", JSON.parse(status.fetch(:body)).fetch("status")
   end
 
   def test_github_oauth_creates_an_authenticated_session

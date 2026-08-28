@@ -49,7 +49,7 @@ module WeblogAuthoring
     def initialize(database:, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
                    allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
                    development_asset_bucket: nil, site_bucket: nil, search_queue_url: nil, sqs_client: nil, logger: $stderr,
-                   search_index: nil, clock: Time.method(:now))
+                   search_index: nil, lambda_client: nil, inbox_sync_function_name: nil, clock: Time.method(:now))
       @database = database
       @oauth = oauth
       @session_codec = session_codec
@@ -65,6 +65,8 @@ module WeblogAuthoring
       @sqs_client = sqs_client
       @logger = logger
       @search_index = search_index
+      @lambda_client = lambda_client
+      @inbox_sync_function_name = inbox_sync_function_name
       @clock = clock
     end
 
@@ -91,6 +93,10 @@ module WeblogAuthoring
       end
       return inbox_response(event) if method == "GET" && path == "/api/inbox"
       return adopt_inbox_response(event) if method == "POST" && path == "/api/inbox/adopt"
+      return start_inbox_sync_response(event) if method == "POST" && path == "/api/inbox/sync"
+      if method == "GET" && %r{\A/api/inbox/sync/[^/]+\z}.match?(path)
+        return inbox_sync_status_response(event)
+      end
       return search_response(event) if method == "GET" && path == "/api/search"
       return pages_response(event) if method == "GET" && path == "/api/pages"
       return tags_response if method == "GET" && path == "/api/tags"
@@ -463,6 +469,35 @@ module WeblogAuthoring
       items = @database.list_inbox_items(source: optional_query(query, "source"), kind: optional_query(query, "kind"))
       usages = @database.list_inbox_item_usages.group_by(&:item_id)
       json_response(200, "items" => items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, [])) })
+    end
+
+    def start_inbox_sync_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to sync the inbox") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+      expected_csrf_token = session.fetch("csrf_token", "")
+      return json_response(403, error: "CSRF token mismatch") unless secure_equal?(expected_csrf_token, csrf_token_from(event))
+
+      run_id = SecureRandom.uuid.delete("-")
+      queued = @database.queue_inbox_sync_run(run_id:, trigger: "manual", queued_at: @clock.call)
+      return json_response(409, error: "Inbox sync is already running") unless queued
+
+      @lambda_client.invoke(
+        function_name: @inbox_sync_function_name,
+        invocation_type: "Event",
+        payload: JSON.generate("type" => "inbox_sync", "trigger" => "manual", "run_id" => run_id)
+      )
+      json_response(202, "run_id" => run_id, "status" => "queued")
+    end
+
+    def inbox_sync_status_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to view inbox sync status") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+
+      run_id = event.dig("pathParameters", "run_id").to_s
+      run = @database.inbox_sync_run(run_id:)
+      run ? json_response(200, run) : json_response(404, error: "Inbox sync run was not found")
     end
 
     def search_response(event)

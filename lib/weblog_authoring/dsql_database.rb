@@ -407,6 +407,239 @@ module WeblogAuthoring
       end
     end
 
+    def start_inbox_sync_run(run_id:, trigger:, started_at:)
+      with_connection do |connection|
+        connection.transaction do
+          connection.exec_params(
+            <<~SQL,
+              DELETE FROM #{SCHEMA}.inbox_sync_run_sources
+              WHERE run_id IN (
+                SELECT id FROM #{SCHEMA}.inbox_sync_runs WHERE expires_at <= $1
+              )
+            SQL
+            [started_at]
+          )
+          connection.exec_params(
+            "DELETE FROM #{SCHEMA}.inbox_sync_runs WHERE expires_at <= $1",
+            [started_at]
+          )
+          active = connection.exec(
+            "SELECT id FROM #{SCHEMA}.inbox_sync_runs WHERE status IN ('queued', 'running') ORDER BY started_at LIMIT 1"
+          )
+          next false if active.ntuples.positive? && active[0].fetch("id") != run_id
+
+          connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.inbox_sync_runs (
+                id, trigger, status, started_at, completed_at, expires_at
+              ) VALUES ($1, $2, 'running', $3, NULL, $4)
+              ON CONFLICT (id) DO UPDATE
+              SET status = 'running',
+                  started_at = EXCLUDED.started_at,
+                  completed_at = NULL,
+                  expires_at = EXCLUDED.expires_at
+            SQL
+            [run_id, trigger, started_at, started_at + 86_400]
+          )
+          true
+        end
+      end
+    end
+
+    def queue_inbox_sync_run(run_id:, trigger:, queued_at:)
+      with_connection do |connection|
+        connection.transaction do
+          connection.exec_params(
+            <<~SQL,
+              DELETE FROM #{SCHEMA}.inbox_sync_run_sources
+              WHERE run_id IN (
+                SELECT id FROM #{SCHEMA}.inbox_sync_runs WHERE expires_at <= $1
+              )
+            SQL
+            [queued_at]
+          )
+          connection.exec_params("DELETE FROM #{SCHEMA}.inbox_sync_runs WHERE expires_at <= $1", [queued_at])
+          active = connection.exec(
+            "SELECT 1 FROM #{SCHEMA}.inbox_sync_runs WHERE status IN ('queued', 'running') LIMIT 1"
+          )
+          next false if active.ntuples.positive?
+
+          connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.inbox_sync_runs (
+                id, trigger, status, started_at, completed_at, expires_at
+              ) VALUES ($1, $2, 'queued', $3, NULL, $4)
+            SQL
+            [run_id, trigger, queued_at, queued_at + 86_400]
+          )
+          true
+        end
+      end
+    end
+
+    def inbox_sync_run(run_id:)
+      with_connection do |connection|
+        result = connection.exec_params(
+          <<~SQL,
+            SELECT id, trigger, status, started_at, completed_at
+            FROM #{SCHEMA}.inbox_sync_runs
+            WHERE id = $1
+            LIMIT 1
+          SQL
+          [run_id]
+        )
+        next nil if result.ntuples.zero?
+
+        row = result[0]
+        sources = connection.exec_params(
+          <<~SQL,
+            SELECT source, status, fetched_count, created_count, updated_count,
+                   deleted_count, error, completed_at
+            FROM #{SCHEMA}.inbox_sync_run_sources
+            WHERE run_id = $1
+            ORDER BY completed_at, source
+          SQL
+          [run_id]
+        ).map do |source|
+          {
+            "source" => source.fetch("source"), "status" => source.fetch("status"),
+            "fetched_count" => Integer(source.fetch("fetched_count")),
+            "created_count" => Integer(source.fetch("created_count")),
+            "updated_count" => Integer(source.fetch("updated_count")),
+            "deleted_count" => Integer(source.fetch("deleted_count")),
+            "error" => source["error"], "completed_at" => source.fetch("completed_at"),
+          }
+        end
+        {
+          "id" => row.fetch("id"), "trigger" => row.fetch("trigger"), "status" => row.fetch("status"),
+          "started_at" => row.fetch("started_at"), "completed_at" => row["completed_at"], "sources" => sources,
+        }
+      end
+    end
+
+    def inbox_source_sync_state(source:)
+      with_connection do |connection|
+        result = connection.exec_params(
+          <<~SQL,
+            SELECT source, last_attempted_at, last_succeeded_at, watermark, last_error, updated_at
+            FROM #{SCHEMA}.inbox_source_sync_states
+            WHERE source = $1
+            LIMIT 1
+          SQL
+          [source]
+        )
+        next nil if result.ntuples.zero?
+
+        row = result[0]
+        {
+          "source" => row.fetch("source"),
+          "last_attempted_at" => row.fetch("last_attempted_at"),
+          "last_succeeded_at" => row["last_succeeded_at"],
+          "watermark" => row["watermark"],
+          "last_error" => row["last_error"],
+          "updated_at" => row.fetch("updated_at"),
+        }
+      end
+    end
+
+    def apply_inbox_source_snapshot(run_id:, source:, snapshot:, completed_at:)
+      with_connection do |connection|
+        connection.transaction do
+          counts = { created_count: 0, updated_count: 0, deleted_count: 0 }
+          snapshot.items.each do |item|
+            suppressed = connection.exec_params(
+              <<~SQL,
+                SELECT 1 FROM #{SCHEMA}.consumed_inbox_items
+                WHERE source = $1 AND kind = $2 AND source_id = $3 AND expires_at > $4
+                LIMIT 1
+              SQL
+              [source, item.kind, item.source_id, completed_at]
+            )
+            next if suppressed.ntuples.positive?
+
+            existing = connection.exec_params(
+              "SELECT 1 FROM #{SCHEMA}.inbox_items WHERE source = $1 AND kind = $2 AND source_id = $3 LIMIT 1",
+              [source, item.kind, item.source_id]
+            )
+            connection.exec_params(
+              <<~SQL,
+                INSERT INTO #{SCHEMA}.inbox_items (
+                  source, kind, source_id, occurred_at, payload, id, ingested_at,
+                  expires_at, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $7, $7)
+                ON CONFLICT (source, kind, source_id) DO UPDATE
+                SET occurred_at = EXCLUDED.occurred_at,
+                    payload = EXCLUDED.payload,
+                    updated_at = EXCLUDED.updated_at
+              SQL
+              [
+                source, item.kind, item.source_id, item.occurred_at, JSON.generate(item.payload),
+                SecureRandom.uuid.delete("-"), completed_at, completed_at + INBOX_RETENTION_SECONDS,
+              ]
+            )
+            counts[existing.ntuples.positive? ? :updated_count : :created_count] += 1
+          end
+
+          if snapshot.complete
+            identities = snapshot.items.map { |item| [item.kind, item.source_id] }
+            deletion = if identities.empty?
+                         connection.exec_params("DELETE FROM #{SCHEMA}.inbox_items WHERE source = $1", [source])
+                       else
+                         retained = identities.each_index.map do |index|
+                           offset = (index * 2) + 2
+                           "(kind = $#{offset} AND source_id = $#{offset + 1})"
+                         end.join(" OR ")
+                         connection.exec_params(
+                           "DELETE FROM #{SCHEMA}.inbox_items WHERE source = $1 AND NOT (#{retained})",
+                           [source, *identities.flatten]
+                         )
+                       end
+            counts[:deleted_count] = deletion.cmd_tuples
+          end
+
+          record_inbox_source_success(connection, run_id:, source:, snapshot:, counts:, completed_at:)
+          counts
+        end
+      end
+    end
+
+    def fail_inbox_source_sync(run_id:, source:, error:, completed_at:)
+      with_connection do |connection|
+        connection.transaction do
+          connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.inbox_sync_run_sources (
+                run_id, source, status, fetched_count, created_count, updated_count,
+                deleted_count, error, completed_at
+              ) VALUES ($1, $2, 'failed', 0, 0, 0, 0, $3, $4)
+            SQL
+            [run_id, source, error, completed_at]
+          )
+          connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.inbox_source_sync_states (
+                source, last_attempted_at, last_succeeded_at, watermark, last_error, updated_at
+              ) VALUES ($1, $2, NULL, NULL, $3, $2)
+              ON CONFLICT (source) DO UPDATE
+              SET last_attempted_at = EXCLUDED.last_attempted_at,
+                  last_error = EXCLUDED.last_error,
+                  updated_at = EXCLUDED.updated_at
+            SQL
+            [source, completed_at, error]
+          )
+        end
+      end
+    end
+
+    def finish_inbox_sync_run(run_id:, status:, completed_at:)
+      with_connection do |connection|
+        connection.exec_params(
+          "UPDATE #{SCHEMA}.inbox_sync_runs SET status = $2, completed_at = $3 WHERE id = $1",
+          [run_id, status, completed_at]
+        )
+      end
+    end
+
     def list_inbox_items(source: nil, kind: nil)
       timestamp = now
       with_connection do |connection|
@@ -560,6 +793,35 @@ module WeblogAuthoring
     end
 
     private
+
+    def record_inbox_source_success(connection, run_id:, source:, snapshot:, counts:, completed_at:)
+      connection.exec_params(
+        <<~SQL,
+          INSERT INTO #{SCHEMA}.inbox_sync_run_sources (
+            run_id, source, status, fetched_count, created_count, updated_count,
+            deleted_count, error, completed_at
+          ) VALUES ($1, $2, 'succeeded', $3, $4, $5, $6, NULL, $7)
+        SQL
+        [
+          run_id, source, snapshot.items.length, counts.fetch(:created_count),
+          counts.fetch(:updated_count), counts.fetch(:deleted_count), completed_at,
+        ]
+      )
+      connection.exec_params(
+        <<~SQL,
+          INSERT INTO #{SCHEMA}.inbox_source_sync_states (
+            source, last_attempted_at, last_succeeded_at, watermark, last_error, updated_at
+          ) VALUES ($1, $2, $2, $3, NULL, $2)
+          ON CONFLICT (source) DO UPDATE
+          SET last_attempted_at = EXCLUDED.last_attempted_at,
+              last_succeeded_at = EXCLUDED.last_succeeded_at,
+              watermark = EXCLUDED.watermark,
+              last_error = NULL,
+              updated_at = EXCLUDED.updated_at
+        SQL
+        [source, completed_at, snapshot.watermark]
+      )
+    end
 
     def record_inbox_item_usage_with_connection(connection, id, page_id)
       timestamp = now

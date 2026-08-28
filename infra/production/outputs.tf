@@ -33,6 +33,21 @@ output "search_indexer_lambda_function_name" {
   value       = aws_lambda_function.search_indexer.function_name
 }
 
+output "inbox_sync_runtime_role_arn" {
+  description = "IAM role assumed by the production inbox sync Lambda."
+  value       = aws_iam_role.inbox_sync_runtime.arn
+}
+
+output "inbox_sync_ecr_repository_url" {
+  description = "ECR repository URL for the production inbox sync Lambda image."
+  value       = aws_ecr_repository.inbox_sync.repository_url
+}
+
+output "inbox_sync_lambda_function_name" {
+  description = "Name of the production inbox sync Lambda function."
+  value       = aws_lambda_function.inbox_sync.function_name
+}
+
 output "authoring_api_endpoint" {
   description = "Endpoint of the production authoring API. Reads are public and mutations require an application session."
   value       = aws_apigatewayv2_api.authoring.api_endpoint

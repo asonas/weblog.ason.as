@@ -407,6 +407,11 @@ type InboxItem = {
 };
 
 type InboxResponse = { items: Array<InboxItem> };
+type InboxSyncResponse = { run_id: string; status: "queued" };
+type InboxSyncStatus = {
+  id: string;
+  status: "queued" | "running" | "succeeded" | "completed_with_errors" | "failed";
+};
 
 type ApiError = Error & {
   fields?: Record<string, string[]>;
@@ -1970,6 +1975,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const [inboxItems, setInboxItems] = useState<Array<InboxItem>>([]);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [loadingInbox, setLoadingInbox] = useState(false);
+  const [syncingInbox, setSyncingInbox] = useState(false);
   const [linkedPages, setLinkedPages] = useState(bootstrap.linked_pages || []);
   const [linkedPagesHasMore, setLinkedPagesHasMore] = useState(bootstrap.linked_pages_has_more || false);
   const [loadingLinkedPages, setLoadingLinkedPages] = useState(false);
@@ -2430,6 +2436,26 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     setInboxItems(result.items.filter((item) => !consumed.has(item.id)));
   }, []);
 
+  const syncInbox = useCallback(async () => {
+    if (syncingInbox) return;
+
+    setSyncingInbox(true);
+    try {
+      const started = await requestJson<InboxSyncResponse>("/api/inbox/sync", {});
+      let run = await fetchJson<InboxSyncStatus>(`/api/inbox/sync/${encodeURIComponent(started.run_id)}`);
+      while (run.status === "queued" || run.status === "running") {
+        await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+        run = await fetchJson<InboxSyncStatus>(`/api/inbox/sync/${encodeURIComponent(started.run_id)}`);
+      }
+      await refreshInbox();
+      setImageUploadStatus(run.status === "completed_with_errors" ? "一部の素材を更新できませんでした" : "");
+    } catch (error) {
+      setImageUploadStatus(error instanceof Error ? error.message : "インボックスを更新できませんでした");
+    } finally {
+      setSyncingInbox(false);
+    }
+  }, [refreshInbox, syncingInbox]);
+
   useEffect(() => {
     if (!editor?.isEditable || !inboxOpen) return;
     void refreshInbox().catch((error: unknown) => {
@@ -2689,6 +2715,20 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
               </button>
               {inboxOpen && (
                 <aside id="content-inbox-panel" className="content-inbox" aria-label="コンテンツインボックス">
+                  <div className="content-inbox__toolbar">
+                    <button
+                      type="button"
+                      className="content-inbox__sync"
+                      aria-label="インボックスを更新"
+                      title="インボックスを更新"
+                      disabled={syncingInbox}
+                      onClick={() => void syncInbox()}
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="M20 7v5h-5M4 17v-5h5M18.5 9A7 7 0 0 0 6 7M5.5 15A7 7 0 0 0 18 17" />
+                      </svg>
+                    </button>
+                  </div>
                   {inboxItems.length === 0 ? (
                     <p className="content-inbox__empty">素材はありません</p>
                   ) : (

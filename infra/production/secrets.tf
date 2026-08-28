@@ -16,3 +16,8 @@ resource "aws_iam_role_policy" "oauth_secret" {
   role   = aws_iam_role.authoring_runtime.id
   policy = data.aws_iam_policy_document.oauth_secret.json
 }
+
+resource "aws_secretsmanager_secret" "inbox_sources" {
+  name                    = "weblog-authoring-production/inbox-sources"
+  recovery_window_in_days = 7
+}

@@ -10,6 +10,7 @@ require "weblog_authoring/lambda_session"
 require "weblog_authoring/production_secrets"
 require "weblog_authoring/search_index"
 require "aws-sdk-sqs"
+require "aws-sdk-lambda"
 
 module WeblogAuthoring
   module LambdaHandler
@@ -34,6 +35,8 @@ module WeblogAuthoring
           site_bucket: ENV.fetch("SITE_BUCKET"),
           sqs_client: Aws::SQS::Client.new,
           search_queue_url: ENV["SEARCH_INDEX_QUEUE_URL"],
+          lambda_client: Aws::Lambda::Client.new,
+          inbox_sync_function_name: ENV["INBOX_SYNC_FUNCTION_NAME"],
           search_index: SearchIndex.new(s3_client:, bucket: ENV.fetch("SITE_BUCKET")),
           embed_fetcher: EmbedMetadataFetcher.new,
           oauth: GitHubOAuth.new(

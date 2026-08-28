@@ -18,6 +18,7 @@ resource "aws_lambda_function" "authoring" {
       DEVELOPMENT_ASSET_BUCKET = "weblog-asonas-assets-dev-${data.aws_caller_identity.current.account_id}"
       SITE_BUCKET              = aws_s3_bucket.site.id
       SEARCH_INDEX_QUEUE_URL   = aws_sqs_queue.search_index.url
+      INBOX_SYNC_FUNCTION_NAME = aws_lambda_function.inbox_sync.function_name
     }
   }
 
@@ -26,6 +27,7 @@ resource "aws_lambda_function" "authoring" {
     aws_iam_role_policy.embed_cache,
     aws_iam_role_policy.feed_publish,
     aws_iam_role_policy.image_upload,
+    aws_iam_role_policy.invoke_inbox_sync,
     aws_iam_role_policy.oauth_secret,
     aws_iam_role_policy.search_index_notify,
     aws_iam_role_policy.search_index_read,

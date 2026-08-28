@@ -36,7 +36,9 @@ resource "aws_apigatewayv2_route" "authoring" {
     "POST /api/mobile/uploads/{upload_id}/complete" = "NONE"
     "DELETE /api/mobile/devices/{device_id}"        = "NONE"
     "GET /api/inbox"                                = "NONE"
+    "GET /api/inbox/sync/{run_id}"                  = "NONE"
     "POST /api/inbox/adopt"                         = "NONE"
+    "POST /api/inbox/sync"                          = "NONE"
     "PATCH /api/authoring/pages/{id}"               = "NONE"
   }
 

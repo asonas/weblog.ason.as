@@ -55,3 +55,32 @@ resource "aws_ecr_lifecycle_policy" "search_indexer" {
     ]
   })
 }
+
+resource "aws_ecr_repository" "inbox_sync" {
+  name                 = "weblog-inbox-sync-production"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "inbox_sync" {
+  repository = aws_ecr_repository.inbox_sync.name
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep the latest ten images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 10
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}

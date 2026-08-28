@@ -14,7 +14,7 @@ require_relative "names"
 
 module WeblogAuthoring
   class DevelopmentDatabase
-    SCHEMA_VERSION = 5
+    SCHEMA_VERSION = 6
     INBOX_RETENTION_SECONDS = 7 * 24 * 60 * 60
     ADOPTION_RETENTION_SECONDS = 14 * 24 * 60 * 60
     TOKYO_OFFSET = "+09:00"
@@ -135,6 +135,204 @@ module WeblogAuthoring
           ]
         )
         find_inbox_item_by_identity(database, source, kind, source_id)
+      end
+    end
+
+    def start_inbox_sync_run(run_id:, trigger:, started_at:)
+      with_connection do |database|
+        database.transaction do
+          database.execute(
+            "DELETE FROM inbox_sync_run_sources WHERE run_id IN (SELECT id FROM inbox_sync_runs WHERE expires_at <= ?)",
+            serialize_time(started_at)
+          )
+          database.execute("DELETE FROM inbox_sync_runs WHERE expires_at <= ?", serialize_time(started_at))
+          active_run_id = database.get_first_value(
+            "SELECT id FROM inbox_sync_runs WHERE status IN ('queued', 'running') ORDER BY started_at LIMIT 1"
+          )
+          next false if active_run_id && active_run_id != run_id
+
+          database.execute(
+            <<~SQL,
+              INSERT INTO inbox_sync_runs (id, trigger, status, started_at, completed_at, expires_at)
+              VALUES (?, ?, 'running', ?, NULL, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                status = 'running',
+                started_at = excluded.started_at,
+                completed_at = NULL,
+                expires_at = excluded.expires_at
+            SQL
+            [run_id, trigger, serialize_time(started_at), serialize_time(started_at + 86_400)]
+          )
+          true
+        end
+      end
+    end
+
+    def queue_inbox_sync_run(run_id:, trigger:, queued_at:)
+      with_connection do |database|
+        database.transaction do
+          timestamp = serialize_time(queued_at)
+          database.execute(
+            "DELETE FROM inbox_sync_run_sources WHERE run_id IN (SELECT id FROM inbox_sync_runs WHERE expires_at <= ?)",
+            timestamp
+          )
+          database.execute("DELETE FROM inbox_sync_runs WHERE expires_at <= ?", timestamp)
+          active = database.get_first_value(
+            "SELECT 1 FROM inbox_sync_runs WHERE status IN ('queued', 'running') LIMIT 1"
+          )
+          next false if active
+
+          database.execute(
+            <<~SQL,
+              INSERT INTO inbox_sync_runs (id, trigger, status, started_at, completed_at, expires_at)
+              VALUES (?, ?, 'queued', ?, NULL, ?)
+            SQL
+            [run_id, trigger, timestamp, serialize_time(queued_at + 86_400)]
+          )
+          true
+        end
+      end
+    end
+
+    def inbox_sync_run(run_id:)
+      with_connection do |database|
+        row = database.get_first_row(
+          "SELECT id, trigger, status, started_at, completed_at FROM inbox_sync_runs WHERE id = ?",
+          run_id
+        )
+        next nil if row.nil?
+
+        sources = database.execute(
+          <<~SQL,
+            SELECT source, status, fetched_count, created_count, updated_count,
+                   deleted_count, error, completed_at
+            FROM inbox_sync_run_sources
+            WHERE run_id = ?
+            ORDER BY rowid
+          SQL
+          run_id
+        ).map do |source|
+          {
+            "source" => source.fetch(0), "status" => source.fetch(1),
+            "fetched_count" => source.fetch(2), "created_count" => source.fetch(3),
+            "updated_count" => source.fetch(4), "deleted_count" => source.fetch(5),
+            "error" => source.fetch(6), "completed_at" => source.fetch(7),
+          }
+        end
+        {
+          "id" => row.fetch(0), "trigger" => row.fetch(1), "status" => row.fetch(2),
+          "started_at" => row.fetch(3), "completed_at" => row.fetch(4), "sources" => sources,
+        }
+      end
+    end
+
+    def inbox_source_sync_state(source:)
+      with_connection do |database|
+        row = database.get_first_row(
+          <<~SQL,
+            SELECT source, last_attempted_at, last_succeeded_at, watermark, last_error, updated_at
+            FROM inbox_source_sync_states
+            WHERE source = ?
+          SQL
+          source
+        )
+        row && {
+          "source" => row.fetch(0), "last_attempted_at" => row.fetch(1),
+          "last_succeeded_at" => row.fetch(2), "watermark" => row.fetch(3),
+          "last_error" => row.fetch(4), "updated_at" => row.fetch(5),
+        }
+      end
+    end
+
+    def apply_inbox_source_snapshot(run_id:, source:, snapshot:, completed_at:)
+      with_connection do |database|
+        database.transaction do
+          counts = { created_count: 0, updated_count: 0, deleted_count: 0 }
+          snapshot.items.each do |item|
+            suppressed = database.get_first_value(
+              "SELECT 1 FROM consumed_inbox_items WHERE source = ? AND kind = ? AND source_id = ? AND expires_at > ?",
+              [source, item.kind, item.source_id, serialize_time(completed_at)]
+            )
+            next if suppressed
+
+            existing = database.get_first_value(
+              "SELECT 1 FROM inbox_items WHERE source = ? AND kind = ? AND source_id = ?",
+              [source, item.kind, item.source_id]
+            )
+            database.execute(
+              <<~SQL,
+                INSERT INTO inbox_items (
+                  id, source, kind, source_id, occurred_at, ingested_at, expires_at,
+                  payload, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source, kind, source_id) DO UPDATE SET
+                  occurred_at = excluded.occurred_at,
+                  payload = excluded.payload,
+                  updated_at = excluded.updated_at
+              SQL
+              [
+                new_id, source, item.kind, item.source_id, serialize_time(item.occurred_at),
+                serialize_time(completed_at), serialize_time(completed_at + INBOX_RETENTION_SECONDS),
+                JSON.generate(item.payload), serialize_time(completed_at), serialize_time(completed_at),
+              ]
+            )
+            counts[existing ? :updated_count : :created_count] += 1
+          end
+
+          if snapshot.complete
+            identities = snapshot.items.map { |item| [item.kind, item.source_id] }
+            if identities.empty?
+              database.execute("DELETE FROM inbox_items WHERE source = ?", source)
+            else
+              retained = Array.new(identities.length, "(kind = ? AND source_id = ?)").join(" OR ")
+              database.execute(
+                "DELETE FROM inbox_items WHERE source = ? AND NOT (#{retained})",
+                [source, *identities.flatten]
+              )
+            end
+            counts[:deleted_count] = database.changes
+          end
+
+          record_inbox_source_success(database, run_id:, source:, snapshot:, counts:, completed_at:)
+          counts
+        end
+      end
+    end
+
+    def fail_inbox_source_sync(run_id:, source:, error:, completed_at:)
+      with_connection do |database|
+        database.transaction do
+          database.execute(
+            <<~SQL,
+              INSERT INTO inbox_sync_run_sources (
+                run_id, source, status, fetched_count, created_count, updated_count,
+                deleted_count, error, completed_at
+              ) VALUES (?, ?, 'failed', 0, 0, 0, 0, ?, ?)
+            SQL
+            [run_id, source, error, serialize_time(completed_at)]
+          )
+          database.execute(
+            <<~SQL,
+              INSERT INTO inbox_source_sync_states (
+                source, last_attempted_at, last_succeeded_at, watermark, last_error, updated_at
+              ) VALUES (?, ?, NULL, NULL, ?, ?)
+              ON CONFLICT(source) DO UPDATE SET
+                last_attempted_at = excluded.last_attempted_at,
+                last_error = excluded.last_error,
+                updated_at = excluded.updated_at
+            SQL
+            [source, serialize_time(completed_at), error, serialize_time(completed_at)]
+          )
+        end
+      end
+    end
+
+    def finish_inbox_sync_run(run_id:, status:, completed_at:)
+      with_connection do |database|
+        database.execute(
+          "UPDATE inbox_sync_runs SET status = ?, completed_at = ? WHERE id = ?",
+          [status, serialize_time(completed_at), run_id]
+        )
       end
     end
 
@@ -490,22 +688,31 @@ module WeblogAuthoring
         migrate_date_pages_to_title_routes(database)
         create_inbox_schema(database)
         create_mobile_upload_schema(database)
+        create_inbox_sync_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
       if version == 2 && table_exists?(database, "pages")
         create_inbox_schema(database)
         create_mobile_upload_schema(database)
+        create_inbox_sync_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
       if version == 3 && table_exists?(database, "pages")
         create_mobile_upload_schema(database)
+        create_inbox_sync_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
       if version == 4 && table_exists?(database, "pages")
         create_inbox_schema(database)
+        create_inbox_sync_schema(database)
+        database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
+        return
+      end
+      if version == 5 && table_exists?(database, "pages")
+        create_inbox_sync_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
@@ -542,6 +749,7 @@ module WeblogAuthoring
       )
       create_inbox_schema(database)
       create_mobile_upload_schema(database)
+      create_inbox_sync_schema(database)
     end
 
     def table_exists?(database, table)
@@ -629,6 +837,73 @@ module WeblogAuthoring
             UNIQUE(device_id, client_upload_id)
           );
         SQL
+      )
+    end
+
+    def create_inbox_sync_schema(database)
+      database.execute_batch(
+        <<~SQL
+          CREATE TABLE IF NOT EXISTS inbox_source_sync_states (
+            source TEXT PRIMARY KEY,
+            last_attempted_at TEXT NOT NULL,
+            last_succeeded_at TEXT,
+            watermark TEXT,
+            last_error TEXT,
+            updated_at TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS inbox_sync_runs (
+            id TEXT PRIMARY KEY,
+            trigger TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            expires_at TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS inbox_sync_run_sources (
+            run_id TEXT NOT NULL,
+            source TEXT NOT NULL,
+            status TEXT NOT NULL,
+            fetched_count INTEGER NOT NULL,
+            created_count INTEGER NOT NULL,
+            updated_count INTEGER NOT NULL,
+            deleted_count INTEGER NOT NULL,
+            error TEXT,
+            completed_at TEXT NOT NULL,
+            PRIMARY KEY(run_id, source)
+          );
+        SQL
+      )
+    end
+
+    def record_inbox_source_success(database, run_id:, source:, snapshot:, counts:, completed_at:)
+      database.execute(
+        <<~SQL,
+          INSERT INTO inbox_sync_run_sources (
+            run_id, source, status, fetched_count, created_count, updated_count,
+            deleted_count, error, completed_at
+          ) VALUES (?, ?, 'succeeded', ?, ?, ?, ?, NULL, ?)
+        SQL
+        [
+          run_id, source, snapshot.items.length, counts.fetch(:created_count),
+          counts.fetch(:updated_count), counts.fetch(:deleted_count), serialize_time(completed_at),
+        ]
+      )
+      database.execute(
+        <<~SQL,
+          INSERT INTO inbox_source_sync_states (
+            source, last_attempted_at, last_succeeded_at, watermark, last_error, updated_at
+          ) VALUES (?, ?, ?, ?, NULL, ?)
+          ON CONFLICT(source) DO UPDATE SET
+            last_attempted_at = excluded.last_attempted_at,
+            last_succeeded_at = excluded.last_succeeded_at,
+            watermark = excluded.watermark,
+            last_error = NULL,
+            updated_at = excluded.updated_at
+        SQL
+        [
+          source, serialize_time(completed_at), serialize_time(completed_at),
+          snapshot.watermark, serialize_time(completed_at),
+        ]
       )
     end
 

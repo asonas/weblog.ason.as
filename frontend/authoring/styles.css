@@ -1705,6 +1705,31 @@ h2 {
   text-align: center;
 }
 
+.content-inbox__toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.content-inbox__sync {
+  display: grid;
+  place-items: center;
+  inline-size: 2.5rem;
+  min-block-size: 2.5rem;
+  padding: 0.55rem;
+  border-color: var(--separator);
+  border-radius: 50%;
+}
+
+.content-inbox__sync svg {
+  inline-size: 100%;
+  block-size: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .content-inbox__items {
   display: grid;
   gap: 0.65rem;

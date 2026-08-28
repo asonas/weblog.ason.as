@@ -163,6 +163,40 @@ module WeblogAuthoring
           UNIQUE (device_id, client_upload_id)
         )
       SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.inbox_source_sync_states (
+          source TEXT PRIMARY KEY,
+          last_attempted_at TIMESTAMPTZ NOT NULL,
+          last_succeeded_at TIMESTAMPTZ,
+          watermark TEXT,
+          last_error TEXT,
+          updated_at TIMESTAMPTZ NOT NULL
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.inbox_sync_runs (
+          id TEXT PRIMARY KEY,
+          trigger TEXT NOT NULL,
+          status TEXT NOT NULL,
+          started_at TIMESTAMPTZ NOT NULL,
+          completed_at TIMESTAMPTZ,
+          expires_at TIMESTAMPTZ NOT NULL
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.inbox_sync_run_sources (
+          run_id TEXT NOT NULL,
+          source TEXT NOT NULL,
+          status TEXT NOT NULL,
+          fetched_count INTEGER NOT NULL,
+          created_count INTEGER NOT NULL,
+          updated_count INTEGER NOT NULL,
+          deleted_count INTEGER NOT NULL,
+          error TEXT,
+          completed_at TIMESTAMPTZ NOT NULL,
+          PRIMARY KEY (run_id, source)
+        )
+      SQL
     end
 
     def grant_privileges(connection)

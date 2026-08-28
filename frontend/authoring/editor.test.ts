@@ -318,6 +318,80 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
   }
 });
 
+test("manually synchronizes the inbox and refreshes it after completion", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  let inboxReads = 0;
+  const pageResponse = {
+    mode: "editor", id: "page-id", page_type: "named", date: null, name: "current", title: null,
+    updated_at: "2026-08-26T12:00:00+09:00", route: "current", body: "本文",
+    linked_pages: [], linked_pages_has_more: false
+  };
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    requests.push(url);
+    if (url === "/api/inbox") {
+      inboxReads += 1;
+      return new Response(JSON.stringify({
+        items: inboxReads === 1 ? [] : [{
+          id: "bookmark-1", source: "raindrop", kind: "bookmark", source_id: "1",
+          occurred_at: "2026-08-28T11:00:00+09:00", ingested_at: "2026-08-28T12:00:00+09:00",
+          expires_at: "2026-09-04T12:00:00+09:00",
+          payload: { url: "https://example.com" }, used_in_pages: []
+        }]
+      }), { headers: { "content-type": "application/json" } });
+    }
+    if (url === "/api/inbox/sync") {
+      return new Response(JSON.stringify({ run_id: "run-1", status: "queued" }), {
+        status: 202, headers: { "content-type": "application/json" }
+      });
+    }
+    if (url === "/api/inbox/sync/run-1") {
+      return new Response(JSON.stringify({ id: "run-1", status: "succeeded", sources: [] }), {
+        headers: { "content-type": "application/json" }
+      });
+    }
+    if (url.startsWith("/api/page-names")) {
+      return new Response(JSON.stringify({ names: [] }), { headers: { "content-type": "application/json" } });
+    }
+    if (url.startsWith("/api/routes/") || url.startsWith("/api/related")) {
+      return new Response(JSON.stringify(pageResponse), { headers: { "content-type": "application/json", etag: "\"same\"" } });
+    }
+    throw new Error(`unexpected request: ${url}`);
+  };
+  const bootstrap: EditorBootstrap = {
+    page_id: "page-id", page_type: "named", date: "", name: "current", title: "current", body: "本文",
+    expected_updated_at: "2026-08-26T11:00:00+09:00", save_message: "", linked_pages: [], linked_pages_has_more: false
+  };
+
+  try {
+    await act(async () => {
+      root.render(createElement(AuthoringEditor, { bootstrap }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".content-inbox__tab")!.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".content-inbox__sync")!.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    assert.deepEqual(requests.filter((url) => url.startsWith("/api/inbox")), [
+      "/api/inbox", "/api/inbox/sync", "/api/inbox/sync/run-1", "/api/inbox"
+    ]);
+    assert.equal(container.querySelector(".content-inbox__kind")?.textContent, "Raindrop");
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
 test("extracts video IDs from YouTube URLs", () => {
   assert.equal(youtubeVideoId("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "dQw4w9WgXcQ");
   assert.equal(youtubeVideoId("https://youtu.be/dQw4w9WgXcQ?t=42"), "dQw4w9WgXcQ");

@@ -22,6 +22,7 @@ require_relative "embed_metadata"
 require_relative "github_oauth"
 require_relative "image_inbox"
 require_relative "image_upload"
+require_relative "inbox_sync"
 require_relative "mobile_upload"
 require_relative "models"
 require_relative "names"
@@ -408,6 +409,35 @@ module WeblogAuthoring
 
     post "/api/inbox/adopt" do
       api_response { |payload| image_inbox.prepare(item_id: required_string(payload, "item_id")) }
+    end
+
+    post "/api/inbox/sync" do
+      api_response(202) do |_payload|
+        run_id = SecureRandom.uuid.delete("-")
+        queued = settings.database.queue_inbox_sync_run(
+          run_id:, trigger: "manual", queued_at: settings.clock.call
+        )
+        raise ConflictError, "Inbox sync is already running" unless queued
+
+        InboxSync::Runner.new(
+          database: settings.database,
+          sources: {
+            "bluesky" => InboxSync::PendingSource.new,
+            "raindrop" => InboxSync::PendingSource.new,
+            "c4p" => InboxSync::PendingSource.new,
+          },
+          clock: settings.clock
+        ).call(trigger: "manual", run_id:)
+        { "run_id" => run_id, "status" => "queued" }
+      end
+    end
+
+    get "/api/inbox/sync/:run_id" do
+      require_authenticated! if settings.authentication_required
+      run = settings.database.inbox_sync_run(run_id: params.fetch("run_id"))
+      halt 404 if run.nil?
+
+      json_response(run)
     end
 
     patch "/api/authoring/pages/:id" do
