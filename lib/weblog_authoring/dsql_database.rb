@@ -121,14 +121,40 @@ module WeblogAuthoring
       end
     end
 
+    def scrapbox_line_metadata(page_id)
+      with_connection do |connection|
+        result = connection.exec_params(
+          <<~SQL,
+            SELECT metadata.line_index, metadata.created_at, metadata.updated_at, metadata.user_id
+            FROM #{SCHEMA}.scrapbox_line_metadata metadata
+            JOIN #{SCHEMA}.pages pages
+              ON pages.id = metadata.page_id AND pages.body_hash = metadata.body_hash
+            WHERE metadata.page_id = $1
+            ORDER BY metadata.line_index
+          SQL
+          [page_id]
+        )
+        result.map do |row|
+          {
+            line_index: Integer(row.fetch("line_index")),
+            created_at: row["created_at"] && parse_time(row.fetch("created_at")),
+            updated_at: row["updated_at"] && parse_time(row.fetch("updated_at")),
+            user_id: row["user_id"],
+          }
+        end
+      end
+    end
+
     def save(request)
       current = request.page_id && find(request.page_id)
+      current_line_metadata = current && scrapbox_line_metadata(current.id)
       document = current.nil? ? new_document(request) : updated_document(current, request)
 
       with_connection do |connection|
         connection.transaction do
           ensure_unique_route!(connection, document, current)
           current.nil? ? insert_page(connection, document) : update_page(connection, document)
+          replace_line_metadata_after_save(connection, document, current, current_line_metadata || [])
           replace_links(connection, document)
           request.consumed_inbox_item_ids.each do |item_id|
             record_inbox_item_usage_with_connection(connection, item_id, document.id)
@@ -1057,6 +1083,44 @@ module WeblogAuthoring
             VALUES ($1, $2, $3, $4)
           SQL
           [document.id, target_id, link.name, position]
+        )
+      end
+    end
+
+    def replace_line_metadata_after_save(connection, document, current, current_metadata)
+      previous_lines = current&.body.to_s.split("\n", -1)
+      metadata_by_line = Hash.new { |lines, body| lines[body] = [] }
+      previous_lines.each_with_index do |line, index|
+        metadata = current_metadata[index]
+        metadata_by_line[line] << metadata unless metadata.nil?
+      end
+
+      timestamp = document.updated_at
+      lines = document.body.split("\n", -1).map do |line|
+        previous = metadata_by_line[line].shift
+        {
+          created_at: previous&.fetch(:created_at, nil) || timestamp,
+          updated_at: previous&.fetch(:updated_at, nil) || timestamp,
+          user_id: previous&.fetch(:user_id, nil),
+        }
+      end
+
+      connection.exec_params("DELETE FROM #{SCHEMA}.scrapbox_line_metadata WHERE page_id = $1", [document.id])
+      lines.each_with_index do |line, line_index|
+        connection.exec_params(
+          <<~SQL,
+            INSERT INTO #{SCHEMA}.scrapbox_line_metadata (
+              page_id, body_hash, line_index, created_at, updated_at, user_id
+            ) VALUES ($1, $2, $3, $4, $5, $6)
+          SQL
+          [
+            document.id,
+            Digest::SHA256.hexdigest(document.body),
+            line_index,
+            line.fetch(:created_at),
+            line.fetch(:updated_at),
+            line.fetch(:user_id),
+          ]
         )
       end
     end

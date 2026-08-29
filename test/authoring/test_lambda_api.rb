@@ -96,6 +96,10 @@ class LambdaApiTest < Minitest::Test
       pages.fetch(0)
     end
 
+    def scrapbox_line_metadata(_page_id)
+      [{ updated_at: Time.iso8601("2026-08-29T13:23:44+00:00") }]
+    end
+
     def list_inbox_items(source: nil, kind: nil)
       @inbox_filters = { source:, kind: }
       @inbox_items.select do |item|
@@ -318,6 +322,17 @@ class LambdaApiTest < Minitest::Test
     assert_equal 200, response.fetch(:statusCode)
     assert_equal "editor", page.fetch("mode")
     assert_equal "本文", page.fetch("body")
+    assert_equal ["2026-08-29T13:23:44.000000000+00:00"], page.fetch("line_updated_at")
+  end
+
+  def test_page_without_line_history_uses_page_update_time
+    @database.define_singleton_method(:scrapbox_line_metadata) { |_page_id| [] }
+    @database.pages.replace([page_document(id: "page-id", name: "記事名", body: "一行目\n二行目")])
+
+    response = @api.call(event("GET", "/api/pages/page-id", { "id" => "page-id" }))
+    page = JSON.parse(response.fetch(:body))
+
+    assert_equal Array.new(2, @database.pages.fetch(0).updated_at.iso8601(9)), page.fetch("line_updated_at")
   end
 
   def test_page_response_accepts_a_weak_matching_etag
@@ -602,6 +617,8 @@ class LambdaApiTest < Minitest::Test
     ))
     assert_equal 201, allowed.fetch(:statusCode)
     assert_equal "本文", @database.saved_requests.fetch(0).body
+    assert_equal ["2026-08-29T13:23:44.000000000+00:00"],
+                 JSON.parse(allowed.fetch(:body)).fetch("line_updated_at")
   end
 
   def test_successful_save_requests_a_debounced_search_index_update

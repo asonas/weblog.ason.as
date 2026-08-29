@@ -754,11 +754,21 @@ module WeblogAuthoring
         "name" => resolved_name,
         "title" => resolved_title,
         "body" => resolved_body,
+        "line_updated_at" => page ? line_updated_at(page) : [],
         "expected_updated_at" => page&.updated_at&.iso8601(9).to_s,
         "save_message" => "",
         "linked_pages" => [],
         "linked_pages_has_more" => linked_pages_has_more.nil? ? !page.nil? : linked_pages_has_more,
       }
+    end
+
+    def line_updated_at(page)
+      metadata = @database.scrapbox_line_metadata(page.id)
+      return Array.new(page.body.split("\n", -1).length, page.updated_at.iso8601(9)) if metadata.empty?
+
+      metadata.map do |line|
+        line.fetch(:updated_at)&.iso8601(9)
+      end
     end
 
     def related_page_result(route, body, excluding_id: nil, offset: 0)
@@ -845,6 +855,7 @@ module WeblogAuthoring
         "title" => page.title,
         "status" => page.status,
         "updated_at" => page.updated_at.iso8601(9),
+        "line_updated_at" => line_updated_at(page),
         "route" => page.route,
         "linked_pages" => related.fetch("pages"),
         "linked_pages_has_more" => related.fetch("has_more"),

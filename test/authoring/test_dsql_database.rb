@@ -37,13 +37,14 @@ class DsqlDatabaseTest < Minitest::Test
       @committed_adoptions = []
       @usages = []
       @adoptions = {}
+      @line_metadata = {}
     end
 
     def transaction
-      snapshot = Marshal.load(Marshal.dump([@pages, @links, @items, @consumed, @committed_adoptions, @usages]))
+      snapshot = Marshal.load(Marshal.dump([@pages, @links, @items, @consumed, @committed_adoptions, @usages, @line_metadata]))
       yield
     rescue StandardError
-      @pages, @links, @items, @consumed, @committed_adoptions, @usages = snapshot
+      @pages, @links, @items, @consumed, @committed_adoptions, @usages, @line_metadata = snapshot
       raise
     end
 
@@ -59,6 +60,20 @@ class DsqlDatabaseTest < Minitest::Test
 
     def exec_params(statement, params)
       case statement
+      when /FROM weblog_authoring\.scrapbox_line_metadata metadata/
+        page = @pages[params.fetch(0)]
+        rows = @line_metadata.fetch(params.fetch(0), [])
+        Result.new(page && rows.first&.fetch("body_hash", nil) == page.fetch("body_hash") ? rows : [])
+      when /DELETE FROM weblog_authoring\.scrapbox_line_metadata/
+        @line_metadata.delete(params.fetch(0))
+        Result.new
+      when /INSERT INTO weblog_authoring\.scrapbox_line_metadata/
+        @line_metadata[params.fetch(0)] ||= []
+        @line_metadata.fetch(params.fetch(0)) << {
+          "body_hash" => params.fetch(1), "line_index" => params.fetch(2),
+          "created_at" => params.fetch(3), "updated_at" => params.fetch(4), "user_id" => params.fetch(5),
+        }
+        Result.new
       when /\A\s*SELECT.*FROM weblog_authoring\.inbox_items\s+WHERE id/m
         item = @items[params.fetch(0)]
         Result.new(item && item.fetch("expires_at") > params.fetch(1) ? [item] : [])
@@ -187,6 +202,22 @@ class DsqlDatabaseTest < Minitest::Test
     assert_equal updated, database.find(page.id)
   end
 
+  def test_tracks_line_update_times_across_page_saves
+    later = FIXED_TIME + 3600
+    times = [FIXED_TIME, later]
+    database = dsql_database(clock: -> { times.shift || later })
+    page = database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "行履歴", body: "維持\n変更前"
+    ))
+    updated = database.save(WeblogAuthoring::SaveRequest.new(
+      page_id: page.id, page_type: page.page_type, name: page.name,
+      body: "維持\n変更後", expected_updated_at: page.updated_at
+    ))
+
+    assert_equal [FIXED_TIME, later],
+                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at) }
+  end
+
   def test_page_save_records_inbox_usage_without_removing_the_item
     database = dsql_database
     @pool.connection.add_inbox_item(inbox_row("item-1", expires_at: FIXED_TIME + 3600))
@@ -235,12 +266,12 @@ class DsqlDatabaseTest < Minitest::Test
 
   private
 
-  def dsql_database
+  def dsql_database(clock: -> { FIXED_TIME })
     @pool = Pool.new
     WeblogAuthoring::DsqlDatabase.new(
       host: "cluster.dsql.ap-northeast-1.on.aws",
       content_dir: Pathname("content"),
-      clock: -> { FIXED_TIME },
+      clock:,
       pool: @pool
     )
   end

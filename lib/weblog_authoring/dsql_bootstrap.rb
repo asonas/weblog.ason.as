@@ -76,6 +76,17 @@ module WeblogAuthoring
         )
       SQL
       connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.scrapbox_line_metadata (
+          page_id TEXT NOT NULL,
+          body_hash TEXT NOT NULL,
+          line_index INTEGER NOT NULL,
+          created_at TIMESTAMPTZ,
+          updated_at TIMESTAMPTZ,
+          user_id TEXT,
+          PRIMARY KEY (page_id, line_index)
+        )
+      SQL
+      connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.inbox_items (
           id TEXT PRIMARY KEY,
           source TEXT NOT NULL,
