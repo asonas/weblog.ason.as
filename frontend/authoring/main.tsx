@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import type { RefObject } from "react";
 
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
+import { FeedLoadQueue } from "./feedLoadQueue";
 import { captureScrollAnchor, restoreScrollAnchor, type ScrollAnchor } from "./scrollAnchor";
 import { SearchPage, SiteSearch } from "./search";
 import "./styles.css";
@@ -402,34 +403,36 @@ function FeedColumn({ kind, heading, initialPages, selectedMonth, feedRef, pendi
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadingRef = useRef(false);
+  const loadQueueRef = useRef(new FeedLoadQueue());
   const newerRef = useRef<HTMLDivElement | null>(null);
   const olderRef = useRef<HTMLDivElement | null>(null);
 
   const loadWindow = async (url: string, direction: "replace" | "newer" | "older") => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    setIsLoading(true);
-    setLoadError(null);
-    try {
-      const response = await fetchBootstrap<PageWindow>(url);
-      if (direction === "newer" && feedRef.current && !pendingScrollAnchorRef.current) {
-        pendingScrollAnchorRef.current = captureScrollAnchor(feedRef.current);
+    await loadQueueRef.current.run({ url, direction }, async (request) => {
+      loadingRef.current = true;
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const response = await fetchBootstrap<PageWindow>(request.url);
+        if (request.direction === "newer" && feedRef.current && !pendingScrollAnchorRef.current) {
+          pendingScrollAnchorRef.current = captureScrollAnchor(feedRef.current);
+        }
+        setWindowState((current) => ({
+          pages: request.direction === "replace" ? response.pages
+            : request.direction === "newer" ? [...response.pages, ...current.pages]
+              : [...current.pages, ...response.pages],
+          newer_cursor: request.direction === "older" ? current.newer_cursor : response.newer_cursor,
+          older_cursor: request.direction === "newer" ? current.older_cursor : response.older_cursor,
+          has_newer: request.direction === "older" ? current.has_newer : response.has_newer,
+          has_older: request.direction === "newer" ? current.has_older : response.has_older
+        }));
+      } catch (reason: unknown) {
+        setLoadError(reason instanceof Error ? reason.message : "記事を読み込めませんでした");
+      } finally {
+        loadingRef.current = false;
+        setIsLoading(false);
       }
-      setWindowState((current) => ({
-        pages: direction === "replace" ? response.pages
-          : direction === "newer" ? [...response.pages, ...current.pages]
-            : [...current.pages, ...response.pages],
-        newer_cursor: direction === "older" ? current.newer_cursor : response.newer_cursor,
-        older_cursor: direction === "newer" ? current.older_cursor : response.older_cursor,
-        has_newer: direction === "older" ? current.has_newer : response.has_newer,
-        has_older: direction === "newer" ? current.has_older : response.has_older
-      }));
-    } catch (reason: unknown) {
-      setLoadError(reason instanceof Error ? reason.message : "記事を読み込めませんでした");
-    } finally {
-      loadingRef.current = false;
-      setIsLoading(false);
-    }
+    });
   };
 
   useLayoutEffect(() => {
