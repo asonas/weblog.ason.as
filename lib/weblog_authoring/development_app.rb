@@ -88,7 +88,7 @@ module WeblogAuthoring
     }.freeze
     ALLOWED_PAGE_TYPES = %w[date named].freeze
     JAPANESE_WEEKDAYS = %w[日曜日 月曜日 火曜日 水曜日 木曜日 金曜日 土曜日].freeze
-    DIARY_DATE_TAG = /\A(?:\d{4}(?:0[1-9]|1[0-2])|(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))\z/
+    DIARY_DATE_TAG = /\A(?:\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])|\d{4}(?:0[1-9]|1[0-2])|(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))\z/
     IMAGE_EXTENSIONS = /\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|\z)/i
     HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]]+)/
     RELATED_PAGE_LIMIT = 50
@@ -1074,8 +1074,8 @@ module WeblogAuthoring
       pages = pages.first(30)
       {
         "pages" => measure(timings, "summaries") { pages.map { |page| page_summary(page) } },
-        "newer_cursor" => pages.empty? ? nil : encode_page_cursor(pages.first),
-        "older_cursor" => pages.empty? ? nil : encode_page_cursor(pages.last),
+        "newer_cursor" => pages.empty? ? nil : encode_page_cursor(pages.first, kind:),
+        "older_cursor" => pages.empty? ? nil : encode_page_cursor(pages.last, kind:),
         "has_newer" => after ? has_more : newer_pages?(pages, before:, kind:),
         "has_older" => after ? older_pages?(pages, kind:) : has_more
       }
@@ -1084,22 +1084,23 @@ module WeblogAuthoring
     def newer_pages?(pages, before:, kind:)
       return false if pages.empty? && before.nil?
 
-      cursor = pages.empty? ? before : page_cursor(pages.first)
+      cursor = pages.empty? ? before : page_cursor(pages.first, kind:)
       settings.database.list_pages(limit: 1, after: cursor, kind:).any?
     end
 
     def older_pages?(pages, kind:)
       return false if pages.empty?
 
-      settings.database.list_pages(limit: 1, before: page_cursor(pages.last), kind:).any?
+      settings.database.list_pages(limit: 1, before: page_cursor(pages.last, kind:), kind:).any?
     end
 
-    def page_cursor(page)
-      { updated_at: page.updated_at, id: page.id }
+    def page_cursor(page, kind:)
+      { timestamp: kind == "diary" ? page.created_at : page.updated_at, id: page.id }
     end
 
-    def encode_page_cursor(page)
-      Base64.urlsafe_encode64(JSON.generate([page.updated_at.iso8601(9), page.id]), padding: false)
+    def encode_page_cursor(page, kind:)
+      cursor = page_cursor(page, kind:)
+      Base64.urlsafe_encode64(JSON.generate([cursor.fetch(:timestamp).iso8601(9), page.id]), padding: false)
     end
 
     def decode_page_cursor(value)
@@ -1107,7 +1108,7 @@ module WeblogAuthoring
 
       updated_at, id = JSON.parse(Base64.urlsafe_decode64(value.to_s))
       halt 422, "カーソルが不正です" unless updated_at.is_a?(String) && id.is_a?(String)
-      { updated_at: Time.iso8601(updated_at), id: }
+      { timestamp: Time.iso8601(updated_at), id: }
     rescue ArgumentError, JSON::ParserError
       halt 422, "カーソルが不正です"
     end
@@ -1116,7 +1117,7 @@ module WeblogAuthoring
       match = /\A(\d{4})-(0[1-9]|1[0-2])\z/.match(value.to_s)
       halt 422, "monthはYYYY-MM形式で指定してください" unless match
       date = Date.new(match[1].to_i, match[2].to_i, 1) >> 1
-      { updated_at: Time.new(date.year, date.month, 1, 0, 0, 0, DevelopmentDatabase::TOKYO_OFFSET), id: "" }
+      { timestamp: Time.new(date.year, date.month, 1, 0, 0, 0, DevelopmentDatabase::TOKYO_OFFSET), id: "" }
     end
 
     def measure(timings, name)
@@ -1151,7 +1152,7 @@ module WeblogAuthoring
         names.concat(page.body.to_s.scan(HASHTAG_PATTERN).flatten)
         names.each do |name|
           tag = name.strip
-          tags << tag unless tag.empty? || JAPANESE_WEEKDAYS.include?(tag) || DIARY_DATE_TAG.match?(tag) || tags.include?(tag)
+          tags << tag unless tag.empty? || tag == "日記" || JAPANESE_WEEKDAYS.include?(tag) || DIARY_DATE_TAG.match?(tag) || tags.include?(tag)
           return tags if tags.length == 20
         end
       end

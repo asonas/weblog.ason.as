@@ -67,16 +67,17 @@ class LambdaApiTest < Minitest::Test
     end
 
     def list_pages(limit: nil, before: nil, after: nil, kind: nil)
-      selected = pages.sort_by { |page| [page.updated_at, page.id] }.reverse
+      timestamp = ->(page) { kind == "diary" ? page.created_at : page.updated_at }
+      selected = pages.sort_by { |page| [timestamp.call(page), page.id] }.reverse
       selected = selected.select do |page|
         is_diary = page.links.any? { |link| link.name == "日記" }
         kind == "diary" ? is_diary : !is_diary
       end if kind
       selected = selected.select do |page|
-        ([page.updated_at, page.id] <=> [before.fetch(:updated_at), before.fetch(:id)]).negative?
+        ([timestamp.call(page), page.id] <=> [before.fetch(:timestamp), before.fetch(:id)]).negative?
       end if before
       selected = selected.select do |page|
-        ([page.updated_at, page.id] <=> [after.fetch(:updated_at), after.fetch(:id)]).positive?
+        ([timestamp.call(page), page.id] <=> [after.fetch(:timestamp), after.fetch(:id)]).positive?
       end if after
       selected = selected.first(limit) if limit
       selected
@@ -256,18 +257,35 @@ class LambdaApiTest < Minitest::Test
     assert_equal ["article"], JSON.parse(articles.fetch(:body)).fetch("pages").map { |page| page.fetch("route") }
   end
 
+  def test_page_windows_order_diaries_by_creation_and_articles_by_update
+    older = Time.iso8601("2026-08-20T10:00:00+09:00")
+    newer = Time.iso8601("2026-08-21T10:00:00+09:00")
+    @database.pages.replace([
+      page_document(id: "new-diary", name: "2026-08-21", body: "[[日記]]", created_at: newer, updated_at: older),
+      page_document(id: "edited-diary", name: "2026-08-20", body: "[[日記]]", created_at: older, updated_at: newer),
+      page_document(id: "new-article", name: "new-article", body: "本文", created_at: newer, updated_at: older),
+      page_document(id: "edited-article", name: "edited-article", body: "本文", created_at: older, updated_at: newer)
+    ])
+
+    diaries = @api.call(event("GET", "/api/pages", query: { "kind" => "diary" }))
+    articles = @api.call(event("GET", "/api/pages", query: { "kind" => "article" }))
+
+    assert_equal %w[2026-08-21 2026-08-20], JSON.parse(diaries.fetch(:body)).fetch("pages").map { |page| page.fetch("route") }
+    assert_equal %w[edited-article new-article], JSON.parse(articles.fetch(:body)).fetch("pages").map { |page| page.fetch("route") }
+  end
+
   def test_lists_home_tags_and_archive_separately
     @database.pages.replace([
       page_document(
         id: "diary",
         name: "日記",
-        body: "[[日記]] [[月曜日]] [[火曜日]] [[202608]] [[0827]] #開発"
+        body: "[[日記]] [[月曜日]] [[火曜日]] [[2026-08-21]] [[202608]] [[0827]] #開発"
       ),
     ])
     tags = @api.call(event("GET", "/api/tags"))
     archive = @api.call(event("GET", "/api/archive"))
 
-    assert_equal %w[日記 開発], JSON.parse(tags.fetch(:body)).fetch("tags")
+    assert_equal %w[開発], JSON.parse(tags.fetch(:body)).fetch("tags")
     assert_equal [{ "year" => 2026, "months" => [8] }], JSON.parse(archive.fetch(:body)).fetch("archive")
   end
 
@@ -822,7 +840,8 @@ class LambdaApiTest < Minitest::Test
     [api, token]
   end
 
-  def page_document(id:, name:, body:)
+  def page_document(id:, name:, body:, created_at: Time.iso8601("2026-08-22T10:00:00+09:00"),
+                    updated_at: Time.iso8601("2026-08-22T11:00:00+09:00"))
     WeblogAuthoring::PageDocument.new(
       id:,
       page_type: "named",
@@ -830,8 +849,8 @@ class LambdaApiTest < Minitest::Test
       page_date: nil,
       title: nil,
       status: "published",
-      created_at: Time.iso8601("2026-08-22T10:00:00+09:00"),
-      updated_at: Time.iso8601("2026-08-22T11:00:00+09:00"),
+      created_at:,
+      updated_at:,
       published_at: Time.iso8601("2026-08-22T11:00:00+09:00"),
       path: Pathname("content/pages/#{id}.md"),
       body:,

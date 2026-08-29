@@ -1499,11 +1499,6 @@ html[data-universe="on"] .linked-pages {
   letter-spacing: 0.08em;
 }
 
-.atlas-split__column > header span {
-  color: var(--muted-ink);
-  font-size: 0.72rem;
-}
-
 .atlas-calendar .home-auth {
   justify-content: flex-start;
   margin-block: 1rem 0;
@@ -1554,11 +1549,6 @@ html[data-universe="on"] .linked-pages {
 
 .atlas-entry a:not(:has(img)) .atlas-entry__body {
   grid-column: 1 / -1;
-}
-
-.atlas-entry time {
-  color: var(--muted-ink);
-  font-size: 0.72rem;
 }
 
 .atlas-entry strong {

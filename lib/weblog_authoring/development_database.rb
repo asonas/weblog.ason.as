@@ -33,6 +33,7 @@ module WeblogAuthoring
 
     def list_pages(limit: nil, before: nil, after: nil, kind: nil)
       with_connection do |database|
+        order_column = kind == "diary" ? "created_at" : "updated_at"
         sql = <<~SQL
             SELECT id, page_type, name, page_date, title, status,
                    created_at, updated_at, published_at, path, body
@@ -46,14 +47,14 @@ module WeblogAuthoring
           values << "日記"
         end
         if before
-          conditions << "(updated_at < ? OR (updated_at = ? AND id < ?))"
-          values.concat([before.fetch(:updated_at).iso8601(9), before.fetch(:updated_at).iso8601(9), before.fetch(:id)])
+          conditions << "(#{order_column} < ? OR (#{order_column} = ? AND id < ?))"
+          values.concat([before.fetch(:timestamp).iso8601(9), before.fetch(:timestamp).iso8601(9), before.fetch(:id)])
         elsif after
-          conditions << "(updated_at > ? OR (updated_at = ? AND id > ?))"
-          values.concat([after.fetch(:updated_at).iso8601(9), after.fetch(:updated_at).iso8601(9), after.fetch(:id)])
+          conditions << "(#{order_column} > ? OR (#{order_column} = ? AND id > ?))"
+          values.concat([after.fetch(:timestamp).iso8601(9), after.fetch(:timestamp).iso8601(9), after.fetch(:id)])
         end
         sql += "WHERE #{conditions.join(' AND ')}\n" unless conditions.empty?
-        sql += "ORDER BY updated_at #{after ? 'ASC' : 'DESC'}, id #{after ? 'ASC' : 'DESC'}\n"
+        sql += "ORDER BY #{order_column} #{after ? 'ASC' : 'DESC'}, id #{after ? 'ASC' : 'DESC'}\n"
         if limit
           sql += "LIMIT ?\n"
           values << limit

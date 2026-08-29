@@ -57,6 +57,7 @@ module WeblogAuthoring
 
     def list_pages(limit: nil, before: nil, after: nil, kind: nil)
       with_connection do |connection|
+        order_column = kind == "diary" ? "created_at" : "updated_at"
         sql = <<~SQL
           SELECT id, page_type, name, page_date, title, status,
                  created_at, updated_at, published_at, path, body
@@ -70,14 +71,14 @@ module WeblogAuthoring
           conditions << (kind == "diary" ? exists : "NOT #{exists}")
         end
         if before
-          values.concat([before.fetch(:updated_at).iso8601(9), before.fetch(:id)])
-          conditions << "(updated_at < $#{values.length - 1} OR (updated_at = $#{values.length - 1} AND id < $#{values.length}))"
+          values.concat([before.fetch(:timestamp).iso8601(9), before.fetch(:id)])
+          conditions << "(#{order_column} < $#{values.length - 1} OR (#{order_column} = $#{values.length - 1} AND id < $#{values.length}))"
         elsif after
-          values.concat([after.fetch(:updated_at).iso8601(9), after.fetch(:id)])
-          conditions << "(updated_at > $#{values.length - 1} OR (updated_at = $#{values.length - 1} AND id > $#{values.length}))"
+          values.concat([after.fetch(:timestamp).iso8601(9), after.fetch(:id)])
+          conditions << "(#{order_column} > $#{values.length - 1} OR (#{order_column} = $#{values.length - 1} AND id > $#{values.length}))"
         end
         sql += "WHERE #{conditions.join(' AND ')}\n" unless conditions.empty?
-        sql += "ORDER BY updated_at #{after ? 'ASC' : 'DESC'}, id #{after ? 'ASC' : 'DESC'}\n"
+        sql += "ORDER BY #{order_column} #{after ? 'ASC' : 'DESC'}, id #{after ? 'ASC' : 'DESC'}\n"
         if limit
           values << limit
           sql += "LIMIT $#{values.length}\n"

@@ -381,7 +381,6 @@ function AtlasEntry({ page }: { page: HomePage }) {
       <a href={`/${encodeURIComponent(page.route)}`}>
         {page.image_url && <img src={page.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />}
         <span className="atlas-entry__body">
-          <time dateTime={page.updated_at}>{formatDate(page.updated_at)}</time>
           <strong>{page.title}</strong>
           {page.excerpt && <span>{page.excerpt}</span>}
         </span>
@@ -464,7 +463,7 @@ function FeedColumn({ kind, heading, initialPages, selectedMonth }: {
 
   return (
     <section className={`atlas-split__column atlas-split__${kind}`} aria-label={`${heading}フィード`} aria-busy={isLoading} ref={columnRef}>
-      <header><h2>{heading}</h2><span>{windowState.pages.length}</span></header>
+      <header><h2>{heading}</h2></header>
       {loadError && <p className="atlas-stream__error" role="alert">{loadError}</p>}
       <div className="atlas-stream__sentinel" ref={newerRef}>
         {!windowState.has_newer && selectedMonth && <span>最新まで表示しています</span>}

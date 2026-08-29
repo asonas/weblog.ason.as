@@ -564,7 +564,7 @@ class TestDevelopmentApp < Minitest::Test
       page_type: "date",
       date: "2026-08-21",
       title: "Viteから開く記事",
-      body: "本文 [[日記]] [[水曜日]] [[202608]] [[0827]] #開発\n[https://example.com/photo.jpg#.png]"
+      body: "本文 [[日記]] [[水曜日]] [[2026-08-21]] [[202608]] [[0827]] #開発\n[https://example.com/photo.jpg#.png]"
     )
     page = JSON.parse(body)
 
@@ -572,9 +572,9 @@ class TestDevelopmentApp < Minitest::Test
     summary = JSON.parse(body).fetch("pages").fetch(0)
     assert_equal 200, status
     assert_equal "2026-08-21T12:00:00.000000000+09:00", summary.fetch("created_at")
-    assert_equal "本文 日記 水曜日 202608 0827", summary.fetch("excerpt")
+    assert_equal "本文 日記 水曜日 2026-08-21 202608 0827", summary.fetch("excerpt")
     assert_equal "https://example.com/photo.jpg", summary.fetch("image_url")
-    assert_equal ["日記", "開発"], JSON.parse(request("GET", "/api/tags").last).fetch("tags")
+    assert_equal ["開発"], JSON.parse(request("GET", "/api/tags").last).fetch("tags")
     assert_equal [{ "year" => 2026, "months" => [8] }], JSON.parse(request("GET", "/api/archive").last).fetch("archive")
 
     status, _headers, body = request("GET", "/api/pages/#{page.fetch("id")}")
@@ -583,7 +583,7 @@ class TestDevelopmentApp < Minitest::Test
     editor = JSON.parse(body)
     assert_equal "editor", editor.fetch("mode")
     assert_equal page.fetch("id"), editor.fetch("page_id")
-    assert_equal "本文 [[日記]] [[水曜日]] [[202608]] [[0827]] #開発\n[https://example.com/photo.jpg#.png]", editor.fetch("body")
+    assert_equal "本文 [[日記]] [[水曜日]] [[2026-08-21]] [[202608]] [[0827]] #開発\n[https://example.com/photo.jpg#.png]", editor.fetch("body")
 
     status, _headers, body = request("GET", "/api/editor/new")
 
