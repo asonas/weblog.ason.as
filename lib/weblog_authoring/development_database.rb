@@ -31,22 +31,29 @@ module WeblogAuthoring
       with_connection { |database| create_schema(database) }
     end
 
-    def list_pages(limit: nil, before: nil, after: nil)
+    def list_pages(limit: nil, before: nil, after: nil, kind: nil)
       with_connection do |database|
         sql = <<~SQL
             SELECT id, page_type, name, page_date, title, status,
                    created_at, updated_at, published_at, path, body
             FROM pages
         SQL
+        conditions = []
         values = []
-        if before
-          sql += "WHERE (created_at < ? OR (created_at = ? AND id < ?))\n"
-          values.concat([before.fetch(:created_at).iso8601(9), before.fetch(:created_at).iso8601(9), before.fetch(:id)])
-        elsif after
-          sql += "WHERE (created_at > ? OR (created_at = ? AND id > ?))\n"
-          values.concat([after.fetch(:created_at).iso8601(9), after.fetch(:created_at).iso8601(9), after.fetch(:id)])
+        if kind
+          exists = "EXISTS (SELECT 1 FROM links WHERE links.source_id = pages.id AND links.target_name = ?)"
+          conditions << (kind == "diary" ? exists : "NOT #{exists}")
+          values << "日記"
         end
-        sql += "ORDER BY created_at #{after ? 'ASC' : 'DESC'}, id #{after ? 'ASC' : 'DESC'}\n"
+        if before
+          conditions << "(updated_at < ? OR (updated_at = ? AND id < ?))"
+          values.concat([before.fetch(:updated_at).iso8601(9), before.fetch(:updated_at).iso8601(9), before.fetch(:id)])
+        elsif after
+          conditions << "(updated_at > ? OR (updated_at = ? AND id > ?))"
+          values.concat([after.fetch(:updated_at).iso8601(9), after.fetch(:updated_at).iso8601(9), after.fetch(:id)])
+        end
+        sql += "WHERE #{conditions.join(' AND ')}\n" unless conditions.empty?
+        sql += "ORDER BY updated_at #{after ? 'ASC' : 'DESC'}, id #{after ? 'ASC' : 'DESC'}\n"
         if limit
           sql += "LIMIT ?\n"
           values << limit

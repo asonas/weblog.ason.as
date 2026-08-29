@@ -631,9 +631,9 @@ class TestDevelopmentApp < Minitest::Test
     february = app_database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "february", body: ""))
     march = app_database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "march", body: ""))
     SQLite3::Database.new(database_path.to_s) do |sqlite|
-      sqlite.execute("UPDATE pages SET created_at = ? WHERE id = ?", ["2025-01-31T12:00:00.000000000+09:00", january.id])
-      sqlite.execute("UPDATE pages SET created_at = ? WHERE id = ?", ["2025-02-01T12:00:00.000000000+09:00", february.id])
-      sqlite.execute("UPDATE pages SET created_at = ? WHERE id = ?", ["2025-03-01T12:00:00.000000000+09:00", march.id])
+      sqlite.execute("UPDATE pages SET updated_at = ? WHERE id = ?", ["2025-01-31T12:00:00.000000000+09:00", january.id])
+      sqlite.execute("UPDATE pages SET updated_at = ? WHERE id = ?", ["2025-02-01T12:00:00.000000000+09:00", february.id])
+      sqlite.execute("UPDATE pages SET updated_at = ? WHERE id = ?", ["2025-03-01T12:00:00.000000000+09:00", march.id])
     end
 
     status, _headers, body = request("GET", "/api/pages?month=2025-01")

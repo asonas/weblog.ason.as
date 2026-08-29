@@ -66,7 +66,7 @@ class TestDevelopmentDatabase < Minitest::Test
     assert_includes error.message, "最初の記事"
   end
 
-  def test_list_pages_orders_pages_by_creation_time_descending
+  def test_list_pages_orders_pages_by_update_time_descending
     current_time = Time.iso8601("2026-08-20T12:00:00+09:00")
     database = WeblogAuthoring::DevelopmentDatabase.new(
       tmpdir.join("data/development/authoring.sqlite3"),
@@ -82,7 +82,14 @@ class TestDevelopmentDatabase < Minitest::Test
       page_type: "named", name: "newer", body: "新しい記事"
     ))
 
-    assert_equal ["newer", "older"], database.list_pages.map(&:name)
+    older = database.find_route("older")
+    current_time = Time.iso8601("2026-08-22T12:00:00+09:00")
+    database.save(WeblogAuthoring::SaveRequest.new(
+      page_id: older.id, page_type: older.page_type, name: older.name,
+      body: "更新した記事", expected_updated_at: older.updated_at
+    ))
+
+    assert_equal ["older", "newer"], database.list_pages.map(&:name)
   end
 
   def test_list_pages_reads_only_the_records_next_to_a_cursor
@@ -93,14 +100,16 @@ class TestDevelopmentDatabase < Minitest::Test
       clock: -> { current_time }
     )
     database.setup!
-    january = database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "january", body: ""))
+    january = database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "january", body: "[[日記]]"))
     current_time = Time.iso8601("2025-02-01T12:00:00+09:00")
     february = database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "february", body: ""))
     current_time = Time.iso8601("2025-03-01T12:00:00+09:00")
     database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "march", body: ""))
 
-    assert_equal ["january"], database.list_pages(limit: 1, before: { created_at: february.created_at, id: february.id }).map(&:name)
-    assert_equal ["february"], database.list_pages(limit: 1, after: { created_at: january.created_at, id: january.id }).map(&:name)
+    assert_equal ["january"], database.list_pages(limit: 1, before: { updated_at: february.updated_at, id: february.id }).map(&:name)
+    assert_equal ["february"], database.list_pages(limit: 1, after: { updated_at: january.updated_at, id: january.id }).map(&:name)
+    assert_equal ["january"], database.list_pages(kind: "diary").map(&:name)
+    assert_equal ["march", "february"], database.list_pages(kind: "article").map(&:name)
   end
 
   def test_save_records_inbox_usage_and_commits_its_image_adoption_atomically

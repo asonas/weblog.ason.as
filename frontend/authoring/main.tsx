@@ -69,6 +69,7 @@ type HomePage = {
   updated_at: string;
   excerpt: string;
   image_url: string | null;
+  is_diary: boolean;
 };
 
 type HomeBootstrap = {
@@ -374,64 +375,55 @@ type PageWindow = Pick<HomeBootstrap,
   "pages" | "newer_cursor" | "older_cursor" | "has_newer" | "has_older"
 >;
 
-function AtlasHome({ initialWindow, tags, archive, archiveRef, auth }: {
-  initialWindow: PageWindow;
-  tags: string[];
-  archive: NonNullable<HomeBootstrap["archive"]>;
-  archiveRef: RefObject<HTMLDivElement | null>;
-  auth: AuthState;
+function AtlasEntry({ page }: { page: HomePage }) {
+  return (
+    <article className="atlas-entry">
+      <a href={`/${encodeURIComponent(page.route)}`}>
+        {page.image_url && <img src={page.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />}
+        <span className="atlas-entry__body">
+          <time dateTime={page.updated_at}>{formatDate(page.updated_at)}</time>
+          <strong>{page.title}</strong>
+          {page.excerpt && <span>{page.excerpt}</span>}
+        </span>
+      </a>
+    </article>
+  );
+}
+
+function FeedColumn({ kind, heading, initialPages, selectedMonth }: {
+  kind: "diary" | "article";
+  heading: string;
+  initialPages: HomePage[];
+  selectedMonth: string | null;
 }) {
-  const [calendarOpen, setCalendarOpen] = useState(() => !window.matchMedia("(max-width: 36rem)").matches);
-  const [pages, setPages] = useState(initialWindow.pages);
-  const [newerCursor, setNewerCursor] = useState(initialWindow.newer_cursor ?? null);
-  const [olderCursor, setOlderCursor] = useState(initialWindow.older_cursor ?? null);
-  const [hasNewer, setHasNewer] = useState(initialWindow.has_newer ?? false);
-  const [hasOlder, setHasOlder] = useState(initialWindow.has_older ?? false);
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [windowState, setWindowState] = useState<PageWindow>({ pages: initialPages });
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadingRef = useRef(false);
-  const streamRef = useRef<HTMLElement | null>(null);
+  const columnRef = useRef<HTMLElement | null>(null);
   const newerRef = useRef<HTMLDivElement | null>(null);
   const olderRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 36rem)");
-    const update = () => setCalendarOpen(!media.matches);
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
 
   const loadWindow = async (url: string, direction: "replace" | "newer" | "older") => {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setIsLoading(true);
     setLoadError(null);
-    const previousHeight = streamRef.current?.scrollHeight ?? 0;
+    const previousHeight = columnRef.current?.scrollHeight ?? 0;
     try {
       const response = await fetchBootstrap<PageWindow>(url);
-      if (direction === "replace") {
-        setPages(response.pages);
-        setSelectedMonth(new URL(url, window.location.href).searchParams.get("month"));
-      } else if (direction === "newer") {
-        setPages((current) => [...response.pages, ...current]);
-      } else {
-        setPages((current) => [...current, ...response.pages]);
-      }
-      if (direction !== "older") {
-        setNewerCursor(response.newer_cursor ?? null);
-        setHasNewer(response.has_newer ?? false);
-      }
-      if (direction !== "newer") {
-        setOlderCursor(response.older_cursor ?? null);
-        setHasOlder(response.has_older ?? false);
-      }
-
-      if (direction === "replace") {
-        requestAnimationFrame(() => streamRef.current?.scrollIntoView({ block: "start" }));
-      } else if (direction === "newer") {
+      setWindowState((current) => ({
+        pages: direction === "replace" ? response.pages
+          : direction === "newer" ? [...response.pages, ...current.pages]
+            : [...current.pages, ...response.pages],
+        newer_cursor: direction === "older" ? current.newer_cursor : response.newer_cursor,
+        older_cursor: direction === "newer" ? current.older_cursor : response.older_cursor,
+        has_newer: direction === "older" ? current.has_newer : response.has_newer,
+        has_older: direction === "newer" ? current.has_older : response.has_older
+      }));
+      if (direction === "newer") {
         requestAnimationFrame(() => {
-          const nextHeight = streamRef.current?.scrollHeight ?? previousHeight;
+          const nextHeight = columnRef.current?.scrollHeight ?? previousHeight;
           window.scrollBy({ top: nextHeight - previousHeight });
         });
       }
@@ -444,17 +436,23 @@ function AtlasHome({ initialWindow, tags, archive, archiveRef, auth }: {
   };
 
   useEffect(() => {
+    const query = new URLSearchParams({ kind });
+    if (selectedMonth) query.set("month", selectedMonth);
+    void loadWindow(`/api/pages?${query}`, "replace");
+  }, [kind, selectedMonth]);
+
+  useEffect(() => {
     const newerTarget = newerRef.current;
     const olderTarget = olderRef.current;
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting || loadingRef.current) continue;
-        if (entry.target === newerTarget && hasNewer && newerCursor) {
-          void loadWindow(`/api/pages?after=${encodeURIComponent(newerCursor)}`, "newer");
+        if (entry.target === newerTarget && windowState.has_newer && windowState.newer_cursor) {
+          void loadWindow(`/api/pages?kind=${kind}&after=${encodeURIComponent(windowState.newer_cursor)}`, "newer");
           return;
         }
-        if (entry.target === olderTarget && hasOlder && olderCursor) {
-          void loadWindow(`/api/pages?before=${encodeURIComponent(olderCursor)}`, "older");
+        if (entry.target === olderTarget && windowState.has_older && windowState.older_cursor) {
+          void loadWindow(`/api/pages?kind=${kind}&before=${encodeURIComponent(windowState.older_cursor)}`, "older");
           return;
         }
       }
@@ -462,7 +460,58 @@ function AtlasHome({ initialWindow, tags, archive, archiveRef, auth }: {
     if (newerTarget) observer.observe(newerTarget);
     if (olderTarget) observer.observe(olderTarget);
     return () => observer.disconnect();
-  }, [hasNewer, hasOlder, newerCursor, olderCursor]);
+  }, [kind, windowState]);
+
+  return (
+    <section className={`atlas-split__column atlas-split__${kind}`} aria-label={`${heading}フィード`} aria-busy={isLoading} ref={columnRef}>
+      <header><h2>{heading}</h2><span>{windowState.pages.length}</span></header>
+      {loadError && <p className="atlas-stream__error" role="alert">{loadError}</p>}
+      <div className="atlas-stream__sentinel" ref={newerRef}>
+        {!windowState.has_newer && selectedMonth && <span>最新まで表示しています</span>}
+      </div>
+      {windowState.pages.map((page) => <AtlasEntry page={page} key={page.id} />)}
+      <div className="atlas-stream__sentinel" ref={olderRef}>
+        {!windowState.has_older && <span>最初まで表示しています</span>}
+      </div>
+    </section>
+  );
+}
+
+function SplitFeed({ initialPages, selectedMonth }: { initialPages: HomePage[]; selectedMonth: string | null }) {
+  return (
+    <div className="atlas-split">
+      <FeedColumn
+        kind="diary"
+        heading="日記"
+        initialPages={initialPages.filter((page) => page.is_diary)}
+        selectedMonth={selectedMonth}
+      />
+      <FeedColumn
+        kind="article"
+        heading="記事"
+        initialPages={initialPages.filter((page) => !page.is_diary)}
+        selectedMonth={selectedMonth}
+      />
+    </div>
+  );
+}
+
+function AtlasHome({ initialWindow, tags, archive, archiveRef, auth }: {
+  initialWindow: PageWindow;
+  tags: string[];
+  archive: NonNullable<HomeBootstrap["archive"]>;
+  archiveRef: RefObject<HTMLDivElement | null>;
+  auth: AuthState;
+}) {
+  const [calendarOpen, setCalendarOpen] = useState(() => !window.matchMedia("(max-width: 36rem)").matches);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 36rem)");
+    const update = () => setCalendarOpen(!media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   return (
     <div className="home-variant home-variant--atlas">
@@ -487,32 +536,16 @@ function AtlasHome({ initialWindow, tags, archive, archiveRef, auth }: {
               years={archive}
               heading=""
               selectedMonth={selectedMonth}
-              onSelectMonth={(month) => void loadWindow(`/api/pages?month=${month}`, "replace")}
+              onSelectMonth={setSelectedMonth}
             />
             <GitHubAuthentication auth={auth} />
           </details>
         </div>
       </aside>
-      <section className="atlas-stream" aria-label="記事" aria-busy={isLoading} ref={streamRef}>
-        {loadError && <p className="atlas-stream__error" role="alert">{loadError}</p>}
-        <div className="atlas-stream__sentinel" ref={newerRef}>
-          {!hasNewer && selectedMonth && <span>最新の記事まで表示しています</span>}
-        </div>
-        {pages.length === 0 ? <p className="empty-home">まだ記事がありません</p> : pages.map((page) => (
-          <article className="atlas-entry" key={page.id}>
-            <a href={`/${encodeURIComponent(page.route)}`}>
-              {page.image_url && <img src={page.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />}
-              <span className="atlas-entry__body">
-                <time dateTime={page.created_at}>{formatDate(page.created_at)}</time>
-                <strong>{page.title}</strong>
-                {page.excerpt && <span>{page.excerpt}</span>}
-              </span>
-            </a>
-          </article>
-        ))}
-        <div className="atlas-stream__sentinel" ref={olderRef}>
-          {!hasOlder && <span>最初の記事まで表示しています</span>}
-        </div>
+      <section className="atlas-stream" aria-label="記事">
+        {initialWindow.pages.length === 0
+          ? <p className="empty-home">まだ記事がありません</p>
+          : <SplitFeed initialPages={initialWindow.pages} selectedMonth={selectedMonth} />}
       </section>
     </div>
   );

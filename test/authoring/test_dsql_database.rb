@@ -52,7 +52,7 @@ class DsqlDatabaseTest < Minitest::Test
 
     def exec(statement)
       return Result.new([{ "?column?" => "1" }]) if statement.strip == "SELECT 1"
-      return Result.new(sorted_pages) if statement.include?("ORDER BY created_at DESC")
+      return Result.new(sorted_pages) if statement.include?("ORDER BY updated_at DESC")
 
       raise "unexpected SQL: #{statement}"
     end
@@ -110,7 +110,7 @@ class DsqlDatabaseTest < Minitest::Test
     private
 
     def sorted_pages
-      @pages.values.sort_by { |page| page.fetch("created_at") }.reverse
+      @pages.values.sort_by { |page| page.fetch("updated_at") }.reverse
     end
 
     def store_page(values)

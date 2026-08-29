@@ -66,13 +66,17 @@ class LambdaApiTest < Minitest::Test
       true
     end
 
-    def list_pages(limit: nil, before: nil, after: nil)
-      selected = pages.sort_by { |page| [page.created_at, page.id] }.reverse
+    def list_pages(limit: nil, before: nil, after: nil, kind: nil)
+      selected = pages.sort_by { |page| [page.updated_at, page.id] }.reverse
       selected = selected.select do |page|
-        ([page.created_at, page.id] <=> [before.fetch(:created_at), before.fetch(:id)]).negative?
+        is_diary = page.links.any? { |link| link.name == "日記" }
+        kind == "diary" ? is_diary : !is_diary
+      end if kind
+      selected = selected.select do |page|
+        ([page.updated_at, page.id] <=> [before.fetch(:updated_at), before.fetch(:id)]).negative?
       end if before
       selected = selected.select do |page|
-        ([page.created_at, page.id] <=> [after.fetch(:created_at), after.fetch(:id)]).positive?
+        ([page.updated_at, page.id] <=> [after.fetch(:updated_at), after.fetch(:id)]).positive?
       end if after
       selected = selected.first(limit) if limit
       selected
@@ -228,6 +232,28 @@ class LambdaApiTest < Minitest::Test
     assert_match(/db;dur=.*summaries;dur=.*json;dur=/, response.fetch(:headers).fetch("server-timing"))
     refute JSON.parse(response.fetch(:body)).key?("tags")
     refute JSON.parse(response.fetch(:body)).key?("archive")
+  end
+
+  def test_page_summaries_identify_diary_links
+    @database.pages.replace([page_document(id: "diary", name: "2026-08-28", body: "本文 [[日記]]")])
+
+    response = @api.call(event("GET", "/api/pages"))
+    page = JSON.parse(response.fetch(:body)).fetch("pages").fetch(0)
+
+    assert_equal true, page.fetch("is_diary")
+  end
+
+  def test_page_windows_filter_diaries_and_articles_independently
+    @database.pages.replace([
+      page_document(id: "diary", name: "2026-08-28", body: "本文 [[日記]]"),
+      page_document(id: "article", name: "article", body: "本文")
+    ])
+
+    diaries = @api.call(event("GET", "/api/pages", query: { "kind" => "diary" }))
+    articles = @api.call(event("GET", "/api/pages", query: { "kind" => "article" }))
+
+    assert_equal ["2026-08-28"], JSON.parse(diaries.fetch(:body)).fetch("pages").map { |page| page.fetch("route") }
+    assert_equal ["article"], JSON.parse(articles.fetch(:body)).fetch("pages").map { |page| page.fetch("route") }
   end
 
   def test_lists_home_tags_and_archive_separately

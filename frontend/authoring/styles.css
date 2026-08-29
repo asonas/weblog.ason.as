@@ -1479,6 +1479,31 @@ html[data-universe="on"] .linked-pages {
   color: var(--accent);
 }
 
+.atlas-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1.5rem, 3vw, 3rem);
+}
+
+.atlas-split__column > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-block: 0.75rem;
+  border-block: 1px solid var(--separator);
+}
+
+.atlas-split__column > header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+}
+
+.atlas-split__column > header span {
+  color: var(--muted-ink);
+  font-size: 0.72rem;
+}
+
 .atlas-calendar .home-auth {
   justify-content: flex-start;
   margin-block: 1rem 0;
@@ -2281,6 +2306,10 @@ td {
   .atlas-entry a {
     grid-template-columns: 1fr;
     min-block-size: 20rem;
+  }
+
+  .atlas-split {
+    grid-template-columns: 1fr;
   }
 
   .atlas-entry img {
