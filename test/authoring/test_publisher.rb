@@ -78,6 +78,23 @@ class TestPublisher < Minitest::Test
     assert_equal FIXED_TIME, result.release_candidate.pages.fetch(0).published_at
   end
 
+  def test_build_uses_the_resolved_cover_for_open_graph_metadata
+    page = WeblogAuthoring::PageDocument.new(
+      **published_named_page("cover-page", body: "本文").to_h,
+      cover_mode: "explicit",
+      cover_image_url: "/assets/uploads/cover.jpg"
+    )
+
+    publisher.build(
+      snapshot_for(pages: [page]),
+      tmpdir.join("build"),
+      release_snapshot: WeblogAuthoring::ReleaseSnapshot.new(pages: [page], published_at: FIXED_TIME)
+    )
+
+    html = tmpdir.join("build/cover-page/index.html").read(encoding: "UTF-8")
+    assert_includes html, '<meta property="og:image" content="/assets/uploads/cover.jpg">'
+  end
+
   def test_build_uses_current_body_and_placeholder_for_first_publish
     published = published_date_page("2026-01-01", body: "公開本文\n\n[[page-a]]")
     placeholder_source = draft_named_page("page-a", body: "下書き本文")

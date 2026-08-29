@@ -63,9 +63,13 @@ module WeblogAuthoring
           path TEXT NOT NULL,
           body_hash TEXT NOT NULL,
           is_empty BOOLEAN NOT NULL,
-          body TEXT NOT NULL
+          body TEXT NOT NULL,
+          cover_mode TEXT NOT NULL DEFAULT 'auto',
+          cover_image_url TEXT
         )
       SQL
+      connection.exec("ALTER TABLE #{SCHEMA}.pages ADD COLUMN IF NOT EXISTS cover_mode TEXT NOT NULL DEFAULT 'auto'")
+      connection.exec("ALTER TABLE #{SCHEMA}.pages ADD COLUMN IF NOT EXISTS cover_image_url TEXT")
       connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.links (
           source_id TEXT NOT NULL,

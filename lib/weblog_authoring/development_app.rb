@@ -861,6 +861,9 @@ module WeblogAuthoring
         "name" => name,
         "title" => title,
         "body" => body,
+        "cover_mode" => page&.cover_mode || "auto",
+        "cover_image_url" => page&.cover_image_url,
+        "resolved_cover_image_url" => page && page_image_url(page),
         "line_updated_at" => line_updated_at || [],
         "expected_updated_at" => expected_updated_at,
         "save_message" => save_message,
@@ -987,7 +990,9 @@ module WeblogAuthoring
         page_date:,
         title:,
         expected_updated_at: expected_updated_at(payload),
-        consumed_inbox_item_ids: string_array(payload, "consumed_inbox_item_ids")
+        consumed_inbox_item_ids: string_array(payload, "consumed_inbox_item_ids"),
+        cover_mode: optional_string(payload, "cover_mode"),
+        cover_image_url: optional_string(payload, "cover_image_url")
       )
     end
 
@@ -1043,6 +1048,9 @@ module WeblogAuthoring
         "updated_at" => page.updated_at.iso8601(9),
         "line_updated_at" => line_updated_at(page.id),
         "route" => page.route,
+        "cover_mode" => page.cover_mode,
+        "cover_image_url" => page.cover_image_url,
+        "resolved_cover_image_url" => page_image_url(page),
         "linked_pages" => related.fetch("pages"),
         "linked_pages_has_more" => related.fetch("has_more")
       }
@@ -1171,16 +1179,7 @@ module WeblogAuthoring
     end
 
     def page_image_url(page)
-      markdown_image = page.body.to_s[/!\[[^\]]*\]\((https?:\/\/[^\s)]+|\/assets\/[^\s)]+)(?:\s+[^)]*)?\)/, 1]
-      return markdown_image if markdown_image
-
-      urls = page.body.to_s.scan(/\[(https?:\/\/[^\]\s]+)(?:\s+[^\]]+)?\]/).flatten
-      urls.each do |url|
-        local_path = settings.asset_image_paths[url]
-        return "/assets/#{local_path}" if local_path
-        return url.sub(/#\.png\z/i, "") if IMAGE_EXTENSIONS.match?(url)
-      end
-      nil
+      CoverImage.resolve(page, asset_image_paths: settings.asset_image_paths)
     end
 
     def page_excerpt(page)

@@ -110,15 +110,16 @@ module WeblogAuthoring
           UPDATE #{SCHEMA}.pages
           SET page_type = $1, name = $2, page_date = $3, title = $4,
               status = $5, created_at = $6, updated_at = $7, published_at = $8,
-              path = $9, body_hash = $10, is_empty = $11, body = $12
-          WHERE id = $13
+              path = $9, body_hash = $10, is_empty = $11, body = $12,
+              cover_mode = $13, cover_image_url = $14
+          WHERE id = $15
         SQL
       else
         connection.exec_params(<<~SQL, values)
           INSERT INTO #{SCHEMA}.pages (
             id, page_type, name, page_date, title, status, created_at,
-            updated_at, published_at, path, body_hash, is_empty, body
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            updated_at, published_at, path, body_hash, is_empty, body, cover_mode, cover_image_url
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         SQL
       end
     end
@@ -136,9 +137,12 @@ module WeblogAuthoring
     def page_values(page)
       %w[
         id page_type name page_date title status created_at updated_at published_at
-        path body_hash is_empty body
+        path body_hash is_empty body cover_mode cover_image_url
       ].map do |key|
-        key == "is_empty" ? page.fetch(key).to_i == 1 : page[key]
+        next page.fetch(key).to_i == 1 if key == "is_empty"
+        next page[key] || "auto" if key == "cover_mode"
+
+        page[key]
       end
     end
   end

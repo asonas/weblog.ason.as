@@ -4,9 +4,11 @@ require "date"
 require "pathname"
 require "psych"
 
+require_relative "cover_image"
+
 module WeblogAuthoring
   REQUIRED_KEYS = %w[id page_type status created_at updated_at].freeze
-  ALLOWED_KEYS = (REQUIRED_KEYS + %w[name page_date title published_at]).freeze
+  ALLOWED_KEYS = (REQUIRED_KEYS + %w[name page_date title published_at cover_mode cover_image_url]).freeze
 
   module_function
 
@@ -43,6 +45,11 @@ module WeblogAuthoring
 
     title = values["title"]
     return problem(path, "title must be a string") unless title.nil? || title.is_a?(String)
+    begin
+      cover_mode, cover_image_url = CoverImage.validate(values["cover_mode"], values["cover_image_url"])
+    rescue ArgumentError => error
+      return problem(path, error.message)
+    end
 
     if values["page_type"] == "date" && page_date.nil?
       return problem(path, "date pages require page_date")
@@ -63,7 +70,9 @@ module WeblogAuthoring
       published_at:,
       path:,
       body: text[(marker + "\n---\n".length)..] || "",
-      links: []
+      links: [],
+      cover_mode:,
+      cover_image_url:
     )
   end
 
@@ -77,7 +86,9 @@ module WeblogAuthoring
       "status" => document.status,
       "created_at" => document.created_at&.dup,
       "updated_at" => document.updated_at&.dup,
-      "published_at" => document.published_at&.dup
+      "published_at" => document.published_at&.dup,
+      "cover_mode" => document.cover_mode,
+      "cover_image_url" => document.cover_image_url,
     }
     serialized = Psych.safe_dump(values, permitted_classes: [Date, Time], line_width: -1).delete_prefix("---\n")
 

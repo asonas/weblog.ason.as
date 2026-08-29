@@ -575,7 +575,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal 200, status
     assert_equal "2026-08-21T12:00:00.000000000+09:00", summary.fetch("created_at")
     assert_equal "本文 日記 水曜日 2026-08-21 202608 0827", summary.fetch("excerpt")
-    assert_equal "https://example.com/photo.jpg", summary.fetch("image_url")
+    assert_nil summary.fetch("image_url")
     assert_equal ["開発"], JSON.parse(request("GET", "/api/tags").last).fetch("tags")
     assert_equal [{ "year" => 2026, "months" => [8] }], JSON.parse(request("GET", "/api/archive").last).fetch("archive")
 
@@ -595,6 +595,30 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "named", fresh_editor.fetch("page_type")
     assert_empty fresh_editor.fetch("date")
     assert_empty fresh_editor.fetch("page_id")
+  end
+
+  def test_cover_selection_is_returned_by_save_and_editor_apis
+    status, _headers, body = json_request(
+      "POST",
+      "/api/authoring/pages",
+      page_type: "named",
+      name: "カバー記事",
+      body: "本文",
+      cover_mode: "explicit",
+      cover_image_url: "/assets/uploads/cover.jpg"
+    )
+    saved = JSON.parse(body)
+
+    assert_equal 201, status
+    assert_equal "explicit", saved.fetch("cover_mode")
+    assert_equal "/assets/uploads/cover.jpg", saved.fetch("resolved_cover_image_url")
+
+    status, _headers, body = request("GET", "/api/pages/#{saved.fetch('id')}")
+    editor = JSON.parse(body)
+
+    assert_equal 200, status
+    assert_equal "/assets/uploads/cover.jpg", editor.fetch("cover_image_url")
+    assert_equal "/assets/uploads/cover.jpg", editor.fetch("resolved_cover_image_url")
   end
 
   def test_editor_api_includes_imported_line_update_times

@@ -24,10 +24,13 @@ module WeblogAuthoring
     :path,
     :body,
     :links,
+    :cover_mode,
+    :cover_image_url,
     keyword_init: true
   ) do
     def initialize(**attributes)
       attributes[:links] = Array(attributes[:links]).freeze
+      attributes[:cover_mode] ||= "auto"
       super(**attributes)
       freeze
     end
@@ -107,10 +110,12 @@ module WeblogAuthoring
     :title,
     :expected_updated_at,
     :consumed_inbox_item_ids,
+    :cover_mode,
+    :cover_image_url,
     keyword_init: true
   ) do
     def initialize(page_type:, body:, page_id: nil, name: nil, page_date: nil, title: nil, expected_updated_at: nil,
-                   consumed_inbox_item_ids: [])
+                   consumed_inbox_item_ids: [], cover_mode: nil, cover_image_url: nil)
       super(
         page_type:,
         body:,
@@ -119,7 +124,9 @@ module WeblogAuthoring
         page_date:,
         title:,
         expected_updated_at:,
-        consumed_inbox_item_ids: Array(consumed_inbox_item_ids).freeze
+        consumed_inbox_item_ids: Array(consumed_inbox_item_ids).freeze,
+        cover_mode:,
+        cover_image_url:
       )
       freeze
     end

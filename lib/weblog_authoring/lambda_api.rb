@@ -17,6 +17,7 @@ require_relative "image_upload"
 require_relative "mobile_upload"
 require_relative "models"
 require_relative "names"
+require_relative "cover_image"
 require_relative "atom_feed"
 require_relative "search_index"
 
@@ -754,6 +755,9 @@ module WeblogAuthoring
         "name" => resolved_name,
         "title" => resolved_title,
         "body" => resolved_body,
+        "cover_mode" => page&.cover_mode || "auto",
+        "cover_image_url" => page&.cover_image_url,
+        "resolved_cover_image_url" => page && page_image_url(page),
         "line_updated_at" => page ? line_updated_at(page) : [],
         "expected_updated_at" => page&.updated_at&.iso8601(9).to_s,
         "save_message" => "",
@@ -842,7 +846,7 @@ module WeblogAuthoring
     end
 
     def page_image_url(page)
-      page.body.to_s[/!\[[^\]]*\]\((https?:\/\/[^\s)]+|\/assets\/[^\s)]+)(?:\s+[^)]*)?\)/, 1]
+      CoverImage.resolve(page)
     end
 
     def saved_page_json(page)
@@ -857,6 +861,9 @@ module WeblogAuthoring
         "updated_at" => page.updated_at.iso8601(9),
         "line_updated_at" => line_updated_at(page),
         "route" => page.route,
+        "cover_mode" => page.cover_mode,
+        "cover_image_url" => page.cover_image_url,
+        "resolved_cover_image_url" => page_image_url(page),
         "linked_pages" => related.fetch("pages"),
         "linked_pages_has_more" => related.fetch("has_more"),
       }
@@ -897,7 +904,9 @@ module WeblogAuthoring
         page_date: page_type == "date" ? parse_date(optional_string(payload, "date"), "date") : nil,
         title:,
         expected_updated_at: parse_time(optional_string(payload, "expected_updated_at"), "expected_updated_at"),
-        consumed_inbox_item_ids: string_array(payload, "consumed_inbox_item_ids")
+        consumed_inbox_item_ids: string_array(payload, "consumed_inbox_item_ids"),
+        cover_mode: optional_string(payload, "cover_mode"),
+        cover_image_url: optional_string(payload, "cover_image_url")
       )
     end
 

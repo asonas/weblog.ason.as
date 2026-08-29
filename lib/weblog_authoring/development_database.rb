@@ -8,13 +8,14 @@ require "securerandom"
 require "sqlite3"
 require "time"
 
+require_relative "cover_image"
 require_relative "links"
 require_relative "models"
 require_relative "names"
 
 module WeblogAuthoring
   class DevelopmentDatabase
-    SCHEMA_VERSION = 7
+    SCHEMA_VERSION = 8
     INBOX_RETENTION_SECONDS = 7 * 24 * 60 * 60
     ADOPTION_RETENTION_SECONDS = 14 * 24 * 60 * 60
     TOKYO_OFFSET = "+09:00"
@@ -36,7 +37,7 @@ module WeblogAuthoring
         order_column = kind == "diary" ? "created_at" : "updated_at"
         sql = <<~SQL
             SELECT id, page_type, name, page_date, title, status,
-                   created_at, updated_at, published_at, path, body
+                   created_at, updated_at, published_at, path, body, cover_mode, cover_image_url
             FROM pages
         SQL
         conditions = []
@@ -79,7 +80,7 @@ module WeblogAuthoring
         row = database.get_first_row(
           <<~SQL,
             SELECT id, page_type, name, page_date, title, status,
-                   created_at, updated_at, published_at, path, body
+                   created_at, updated_at, published_at, path, body, cover_mode, cover_image_url
             FROM pages
             WHERE (page_type = 'date' AND page_date = ?)
                OR (page_type = 'named' AND name = ?)
@@ -747,6 +748,7 @@ module WeblogAuthoring
         create_mobile_upload_schema(database)
         create_inbox_sync_schema(database)
         create_scrapbox_line_metadata_schema(database)
+        create_cover_image_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
@@ -755,6 +757,7 @@ module WeblogAuthoring
         create_mobile_upload_schema(database)
         create_inbox_sync_schema(database)
         create_scrapbox_line_metadata_schema(database)
+        create_cover_image_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
@@ -762,6 +765,7 @@ module WeblogAuthoring
         create_mobile_upload_schema(database)
         create_inbox_sync_schema(database)
         create_scrapbox_line_metadata_schema(database)
+        create_cover_image_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
@@ -769,17 +773,25 @@ module WeblogAuthoring
         create_inbox_schema(database)
         create_inbox_sync_schema(database)
         create_scrapbox_line_metadata_schema(database)
+        create_cover_image_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
       if version == 5 && table_exists?(database, "pages")
         create_inbox_sync_schema(database)
         create_scrapbox_line_metadata_schema(database)
+        create_cover_image_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
       if version == 6 && table_exists?(database, "pages")
         create_scrapbox_line_metadata_schema(database)
+        create_cover_image_schema(database)
+        database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
+        return
+      end
+      if version == 7 && table_exists?(database, "pages")
+        create_cover_image_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
@@ -801,7 +813,9 @@ module WeblogAuthoring
             path TEXT NOT NULL,
             body_hash TEXT NOT NULL,
             is_empty INTEGER NOT NULL,
-            body TEXT NOT NULL
+            body TEXT NOT NULL,
+            cover_mode TEXT NOT NULL DEFAULT 'auto',
+            cover_image_url TEXT
           );
           CREATE UNIQUE INDEX pages_named_route ON pages(name)
             WHERE page_type = 'named';
@@ -818,6 +832,14 @@ module WeblogAuthoring
       create_mobile_upload_schema(database)
       create_inbox_sync_schema(database)
       create_scrapbox_line_metadata_schema(database)
+    end
+
+    def create_cover_image_schema(database)
+      columns = database.execute("PRAGMA table_info(pages)").map { |row| row[1] }
+      unless columns.include?("cover_mode")
+        database.execute("ALTER TABLE pages ADD COLUMN cover_mode TEXT NOT NULL DEFAULT 'auto'")
+      end
+      database.execute("ALTER TABLE pages ADD COLUMN cover_image_url TEXT") unless columns.include?("cover_image_url")
     end
 
     def table_exists?(database, table)
@@ -1125,6 +1147,7 @@ module WeblogAuthoring
     def new_document(request)
       timestamp = now
       page_type = request.page_type
+      cover_mode, cover_image_url = CoverImage.validate(request.cover_mode, request.cover_image_url)
 
       case page_type
       when "date"
@@ -1142,7 +1165,9 @@ module WeblogAuthoring
           published_at: timestamp,
           path: page_path("named", name:, page_date: nil),
           body: request.body.to_s,
-          links: WeblogAuthoring.extract_wiki_links(request.body.to_s)
+          links: WeblogAuthoring.extract_wiki_links(request.body.to_s),
+          cover_mode:,
+          cover_image_url:
         )
       when "named"
         name = WeblogAuthoring.validate_page_name(request.name || request.title.to_s)
@@ -1159,7 +1184,9 @@ module WeblogAuthoring
           published_at: timestamp,
           path: page_path(page_type, name:, page_date: nil),
           body: request.body.to_s,
-          links: WeblogAuthoring.extract_wiki_links(request.body.to_s)
+          links: WeblogAuthoring.extract_wiki_links(request.body.to_s),
+          cover_mode:,
+          cover_image_url:
         )
       else
         raise ArgumentError, "unknown page type: #{page_type}"
@@ -1171,12 +1198,19 @@ module WeblogAuthoring
       page_type = current.page_type
       title = page_type == "date" ? request.title : current.title
       body = request.body.to_s
+      cover_mode, cover_image_url = if request.cover_mode.nil?
+                                      [current.cover_mode, current.cover_image_url]
+                                    else
+                                      CoverImage.validate(request.cover_mode, request.cover_image_url)
+                                    end
       PageDocument.new(
         **current.to_h,
         title:,
         body:,
         updated_at: now,
-        links: WeblogAuthoring.extract_wiki_links(body)
+        links: WeblogAuthoring.extract_wiki_links(body),
+        cover_mode:,
+        cover_image_url:
       )
     end
 
@@ -1197,8 +1231,8 @@ module WeblogAuthoring
         <<~SQL,
           INSERT INTO pages (
             id, page_type, name, page_date, title, status, created_at,
-            updated_at, published_at, path, body_hash, is_empty, body
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            updated_at, published_at, path, body_hash, is_empty, body, cover_mode, cover_image_url
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         SQL
         page_values(document)
       )
@@ -1209,7 +1243,7 @@ module WeblogAuthoring
         <<~SQL,
           UPDATE pages
           SET title = ?, status = ?, updated_at = ?, published_at = ?,
-              body_hash = ?, is_empty = ?, body = ?
+              body_hash = ?, is_empty = ?, body = ?, cover_mode = ?, cover_image_url = ?
           WHERE id = ?
         SQL
         [
@@ -1220,7 +1254,9 @@ module WeblogAuthoring
           Digest::SHA256.hexdigest(document.body),
           document.empty? ? 1 : 0,
           document.body,
-          document.id
+          document.cover_mode,
+          document.cover_image_url,
+          document.id,
         ]
       )
     end
@@ -1291,12 +1327,15 @@ module WeblogAuthoring
         document.path.to_s,
         Digest::SHA256.hexdigest(document.body),
         document.empty? ? 1 : 0,
-        document.body
+        document.body,
+        document.cover_mode,
+        document.cover_image_url,
       ]
     end
 
     def page_from_row(row)
-      id, page_type, name, page_date, title, status, created_at, updated_at, published_at, path, body = row
+      id, page_type, name, page_date, title, status, created_at, updated_at, published_at, path, body,
+        cover_mode, cover_image_url = row
       PageDocument.new(
         id:,
         page_type:,
@@ -1309,14 +1348,16 @@ module WeblogAuthoring
         published_at: published_at && Time.iso8601(published_at),
         path: Pathname(path),
         body:,
-        links: WeblogAuthoring.extract_wiki_links(body)
+        links: WeblogAuthoring.extract_wiki_links(body),
+        cover_mode:,
+        cover_image_url:
       )
     end
 
     def select_sql(condition)
       <<~SQL
         SELECT id, page_type, name, page_date, title, status,
-               created_at, updated_at, published_at, path, body
+               created_at, updated_at, published_at, path, body, cover_mode, cover_image_url
         FROM pages
         WHERE #{condition} = ?
         LIMIT 1

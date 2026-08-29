@@ -40,6 +40,35 @@ class TestDevelopmentDatabase < Minitest::Test
     assert_equal updated, database.find_route("/最初の記事")
   end
 
+  def test_cover_selection_round_trips_and_an_omitted_update_preserves_it
+    database = development_database
+    page = database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "カバー", body: "本文",
+      cover_mode: "explicit", cover_image_url: "/assets/uploads/cover.jpg"
+    ))
+
+    assert_equal "explicit", database.find(page.id).cover_mode
+    assert_equal "/assets/uploads/cover.jpg", database.find(page.id).cover_image_url
+
+    updated = database.save(WeblogAuthoring::SaveRequest.new(
+      page_id: page.id, page_type: page.page_type, name: page.name, body: "画像を削除した本文"
+    ))
+
+    assert_equal "explicit", updated.cover_mode
+    assert_equal "/assets/uploads/cover.jpg", updated.cover_image_url
+  end
+
+  def test_cover_selection_rejects_external_images
+    database = development_database
+
+    assert_raises(ArgumentError) do
+      database.save(WeblogAuthoring::SaveRequest.new(
+        page_type: "named", name: "外部画像", body: "本文",
+        cover_mode: "explicit", cover_image_url: "https://example.com/cover.jpg"
+      ))
+    end
+  end
+
   def test_save_tracks_new_and_changed_line_update_times
     current_time = Time.iso8601("2026-08-21T12:00:00+09:00")
     database = WeblogAuthoring::DevelopmentDatabase.new(

@@ -12,6 +12,7 @@ ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
 
 require "aurora_dsql_pg"
 
+require_relative "cover_image"
 require_relative "links"
 require_relative "models"
 require_relative "names"
@@ -60,7 +61,7 @@ module WeblogAuthoring
         order_column = kind == "diary" ? "created_at" : "updated_at"
         sql = <<~SQL
           SELECT id, page_type, name, page_date, title, status,
-                 created_at, updated_at, published_at, path, body
+                 created_at, updated_at, published_at, path, body, cover_mode, cover_image_url
           FROM #{SCHEMA}.pages
         SQL
         conditions = []
@@ -109,7 +110,7 @@ module WeblogAuthoring
         result = connection.exec_params(
           <<~SQL,
             SELECT id, page_type, name, page_date, title, status,
-                   created_at, updated_at, published_at, path, body
+                   created_at, updated_at, published_at, path, body, cover_mode, cover_image_url
             FROM #{SCHEMA}.pages
             WHERE (page_type = 'date' AND page_date = $1)
                OR (page_type = 'named' AND name = $1)
@@ -999,6 +1000,7 @@ module WeblogAuthoring
       timestamp = now
       name = WeblogAuthoring.validate_page_name(request.name || request.title.to_s)
       body = request.body.to_s
+      cover_mode, cover_image_url = CoverImage.validate(request.cover_mode, request.cover_image_url)
 
       PageDocument.new(
         id: SecureRandom.uuid.delete("-"),
@@ -1012,18 +1014,27 @@ module WeblogAuthoring
         published_at: timestamp,
         path: WeblogAuthoring.page_path(@content_dir, "named", name:, page_date: nil),
         body:,
-        links: WeblogAuthoring.extract_wiki_links(body)
+        links: WeblogAuthoring.extract_wiki_links(body),
+        cover_mode:,
+        cover_image_url:
       )
     end
 
     def updated_document(current, request)
       validate_expected_update(current, request)
       body = request.body.to_s
+      cover_mode, cover_image_url = if request.cover_mode.nil?
+                                      [current.cover_mode, current.cover_image_url]
+                                    else
+                                      CoverImage.validate(request.cover_mode, request.cover_image_url)
+                                    end
       PageDocument.new(
         **current.to_h,
         body:,
         updated_at: now,
-        links: WeblogAuthoring.extract_wiki_links(body)
+        links: WeblogAuthoring.extract_wiki_links(body),
+        cover_mode:,
+        cover_image_url:
       )
     end
 
@@ -1042,8 +1053,8 @@ module WeblogAuthoring
         <<~SQL,
           INSERT INTO #{SCHEMA}.pages (
             id, page_type, name, page_date, title, status, created_at,
-            updated_at, published_at, path, body_hash, is_empty, body
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            updated_at, published_at, path, body_hash, is_empty, body, cover_mode, cover_image_url
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         SQL
         page_values(document)
       )
@@ -1054,8 +1065,8 @@ module WeblogAuthoring
         <<~SQL,
           UPDATE #{SCHEMA}.pages
           SET status = $1, updated_at = $2, published_at = $3,
-              body_hash = $4, is_empty = $5, body = $6
-          WHERE id = $7
+              body_hash = $4, is_empty = $5, body = $6, cover_mode = $7, cover_image_url = $8
+          WHERE id = $9
         SQL
         [
           document.status,
@@ -1064,6 +1075,8 @@ module WeblogAuthoring
           Digest::SHA256.hexdigest(document.body),
           document.empty?,
           document.body,
+          document.cover_mode,
+          document.cover_image_url,
           document.id,
         ]
       )
@@ -1140,6 +1153,8 @@ module WeblogAuthoring
         Digest::SHA256.hexdigest(document.body),
         document.empty?,
         document.body,
+        document.cover_mode,
+        document.cover_image_url,
       ]
     end
 
@@ -1157,14 +1172,16 @@ module WeblogAuthoring
         published_at: row["published_at"] && parse_time(row.fetch("published_at")),
         path: Pathname(row.fetch("path")),
         body:,
-        links: WeblogAuthoring.extract_wiki_links(body)
+        links: WeblogAuthoring.extract_wiki_links(body),
+        cover_mode: row["cover_mode"],
+        cover_image_url: row["cover_image_url"]
       )
     end
 
     def select_sql(condition)
       <<~SQL.chomp
         SELECT id, page_type, name, page_date, title, status,
-               created_at, updated_at, published_at, path, body
+               created_at, updated_at, published_at, path, body, cover_mode, cover_image_url
         FROM #{SCHEMA}.pages
         WHERE #{condition} = $1
       SQL

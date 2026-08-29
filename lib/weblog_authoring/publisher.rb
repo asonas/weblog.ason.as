@@ -12,6 +12,7 @@ require "time"
 require_relative "links"
 require_relative "markdown"
 require_relative "models"
+require_relative "cover_image"
 require_relative "names"
 
 module WeblogAuthoring
@@ -57,7 +58,7 @@ module WeblogAuthoring
   class ReleaseManifest
     VERSION = 1
     ROOT_KEYS = %w[version published_at pages redirects].freeze
-    PAGE_KEYS = %w[
+    REQUIRED_PAGE_KEYS = %w[
       id
       route
       page_type
@@ -71,6 +72,7 @@ module WeblogAuthoring
       path
       body
     ].freeze
+    PAGE_KEYS = (REQUIRED_PAGE_KEYS + %w[cover_mode cover_image_url]).freeze
 
     attr_reader :path
 
@@ -160,7 +162,7 @@ module WeblogAuthoring
         unknown_keys = entry.keys - PAGE_KEYS
         raise ArgumentError, "page entry #{index} has unknown key: #{unknown_keys.sort.first}" unless unknown_keys.empty?
 
-        missing_keys = PAGE_KEYS - entry.keys
+        missing_keys = REQUIRED_PAGE_KEYS - entry.keys
         raise ArgumentError, "page entry #{index} is missing key: #{missing_keys.sort.first}" unless missing_keys.empty?
 
         page = PageDocument.new(
@@ -175,7 +177,9 @@ module WeblogAuthoring
           published_at: parse_optional_time(entry["published_at"], "pages[#{index}].published_at"),
           path: Pathname(require_string(entry["path"], "pages[#{index}].path")),
           body: require_string(entry["body"], "pages[#{index}].body"),
-          links: WeblogAuthoring.extract_wiki_links(require_string(entry["body"], "pages[#{index}].body"))
+          links: WeblogAuthoring.extract_wiki_links(require_string(entry["body"], "pages[#{index}].body")),
+          cover_mode: CoverImage.validate(entry["cover_mode"], entry["cover_image_url"])[0],
+          cover_image_url: entry["cover_image_url"]
         )
         serialized_route = require_string(entry["route"], "pages[#{index}].route")
         raise ArgumentError, "pages[#{index}].route does not match page data" unless page.route == serialized_route
@@ -229,7 +233,9 @@ module WeblogAuthoring
         "updated_at" => page.updated_at.iso8601,
         "published_at" => page.published_at&.iso8601,
         "path" => page.path.to_s,
-        "body" => page.body
+        "body" => page.body,
+        "cover_mode" => page.cover_mode,
+        "cover_image_url" => page.cover_image_url,
       }
     end
 
@@ -355,7 +361,11 @@ module WeblogAuthoring
       reset_destination(destination_path)
       plan.public_pages.each do |page|
         html = renderer.render_page(page, backlinks: plan.backlinks.fetch(page.route), mode: "public")
-        write_page(destination_path, page.route, render_document(page.display_title, html))
+        write_page(
+          destination_path,
+          page.route,
+          render_document(page.display_title, html, cover_image_url: CoverImage.resolve(page))
+        )
       end
 
       plan.redirects.each do |redirect|
@@ -481,7 +491,9 @@ module WeblogAuthoring
             created_at: released_page.created_at,
             updated_at: released_page.updated_at,
             published_at: released_page.published_at,
-            body: released_page.body
+            body: released_page.body,
+            cover_mode: released_page.cover_mode,
+            cover_image_url: released_page.cover_image_url
           )
         )
       )
@@ -602,8 +614,8 @@ module WeblogAuthoring
       raise PublishError, "cannot write public page #{route}: #{error.message}"
     end
 
-    def render_document(title, page_html)
-      ERB.new(@template_path.read(encoding: "UTF-8")).result_with_hash(title:, page_html:)
+    def render_document(title, page_html, cover_image_url: nil)
+      ERB.new(@template_path.read(encoding: "UTF-8")).result_with_hash(title:, page_html:, cover_image_url:)
     end
 
     def redirect_document(new_route)

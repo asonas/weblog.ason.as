@@ -131,7 +131,7 @@ class DsqlDatabaseTest < Minitest::Test
     def store_page(values)
       keys = %w[
         id page_type name page_date title status created_at updated_at published_at
-        path body_hash is_empty body
+        path body_hash is_empty body cover_mode cover_image_url
       ]
       stored_values = values.each_with_index.map do |value, index|
         index.between?(6, 8) && value.is_a?(Time) ? value.strftime("%Y-%m-%d %H:%M:%S%:z").sub(/:00\z/, "") : value
@@ -140,14 +140,16 @@ class DsqlDatabaseTest < Minitest::Test
     end
 
     def update_page(values)
-      page = @pages.fetch(values.fetch(6))
+      page = @pages.fetch(values.fetch(8))
       page.merge!(
         "status" => values.fetch(0),
         "updated_at" => values.fetch(1),
         "published_at" => values.fetch(2),
         "body_hash" => values.fetch(3),
         "is_empty" => values.fetch(4),
-        "body" => values.fetch(5)
+        "body" => values.fetch(5),
+        "cover_mode" => values.fetch(6),
+        "cover_image_url" => values.fetch(7)
       )
     end
   end
