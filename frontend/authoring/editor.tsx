@@ -2135,7 +2135,13 @@ function statusMessage(page: PageResponse): string {
   return page.updated_at ? `保存済み・最終更新 ${page.updated_at}` : "保存済み";
 }
 
-export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
+export function AuthoringEditor({
+  bootstrap,
+  canEdit = document.documentElement.dataset.canEdit === "true"
+}: {
+  bootstrap: EditorBootstrap;
+  canEdit?: boolean;
+}) {
   const [draft, setDraft] = useState<EditorDraft>(() => initialDraft(bootstrap));
   const [editorContentReady, setEditorContentReady] = useState(false);
   const [status, setStatus] = useState(bootstrap.save_message);
@@ -2295,6 +2301,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   }, [savePage]);
 
   const handleDocumentChange = useCallback((markdown: string, hasBodyBlock: boolean) => {
+    if (!canEdit) return;
     const next = updateDraft(splitEditorDocument(markdown));
     editVersionRef.current += 1;
     setErrors({});
@@ -2302,9 +2309,10 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     const isRenaming = next.pageId && next.pageType === "named" && next.title !== savedNameRef.current;
     if (isUnpersistedRouteRef.current && !next.body.trim()) return;
     if (!isRenaming && (next.pageId || (next.title && hasBodyBlock))) scheduleSave();
-  }, [scheduleSave, setDirtyState, updateDraft]);
+  }, [canEdit, scheduleSave, setDirtyState, updateDraft]);
 
   const handleEditorBlur = useCallback(async (currentEditor: Editor) => {
+    if (!canEdit) return;
     const current = draftRef.current;
     if (!current.pageId) {
       if (current.title.trim()) void savePage();
@@ -2372,7 +2380,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       savingRef.current = false;
       setSaving(false);
     }
-  }, [savePage, scheduleSave, setDirtyState, updateDraft]);
+  }, [canEdit, savePage, scheduleSave, setDirtyState, updateDraft]);
 
   const loadMoreLinkedPages = useCallback(async () => {
     if (!linkedPagesHasMore || loadingLinkedPagesRef.current) return;
@@ -2417,7 +2425,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     extensions: EDITOR_EXTENSIONS,
     content: editorDocument(bootstrap.title, bootstrap.body),
     contentType: "markdown",
-    editable: document.documentElement.dataset.canEdit === "true",
+    editable: canEdit,
     editorProps: {
       attributes: {
         role: "textbox",
@@ -2514,7 +2522,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
 
       const current = draftRef.current;
       const contentChanged = page.updated_at !== current.expectedUpdatedAt;
-      if (dirtyRef.current || savingRef.current) {
+      if (canEdit && (dirtyRef.current || savingRef.current)) {
         if (contentChanged) {
           setErrors((currentErrors) => ({
             ...currentErrors,
@@ -2547,7 +2555,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     } finally {
       refreshingPageRef.current = false;
     }
-  }, [editor, updateDraft]);
+  }, [canEdit, editor, updateDraft]);
 
   useEffect(() => {
     if (!editor || !draftRef.current.pageId) return;
@@ -2776,6 +2784,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!canEdit) return;
       if (!dirtyRef.current && !savingRef.current) return;
       event.preventDefault();
       event.returnValue = "";
@@ -2785,7 +2794,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
     };
-  }, []);
+  }, [canEdit]);
 
   const editorErrors = [
     ...(errors.title || []),

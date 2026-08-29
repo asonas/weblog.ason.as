@@ -202,7 +202,11 @@ function App({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; auth
   const header = document.querySelector<HTMLElement>(".site-header");
   return <>
     {header && createPortal(<SiteSearch />, header)}
-    <AuthoringEditor key={auth.can_edit ? "editable" : "readonly"} bootstrap={bootstrap} />
+    <AuthoringEditor
+      key={auth.can_edit ? "editable" : "readonly"}
+      bootstrap={bootstrap}
+      canEdit={auth.can_edit}
+    />
   </>;
 }
 

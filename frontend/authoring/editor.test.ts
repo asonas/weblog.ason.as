@@ -808,6 +808,50 @@ test("navigates an unfocused wiki link through the editor mouse event path", () 
   }
 });
 
+test("does not mark a read-only page dirty when navigating a wiki link", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const originalOpen = window.open;
+  const bootstrap: EditorBootstrap = {
+    page_id: "page-id", page_type: "named", date: "", name: "current", title: "current",
+    body: "[[example]]", expected_updated_at: "2026-08-29T11:00:00+09:00",
+    save_message: "", linked_pages: [], linked_pages_has_more: false
+  };
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.startsWith("/api/routes/") || url.startsWith("/api/related")) {
+      return new Response(null, { status: 304, headers: { etag: "\"same\"" } });
+    }
+    throw new Error(`unexpected request: ${url}`);
+  };
+  window.open = () => null;
+
+  try {
+    await act(async () => {
+      root.render(createElement(AuthoringEditor, { bootstrap, canEdit: false }));
+      await Promise.resolve();
+    });
+    const editorElement = container.querySelector<HTMLElement>(".ProseMirror")!;
+    const link = editorElement.querySelector<HTMLAnchorElement>('a[href="/example"]')!;
+    assert.equal(editorElement.getAttribute("contenteditable"), "false");
+
+    link.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    link.dispatchEvent(new window.MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0 }));
+
+    const beforeUnload = new window.Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    assert.equal(beforeUnload.defaultPrevented, false);
+    assert.equal(container.textContent?.includes("ページが別の編集で更新されています"), false);
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    window.open = originalOpen;
+    container.remove();
+  }
+});
+
 test("keeps a wiki link collapsed when the cursor is immediately after it", () => {
   const editor = new Editor({
     element: document.createElement("div"),
