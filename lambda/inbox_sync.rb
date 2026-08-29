@@ -2,9 +2,12 @@
 
 require "pathname"
 require "securerandom"
+require "json"
+require "aws-sdk-secretsmanager"
 
 require "weblog_authoring/dsql_database"
 require "weblog_authoring/inbox_sync"
+require "weblog_authoring/raindrop_source"
 
 module WeblogAuthoring
   module InboxSyncLambdaHandler
@@ -23,11 +26,20 @@ module WeblogAuthoring
         ),
         sources: {
           "bluesky" => InboxSync::PendingSource.new,
-          "raindrop" => InboxSync::PendingSource.new,
+          "raindrop" => raindrop_source,
           "c4p" => InboxSync::PendingSource.new,
         }
       )
     end
+
+    def raindrop_source
+      response = Aws::SecretsManager::Client.new.get_secret_value(
+        secret_id: ENV.fetch("INBOX_SOURCES_SECRET_ID")
+      )
+      token = JSON.parse(response.secret_string).fetch("raindrop_test_token")
+      RaindropSource.new(client: RaindropSource::Client.new(token:))
+    end
+    private_class_method :raindrop_source
 
     def invocation(event)
       if event["source"] == "aws.events" && event["detail-type"] == "Scheduled Event"

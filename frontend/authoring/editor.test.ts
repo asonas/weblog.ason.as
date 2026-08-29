@@ -318,6 +318,90 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
   }
 });
 
+test("inserts a Raindrop URL and marks it as used by the current page", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const savedPayloads: Array<Record<string, unknown>> = [];
+  let resolveSave: (() => void) | null = null;
+  const pageResponse = {
+    mode: "editor", id: "page-id", page_type: "named", date: null, name: "current", title: null,
+    updated_at: "2026-08-29T12:00:00+09:00", route: "current", body: "本文",
+    linked_pages: [], linked_pages_has_more: false
+  };
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url === "/api/inbox") {
+      return new Response(JSON.stringify({ items: [{
+        id: "bookmark-1", source: "raindrop", kind: "bookmark", source_id: "42",
+        occurred_at: "2026-08-29T11:00:00+09:00", ingested_at: "2026-08-29T12:00:00+09:00",
+        expires_at: "2026-09-05T12:00:00+09:00",
+        payload: { raindrop_id: 42, url: "https://example.com/article", title: "Article" }, used_in_pages: []
+      }] }), { headers: { "content-type": "application/json" } });
+    }
+    if (url === "/api/authoring/pages/page-id") {
+      savedPayloads.push(JSON.parse(String(init?.body)));
+      resolveSave?.();
+      return new Response(JSON.stringify(pageResponse), { headers: { "content-type": "application/json" } });
+    }
+    if (url.startsWith("/api/page-names")) {
+      return new Response(JSON.stringify({ names: [] }), { headers: { "content-type": "application/json" } });
+    }
+    if (url.startsWith("/api/routes/") || url.startsWith("/api/related")) {
+      return new Response(JSON.stringify(pageResponse), { headers: { "content-type": "application/json", etag: "\"same\"" } });
+    }
+    throw new Error(`unexpected request: ${url}`);
+  };
+  const bootstrap: EditorBootstrap = {
+    page_id: "page-id", page_type: "named", date: "", name: "current", title: "current", body: "本文",
+    expected_updated_at: "2026-08-29T11:00:00+09:00", save_message: "", linked_pages: [], linked_pages_has_more: false
+  };
+
+  try {
+    await act(async () => {
+      root.render(createElement(AuthoringEditor, { bootstrap }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".content-inbox__tab")!.click();
+      await Promise.resolve();
+    });
+
+    const transferData = new Map<string, string>();
+    const dataTransfer = {
+      files: [], items: [], types: [] as Array<string>, effectAllowed: "none", dropEffect: "none",
+      setData(type: string, value: string) {
+        transferData.set(type, value);
+        if (!this.types.includes(type)) this.types.push(type);
+      },
+      getData(type: string) { return transferData.get(type) || ""; }
+    };
+    const item = container.querySelector<HTMLButtonElement>(".content-inbox__item")!;
+    const dragStart = new window.Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragStart, "dataTransfer", { value: dataTransfer });
+    item.dispatchEvent(dragStart);
+
+    const saved = new Promise<void>((resolve) => { resolveSave = resolve; });
+    await act(async () => {
+      const drop = new window.Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperties(drop, {
+        dataTransfer: { value: dataTransfer }, clientX: { value: 0 }, clientY: { value: 0 }
+      });
+      container.querySelector<HTMLElement>(".ProseMirror")!.dispatchEvent(drop);
+      await Promise.race([saved, new Promise((resolve) => setTimeout(resolve, 1_000))]);
+    });
+
+    assert.deepEqual(savedPayloads[0].consumed_inbox_item_ids, ["bookmark-1"]);
+    assert.match(String(savedPayloads[0].body), /https:\/\/example\.com\/article/);
+    assert.equal(container.querySelector(".content-inbox__usage")?.textContent, "currentで使用済み");
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
 test("manually synchronizes the inbox and refreshes it after completion", async () => {
   const container = document.createElement("div");
   document.body.append(container);

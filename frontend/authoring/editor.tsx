@@ -2485,6 +2485,31 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     }
   }, [editor, loadingInbox]);
 
+  const insertInboxItem = useCallback((itemId: string) => {
+    const item = inboxItems.find((candidate) => candidate.id === itemId);
+    if (!item) return;
+    if (item.source === "photo" && item.kind === "photo") {
+      void adoptInboxImage(itemId);
+      return;
+    }
+    const url = item.source === "raindrop" && item.kind === "bookmark" ? item.payload.url : null;
+    if (!editor || typeof url !== "string") return;
+
+    consumedInboxItemIdsRef.current = [...consumedInboxItemIdsRef.current, itemId];
+    ensureBodySelection(editor);
+    editor.chain().insertContent({
+      type: "paragraph",
+      content: [{ type: "text", text: url }]
+    }).run();
+    setInboxItems((items) => items.map((candidate) => candidate.id === itemId ? {
+      ...candidate,
+      used_in_pages: candidate.used_in_pages.some((page) => page.id === draftRef.current.pageId)
+        ? candidate.used_in_pages
+        : [...candidate.used_in_pages, { id: draftRef.current.pageId, route: draftRef.current.name || draftRef.current.title }]
+    } : candidate));
+    setImageUploadStatus("");
+  }, [adoptInboxImage, editor, inboxItems]);
+
   useEffect(() => {
     if (!editor || !editor.isEditable) return;
     const element = editor.view.dom;
@@ -2519,7 +2544,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
         event.stopImmediatePropagation();
         const position = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
         if (position) editor.commands.setTextSelection(position.pos);
-        void adoptInboxImage(inboxItemId);
+        insertInboxItem(inboxItemId);
         return;
       }
       const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith("image/"));
@@ -2541,7 +2566,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       element.removeEventListener("paste", paste);
       element.removeEventListener("drop", drop, true);
     };
-  }, [adoptInboxImage, editor, handleImageFiles]);
+  }, [editor, handleImageFiles, insertInboxItem]);
 
   useEffect(() => {
     if (!editor || initialFocusAppliedRef.current) return;
@@ -2740,8 +2765,8 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
                             <button
                               type="button"
                               className="content-inbox__item"
-                              disabled={loadingInbox || photoUrl === null}
-                              draggable={photoUrl !== null}
+                              disabled={loadingInbox || (photoUrl === null && item.source !== "raindrop")}
+                              draggable={photoUrl !== null || item.source === "raindrop"}
                               onDragStart={(event) => {
                                 event.dataTransfer.setData(INBOX_ITEM_DRAG_TYPE, item.id);
                                 event.dataTransfer.effectAllowed = "copy";
