@@ -77,3 +77,57 @@ test("converts text lines in an export without changing page metadata", () => {
     pages: [{ title: "A", lines: [{ text: "[[日記]]", userId: "user" }] }],
   });
 });
+
+test("converts indented Scrapbox lines into nested Markdown lists", () => {
+  const result = convertExport({
+    pages: [{
+      title: "ラジオとかvlog",
+      lines: [
+        "毎日更新",
+        " 散財小説ドリキン",
+        "  https://example.com",
+        "  drikinさんがやっている[vlog]",
+        " やんちゃクラブ",
+        "  yancyaさんがやっているvlog",
+        "  ",
+      ],
+    }],
+  });
+
+  assert.deepEqual(result.pages[0].lines, [
+    "毎日更新",
+    "- 散財小説ドリキン",
+    "  - https://example.com",
+    "  - drikinさんがやっている[[vlog]]",
+    "- やんちゃクラブ",
+    "  - yancyaさんがやっているvlog",
+    "",
+  ]);
+});
+
+test("does not turn code and table bodies into Markdown lists", () => {
+  const result = convertExport({
+    pages: [{
+      title: "ブロック",
+      lines: [
+        "code:ts",
+        " const x = 1",
+        "table:csv",
+        " a\tb",
+        "  c\td",
+        "通常の行",
+        " 子の行",
+      ],
+    }],
+  });
+
+  assert.deepEqual(result.pages[0].lines, [
+    "",
+    "const x = 1",
+    "",
+    "a\tb",
+    "c\td",
+    "通常の行",
+    "- 子の行",
+  ]);
+});

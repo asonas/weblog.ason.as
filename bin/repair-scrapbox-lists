@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "optparse"
+
+require_relative "../lib/weblog_authoring/scrapbox_list_repair"
+
+options = { apply: false }
+OptionParser.new do |parser|
+  parser.banner = "Usage: repair-scrapbox-lists --host HOST --before PATH --corrected PATH [--apply]"
+  parser.on("--host HOST", "Aurora DSQL host") { |value| options[:host] = value }
+  parser.on("--before PATH", "Converted export before the repair") { |value| options[:before_path] = value }
+  parser.on("--corrected PATH", "Converted export after the repair") { |value| options[:corrected_path] = value }
+  parser.on("--apply", "Write only hash-matching pages to Aurora DSQL") { options[:apply] = true }
+end.parse!
+
+repair = WeblogAuthoring::ScrapboxListRepair.new(
+  host: options.fetch(:host),
+  before_path: options.fetch(:before_path),
+  corrected_path: options.fetch(:corrected_path)
+)
+results = options.fetch(:apply) ? repair.apply : repair.scan
+
+puts(options.fetch(:apply) ? "Applied Scrapbox list repair:" : "Dry run Scrapbox list repair:")
+results.each do |result|
+  current_hash = result.current_body_hash || "-"
+  puts [
+    result.status, result.name, result.id || "-", "current=#{current_hash}",
+    "expected=#{result.expected_body_hash}", "replacement=#{result.replacement_body_hash}",
+  ].join("\t")
+end
+counts = results.each_with_object(Hash.new(0)) { |result, values| values[result.status] += 1 }
+puts "Summary: #{counts.sort.map { |status, count| "#{status}=#{count}" }.join(", ")}"

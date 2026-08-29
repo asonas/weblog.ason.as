@@ -29,6 +29,14 @@ const isJsonObject = (value: unknown): value is JsonObject =>
 const sourceImageUrl = (url: string): string =>
   url.replace(/\/thumb\/\d+\/?$/, "");
 
+const leadingIndent = (line: string): number =>
+  /^\s*/.exec(line)?.[0].length ?? 0;
+
+const specialBlockIndent = (line: string): number | null => {
+  const match = /^(\s*)(?:code|table):/.exec(line);
+  return match ? match[1].length : null;
+};
+
 const renderNode = (node: Node, imagePaths: ImagePaths, mode: ConversionMode): string => {
   if (node.type === "image" || node.type === "strongImage") {
     const imagePath = imagePaths.get(sourceImageUrl(node.src));
@@ -55,19 +63,49 @@ const renderNode = (node: Node, imagePaths: ImagePaths, mode: ConversionMode): s
   return node.raw;
 };
 
+const renderLine = (
+  line: string,
+  imagePaths: ImagePaths,
+  mode: ConversionMode,
+  renderList: boolean,
+): string => {
+  const blocks: Page = parse(line, { hasTitle: false });
+  return blocks
+    .map((block) => {
+      if (block.type !== "line") return "text" in block ? block.text : "";
+
+      const text = block.nodes.map((node) => renderNode(node, imagePaths, mode)).join("");
+      if (!renderList || block.indent === 0 || text.trim().length === 0) return text;
+
+      return `${"  ".repeat(block.indent - 1)}- ${text}`;
+    })
+    .join("\n");
+};
+
 export const convertLine = (
   line: string,
   imagePaths: ImagePaths = new Map(),
   mode: ConversionMode = "all",
 ): string => {
-  const blocks: Page = parse(line, { hasTitle: false });
-  return blocks
-    .map((block) => (
-      "nodes" in block
-        ? block.nodes.map((node) => renderNode(node, imagePaths, mode)).join("")
-        : block.text
-    ))
-    .join("\n");
+  return renderLine(line, imagePaths, mode, true);
+};
+
+const convertPageLines = (
+  lines: ExportLine[],
+  imagePaths: ImagePaths,
+  mode: ConversionMode,
+): string[] => {
+  let specialBlock: number | null = null;
+
+  return lines.map((line) => {
+    const text = typeof line === "string" ? line : line.text;
+    const indent = leadingIndent(text);
+    const isSpecialBlockChild = specialBlock !== null && indent > specialBlock;
+
+    if (!isSpecialBlockChild) specialBlock = specialBlockIndent(text);
+
+    return renderLine(text, imagePaths, mode, !isSpecialBlockChild && specialBlock === null);
+  });
 };
 
 export const convertExport = (
@@ -76,14 +114,17 @@ export const convertExport = (
   mode: ConversionMode = "all",
 ): ScrapboxExport => ({
   ...payload,
-  pages: payload.pages.map((page) => ({
-    ...page,
-    lines: page.lines.map((line) =>
-      typeof line === "string"
-        ? convertLine(line, imagePaths, mode)
-        : { ...line, text: convertLine(line.text, imagePaths, mode) },
-    ),
-  })),
+  pages: payload.pages.map((page) => {
+    const convertedLines = convertPageLines(page.lines, imagePaths, mode);
+    return {
+      ...page,
+      lines: page.lines.map((line, index) =>
+        typeof line === "string"
+          ? convertedLines[index]
+          : { ...line, text: convertedLines[index] },
+      ),
+    };
+  }),
 });
 
 export const buildImagePaths = (manifest: unknown, report: unknown): Map<string, string> => {

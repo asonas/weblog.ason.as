@@ -53,6 +53,24 @@ npm run convert:scrapbox:assets -- \
 
 どちらもmanifestの固定asset IDと取得レポートのファイル名を照合します。取得に失敗した画像、通常の外部URL、インラインコード中の記法、すでに変換済みの`[[日記]]`はそのまま保持します。`--asset-manifest`と`--asset-fetch-report`を省略した場合は、上記と同じ`data/normalized/asset-manifest.json`と`data/reports/asset-fetch-report.json`を使用します。
 
+### 移行済み記事のリスト修復
+
+ScrapboxのインデントをMarkdownのリストへ変換した結果を既存記事へ反映する場合は、通常の`bin/import-dsql`を再実行せず、修正専用コマンドを使います。`--before`の本文ハッシュと本番記事の現在の本文ハッシュが一致する記事だけを更新し、編集済みの記事、新規記事、移行元にない記事は変更しません。移行時の表現修正は記事自体の更新ではないため、`updated_at`も変更しません。`--apply`を付けない実行では本番データを読み取って分類するだけです。
+
+```sh
+mise exec -- npm run convert:scrapbox:all -- \
+  --input /Users/asonas/Downloads/asonas-memo.json \
+  --output /tmp/asonas-memo-weblog-corrected.json
+
+mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
+  mise exec -- bundle exec ruby bin/repair-scrapbox-lists \
+    --host zjuauvwetzvab4i3bdfd47e3yu.dsql.ap-northeast-1.on.aws \
+    --before data/raw/asonas-memo-weblog-before-list-repair.json \
+    --corrected /tmp/asonas-memo-weblog-corrected.json
+```
+
+dry-runの結果を確認してから`--apply`を追加します。記事の削除や`--prune-excluded`はこの修復では行いません。
+
 ## 変換
 
 保存済みエクスポートを `data/raw/` に置き、次のコマンドを実行します。
