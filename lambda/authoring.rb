@@ -37,6 +37,7 @@ module WeblogAuthoring
           search_queue_url: ENV["SEARCH_INDEX_QUEUE_URL"],
           lambda_client: Aws::Lambda::Client.new,
           inbox_sync_function_name: ENV["INBOX_SYNC_FUNCTION_NAME"],
+          bluesky_oauth_function_name: ENV["BLUESKY_OAUTH_FUNCTION_NAME"],
           search_index: SearchIndex.new(s3_client:, bucket: ENV.fetch("SITE_BUCKET")),
           embed_fetcher: EmbedMetadataFetcher.new,
           oauth: GitHubOAuth.new(

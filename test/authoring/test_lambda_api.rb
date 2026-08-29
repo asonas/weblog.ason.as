@@ -166,12 +166,16 @@ class LambdaApiTest < Minitest::Test
   class FakeLambda
     attr_reader :invocations
 
-    def initialize
+    Response = Data.define(:payload, :function_error)
+
+    def initialize(response: {})
       @invocations = []
+      @response = response
     end
 
     def invoke(**request)
       invocations << request
+      Response.new(payload: StringIO.new(JSON.generate(@response)), function_error: nil)
     end
   end
 
@@ -458,6 +462,70 @@ class LambdaApiTest < Minitest::Test
     response = @api.call(event("GET", "/api/unknown"))
 
     assert_equal 404, response.fetch(:statusCode)
+  end
+
+  def test_bluesky_oauth_routes_require_login_and_csrf_for_mutations
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    lambda_client = FakeLambda.new(response: { "authorization_url" => "https://bsky.social/oauth" })
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      session_codec: codec,
+      allowed_github_user_id: 630_181,
+      lambda_client:,
+      bluesky_oauth_function_name: "bluesky-oauth"
+    )
+    token = codec.issue(
+      kind: "session",
+      attributes: { "github_user_id" => 630_181, "login" => "asonas", "csrf_token" => "csrf-token" },
+      ttl: 600
+    )
+
+    assert_equal 401, api.call(event("GET", "/api/inbox/sources/bluesky/status")).fetch(:statusCode)
+    missing_csrf = api.call(event(
+      "POST", "/api/inbox/sources/bluesky/connect", cookies: ["weblog_authoring_session=#{token}"]
+    ))
+    assert_equal 403, missing_csrf.fetch(:statusCode)
+
+    connected = api.call(event(
+      "POST",
+      "/api/inbox/sources/bluesky/connect",
+      cookies: ["weblog_authoring_session=#{token}"],
+      headers: { "x-csrf-token" => "csrf-token" }
+    ))
+    assert_equal 200, connected.fetch(:statusCode)
+    assert_equal "https://bsky.social/oauth", JSON.parse(connected.fetch(:body)).fetch("authorization_url")
+    assert_equal "RequestResponse", lambda_client.invocations.last.fetch(:invocation_type)
+  end
+
+  def test_bluesky_oauth_callback_forwards_query_and_redirects_after_authenticated_state_validation
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    lambda_client = FakeLambda.new(response: { "status" => "connected" })
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database,
+      session_codec: codec,
+      frontend_url: "https://weblog.ason.as",
+      allowed_github_user_id: 630_181,
+      lambda_client:,
+      bluesky_oauth_function_name: "bluesky-oauth"
+    )
+    token = codec.issue(
+      kind: "session",
+      attributes: { "github_user_id" => 630_181, "login" => "asonas", "csrf_token" => "csrf-token" },
+      ttl: 600
+    )
+
+    response = api.call(event(
+      "GET",
+      "/api/inbox/sources/bluesky/callback",
+      query: { "state" => "one-time", "code" => "authorization-code" },
+      cookies: ["weblog_authoring_session=#{token}"]
+    ))
+
+    assert_equal 302, response.fetch(:statusCode)
+    assert_equal "https://weblog.ason.as/?bluesky=connected", response.dig(:headers, "location")
+    payload = JSON.parse(lambda_client.invocations.last.fetch(:payload))
+    assert_equal "callback", payload.fetch("action")
+    assert_equal({ "state" => "one-time", "code" => "authorization-code" }, URI.decode_www_form(payload.fetch("query")).to_h)
   end
 
   def test_retries_expired_fallback_embed_metadata

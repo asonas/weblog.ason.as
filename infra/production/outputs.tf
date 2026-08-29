@@ -48,6 +48,26 @@ output "inbox_sync_lambda_function_name" {
   value       = aws_lambda_function.inbox_sync.function_name
 }
 
+output "bluesky_oauth_runtime_role_arn" {
+  description = "IAM role assumed by the production Bluesky OAuth Lambda."
+  value       = aws_iam_role.bluesky_oauth_runtime.arn
+}
+
+output "bluesky_oauth_ecr_repository_url" {
+  description = "ECR repository URL for the production Bluesky OAuth Lambda image."
+  value       = aws_ecr_repository.bluesky_oauth.repository_url
+}
+
+output "bluesky_oauth_lambda_function_name" {
+  description = "Name of the production Bluesky OAuth Lambda function."
+  value       = aws_lambda_function.bluesky_oauth.function_name
+}
+
+output "bluesky_oauth_secret_arn" {
+  description = "ARN of the production Bluesky OAuth secret."
+  value       = aws_secretsmanager_secret.bluesky_oauth.arn
+}
+
 output "authoring_api_endpoint" {
   description = "Endpoint of the production authoring API. Reads are public and mutations require an application session."
   value       = aws_apigatewayv2_api.authoring.api_endpoint

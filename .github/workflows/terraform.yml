@@ -41,6 +41,9 @@ jobs:
       - name: Create inbox sync repository
         run: terraform -chdir=infra/production apply -input=false -auto-approve -target=aws_ecr_repository.inbox_sync -target=aws_ecr_lifecycle_policy.inbox_sync
 
+      - name: Create Bluesky OAuth repository
+        run: terraform -chdir=infra/production apply -input=false -auto-approve -target=aws_ecr_repository.bluesky_oauth -target=aws_ecr_lifecycle_policy.bluesky_oauth
+
       - name: Detect bootstrap image
         id: search-bootstrap
         run: |
@@ -59,14 +62,23 @@ jobs:
             echo "missing=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Detect Bluesky OAuth bootstrap image
+        id: bluesky-oauth-bootstrap
+        run: |
+          if aws ecr describe-images --repository-name weblog-bluesky-oauth-production --image-ids imageTag=bootstrap >/dev/null 2>&1; then
+            echo "missing=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
-        if: steps.search-bootstrap.outputs.missing == 'true' || steps.inbox-sync-bootstrap.outputs.missing == 'true'
+        if: steps.search-bootstrap.outputs.missing == 'true' || steps.inbox-sync-bootstrap.outputs.missing == 'true' || steps.bluesky-oauth-bootstrap.outputs.missing == 'true'
 
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-        if: steps.search-bootstrap.outputs.missing == 'true' || steps.inbox-sync-bootstrap.outputs.missing == 'true'
+        if: steps.search-bootstrap.outputs.missing == 'true' || steps.inbox-sync-bootstrap.outputs.missing == 'true' || steps.bluesky-oauth-bootstrap.outputs.missing == 'true'
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-        if: steps.search-bootstrap.outputs.missing == 'true' || steps.inbox-sync-bootstrap.outputs.missing == 'true'
+        if: steps.search-bootstrap.outputs.missing == 'true' || steps.inbox-sync-bootstrap.outputs.missing == 'true' || steps.bluesky-oauth-bootstrap.outputs.missing == 'true'
 
       - name: Publish search indexer bootstrap image
         if: steps.search-bootstrap.outputs.missing == 'true'
@@ -91,6 +103,19 @@ jobs:
           provenance: false
           push: true
           tags: 282782318939.dkr.ecr.ap-northeast-1.amazonaws.com/weblog-inbox-sync-production:bootstrap
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Publish Bluesky OAuth bootstrap image
+        if: steps.bluesky-oauth-bootstrap.outputs.missing == 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: Dockerfile.bluesky-oauth
+          platforms: linux/arm64
+          provenance: false
+          push: true
+          tags: 282782318939.dkr.ecr.ap-northeast-1.amazonaws.com/weblog-bluesky-oauth-production:bootstrap
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

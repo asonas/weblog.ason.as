@@ -20,12 +20,15 @@ env:
   DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-authoring-production-runtime
   SEARCH_INDEXER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-search-indexer-production-runtime
   INBOX_SYNC_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-inbox-sync-production-runtime
+  BLUESKY_OAUTH_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-bluesky-oauth-production-runtime
   ECR_REPOSITORY: weblog-authoring-production
   LAMBDA_FUNCTION: weblog-authoring-production
   SEARCH_INDEXER_ECR_REPOSITORY: weblog-search-indexer-production
   SEARCH_INDEXER_LAMBDA_FUNCTION: weblog-search-indexer-production
   INBOX_SYNC_ECR_REPOSITORY: weblog-inbox-sync-production
   INBOX_SYNC_LAMBDA_FUNCTION: weblog-inbox-sync-production
+  BLUESKY_OAUTH_ECR_REPOSITORY: weblog-bluesky-oauth-production
+  BLUESKY_OAUTH_LAMBDA_FUNCTION: weblog-bluesky-oauth-production
   SITE_BUCKET: weblog-asonas-site-production-282782318939
   DEVELOPMENT_ASSET_BUCKET: weblog-asonas-assets-dev-282782318939
   CLOUDFRONT_DISTRIBUTION_ID: E3BCWEKGAG5LSG
@@ -48,7 +51,7 @@ jobs:
         run: |
           if [[ "$BEFORE_SHA" == "0000000000000000000000000000000000000000" ]] || ! git cat-file -e "${BEFORE_SHA}^{commit}"; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet "$BEFORE_SHA" "$AFTER_SHA" -- Dockerfile.lambda Dockerfile.search-indexer Dockerfile.inbox-sync Gemfile Gemfile.lock lib/ lambda/; then
+          elif git diff --quiet "$BEFORE_SHA" "$AFTER_SHA" -- Dockerfile.lambda Dockerfile.search-indexer Dockerfile.inbox-sync Dockerfile.bluesky-oauth Gemfile Gemfile.lock package.json package-lock.json lib/ lambda/; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -67,6 +70,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test:authoring
+      - run: npm run test:bluesky-oauth
+      - run: npm run build:bluesky-oauth
       - run: npm run build
       - run: bundle exec ruby -Itest -e 'Dir["test/**/*_test.rb", "test/**/test_*.rb"].uniq.sort.each { |file| require_relative file }'
 
@@ -95,12 +100,25 @@ jobs:
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Detect Bluesky OAuth infrastructure
+        id: bluesky-oauth-infra
+        run: |
+          if aws ecr describe-repositories --repository-names "$BLUESKY_OAUTH_ECR_REPOSITORY" >/dev/null 2>&1 \
+            && aws lambda get-function --function-name "$BLUESKY_OAUTH_LAMBDA_FUNCTION" >/dev/null 2>&1; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Apply database schema
         run: |
           bundle exec ruby bin/bootstrap-dsql
           DSQL_RUNTIME_ROLE_ARN="$SEARCH_INDEXER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql
           if [[ "${{ steps.inbox-sync-infra.outputs.ready }}" == "true" ]]; then
             DSQL_RUNTIME_ROLE_ARN="$INBOX_SYNC_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql
+          fi
+          if [[ "${{ steps.bluesky-oauth-infra.outputs.ready }}" == "true" ]]; then
+            DSQL_RUNTIME_ROLE_ARN="$BLUESKY_OAUTH_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql
           fi
 
       - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
@@ -151,6 +169,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and publish Bluesky OAuth Lambda image
+        if: steps.lambda-changes.outputs.changed == 'true' && steps.bluesky-oauth-infra.outputs.ready == 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: Dockerfile.bluesky-oauth
+          platforms: linux/arm64
+          provenance: false
+          push: true
+          tags: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.BLUESKY_OAUTH_ECR_REPOSITORY }}:${{ github.sha }}-${{ github.run_attempt }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Deploy Lambda image
         if: steps.lambda-changes.outputs.changed == 'true'
         env:
@@ -174,6 +205,14 @@ jobs:
         run: |
           aws lambda update-function-code --function-name "$SEARCH_INDEXER_LAMBDA_FUNCTION" --image-uri "$IMAGE_URI"
           aws lambda wait function-updated-v2 --function-name "$SEARCH_INDEXER_LAMBDA_FUNCTION"
+
+      - name: Deploy Bluesky OAuth Lambda image
+        if: steps.lambda-changes.outputs.changed == 'true' && steps.bluesky-oauth-infra.outputs.ready == 'true'
+        env:
+          IMAGE_URI: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.BLUESKY_OAUTH_ECR_REPOSITORY }}:${{ github.sha }}-${{ github.run_attempt }}
+        run: |
+          aws lambda update-function-code --function-name "$BLUESKY_OAUTH_LAMBDA_FUNCTION" --image-uri "$IMAGE_URI"
+          aws lambda wait function-updated-v2 --function-name "$BLUESKY_OAUTH_LAMBDA_FUNCTION"
 
       - name: Publish site and existing images
         run: |

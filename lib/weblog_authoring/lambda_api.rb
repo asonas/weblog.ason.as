@@ -49,7 +49,8 @@ module WeblogAuthoring
     def initialize(database:, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
                    allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
                    development_asset_bucket: nil, site_bucket: nil, search_queue_url: nil, sqs_client: nil, logger: $stderr,
-                   search_index: nil, lambda_client: nil, inbox_sync_function_name: nil, clock: Time.method(:now))
+                   search_index: nil, lambda_client: nil, inbox_sync_function_name: nil,
+                   bluesky_oauth_function_name: nil, clock: Time.method(:now))
       @database = database
       @oauth = oauth
       @session_codec = session_codec
@@ -67,6 +68,7 @@ module WeblogAuthoring
       @search_index = search_index
       @lambda_client = lambda_client
       @inbox_sync_function_name = inbox_sync_function_name
+      @bluesky_oauth_function_name = bluesky_oauth_function_name
       @clock = clock
     end
 
@@ -94,6 +96,10 @@ module WeblogAuthoring
       return inbox_response(event) if method == "GET" && path == "/api/inbox"
       return adopt_inbox_response(event) if method == "POST" && path == "/api/inbox/adopt"
       return start_inbox_sync_response(event) if method == "POST" && path == "/api/inbox/sync"
+      return bluesky_oauth_status_response(event) if method == "GET" && path == "/api/inbox/sources/bluesky/status"
+      return bluesky_oauth_connect_response(event) if method == "POST" && path == "/api/inbox/sources/bluesky/connect"
+      return bluesky_oauth_callback_response(event) if method == "GET" && path == "/api/inbox/sources/bluesky/callback"
+      return bluesky_oauth_disconnect_response(event) if method == "DELETE" && path == "/api/inbox/sources/bluesky/connection"
       if method == "GET" && %r{\A/api/inbox/sync/[^/]+\z}.match?(path)
         return inbox_sync_status_response(event)
       end
@@ -501,6 +507,56 @@ module WeblogAuthoring
       run_id = event.dig("pathParameters", "run_id").to_s
       run = @database.inbox_sync_run(run_id:)
       run ? json_response(200, run) : json_response(404, error: "Inbox sync run was not found")
+    end
+
+    def bluesky_oauth_status_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to view Bluesky status") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+
+      json_response(200, invoke_bluesky_oauth("action" => "status"))
+    end
+
+    def bluesky_oauth_connect_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to connect Bluesky") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+      valid_csrf = secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
+      return json_response(403, error: "CSRF token mismatch") unless valid_csrf
+
+      json_response(200, invoke_bluesky_oauth("action" => "connect"))
+    end
+
+    def bluesky_oauth_callback_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to connect Bluesky") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+
+      query = URI.encode_www_form(event.fetch("queryStringParameters", {}).to_h)
+      invoke_bluesky_oauth("action" => "callback", "query" => query)
+      redirect_response("#{@frontend_url}/?bluesky=connected")
+    end
+
+    def bluesky_oauth_disconnect_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to disconnect Bluesky") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+      valid_csrf = secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
+      return json_response(403, error: "CSRF token mismatch") unless valid_csrf
+
+      json_response(200, invoke_bluesky_oauth("action" => "disconnect"))
+    end
+
+    def invoke_bluesky_oauth(payload)
+      response = @lambda_client.invoke(
+        function_name: @bluesky_oauth_function_name,
+        invocation_type: "RequestResponse",
+        payload: JSON.generate(payload)
+      )
+      raise "Bluesky OAuth Lambda failed" unless response.function_error.nil?
+
+      body = response.payload.respond_to?(:read) ? response.payload.read : response.payload.to_s
+      JSON.parse(body)
     end
 
     def search_response(event)

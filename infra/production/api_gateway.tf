@@ -10,6 +10,25 @@ resource "aws_apigatewayv2_integration" "authoring" {
   payload_format_version = "2.0"
 }
 
+resource "aws_apigatewayv2_integration" "bluesky_oauth" {
+  api_id                 = aws_apigatewayv2_api.authoring.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.bluesky_oauth.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "bluesky_oauth" {
+  for_each = toset([
+    "GET /oauth/bluesky/client-metadata.json",
+    "GET /oauth/bluesky/jwks.json",
+  ])
+
+  api_id             = aws_apigatewayv2_api.authoring.id
+  route_key          = each.value
+  authorization_type = "NONE"
+  target             = "integrations/${aws_apigatewayv2_integration.bluesky_oauth.id}"
+}
+
 resource "aws_apigatewayv2_route" "authoring" {
   for_each = {
     "GET /health"                                   = "NONE"
@@ -39,6 +58,10 @@ resource "aws_apigatewayv2_route" "authoring" {
     "GET /api/inbox/sync/{run_id}"                  = "NONE"
     "POST /api/inbox/adopt"                         = "NONE"
     "POST /api/inbox/sync"                          = "NONE"
+    "GET /api/inbox/sources/bluesky/status"         = "NONE"
+    "POST /api/inbox/sources/bluesky/connect"       = "NONE"
+    "GET /api/inbox/sources/bluesky/callback"       = "NONE"
+    "DELETE /api/inbox/sources/bluesky/connection"  = "NONE"
     "PATCH /api/authoring/pages/{id}"               = "NONE"
   }
 
@@ -77,4 +100,12 @@ resource "aws_lambda_permission" "authoring_api" {
   function_name = aws_lambda_function.authoring.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.authoring.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "bluesky_oauth_api" {
+  statement_id  = "AllowBlueskyOAuthApiGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.bluesky_oauth.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.authoring.execution_arn}/*/GET/oauth/bluesky/*"
 }

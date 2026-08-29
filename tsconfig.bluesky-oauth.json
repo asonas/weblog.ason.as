@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist/bluesky-oauth",
+    "rootDir": "lambda/bluesky_oauth",
+    "types": ["node", "aws-lambda"]
+  },
+  "include": ["lambda/bluesky_oauth/**/*.ts"],
+  "exclude": ["lambda/bluesky_oauth/**/*.test.ts"]
+}

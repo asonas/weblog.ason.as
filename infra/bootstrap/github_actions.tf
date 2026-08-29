@@ -68,6 +68,7 @@ data "aws_iam_policy_document" "github_deploy" {
       "arn:aws:ecr:ap-northeast-1:${data.aws_caller_identity.current.account_id}:repository/weblog-authoring-production",
       "arn:aws:ecr:ap-northeast-1:${data.aws_caller_identity.current.account_id}:repository/weblog-search-indexer-production",
       "arn:aws:ecr:ap-northeast-1:${data.aws_caller_identity.current.account_id}:repository/weblog-inbox-sync-production",
+      "arn:aws:ecr:ap-northeast-1:${data.aws_caller_identity.current.account_id}:repository/weblog-bluesky-oauth-production",
     ]
   }
 
@@ -83,6 +84,7 @@ data "aws_iam_policy_document" "github_deploy" {
       "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-authoring-production",
       "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-search-indexer-production",
       "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-inbox-sync-production",
+      "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-bluesky-oauth-production",
     ]
   }
 

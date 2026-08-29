@@ -197,6 +197,29 @@ module WeblogAuthoring
           PRIMARY KEY (run_id, source)
         )
       SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.bluesky_oauth_states (
+          state TEXT PRIMARY KEY,
+          encrypted_value TEXT NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.bluesky_oauth_sessions (
+          did TEXT PRIMARY KEY,
+          encrypted_value TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('connected', 'reauthorization_required')),
+          created_at TIMESTAMPTZ NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.bluesky_oauth_locks (
+          lock_key TEXT PRIMARY KEY,
+          expires_at TIMESTAMPTZ NOT NULL
+        )
+      SQL
     end
 
     def grant_privileges(connection)

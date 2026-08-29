@@ -191,6 +191,17 @@ resource "aws_cloudfront_distribution" "weblog" {
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
   }
 
+  ordered_cache_behavior {
+    path_pattern             = "/oauth/bluesky/*"
+    target_origin_id         = "authoring-api"
+    viewer_protocol_policy   = "https-only"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
+  }
+
   custom_error_response {
     error_code            = 403
     response_code         = 200
