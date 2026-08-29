@@ -321,6 +321,7 @@ export type EditorBootstrap = {
   name: string;
   title: string;
   body: string;
+  line_updated_at?: Array<string | null>;
   expected_updated_at: string;
   save_message: string;
   linked_pages: Array<LinkedPage>;
@@ -379,6 +380,7 @@ type PageResponse = {
   updated_at: string | null;
   route?: string;
   body?: string;
+  line_updated_at?: Array<string | null>;
   linked_pages: EditorBootstrap["linked_pages"];
   linked_pages_has_more: boolean;
 };
@@ -426,6 +428,177 @@ type ImageDragData = {
 
 const PAGE_REFRESH_INTERVAL = 15_000;
 const INBOX_ITEM_DRAG_TYPE = "application/x-weblog-inbox-item-id";
+const LINE_UPDATE_DATE_FORMATTER = new Intl.DateTimeFormat("ja-JP", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+  timeZone: "Asia/Tokyo"
+});
+
+export function lineUpdateLabel(value: string, now = new Date()): string {
+  const updatedAt = new Date(value);
+  const elapsedSeconds = Math.max(0, Math.floor((now.getTime() - updatedAt.getTime()) / 1000));
+  if (elapsedSeconds < 60) return "たった今更新";
+  if (elapsedSeconds < 60 * 60) return `${Math.floor(elapsedSeconds / 60)}分前に更新`;
+  if (elapsedSeconds < 24 * 60 * 60) return `${Math.floor(elapsedSeconds / (60 * 60))}時間前に更新`;
+  if (elapsedSeconds < 30 * 24 * 60 * 60) return `${Math.floor(elapsedSeconds / (24 * 60 * 60))}日前に更新`;
+  return `${LINE_UPDATE_DATE_FORMATTER.format(updatedAt)}に更新`;
+}
+
+export function lineUpdateStrength(value: string, now = new Date()): number {
+  const elapsedSeconds = Math.max(0, (now.getTime() - new Date(value).getTime()) / 1000);
+  if (elapsedSeconds < 60 * 60) return 1;
+  if (elapsedSeconds < 24 * 60 * 60) return 0.85;
+  if (elapsedSeconds < 7 * 24 * 60 * 60) return 0.65;
+  if (elapsedSeconds < 30 * 24 * 60 * 60) return 0.45;
+  if (elapsedSeconds < 90 * 24 * 60 * 60) return 0.25;
+  return 0;
+}
+
+export function isVisibleLine(line: string): boolean {
+  const value = line.trim();
+  return value.length > 0 && value !== "&nbsp;";
+}
+
+export function pendingLineUpdates(
+  savedBody: string,
+  draftBody: string,
+  updates: Array<string | null>
+): Array<string | null> {
+  const updatesByLine = new Map<string, Array<string | null>>();
+  savedBody.split("\n").forEach((line, index) => {
+    const lineUpdates = updatesByLine.get(line) || [];
+    lineUpdates.push(updates[index] || null);
+    updatesByLine.set(line, lineUpdates);
+  });
+
+  return draftBody.split("\n").map((line) => {
+    const update = updatesByLine.get(line)?.shift() || null;
+    return isVisibleLine(line) ? update : null;
+  });
+}
+
+type LineUpdateMarker = {
+  blockSize: number;
+  insetBlockStart: number;
+  updatedAt: string | null;
+};
+
+function blockLineRects(block: HTMLElement): Array<DOMRect> {
+  const document = block.ownerDocument;
+  const walker = document.createTreeWalker(block, 4);
+  const textNodes: Array<Text> = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+  const text = textNodes.map((node) => node.data).join("");
+  if (!text.includes("\n")) return text.trim() || block.querySelector("img, iframe") ? [block.getBoundingClientRect()] : [];
+
+  const locate = (offset: number): [Text, number] | null => {
+    let consumed = 0;
+    for (const node of textNodes) {
+      if (offset <= consumed + node.length) return [node, offset - consumed];
+      consumed += node.length;
+    }
+    return null;
+  };
+
+  let offset = 0;
+  return text.split("\n").flatMap((line) => {
+    const start = offset;
+    const end = start + line.length;
+    offset = end + 1;
+    if (!isVisibleLine(line)) return [];
+    const startPosition = locate(start);
+    const endPosition = locate(end);
+    if (!startPosition || !endPosition) return [];
+    const range = document.createRange();
+    range.setStart(...startPosition);
+    range.setEnd(...endPosition);
+    return typeof range.getBoundingClientRect === "function"
+      ? [range.getBoundingClientRect()]
+      : [block.getBoundingClientRect()];
+  });
+}
+
+function LineUpdateRail({ body, editor, updates }: {
+  body: string;
+  editor: Editor | null;
+  updates: Array<string | null>;
+}) {
+  const lines = body.split("\n");
+  const [markers, setMarkers] = useState<Array<LineUpdateMarker>>([]);
+
+  useLayoutEffect(() => {
+    if (!editor) return;
+
+    const measure = () => {
+      const editorElement = editor.view.dom;
+      const shell = editorElement.closest<HTMLElement>(".editor-shell");
+      if (!shell) return;
+
+      const shellRect = shell.getBoundingClientRect();
+      const blocks = Array.from(editorElement.children).slice(1) as Array<HTMLElement>;
+      const visibleUpdates = lines.flatMap((line, index) => isVisibleLine(line) ? [updates[index] || null] : []);
+      let updateIndex = 0;
+      const visibleBlocks = blocks.flatMap((block, blockIndex) => {
+        return blockLineRects(block).map((rect, lineIndex) => ({
+          blockIndex,
+          lineIndex,
+          blockSize: rect.height,
+          insetBlockStart: rect.top - shellRect.top,
+          updatedAt: visibleUpdates[updateIndex++] || null
+        }));
+      });
+      setMarkers(visibleBlocks.map((block, index) => {
+        const next = visibleBlocks[index + 1];
+        const isAdjacent = next && (
+          (next.blockIndex === block.blockIndex && next.lineIndex === block.lineIndex + 1) ||
+          (next.blockIndex === block.blockIndex + 1 && next.lineIndex === 0)
+        );
+        const blockSize = isAdjacent
+          ? next.insetBlockStart - block.insetBlockStart
+          : block.blockSize;
+        return { blockSize, insetBlockStart: block.insetBlockStart, updatedAt: block.updatedAt };
+      }));
+    };
+
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(editor.view.dom);
+    return () => observer.disconnect();
+  }, [body, editor, updates]);
+
+  return (
+    <div className="line-update-rail" aria-hidden="true">
+      {markers.map((marker, index) => {
+        const updatedAt = marker.updatedAt;
+        const strength = updatedAt ? lineUpdateStrength(updatedAt) : 0;
+        const state = updatedAt && strength > 0 ? "updated" : updatedAt ? "expired" : "pending";
+        return (
+          <span
+            className="line-update-rail__segment"
+            data-state={state}
+            data-label={state === "updated" ? lineUpdateLabel(updatedAt!) : undefined}
+            title={state === "updated" ? lineUpdateLabel(updatedAt!) : undefined}
+            style={state === "updated" ? {
+              "--line-update-strength": `${strength * 100}%`,
+              blockSize: marker.blockSize,
+              insetBlockStart: marker.insetBlockStart
+            } as CSSProperties : {
+              blockSize: marker.blockSize,
+              insetBlockStart: marker.insetBlockStart
+            }}
+            key={index}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 export function isImageDrag(dataTransfer: ImageDragData | null): boolean {
   if (!dataTransfer) return false;
@@ -1972,6 +2145,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const [draft, setDraft] = useState<EditorDraft>(() => initialDraft(bootstrap));
   const [editorContentReady, setEditorContentReady] = useState(false);
   const [status, setStatus] = useState(bootstrap.save_message);
+  const [lineUpdatedAt, setLineUpdatedAt] = useState(bootstrap.line_updated_at || []);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -1995,6 +2169,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const editVersionRef = useRef(0);
   const saveTimerRef = useRef<number | null>(null);
   const pendingSaveRef = useRef(false);
+  const savedBodyRef = useRef(bootstrap.body);
   const savedNameRef = useRef(bootstrap.name || bootstrap.title);
   const loadingLinkedPagesRef = useRef(false);
   const linkedPagesSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -2089,6 +2264,8 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       savedNameRef.current = page.name || next.title;
       setLinkedPages(page.linked_pages || []);
       setLinkedPagesHasMore(page.linked_pages_has_more || false);
+      savedBodyRef.current = snapshot.body;
+      setLineUpdatedAt(page.line_updated_at || []);
       if (!snapshot.pageId) {
         window.history.pushState(null, "", `/${encodePageName(page.route || page.name || next.title)}`);
       }
@@ -2339,6 +2516,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
       pageEtagRef.current = result.etag;
       const page = result.page;
       if (!page) return;
+      setLineUpdatedAt(page.line_updated_at || []);
 
       const current = draftRef.current;
       const contentChanged = page.updated_at !== current.expectedUpdatedAt;
@@ -2362,6 +2540,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
           body: page.body,
           expectedUpdatedAt: page.updated_at || ""
         });
+        savedBodyRef.current = page.body;
         savedNameRef.current = page.name || title;
         replaceEditorContentPreservingSelection(editor, editorDocument(title, page.body));
         window.history.replaceState(null, "", `/${encodePageName(page.route || page.name || current.title)}`);
@@ -2645,6 +2824,10 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
     () => universeGroups.map(({ kind, name }) => ({ kind, name })),
     [universeGroups]
   );
+  const visibleLineUpdates = useMemo(
+    () => pendingLineUpdates(savedBodyRef.current, draft.body, lineUpdatedAt),
+    [draft.body, lineUpdatedAt]
+  );
 
   return (
     <>
@@ -2687,6 +2870,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
               editor.commands.focus("end");
             }}
           >
+            <LineUpdateRail body={draft.body} editor={editor} updates={visibleLineUpdates} />
             {draggingImages && (
               <div className="editor-shell__drop-target" role="status">
                 ここにドロップして記事へ追加

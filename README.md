@@ -23,6 +23,18 @@ mise exec -- npm run dev
 
 ブラウザで`http://127.0.0.1:5173/`を開きます。
 
+### Scrapboxの行更新日時を取り込む
+
+`Include metadata`付きのScrapboxエクスポートから、開発用SQLiteへ行ごとの作成日時・最終更新日時・更新者IDを取り込みます。
+
+```sh
+mise exec -- bin/import-scrapbox-line-metadata \
+  --input data/raw/asonas-memo-weblog.json \
+  --database data/development/authoring.sqlite3
+```
+
+本文とScrapboxの行数が一致するページだけが対象です。取り込み後の保存では、内容が変わらない行の日時を維持し、追加・変更した行を保存時刻で更新します。
+
 ## Scrapbox移行・静的生成
 
 以下は既存のScrapbox移行と静的生成のためのRubyツールです。投稿サーバーの起動とは独立したコマンドです。

@@ -1625,6 +1625,62 @@ h2 {
   background: var(--surface);
 }
 
+.line-update-rail {
+  position: absolute;
+  z-index: 2;
+  inset-block: 0;
+  inset-inline-start: 0.45rem;
+  inline-size: 1rem;
+  pointer-events: none;
+}
+
+.line-update-rail__segment {
+  position: absolute;
+  display: block;
+  inline-size: 0.3rem;
+  min-block-size: 1px;
+  background: color-mix(in oklch, var(--accent) var(--line-update-strength, 100%), transparent);
+  pointer-events: auto;
+}
+
+.line-update-rail__segment[data-state="pending"] {
+  background: color-mix(in oklch, var(--separator) 25%, transparent);
+}
+
+.line-update-rail__segment[data-state="expired"] {
+  background: transparent;
+  pointer-events: none;
+}
+
+.line-update-rail__segment:hover {
+  background: var(--accent);
+}
+
+.line-update-rail__segment::after {
+  position: absolute;
+  z-index: 4;
+  inset-block-start: 50%;
+  inset-inline-start: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--muted-ink);
+  color: var(--surface);
+  content: attr(data-label);
+  font-size: 0.8rem;
+  line-height: 1.25;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.line-update-rail__segment:not([data-state="updated"])::after {
+  content: none;
+}
+
+.line-update-rail__segment:hover::after {
+  opacity: 1;
+}
+
 .editor-shell__actions {
   position: absolute;
   z-index: 2;

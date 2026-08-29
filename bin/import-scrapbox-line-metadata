@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "optparse"
+
+require_relative "../lib/weblog_authoring/development_database"
+require_relative "../lib/weblog_authoring/scrapbox_line_metadata_importer"
+
+options = { database_path: "data/development/authoring.sqlite3" }
+OptionParser.new do |parser|
+  parser.banner = "Usage: import-scrapbox-line-metadata --input EXPORT [--database PATH]"
+  parser.on("--input PATH", "Scrapbox export JSON with metadata") { |value| options[:input] = value }
+  parser.on("--database PATH", "Development SQLite database") { |value| options[:database_path] = value }
+end.parse!
+
+input = options.fetch(:input) { raise OptionParser::MissingArgument, "--input" }
+database = WeblogAuthoring::DevelopmentDatabase.new(
+  options.fetch(:database_path),
+  content_dir: "content"
+)
+counts = WeblogAuthoring::ScrapboxLineMetadataImporter.new(database:, export_path: input).run
+puts "Imported #{counts.fetch(:imported_lines)} lines from #{counts.fetch(:imported_pages)} pages"
+puts "Unmatched pages: #{counts.fetch(:unmatched_pages)}"
+puts "Skipped pages: #{counts.fetch(:skipped_pages)}"
+puts "Skipped titles: #{counts.fetch(:skipped_titles).join(", ")}" unless counts.fetch(:skipped_titles).empty?

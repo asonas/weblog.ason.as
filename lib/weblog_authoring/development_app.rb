@@ -190,7 +190,8 @@ module WeblogAuthoring
         title: page.page_type == "named" ? page.name.to_s : page.title.to_s,
         body: page.body,
         expected_updated_at: page.updated_at.iso8601(9),
-        save_message: "保存済み・最終更新 #{format_time(page.updated_at)}"
+        save_message: "保存済み・最終更新 #{format_time(page.updated_at)}",
+        line_updated_at: line_updated_at(page.id)
       )
     end
 
@@ -744,7 +745,8 @@ module WeblogAuthoring
       metadata
     end
 
-    def render_editor(page_id:, page_type:, date:, name:, title:, body:, expected_updated_at:, save_message:)
+    def render_editor(page_id:, page_type:, date:, name:, title:, body:, expected_updated_at:, save_message:,
+                      line_updated_at: [])
       render_shell(
         title: "編集",
         initial_state: editor_json(
@@ -755,7 +757,8 @@ module WeblogAuthoring
           title:,
           body:,
           expected_updated_at:,
-          save_message:
+          save_message:,
+          line_updated_at:
         )
       )
     end
@@ -837,7 +840,7 @@ module WeblogAuthoring
     end
 
     def editor_json(page = nil, page_id: nil, page_type: nil, date: nil, name: nil, title: nil, body: nil,
-                    expected_updated_at: nil, save_message: nil, linked_pages_has_more: nil)
+                    expected_updated_at: nil, save_message: nil, linked_pages_has_more: nil, line_updated_at: nil)
       if page
         page_id = page.id
         page_type = page.page_type
@@ -847,6 +850,7 @@ module WeblogAuthoring
         body = page.body
         expected_updated_at = page.updated_at.iso8601(9)
         save_message = "保存済み・最終更新 #{format_time(page.updated_at)}"
+        line_updated_at = line_updated_at(page.id)
       end
 
       {
@@ -857,6 +861,7 @@ module WeblogAuthoring
         "name" => name,
         "title" => title,
         "body" => body,
+        "line_updated_at" => line_updated_at || [],
         "expected_updated_at" => expected_updated_at,
         "save_message" => save_message,
         "linked_pages" => [],
@@ -1036,10 +1041,17 @@ module WeblogAuthoring
         "title" => page.title,
         "status" => page.status,
         "updated_at" => page.updated_at.iso8601(9),
+        "line_updated_at" => line_updated_at(page.id),
         "route" => page.route,
         "linked_pages" => related.fetch("pages"),
         "linked_pages_has_more" => related.fetch("has_more")
       }
+    end
+
+    def line_updated_at(page_id)
+      settings.database.scrapbox_line_metadata(page_id).map do |line|
+        line.fetch(:updated_at)&.iso8601(9)
+      end
     end
 
     def page_summary(page)

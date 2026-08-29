@@ -4,6 +4,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
+const authoringApiOrigin = process.env.AUTHORING_API_ORIGIN || "http://127.0.0.1:8000";
 
 export default defineConfig(({ mode }) => ({
   base: mode === "production" ? "/static/authoring/" : "/",
@@ -51,13 +52,13 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     proxy: {
       "/feed.xml": {
-        target: "http://127.0.0.1:8000"
+        target: authoringApiOrigin
       },
       "/api": {
-        target: "http://127.0.0.1:8000"
+        target: authoringApiOrigin
       },
       "/assets": {
-        target: "http://127.0.0.1:8000"
+        target: authoringApiOrigin
       }
     }
   },

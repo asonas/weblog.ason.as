@@ -14,7 +14,7 @@ require_relative "names"
 
 module WeblogAuthoring
   class DevelopmentDatabase
-    SCHEMA_VERSION = 6
+    SCHEMA_VERSION = 7
     INBOX_RETENTION_SECONDS = 7 * 24 * 60 * 60
     ADOPTION_RETENTION_SECONDS = 14 * 24 * 60 * 60
     TOKYO_OFFSET = "+09:00"
@@ -91,8 +91,56 @@ module WeblogAuthoring
       end
     end
 
+    def replace_scrapbox_line_metadata(page_id, body_hash:, lines:)
+      with_connection do |database|
+        database.transaction do
+          database.execute("DELETE FROM scrapbox_line_metadata WHERE page_id = ?", page_id)
+          lines.each_with_index do |line, line_index|
+            database.execute(
+              <<~SQL,
+                INSERT INTO scrapbox_line_metadata (
+                  page_id, body_hash, line_index, created_at, updated_at, user_id
+                ) VALUES (?, ?, ?, ?, ?, ?)
+              SQL
+              [
+                page_id,
+                body_hash,
+                line_index,
+                serialize_time(line[:created_at]),
+                serialize_time(line[:updated_at]),
+                line[:user_id]
+              ]
+            )
+          end
+        end
+      end
+    end
+
+    def scrapbox_line_metadata(page_id)
+      with_connection do |database|
+        database.execute(
+          <<~SQL,
+            SELECT metadata.line_index, metadata.created_at, metadata.updated_at, metadata.user_id
+            FROM scrapbox_line_metadata metadata
+            JOIN pages ON pages.id = metadata.page_id AND pages.body_hash = metadata.body_hash
+            WHERE metadata.page_id = ?
+            ORDER BY metadata.line_index
+          SQL
+          page_id
+        ).map do |line_index, created_at, updated_at, user_id|
+          {
+            line_index:,
+            created_at: created_at && Time.iso8601(created_at),
+            updated_at: updated_at && Time.iso8601(updated_at),
+            user_id:
+          }
+        end
+      end
+    end
+
     def save(request)
       current = request.page_id && find(request.page_id)
+      current_line_metadata = current && scrapbox_line_metadata(current.id)
       document = current.nil? ? new_document(request) : updated_document(current, request)
 
       with_connection do |database|
@@ -103,6 +151,7 @@ module WeblogAuthoring
           else
             update_page(database, document)
           end
+          replace_line_metadata_after_save(database, document, current, current_line_metadata || [])
           replace_links(database, document)
           request.consumed_inbox_item_ids.each do |item_id|
             record_inbox_item_usage_with_connection(database, item_id, document.id)
@@ -697,6 +746,7 @@ module WeblogAuthoring
         create_inbox_schema(database)
         create_mobile_upload_schema(database)
         create_inbox_sync_schema(database)
+        create_scrapbox_line_metadata_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
@@ -704,23 +754,32 @@ module WeblogAuthoring
         create_inbox_schema(database)
         create_mobile_upload_schema(database)
         create_inbox_sync_schema(database)
+        create_scrapbox_line_metadata_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
       if version == 3 && table_exists?(database, "pages")
         create_mobile_upload_schema(database)
         create_inbox_sync_schema(database)
+        create_scrapbox_line_metadata_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
       if version == 4 && table_exists?(database, "pages")
         create_inbox_schema(database)
         create_inbox_sync_schema(database)
+        create_scrapbox_line_metadata_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
       if version == 5 && table_exists?(database, "pages")
         create_inbox_sync_schema(database)
+        create_scrapbox_line_metadata_schema(database)
+        database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
+        return
+      end
+      if version == 6 && table_exists?(database, "pages")
+        create_scrapbox_line_metadata_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end
@@ -758,6 +817,7 @@ module WeblogAuthoring
       create_inbox_schema(database)
       create_mobile_upload_schema(database)
       create_inbox_sync_schema(database)
+      create_scrapbox_line_metadata_schema(database)
     end
 
     def table_exists?(database, table)
@@ -878,6 +938,22 @@ module WeblogAuthoring
             error TEXT,
             completed_at TEXT NOT NULL,
             PRIMARY KEY(run_id, source)
+          );
+        SQL
+      )
+    end
+
+    def create_scrapbox_line_metadata_schema(database)
+      database.execute_batch(
+        <<~SQL
+          CREATE TABLE IF NOT EXISTS scrapbox_line_metadata (
+            page_id TEXT NOT NULL,
+            body_hash TEXT NOT NULL,
+            line_index INTEGER NOT NULL,
+            created_at TEXT,
+            updated_at TEXT,
+            user_id TEXT,
+            PRIMARY KEY (page_id, line_index)
           );
         SQL
       )
@@ -1159,6 +1235,44 @@ module WeblogAuthoring
         database.execute(
           "INSERT INTO links (source_id, target_id, target_name, position) VALUES (?, ?, ?, ?)",
           [document.id, target_id, link.name, position]
+        )
+      end
+    end
+
+    def replace_line_metadata_after_save(database, document, current, current_metadata)
+      previous_lines = current&.body.to_s.split("\n", -1)
+      metadata_by_line = Hash.new { |lines, body| lines[body] = [] }
+      previous_lines.each_with_index do |line, index|
+        metadata = current_metadata[index]
+        metadata_by_line[line] << metadata unless metadata.nil?
+      end
+
+      timestamp = document.updated_at
+      lines = document.body.split("\n", -1).map do |line|
+        previous = metadata_by_line[line].shift
+        {
+          created_at: previous&.fetch(:created_at, nil) || timestamp,
+          updated_at: previous&.fetch(:updated_at, nil) || timestamp,
+          user_id: previous&.fetch(:user_id, nil)
+        }
+      end
+
+      database.execute("DELETE FROM scrapbox_line_metadata WHERE page_id = ?", document.id)
+      lines.each_with_index do |line, line_index|
+        database.execute(
+          <<~SQL,
+            INSERT INTO scrapbox_line_metadata (
+              page_id, body_hash, line_index, created_at, updated_at, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          SQL
+          [
+            document.id,
+            Digest::SHA256.hexdigest(document.body),
+            line_index,
+            serialize_time(line.fetch(:created_at)),
+            serialize_time(line.fetch(:updated_at)),
+            line.fetch(:user_id)
+          ]
         )
       end
     end

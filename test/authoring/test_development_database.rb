@@ -40,6 +40,34 @@ class TestDevelopmentDatabase < Minitest::Test
     assert_equal updated, database.find_route("/最初の記事")
   end
 
+  def test_save_tracks_new_and_changed_line_update_times
+    current_time = Time.iso8601("2026-08-21T12:00:00+09:00")
+    database = WeblogAuthoring::DevelopmentDatabase.new(
+      tmpdir.join("data/development/authoring.sqlite3"),
+      content_dir: tmpdir.join("content"),
+      clock: -> { current_time }
+    )
+    database.setup!
+    page = database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "行更新", body: "残る行\n変更前\n末尾"
+    ))
+
+    assert_equal [current_time.to_i] * 3,
+                 database.scrapbox_line_metadata(page.id).map { |line| line.fetch(:updated_at).to_i }
+
+    current_time = Time.iso8601("2026-08-21T13:00:00+09:00")
+    updated = database.save(WeblogAuthoring::SaveRequest.new(
+      page_id: page.id,
+      page_type: page.page_type,
+      name: page.name,
+      body: "追加行\n残る行\n変更後\n末尾",
+      expected_updated_at: page.updated_at
+    ))
+
+    assert_equal [current_time.to_i, page.updated_at.to_i, current_time.to_i, page.updated_at.to_i],
+                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at).to_i }
+  end
+
   def test_titles_are_unique_and_the_same_date_can_have_multiple_pages
     database = development_database
     database.save(WeblogAuthoring::SaveRequest.new(
@@ -106,8 +134,8 @@ class TestDevelopmentDatabase < Minitest::Test
     current_time = Time.iso8601("2025-03-01T12:00:00+09:00")
     database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "march", body: ""))
 
-    assert_equal ["january"], database.list_pages(limit: 1, before: { updated_at: february.updated_at, id: february.id }).map(&:name)
-    assert_equal ["february"], database.list_pages(limit: 1, after: { updated_at: january.updated_at, id: january.id }).map(&:name)
+    assert_equal ["january"], database.list_pages(limit: 1, before: { timestamp: february.updated_at, id: february.id }).map(&:name)
+    assert_equal ["february"], database.list_pages(limit: 1, after: { timestamp: january.updated_at, id: january.id }).map(&:name)
     assert_equal ["january"], database.list_pages(kind: "diary").map(&:name)
     assert_equal ["march", "february"], database.list_pages(kind: "article").map(&:name)
   end

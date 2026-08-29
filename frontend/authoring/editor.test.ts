@@ -55,6 +55,10 @@ const {
   extractEmbeddableUrls,
   internalNodeVisual,
   isImageDrag,
+  isVisibleLine,
+  lineUpdateLabel,
+  lineUpdateStrength,
+  pendingLineUpdates,
   matchingWikiLinkNames,
   nextWikiLinkSuggestionIndex,
   replaceEditorContentPreservingSelection,
@@ -74,6 +78,47 @@ test("prefixes editor document titles only in development", () => {
   assert.equal(editorDocumentTitle("", "development"), "[dev] weblog.ason.as");
   assert.equal(editorDocumentTitle("2026-08-26", "development"), "[dev] 2026-08-26 : weblog.ason.as");
   assert.equal(editorDocumentTitle("2026-08-26"), "2026-08-26 : weblog.ason.as");
+});
+
+test("formats recent and older line update times", () => {
+  const now = new Date("2026-08-28T12:00:00+09:00");
+
+  assert.equal(lineUpdateLabel("2026-08-23T12:00:00+09:00", now), "5日前に更新");
+  assert.equal(lineUpdateLabel("2021-11-14T13:24:36+09:00", now), "2021/11/14 13:24:36に更新");
+});
+
+test("fades line update colors as updates age", () => {
+  const now = new Date("2026-08-29T12:00:00+09:00");
+
+  assert.equal(lineUpdateStrength("2026-08-29T11:30:00+09:00", now), 1);
+  assert.equal(lineUpdateStrength("2026-08-29T06:00:00+09:00", now), 0.85);
+  assert.equal(lineUpdateStrength("2026-08-27T12:00:00+09:00", now), 0.65);
+  assert.equal(lineUpdateStrength("2026-08-15T12:00:00+09:00", now), 0.45);
+  assert.equal(lineUpdateStrength("2026-07-01T12:00:00+09:00", now), 0.25);
+  assert.equal(lineUpdateStrength("2026-05-31T11:59:59+09:00", now), 0);
+});
+
+test("keeps unchanged line updates and leaves edited lines pending", () => {
+  assert.deepEqual(
+    pendingLineUpdates(
+      "最初の行\n残る行\n末尾",
+      "追加行\n最初の行\n変更後\n末尾",
+      ["first", "remaining", "last"]
+    ),
+    [null, "first", null, "last"]
+  );
+  assert.deepEqual(pendingLineUpdates("", "新しい記事", []), [null]);
+  assert.deepEqual(
+    pendingLineUpdates("最初の行\n\n末尾", "最初の行\n\n末尾", ["first", "blank", "last"]),
+    ["first", null, "last"]
+  );
+});
+
+test("treats blank and non-breaking-space lines as invisible", () => {
+  assert.equal(isVisibleLine(""), false);
+  assert.equal(isVisibleLine("   "), false);
+  assert.equal(isVisibleLine("&nbsp;"), false);
+  assert.equal(isVisibleLine("本文"), true);
 });
 
 test("searches from the shared search field and renders article links", async () => {

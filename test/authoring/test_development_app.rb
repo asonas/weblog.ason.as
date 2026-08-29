@@ -597,6 +597,28 @@ class TestDevelopmentApp < Minitest::Test
     assert_empty fresh_editor.fetch("page_id")
   end
 
+  def test_editor_api_includes_imported_line_update_times
+    page = app_database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named",
+      name: "Scrapboxからの記事",
+      body: "最初の行\n次の行"
+    ))
+    app_database.replace_scrapbox_line_metadata(
+      page.id,
+      body_hash: Digest::SHA256.hexdigest(page.body),
+      lines: [
+        { created_at: Time.at(1_700_000_000).utc, updated_at: Time.at(1_700_000_001).utc, user_id: "user-1" },
+        { created_at: Time.at(1_700_000_010).utc, updated_at: Time.at(1_700_000_011).utc, user_id: "user-1" }
+      ]
+    )
+
+    status, _headers, body = request("GET", "/api/routes/#{URI.encode_uri_component("Scrapboxからの記事")}")
+
+    assert_equal 200, status
+    assert_equal ["2023-11-15T07:13:21.000000000+09:00", "2023-11-15T07:13:31.000000000+09:00"],
+                 JSON.parse(body).fetch("line_updated_at")
+  end
+
   def test_atom_feed_contains_article_body_and_excludes_empty_pages
     json_request("POST", "/api/authoring/pages", page_type: "named", title: "記事", body: "本文 **です**")
     json_request("POST", "/api/authoring/pages", page_type: "named", title: "空のハブ", body: "")
