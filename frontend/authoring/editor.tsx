@@ -152,13 +152,7 @@ const WikiLinks = Extension.create({
                 && oldState.selection.to <= selection.from;
               const selectedImage = selection instanceof NodeSelection && selection.node.type.name === "image"
                 ? { from: selection.from, to: selection.to, node: selection.node }
-                : selection.empty && selection.$from.parentOffset === 0 && selection.$from.depth > 0
-                  ? (() => {
-                      const from = selection.$from.before(selection.$from.depth);
-                      const node = newState.doc.resolve(from).nodeBefore;
-                      return node?.type.name === "image" ? { from: from - node.nodeSize, to: from, node } : null;
-                    })()
-                  : null;
+                : null;
               const src = selectedImage?.node.attrs.src;
               if (selectedImage && typeof src === "string" && src.length > 0) {
                 const markdown = `![](${src})`;

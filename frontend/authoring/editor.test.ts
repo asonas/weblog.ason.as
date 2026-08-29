@@ -935,7 +935,7 @@ test("edits a selected image as Markdown and renders it again after leaving", ()
   editor.destroy();
 });
 
-test("edits an image as Markdown when the cursor lands to its right", () => {
+test("keeps an image rendered when the cursor moves to the start of the following line", () => {
   const editor = new Editor({
     element: document.createElement("div"),
     extensions: EDITOR_EXTENSIONS,
@@ -946,8 +946,8 @@ test("edits an image as Markdown when the cursor lands to its right", () => {
 
   editor.commands.setTextSelection(bodyStart);
 
-  assert.match(editor.getText(), /!\[\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
-  assert.equal(editor.state.selection.from, editor.state.doc.child(0).nodeSize + editor.state.doc.child(1).nodeSize - 1);
+  assert.equal(editor.state.doc.child(1).type.name, "image");
+  assert.equal(editor.state.selection.from, bodyStart);
   editor.destroy();
 });
 
