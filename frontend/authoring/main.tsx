@@ -6,6 +6,7 @@ import type { RefObject } from "react";
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
 import { FeedLoadQueue } from "./feedLoadQueue";
 import { captureScrollAnchor, restoreScrollAnchor, type ScrollAnchor } from "./scrollAnchor";
+import { DesignSystemPage } from "./designSystem";
 import { SearchPage, SiteSearch } from "./search";
 import "./styles.css";
 
@@ -607,6 +608,12 @@ const data = document.querySelector<HTMLScriptElement>("#authoring-data");
 
 function start() {
   if (root) {
+    if (import.meta.env.DEV && window.location.pathname === "/design-system") {
+      document.documentElement.dataset.view = "design-system";
+      document.title = "Design system · weblog.ason.as";
+      createRoot(root).render(<DesignSystemPage />);
+      return;
+    }
     const initialBootstrap = data?.textContent ? JSON.parse(data.textContent) as AppBootstrap : undefined;
     createRoot(root).render(<RootApp initialBootstrap={initialBootstrap} initialAuth={DEFAULT_AUTH_STATE} />);
   }
