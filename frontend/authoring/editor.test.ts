@@ -50,6 +50,7 @@ const {
   buildInternalUniverseGroups,
   EDITOR_EXTENSIONS,
   embedImageUrl,
+  editorDocumentTitle,
   ensureBodySelection,
   extractEmbeddableUrls,
   internalNodeVisual,
@@ -68,6 +69,12 @@ const {
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
 const { markdownForSource } = await import("./markdown");
 const { SearchPage, SiteSearch } = await import("./search");
+
+test("prefixes editor document titles only in development", () => {
+  assert.equal(editorDocumentTitle("", "development"), "[dev] weblog.ason.as");
+  assert.equal(editorDocumentTitle("2026-08-26", "development"), "[dev] 2026-08-26 : weblog.ason.as");
+  assert.equal(editorDocumentTitle("2026-08-26"), "2026-08-26 : weblog.ason.as");
+});
 
 test("searches from the shared search field and renders article links", async () => {
   const container = document.createElement("div");

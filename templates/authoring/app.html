@@ -1,9 +1,9 @@
 <!doctype html>
-  <html lang="ja" data-theme="teal" data-can-edit="<%= auth.fetch("can_edit") %>" data-csrf-token="<%= CGI.escapeHTML(auth.fetch("csrf_token")) %>">
+  <html lang="ja" data-theme="teal" data-environment="development" data-can-edit="<%= auth.fetch("can_edit") %>" data-csrf-token="<%= CGI.escapeHTML(auth.fetch("csrf_token")) %>">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><%= CGI.escapeHTML(title.to_s) %></title>
+    <title>[dev] <%= CGI.escapeHTML(title.to_s) %></title>
     <link rel="alternate" type="application/atom+xml" title="weblog.ason.as" href="/feed.xml">
     <link rel="stylesheet" href="/static/authoring/app.css?v=2">
     <script src="/static/authoring/app.js?v=2" defer></script>

@@ -372,6 +372,8 @@ class TestDevelopmentApp < Minitest::Test
     status, _headers, body = request("GET", "/")
 
     assert_equal 200, status
+    assert_includes body, 'data-environment="development"'
+    assert_includes body, "<title>[dev] weblog.ason.as</title>"
     assert_includes body, '"mode":"home"'
     refute_includes body, 'href="/editor/new"'
     assert_includes body, 'href="/?new=1"'

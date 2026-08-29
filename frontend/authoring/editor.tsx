@@ -1841,6 +1841,11 @@ function initialDraft(bootstrap: EditorBootstrap): EditorDraft {
   };
 }
 
+export function editorDocumentTitle(title: string, environment?: string): string {
+  const pageTitle = title ? `${title} : weblog.ason.as` : "weblog.ason.as";
+  return environment === "development" ? `[dev] ${pageTitle}` : pageTitle;
+}
+
 function editorDocument(title: string, body: string): string {
   return [title, markdownForEditor(body)].filter((part) => part.length > 0).join("\n\n");
 }
@@ -2000,7 +2005,7 @@ export function AuthoringEditor({ bootstrap }: { bootstrap: EditorBootstrap }) {
   const consumedInboxItemIdsRef = useRef<Array<string>>([]);
 
   useEffect(() => {
-    document.title = draft.title ? `${draft.title} : weblog.ason.as` : "weblog.ason.as";
+    document.title = editorDocumentTitle(draft.title, document.documentElement.dataset.environment);
   }, [draft.title]);
   const initialFocusAppliedRef = useRef(false);
   const editorContentReadyFrameRef = useRef<number | null>(null);

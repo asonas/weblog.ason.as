@@ -169,7 +169,7 @@ module WeblogAuthoring
                       else home_state
                       end
       render_shell(
-        title: "weblog",
+        title: "weblog.ason.as",
         initial_state:
       )
     end
