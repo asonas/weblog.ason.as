@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class PhotoSelectionTests: XCTestCase {
-    func testTodayPhotosStartSelectedAndCanBeExcluded() {
+    func testRecentPhotosStartSelectedAndCanBeExcluded() {
         let suiteName = "PhotoSelectionTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }

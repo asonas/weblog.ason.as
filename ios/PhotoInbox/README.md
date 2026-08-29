@@ -1,6 +1,6 @@
 # Photo Inbox for iOS
 
-今日の写真を選び、weblog.ason.as の写真インボックスへ送るiOSアプリです。
+直近7日分の写真を選び、weblog.ason.as の写真インボックスへ送るiOSアプリです。
 
 ## 開発
 

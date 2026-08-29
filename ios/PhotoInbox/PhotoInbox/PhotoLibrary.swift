@@ -22,27 +22,26 @@ final class PhotoLibrary {
     func requestAccess() async {
         authorizationStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         logger.notice("Photo authorization changed to \(self.authorizationStatus.rawValue)")
-        if canRead { loadToday() }
+        if canRead { loadRecentPhotos() }
     }
 
     func refreshAuthorizationAndPhotos() {
         authorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        if canRead { loadToday() }
+        if canRead { loadRecentPhotos() }
     }
 
-    func loadToday(now: Date = .now, calendar: Calendar = .current) {
+    func loadRecentPhotos(now: Date = .now, calendar: Calendar = .current) {
         guard canRead else { return }
-        let start = calendar.startOfDay(for: now)
-        let end = calendar.date(byAdding: .day, value: 1, to: start)!
+        let interval = Self.recentPhotoInterval(now: now, calendar: calendar)
         let options = PHFetchOptions()
         options.predicate = NSPredicate(
             format: "creationDate >= %@ AND creationDate < %@",
-            start as NSDate, end as NSDate
+            interval.start as NSDate, interval.end as NSDate
         )
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         let result = PHAsset.fetchAssets(with: .image, options: options)
         logger.notice(
-            "Fetching today photos from \(start, privacy: .public) to \(end, privacy: .public): \(result.count) assets"
+            "Fetching recent photos from \(interval.start, privacy: .public) to \(interval.end, privacy: .public): \(result.count) assets"
         )
         var loaded: [LibraryPhoto] = []
         result.enumerateObjects { asset, _, _ in
@@ -55,6 +54,13 @@ final class PhotoLibrary {
             ))
         }
         photos = loaded
+    }
+
+    static func recentPhotoInterval(now: Date, calendar: Calendar) -> DateInterval {
+        let today = calendar.startOfDay(for: now)
+        let start = calendar.date(byAdding: .day, value: -6, to: today)!
+        let end = calendar.date(byAdding: .day, value: 1, to: today)!
+        return DateInterval(start: start, end: end)
     }
 
     func thumbnail(for photo: LibraryPhoto, size: CGSize) async -> UIImage? {
