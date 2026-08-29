@@ -1,9 +1,10 @@
 import { createRoot } from "react-dom/client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { RefObject } from "react";
 
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
+import { captureScrollAnchor, restoreScrollAnchor, type ScrollAnchor } from "./scrollAnchor";
 import { SearchPage, SiteSearch } from "./search";
 import "./styles.css";
 
@@ -389,17 +390,18 @@ function AtlasEntry({ page }: { page: HomePage }) {
   );
 }
 
-function FeedColumn({ kind, heading, initialPages, selectedMonth }: {
+function FeedColumn({ kind, heading, initialPages, selectedMonth, feedRef, pendingScrollAnchorRef }: {
   kind: "diary" | "article";
   heading: string;
   initialPages: HomePage[];
   selectedMonth: string | null;
+  feedRef: RefObject<HTMLDivElement | null>;
+  pendingScrollAnchorRef: RefObject<ScrollAnchor | null>;
 }) {
   const [windowState, setWindowState] = useState<PageWindow>({ pages: initialPages });
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadingRef = useRef(false);
-  const columnRef = useRef<HTMLElement | null>(null);
   const newerRef = useRef<HTMLDivElement | null>(null);
   const olderRef = useRef<HTMLDivElement | null>(null);
 
@@ -408,9 +410,11 @@ function FeedColumn({ kind, heading, initialPages, selectedMonth }: {
     loadingRef.current = true;
     setIsLoading(true);
     setLoadError(null);
-    const previousHeight = columnRef.current?.scrollHeight ?? 0;
     try {
       const response = await fetchBootstrap<PageWindow>(url);
+      if (direction === "newer" && feedRef.current && !pendingScrollAnchorRef.current) {
+        pendingScrollAnchorRef.current = captureScrollAnchor(feedRef.current);
+      }
       setWindowState((current) => ({
         pages: direction === "replace" ? response.pages
           : direction === "newer" ? [...response.pages, ...current.pages]
@@ -420,12 +424,6 @@ function FeedColumn({ kind, heading, initialPages, selectedMonth }: {
         has_newer: direction === "older" ? current.has_newer : response.has_newer,
         has_older: direction === "newer" ? current.has_older : response.has_older
       }));
-      if (direction === "newer") {
-        requestAnimationFrame(() => {
-          const nextHeight = columnRef.current?.scrollHeight ?? previousHeight;
-          window.scrollBy({ top: nextHeight - previousHeight });
-        });
-      }
     } catch (reason: unknown) {
       setLoadError(reason instanceof Error ? reason.message : "記事を読み込めませんでした");
     } finally {
@@ -433,6 +431,14 @@ function FeedColumn({ kind, heading, initialPages, selectedMonth }: {
       setIsLoading(false);
     }
   };
+
+  useLayoutEffect(() => {
+    const anchor = pendingScrollAnchorRef.current;
+    if (!anchor) return;
+
+    pendingScrollAnchorRef.current = null;
+    restoreScrollAnchor(anchor);
+  }, [windowState.pages, pendingScrollAnchorRef]);
 
   useEffect(() => {
     const query = new URLSearchParams({ kind });
@@ -462,7 +468,7 @@ function FeedColumn({ kind, heading, initialPages, selectedMonth }: {
   }, [kind, windowState]);
 
   return (
-    <section className={`atlas-split__column atlas-split__${kind}`} aria-label={`${heading}フィード`} aria-busy={isLoading} ref={columnRef}>
+    <section className={`atlas-split__column atlas-split__${kind}`} aria-label={`${heading}フィード`} aria-busy={isLoading}>
       <header><h2>{heading}</h2></header>
       {loadError && <p className="atlas-stream__error" role="alert">{loadError}</p>}
       <div className="atlas-stream__sentinel" ref={newerRef}>
@@ -477,19 +483,26 @@ function FeedColumn({ kind, heading, initialPages, selectedMonth }: {
 }
 
 function SplitFeed({ initialPages, selectedMonth }: { initialPages: HomePage[]; selectedMonth: string | null }) {
+  const feedRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollAnchorRef = useRef<ScrollAnchor | null>(null);
+
   return (
-    <div className="atlas-split">
+    <div className="atlas-split" ref={feedRef}>
       <FeedColumn
         kind="diary"
         heading="日記"
         initialPages={initialPages.filter((page) => page.is_diary)}
         selectedMonth={selectedMonth}
+        feedRef={feedRef}
+        pendingScrollAnchorRef={pendingScrollAnchorRef}
       />
       <FeedColumn
         kind="article"
         heading="記事"
         initialPages={initialPages.filter((page) => !page.is_diary)}
         selectedMonth={selectedMonth}
+        feedRef={feedRef}
+        pendingScrollAnchorRef={pendingScrollAnchorRef}
       />
     </div>
   );

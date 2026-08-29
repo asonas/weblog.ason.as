@@ -5,7 +5,7 @@
     "build": "vite build",
     "dev": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "test:authoring": "tsx --test frontend/authoring/editor.test.ts",
+    "test:authoring": "tsx --test frontend/authoring/*.test.ts",
     "test:scrapbox": "tsx --test scripts/scrapbox-to-weblog.test.ts",
     "convert:scrapbox:all": "tsx scripts/scrapbox-to-weblog.ts",
     "convert:scrapbox:assets": "tsx scripts/scrapbox-to-weblog.ts --assets-only"
