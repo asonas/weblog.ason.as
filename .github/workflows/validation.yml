@@ -1,0 +1,91 @@
+name: Validate
+
+'on':
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ios: ${{ steps.detect.outputs.ios }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect iOS changes
+        id: detect
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$BEFORE_SHA" == "0000000000000000000000000000000000000000" ]] \
+            || ! git cat-file -e "${BEFORE_SHA}^{commit}"; then
+            echo "ios=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$BEFORE_SHA" "$AFTER_SHA" -- \
+            ios/PhotoInbox mise.toml .github/workflows/validation.yml; then
+            echo "ios=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ios=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  portable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        with:
+          install_args: ruby node terraform tflint
+
+      - name: Install locked dependencies
+        run: mise run setup
+
+      - name: Run portable checks and build site
+        run: mise run check:portable
+
+      - name: Record artifact commit
+        run: |
+          jq --null-input --arg commit_sha "$GITHUB_SHA" \
+            '{commit_sha: $commit_sha}' > dist/site/artifact-metadata.json
+          {
+            echo "## site-${GITHUB_SHA}"
+            echo "Commit: \`${GITHUB_SHA}\`"
+            echo ""
+            echo '```text'
+            find dist/site -type f -print | sort
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload site artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: site-${{ github.sha }}
+          path: dist/site
+          if-no-files-found: error
+          retention-days: 7
+
+  ios:
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        with:
+          install_args: xcodegen
+
+      - name: Run iOS checks
+        run: mise run check:ios
