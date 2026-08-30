@@ -198,6 +198,10 @@ run = [
   "mise run check:ios",
 ]
 
+[tasks."check:production"]
+description = "Check read-only production state with AWS credentials"
+run = "mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- bin/check-production"
+
 [tasks."ruby:format"]
 description = "Format Ruby files with RuboCop"
 run = "bundle exec rubocop -a"

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly expected_account="282782318939"
+readonly region="ap-northeast-1"
+readonly functions=(
+  "weblog-authoring-production"
+  "weblog-search-indexer-production"
+  "weblog-inbox-sync-production"
+  "weblog-bluesky-oauth-production"
+)
+
+account="$(aws sts get-caller-identity --query Account --output text)"
+if [[ "${account}" != "${expected_account}" ]]; then
+  echo "Expected AWS account ${expected_account}, got ${account}" >&2
+  exit 1
+fi
+
+for function_name in "${functions[@]}"; do
+  read -r state update_status < <(
+    aws lambda get-function-configuration \
+      --region "${region}" \
+      --function-name "${function_name}" \
+      --query '[State, LastUpdateStatus]' \
+      --output text
+  )
+
+  if [[ "${state}" != "Active" || "${update_status}" != "Successful" ]]; then
+    echo "${function_name}: state=${state}, last_update_status=${update_status}" >&2
+    exit 1
+  fi
+
+  echo "${function_name}: active"
+done
+
+aws secretsmanager describe-secret \
+  --region "${region}" \
+  --secret-id "weblog-authoring-production/oauth" \
+  --query ARN \
+  --output text >/dev/null
+
+echo "Production check passed"

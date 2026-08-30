@@ -177,8 +177,10 @@ macOSとXcodeがある環境では、iOSを含む全体checkを実行できま�
 mise run check
 ```
 
-`check:ios`はiOSだけを検証します。coverageは言語別の`*:coverage`で実行し、
-production credentialを使う確認とともに通常checkには含めません。
+`check:ios`はiOSだけを検証します。
+coverageは言語別の`*:coverage`で実行します。
+production credentialを使う読み取り確認は`mise run check:production`で実行します。
+どちらも通常checkには含めません。
 
 Terraformのmock testは対象resourceだけを評価するため、Terraform自身が
 `Resource targeting is in effect`を表示します。実providerやproductionには接続しません。
