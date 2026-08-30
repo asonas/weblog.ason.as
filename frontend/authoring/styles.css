@@ -1976,6 +1976,10 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header__search .si
   justify-content: flex-start;
 }
 
+.cover-journal__archive > summary {
+  display: none;
+}
+
 .cover-journal__stream {
   min-inline-size: 0;
 }
@@ -2914,8 +2918,8 @@ td {
   }
 
   .cover-journal__body {
-    gap: var(--space-12);
-    padding: var(--space-8) var(--space-4) var(--space-12);
+    gap: var(--space-8);
+    padding: var(--space-6) var(--space-4) var(--space-12);
   }
 
   .cover-journal__index .home-archive__years {
@@ -2925,6 +2929,45 @@ td {
   .cover-journal__index .home-tags,
   .cover-journal__index .home-archive {
     inline-size: 100%;
+  }
+
+  .cover-journal__index .home-tags {
+    max-block-size: 4.25rem;
+    margin-block-end: var(--space-3);
+    overflow: hidden;
+  }
+
+  .cover-journal__archive > summary {
+    display: flex;
+    align-items: center;
+    min-block-size: 2.75rem;
+    border-block-start: 1px solid var(--separator);
+    color: var(--muted-ink);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .cover-journal__archive > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .cover-journal__archive > summary::after {
+    margin-inline-start: auto;
+    content: "+";
+    font-size: 1.35rem;
+    line-height: 1;
+  }
+
+  .cover-journal__archive[open] > summary::after {
+    content: "\2212";
+  }
+
+  .cover-journal__index .home-archive {
+    margin-block-start: var(--space-4);
+  }
+
+  .cover-journal__index .home-auth {
+    margin-block: var(--space-4) 0;
   }
 
   .article-reading-header--covered {
