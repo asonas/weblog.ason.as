@@ -148,17 +148,55 @@ description = "Check PhotoInbox Swift formatting without modifying files"
 run = "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift-format lint --strict --recursive ios/PhotoInbox/PhotoInbox ios/PhotoInbox/PhotoInboxTests"
 
 [tasks."ios:test"]
-description = "Run PhotoInbox XCTest with code coverage enabled"
+description = "Run PhotoInbox XCTest without code coverage"
 run = [
-  "command rm -rf /tmp/weblog-photo-inbox.xcresult /tmp/weblog-photo-inbox-derived-data",
+  "command rm -rf /tmp/weblog-photo-inbox-derived-data",
   "mise run ios:generate",
-  "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xcodebuild test -project ios/PhotoInbox/PhotoInbox.xcodeproj -scheme PhotoInbox -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /tmp/weblog-photo-inbox-derived-data -resultBundlePath /tmp/weblog-photo-inbox.xcresult -enableCodeCoverage YES CODE_SIGNING_ALLOWED=NO",
+  "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xcodebuild test -project ios/PhotoInbox/PhotoInbox.xcodeproj -scheme PhotoInbox -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /tmp/weblog-photo-inbox-derived-data -enableCodeCoverage NO CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES",
 ]
 
 [tasks."ios:coverage"]
-description = "Report PhotoInbox source coverage from the latest XCTest run"
-depends = ["ios:test"]
-run = "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xccov view --report --files-for-target PhotoInbox.app /tmp/weblog-photo-inbox.xcresult"
+description = "Run PhotoInbox XCTest and report source coverage"
+run = [
+  "command rm -rf /tmp/weblog-photo-inbox.xcresult /tmp/weblog-photo-inbox-derived-data",
+  "mise run ios:generate",
+  "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xcodebuild test -project ios/PhotoInbox/PhotoInbox.xcodeproj -scheme PhotoInbox -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /tmp/weblog-photo-inbox-derived-data -resultBundlePath /tmp/weblog-photo-inbox.xcresult -enableCodeCoverage YES CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES",
+  "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xccov view --report --files-for-target PhotoInbox.app /tmp/weblog-photo-inbox.xcresult",
+]
+
+[tasks."check:portable"]
+description = "Run repository checks that work on Linux and macOS"
+run = [
+  "mise run ruby:lint",
+  "mise run ruby:typecheck",
+  "mise run ruby:test",
+  "mise run frontend:lint",
+  "mise run frontend:typecheck",
+  "mise run frontend:test",
+  "mise run bluesky-oauth:lint",
+  "mise run bluesky-oauth:typecheck",
+  "mise run bluesky-oauth:test",
+  "mise run bluesky-oauth:build",
+  "mise run scrapbox:lint",
+  "mise run scrapbox:typecheck",
+  "mise run scrapbox:test",
+  "mise run terraform:check",
+  "mise run frontend:build",
+]
+
+[tasks."check:ios"]
+description = "Run PhotoInbox checks that require macOS and Xcode"
+run = [
+  "mise run ios:lint",
+  "mise run ios:test",
+]
+
+[tasks.check]
+description = "Run all repository checks on macOS"
+run = [
+  "mise run check:portable",
+  "mise run check:ios",
+]
 
 [tasks."ruby:format"]
 description = "Format Ruby files with RuboCop"

@@ -168,7 +168,19 @@ mise exec -- bin/migrate \
 ## テスト
 
 ```sh
-mise exec -- bundle exec ruby -Itest -e 'Dir["test/authoring/test_*.rb", "test/migration/test_*.rb"].sort.each { |file| require_relative file }'
+mise run check:portable
 ```
 
-Rubyの投稿機能はlocalhostでの記事作成・編集・公開を対象にします。
+macOSとXcodeがある環境では、iOSを含む全体checkを実行できます。
+
+```sh
+mise run check
+```
+
+`check:ios`はiOSだけを検証します。coverageは言語別の`*:coverage`で実行し、
+production credentialを使う確認とともに通常checkには含めません。
+
+Terraformのmock testは対象resourceだけを評価するため、Terraform自身が
+`Resource targeting is in effect`を表示します。実providerやproductionには接続しません。
+XcodeはApp Intentsを使わないtargetに対してmetadata抽出skipのwarningを表示します。
+SwiftおよびClangがproject sourceに対して出すwarningはerrorとして扱います。
