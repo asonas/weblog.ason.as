@@ -23,6 +23,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject
@@ -332,6 +333,9 @@ type EditorDraft = {
   name: string;
   title: string;
   body: string;
+  coverMode: "auto" | "explicit" | "none";
+  coverImageUrl: string | null;
+  resolvedCoverImageUrl: string | null;
   expectedUpdatedAt: string;
 };
 
@@ -377,6 +381,9 @@ type PageResponse = {
   updated_at: string | null;
   route?: string;
   body?: string;
+  cover_mode?: "auto" | "explicit" | "none";
+  cover_image_url?: string | null;
+  resolved_cover_image_url?: string | null;
   line_updated_at?: Array<string | null>;
   linked_pages: EditorBootstrap["linked_pages"];
   linked_pages_has_more: boolean;
@@ -411,6 +418,8 @@ type InboxSyncStatus = {
   id: string;
   status: "queued" | "running" | "succeeded" | "completed_with_errors" | "failed";
 };
+
+type MaterialTab = "photo" | "raindrop";
 
 type ApiError = Error & {
   fields?: Record<string, string[]>;
@@ -610,12 +619,25 @@ function inboxPhotoUrl(item: InboxItem): string | null {
   return item.source === "photo" && item.kind === "photo" && typeof url === "string" ? url : null;
 }
 
+export function autoCoverImageUrl(body: string): string | null {
+  return /!\[[^\]]*\]\((\/assets\/[^\s)]+)(?:\s+[^)]*)?\)/.exec(body)?.[1] || null;
+}
+
 function inboxItemLabel(item: InboxItem): string {
   if (item.source === "photo") return "写真";
   if (item.source === "bluesky" && item.kind === "like") return "Bluesky いいね";
   if (item.source === "bluesky") return "Bluesky 投稿";
   if (item.source === "raindrop") return "Raindrop";
   return "c4p";
+}
+
+function PhotoMaterialIcon() {
+  return (
+    // Adapted from Wikimedia Commons "Photo icon.svg", released under CC0 1.0.
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M4 3h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v14h16V5H4Zm3.5 2.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM5 17l4-4 2.5 2.5 2-2L19 19H5v-2Z" />
+    </svg>
+  );
 }
 
 function groupLinkedPages(pages: Array<LinkedPage>): Array<LinkedPageGroup> {
@@ -2007,6 +2029,9 @@ function initialDraft(bootstrap: EditorBootstrap): EditorDraft {
     name: bootstrap.name,
     title: bootstrap.title,
     body: bootstrap.body,
+    coverMode: bootstrap.cover_mode || "auto",
+    coverImageUrl: bootstrap.cover_image_url || null,
+    resolvedCoverImageUrl: bootstrap.resolved_cover_image_url || null,
     expectedUpdatedAt: bootstrap.expected_updated_at
   };
 }
@@ -2155,7 +2180,7 @@ export function AuthoringEditor({
   const [draggingImages, setDraggingImages] = useState(false);
   const [imageUploadStatus, setImageUploadStatus] = useState("");
   const [inboxItems, setInboxItems] = useState<Array<InboxItem>>([]);
-  const [inboxOpen, setInboxOpen] = useState(false);
+  const [activeMaterialTab, setActiveMaterialTab] = useState<MaterialTab>("photo");
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [syncingInbox, setSyncingInbox] = useState(false);
   const [linkedPages, setLinkedPages] = useState(bootstrap.linked_pages || []);
@@ -2178,7 +2203,6 @@ export function AuthoringEditor({
   const linkedPagesSentinelRef = useRef<HTMLDivElement | null>(null);
   const pageEtagRef = useRef<string | null>(null);
   const refreshingPageRef = useRef(false);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const imageDragDepthRef = useRef(0);
   const consumedInboxItemIdsRef = useRef<Array<string>>([]);
 
@@ -2256,6 +2280,8 @@ export function AuthoringEditor({
         name: snapshot.name || undefined,
         title: snapshot.title || undefined,
         body: snapshot.body,
+        cover_mode: snapshot.coverMode,
+        cover_image_url: snapshot.coverImageUrl,
         expected_updated_at: snapshot.expectedUpdatedAt || undefined,
         consumed_inbox_item_ids: consumedInboxItemIds
       }, snapshot.pageId ? "PATCH" : "POST");
@@ -2266,6 +2292,9 @@ export function AuthoringEditor({
         pageType: page.page_type,
         date: page.date || current.date,
         name: page.name || current.name,
+        coverMode: page.cover_mode || current.coverMode,
+        coverImageUrl: page.cover_image_url ?? current.coverImageUrl,
+        resolvedCoverImageUrl: page.resolved_cover_image_url ?? current.resolvedCoverImageUrl,
         expectedUpdatedAt: page.updated_at || ""
       };
       draftRef.current = next;
@@ -2308,6 +2337,18 @@ export function AuthoringEditor({
       void savePage();
     }, 300);
   }, [savePage]);
+
+  const updateCover = useCallback((
+    coverMode: EditorDraft["coverMode"],
+    coverImageUrl: string | null,
+    resolvedCoverImageUrl: string | null
+  ) => {
+    updateDraft({ coverMode, coverImageUrl, resolvedCoverImageUrl });
+    editVersionRef.current += 1;
+    setErrors({});
+    setDirtyState(true);
+    scheduleSave();
+  }, [scheduleSave, setDirtyState, updateDraft]);
 
   const handleDocumentChange = useCallback((markdown: string, hasBodyBlock: boolean) => {
     if (!canEdit) return;
@@ -2549,7 +2590,10 @@ export function AuthoringEditor({
           name: page.name || current.name,
           title,
           body: page.body,
-          expectedUpdatedAt: page.updated_at || ""
+          expectedUpdatedAt: page.updated_at || "",
+          coverMode: page.cover_mode || current.coverMode,
+          coverImageUrl: page.cover_image_url ?? current.coverImageUrl,
+          resolvedCoverImageUrl: page.resolved_cover_image_url ?? current.resolvedCoverImageUrl
         });
         savedBodyRef.current = page.body;
         savedNameRef.current = page.name || title;
@@ -2652,11 +2696,15 @@ export function AuthoringEditor({
   }, [refreshInbox, syncingInbox]);
 
   useEffect(() => {
-    if (!editor?.isEditable || !inboxOpen) return;
+    if (!editor?.isEditable) return;
     void refreshInbox().catch((error: unknown) => {
       setImageUploadStatus(error instanceof Error ? error.message : "インボックスを読み込めませんでした");
     });
-  }, [editor?.isEditable, inboxOpen, refreshInbox]);
+  }, [editor?.isEditable, refreshInbox]);
+
+  const visibleInboxItems = inboxItems.filter((item) => activeMaterialTab === "photo"
+    ? item.source === "photo" && item.kind === "photo"
+    : item.source === "raindrop" && item.kind === "bookmark");
 
   const adoptInboxImage = useCallback(async (itemId: string) => {
     if (!editor || loadingInbox) return;
@@ -2704,6 +2752,46 @@ export function AuthoringEditor({
     } : candidate));
     setImageUploadStatus("");
   }, [adoptInboxImage, editor, inboxItems]);
+
+  const setInboxPhotoAsCover = useCallback(async (itemId: string) => {
+    if (loadingInbox) return;
+    setLoadingInbox(true);
+    try {
+      const result = await requestJson<{ public_url: string }>("/api/inbox/adopt", { item_id: itemId });
+      consumedInboxItemIdsRef.current = [...consumedInboxItemIdsRef.current, itemId];
+      updateCover("explicit", result.public_url, result.public_url);
+      setImageUploadStatus("");
+    } catch (error) {
+      setImageUploadStatus(error instanceof Error ? error.message : "写真をカバーに設定できませんでした");
+    } finally {
+      setLoadingInbox(false);
+    }
+  }, [loadingInbox, updateCover]);
+
+  const handleCoverDrop = useCallback(async (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const itemId = event.dataTransfer.getData(INBOX_ITEM_DRAG_TYPE);
+    if (itemId) {
+      const item = inboxItems.find((candidate) => candidate.id === itemId);
+      if (item?.source === "photo" && item.kind === "photo") void setInboxPhotoAsCover(itemId);
+      return;
+    }
+
+    const file = Array.from(event.dataTransfer.files).find((candidate) => candidate.type.startsWith("image/"));
+    if (!file || uploadingImages) return;
+    setUploadingImages(true);
+    try {
+      const { prepareImage } = await import("./imageUpload");
+      const prepared = await prepareImage(file);
+      const url = await uploadImage(prepared.file);
+      updateCover("explicit", url, url);
+      setImageUploadStatus("");
+    } catch (error) {
+      setImageUploadStatus(error instanceof Error ? error.message : "画像をカバーに設定できませんでした");
+    } finally {
+      setUploadingImages(false);
+    }
+  }, [inboxItems, setInboxPhotoAsCover, updateCover, uploadingImages]);
 
   useEffect(() => {
     if (!editor || !editor.isEditable) return;
@@ -2847,9 +2935,25 @@ export function AuthoringEditor({
         {status}
       </p>
       <div className={`article-workspace${canEdit ? "" : " article-workspace--reading"}`} ref={workspaceRef}>
-        {canEdit && bootstrap.resolved_cover_image_url && (
-          <div className="article-editing-cover">
-            <img src={bootstrap.resolved_cover_image_url} alt="" />
+        {canEdit && (
+          <div
+            className={`article-editing-cover${draft.resolvedCoverImageUrl ? "" : " article-editing-cover--empty"}`}
+            onDragOver={(event) => {
+              if (isImageDrag(event.dataTransfer)) event.preventDefault();
+            }}
+            onDrop={(event) => void handleCoverDrop(event)}
+          >
+            {draft.resolvedCoverImageUrl
+              ? <img src={draft.resolvedCoverImageUrl} alt="" />
+              : <span className="article-editing-cover__prompt">画像をドロップしてカバーに設定</span>}
+            <div className="article-editing-cover__actions">
+              <button type="button" onClick={() => updateCover("auto", null, autoCoverImageUrl(draft.body))}>
+                自動
+              </button>
+              <button type="button" onClick={() => updateCover("none", null, null)}>
+                カバーなし
+              </button>
+            </div>
           </div>
         )}
         {!canEdit && (
@@ -2901,33 +3005,9 @@ export function AuthoringEditor({
                 ここにドロップして記事へ追加
               </div>
             )}
-            {editor?.isEditable && (
+            {editor?.isEditable && imageUploadStatus && (
               <div className="editor-shell__actions" onClick={(event) => event.stopPropagation()}>
-                {imageUploadStatus && (
-                  <span className="editor-shell__upload-status" role="status">{imageUploadStatus}</span>
-                )}
-                <input
-                  ref={imageInputRef}
-                  className="visually-hidden"
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  multiple
-                  onChange={(event) => {
-                    void handleImageFiles(Array.from(event.currentTarget.files || []));
-                    event.currentTarget.value = "";
-                  }}
-                />
-                <button
-                  className="editor-shell__image-button"
-                  type="button"
-                  aria-label="画像を追加"
-                  disabled={uploadingImages}
-                  onClick={() => imageInputRef.current?.click()}
-                >
-                  <svg aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5zM4 16l4.5-4.5 3 3 2-2 6.5 6.5M15.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3" />
-                  </svg>
-                </button>
+                <span className="editor-shell__upload-status" role="status">{imageUploadStatus}</span>
               </div>
             )}
             <div
@@ -2941,71 +3021,87 @@ export function AuthoringEditor({
               <p className="input-error" role="alert">{editorErrors.join(" ")}</p>
             )}
           </section>
-          {editor?.isEditable && (
-            <div className="content-inbox-drawer">
-              <button
-                className="content-inbox__tab"
-                type="button"
-                aria-controls="content-inbox-panel"
-                aria-expanded={inboxOpen}
-                onClick={() => setInboxOpen((open) => !open)}
-              >
-                INBOX
-              </button>
-              {inboxOpen && (
-                <aside id="content-inbox-panel" className="content-inbox" aria-label="コンテンツインボックス">
-                  <div className="content-inbox__toolbar">
-                    <button
-                      type="button"
-                      className="content-inbox__sync"
-                      aria-label="インボックスを更新"
-                      title="インボックスを更新"
-                      disabled={syncingInbox}
-                      onClick={() => void syncInbox()}
-                    >
-                      <svg aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="M20 7v5h-5M4 17v-5h5M18.5 9A7 7 0 0 0 6 7M5.5 15A7 7 0 0 0 18 17" />
-                      </svg>
-                    </button>
-                  </div>
-                  {inboxItems.length === 0 ? (
-                    <p className="content-inbox__empty">素材はありません</p>
-                  ) : (
-                    <ol className="content-inbox__items">
-                      {inboxItems.map((item) => {
-                        const photoUrl = inboxPhotoUrl(item);
-                        return (
-                          <li key={item.id}>
-                            <button
-                              type="button"
-                              className="content-inbox__item"
-                              disabled={loadingInbox || (photoUrl === null && item.source !== "raindrop")}
-                              draggable={photoUrl !== null || item.source === "raindrop"}
-                              onDragStart={(event) => {
-                                event.dataTransfer.setData(INBOX_ITEM_DRAG_TYPE, item.id);
-                                event.dataTransfer.effectAllowed = "copy";
-                              }}
-                              onClick={() => photoUrl && void adoptInboxImage(item.id)}
-                            >
-                              {photoUrl && <img src={photoUrl} alt="" loading="lazy" />}
-                              <span className="content-inbox__kind">{inboxItemLabel(item)}</span>
-                              {item.used_in_pages.map((page) => (
-                                <span className="content-inbox__usage" key={page.id}>{page.route}で使用済み</span>
-                              ))}
-                              <time dateTime={item.occurred_at}>
-                                {new Date(item.occurred_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                              </time>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  )}
-                </aside>
-              )}
-            </div>
-          )}
         </div>
+        {editor?.isEditable && (
+          <aside className="content-inbox-drawer" aria-label="素材">
+            <section id="content-inbox-panel" className="content-inbox">
+              <div className="content-inbox__toolbar">
+                <strong>{activeMaterialTab === "photo" ? "写真" : "Raindrop"}</strong>
+                <button
+                  type="button"
+                  className="content-inbox__sync"
+                  aria-label="素材を更新"
+                  title="素材を更新"
+                  disabled={syncingInbox}
+                  onClick={() => void syncInbox()}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M20 7v5h-5M4 17v-5h5M18.5 9A7 7 0 0 0 6 7M5.5 15A7 7 0 0 0 18 17" />
+                  </svg>
+                </button>
+              </div>
+              {visibleInboxItems.length === 0 ? (
+                <p className="content-inbox__empty">素材はありません</p>
+              ) : (
+                <ol className={`content-inbox__items content-inbox__items--${activeMaterialTab}`}>
+                  {visibleInboxItems.map((item) => {
+                    const photoUrl = inboxPhotoUrl(item);
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          className="content-inbox__item"
+                          disabled={loadingInbox || (photoUrl === null && item.source !== "raindrop")}
+                          draggable={photoUrl !== null || item.source === "raindrop"}
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData(INBOX_ITEM_DRAG_TYPE, item.id);
+                            event.dataTransfer.effectAllowed = "copy";
+                          }}
+                          onClick={() => photoUrl && void adoptInboxImage(item.id)}
+                        >
+                          {photoUrl && <img src={photoUrl} alt="" loading="lazy" />}
+                          {activeMaterialTab === "raindrop" && <span className="content-inbox__kind">{inboxItemLabel(item)}</span>}
+                          {item.used_in_pages.map((page) => (
+                            <span className="content-inbox__usage" key={page.id}>{page.route}で使用済み</span>
+                          ))}
+                          {activeMaterialTab === "raindrop" && (
+                            <time dateTime={item.occurred_at}>
+                              {new Date(item.occurred_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </time>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </section>
+            <div className="content-inbox__tabs" role="tablist" aria-label="素材の種類">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeMaterialTab === "photo"}
+                aria-controls="content-inbox-panel"
+                aria-label="写真"
+                title="写真"
+                onClick={() => setActiveMaterialTab("photo")}
+              >
+                <PhotoMaterialIcon />
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeMaterialTab === "raindrop"}
+                aria-controls="content-inbox-panel"
+                aria-label="Raindrop"
+                title="Raindrop"
+                onClick={() => setActiveMaterialTab("raindrop")}
+              >
+                <span className="content-inbox__raindrop-icon" aria-hidden="true" />
+              </button>
+            </div>
+          </aside>
+        )}
         {universeEnabled && universeGroups.length > 0 && (
           <InternalUniverseGraph
             groups={universeGroups}

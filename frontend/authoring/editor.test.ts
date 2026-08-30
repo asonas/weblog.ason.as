@@ -47,6 +47,7 @@ Object.defineProperty(document, "hidden", { configurable: true, value: false });
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const {
   AuthoringEditor,
+  autoCoverImageUrl,
   buildInternalUniverseGroups,
   EDITOR_EXTENSIONS,
   embedImageUrl,
@@ -78,6 +79,14 @@ test("prefixes editor document titles only in development", () => {
   assert.equal(editorDocumentTitle("", "development"), "[dev] weblog.ason.as");
   assert.equal(editorDocumentTitle("2026-08-26", "development"), "[dev] 2026-08-26 : weblog.ason.as");
   assert.equal(editorDocumentTitle("2026-08-26"), "2026-08-26 : weblog.ason.as");
+});
+
+test("resolves an automatic cover from the first internal article image", () => {
+  assert.equal(
+    autoCoverImageUrl("before\n\n![first](/assets/first.webp)\n\n![second](/assets/second.webp)"),
+    "/assets/first.webp"
+  );
+  assert.equal(autoCoverImageUrl("![external](https://example.com/image.webp)"), null);
 });
 
 test("formats recent and older line update times", () => {
@@ -319,13 +328,9 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
   try {
     await act(async () => {
       root.render(createElement(AuthoringEditor, { bootstrap }));
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>(".content-inbox__tab")!.click();
-      await Promise.resolve();
-    });
-    assert.equal(container.querySelector(".content-inbox__kind")?.textContent, "写真");
+    assert.equal(container.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("aria-label"), "写真");
 
     const transferData = new Map<string, string>();
     const dataTransfer = {
@@ -359,6 +364,8 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
 
     assert.equal(nativeDropObserved, false);
     assert.equal(savedPayloads.length, 1);
+    assert.equal(savedPayloads[0].cover_mode, "auto");
+    assert.equal(savedPayloads[0].cover_image_url, null);
     assert.deepEqual(savedPayloads[0].consumed_inbox_item_ids, ["item-1"]);
     assert.match(String(savedPayloads[0].body), /\/assets\/uploads\/2026\/08\/item-1\.webp/);
     assert.notEqual(container.querySelector(".content-inbox__item"), null);
@@ -413,10 +420,10 @@ test("inserts a Raindrop URL and marks it as used by the current page", async ()
   try {
     await act(async () => {
       root.render(createElement(AuthoringEditor, { bootstrap }));
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await act(async () => {
-      container.querySelector<HTMLButtonElement>(".content-inbox__tab")!.click();
+      container.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Raindrop"]')!.click();
       await Promise.resolve();
     });
 
@@ -506,11 +513,7 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
   try {
     await act(async () => {
       root.render(createElement(AuthoringEditor, { bootstrap }));
-      await Promise.resolve();
-    });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>(".content-inbox__tab")!.click();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await act(async () => {
       container.querySelector<HTMLButtonElement>(".content-inbox__sync")!.click();
@@ -520,6 +523,9 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
     assert.deepEqual(requests.filter((url) => url.startsWith("/api/inbox")), [
       "/api/inbox", "/api/inbox/sync", "/api/inbox/sync/run-1", "/api/inbox"
     ]);
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Raindrop"]')!.click();
+    });
     assert.equal(container.querySelector(".content-inbox__kind")?.textContent, "Raindrop");
   } finally {
     await act(async () => root.unmount());
@@ -840,6 +846,7 @@ test("does not mark a read-only page dirty when navigating a wiki link", async (
     assert.equal(editorElement.getAttribute("contenteditable"), "false");
     assert.equal(container.querySelector(".article-reading-header h1")?.textContent, "current");
     assert.equal(container.querySelector<HTMLImageElement>(".article-reading-header img")?.src.endsWith("/assets/cover.jpg"), true);
+    assert.equal(container.querySelector(".content-inbox-drawer"), null);
     assert.equal(document.documentElement.dataset.view, "reading");
 
     link.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
