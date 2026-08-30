@@ -550,7 +550,6 @@ type ImageDragData = {
   types?: ArrayLike<string>;
 };
 
-const PAGE_REFRESH_INTERVAL = 15_000;
 const INBOX_ITEM_DRAG_TYPE = "application/x-weblog-inbox-item-id";
 const LINE_UPDATE_DATE_FORMATTER = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric",
@@ -2850,6 +2849,7 @@ export function AuthoringEditor({
   const linkedPagesSentinelRef = useRef<HTMLDivElement | null>(null);
   const pageEtagRef = useRef<string | null>(null);
   const refreshingPageRef = useRef(false);
+  const pageWasHiddenRef = useRef(document.hidden);
   const imageDragDepthRef = useRef(0);
   const consumedInboxItemIdsRef = useRef<Array<string>>([]);
 
@@ -3352,7 +3352,7 @@ export function AuthoringEditor({
       setLinkedPages(page.linked_pages || []);
       setLinkedPagesHasMore(page.linked_pages_has_more || false);
     } catch (_error) {
-      // A later poll or visibility change retries transient refresh failures.
+      // A later visibility change retries transient refresh failures.
     } finally {
       refreshingPageRef.current = false;
     }
@@ -3361,28 +3361,15 @@ export function AuthoringEditor({
   useEffect(() => {
     if (!editor || !draftRef.current.pageId) return;
 
-    let interval: number | null = null;
-    const stop = () => {
-      if (interval !== null) window.clearInterval(interval);
-      interval = null;
+    const handleVisibilityChange = () => {
+      const wasHidden = pageWasHiddenRef.current;
+      pageWasHiddenRef.current = document.hidden;
+      if (wasHidden && !document.hidden) void refreshPage();
     };
-    const start = () => {
-      stop();
-      if (document.hidden) return;
-      void refreshPage();
-      interval = window.setInterval(
-        () => void refreshPage(),
-        PAGE_REFRESH_INTERVAL,
-      );
-    };
-    const handleVisibilityChange = () => start();
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    start();
-    return () => {
-      stop();
+    return () =>
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
   }, [editor, refreshPage]);
 
   const handleImageFiles = useCallback(

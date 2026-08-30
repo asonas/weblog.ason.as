@@ -1608,13 +1608,15 @@ test("keeps an image rendered when the cursor moves to the start of the followin
   editor.destroy();
 });
 
-test("refreshes an unedited page from its public API", async () => {
+test("refreshes an unedited page once when the tab becomes visible", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () =>
-    new Response(
+  let fetchCount = 0;
+  globalThis.fetch = async (input) => {
+    if (String(input) === "/api/pages/page-id") fetchCount += 1;
+    return new Response(
       JSON.stringify({
         mode: "editor",
         id: "page-id",
@@ -1630,6 +1632,7 @@ test("refreshes an unedited page from its public API", async () => {
       }),
       { headers: { "content-type": "application/json", etag: '"new"' } },
     );
+  };
   const bootstrap: EditorBootstrap = {
     page_id: "page-id",
     page_type: "named",
@@ -1649,12 +1652,40 @@ test("refreshes an unedited page from its public API", async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
 
+    assert.equal(fetchCount, 0);
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    document.dispatchEvent(new window.Event("visibilitychange"));
+    assert.equal(fetchCount, 0);
+
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    await act(async () => {
+      document.dispatchEvent(new window.Event("visibilitychange"));
+      document.dispatchEvent(new window.Event("visibilitychange"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    assert.equal(fetchCount, 1);
+    await act(async () => {
+      document.dispatchEvent(new window.Event("visibilitychange"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    assert.equal(fetchCount, 1);
     assert.match(container.textContent || "", /新しい本文/);
     assert.doesNotMatch(container.textContent || "", /古い本文/);
     assert.equal(window.location.pathname, "/current");
   } finally {
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
     container.remove();
   }
 });
