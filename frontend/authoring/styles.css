@@ -1958,6 +1958,7 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header__search .si
   position: sticky;
   inset-block-start: var(--space-8);
   align-self: start;
+  min-inline-size: 0;
   max-block-size: calc(100svh - var(--space-16));
   overflow-y: auto;
   overscroll-behavior-block: contain;
@@ -1984,6 +1985,10 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header__search .si
 
 .cover-journal__archive > summary {
   display: none;
+}
+
+.cover-journal__archive {
+  min-inline-size: 0;
 }
 
 .cover-journal__stream {
@@ -2930,6 +2935,7 @@ td {
 
   .cover-journal__index .home-archive__years {
     display: grid;
+    max-inline-size: 100%;
     grid-auto-columns: minmax(12rem, 78vw);
     grid-auto-flow: column;
     grid-template-columns: none;
