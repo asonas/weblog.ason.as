@@ -952,6 +952,12 @@ html[data-view="article-editing"] .site-header .header-action {
   color: currentColor;
 }
 
+html[data-view="reading"]:has(.article-reading-header:not(.article-reading-header--covered)) .site-header {
+  border-block-end-color: color-mix(in oklch, var(--separator) 45%, transparent);
+  background: color-mix(in oklch, var(--quiet-fill) 42%, var(--surface));
+  color: var(--ink);
+}
+
 html[data-header-scrolled="true"][data-view="reading"] .site-header,
 html[data-header-scrolled="true"][data-view="article-editing"] .site-header {
   border-block-end-color: color-mix(in oklch, var(--separator) 58%, transparent);
@@ -1049,6 +1055,10 @@ html[data-view="article-editing"] .page-shell {
   letter-spacing: -0.045em;
   line-height: 1.05;
   text-wrap: balance;
+}
+
+.article-reading-header:not(.article-reading-header--covered) {
+  padding-block-start: calc(var(--space-16) + var(--space-8));
 }
 
 .article-reading-header--covered {
