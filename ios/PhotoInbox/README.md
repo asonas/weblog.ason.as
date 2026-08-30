@@ -7,7 +7,7 @@
 XcodeプロジェクトはXcodeGenで生成します。
 
 ```sh
-xcodegen generate
+mise run ios:generate
 open PhotoInbox.xcodeproj
 ```
 
@@ -17,9 +17,10 @@ Bundle IDは `com.asonas.weblog.PhotoInbox`、Apple Developer Teamは `QYP65434U
 ## テスト
 
 ```sh
-/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test \
-  -project PhotoInbox.xcodeproj \
-  -scheme PhotoInbox \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  CODE_SIGNING_ALLOWED=NO
+mise run ios:lint
+mise run ios:test
+mise run ios:coverage
 ```
+
+`ios:coverage` はテストを実行し、API client、認証状態、upload処理を含む
+`PhotoInbox.app` のファイル別coverageを表示します。

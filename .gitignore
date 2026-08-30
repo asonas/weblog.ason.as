@@ -9,6 +9,7 @@ dist/
 coverage/
 tmp/
 xcuserdata/
+ios/PhotoInbox/PhotoInbox.xcodeproj/
 data/raw/
 data/normalized/
 data/index/

@@ -5,6 +5,7 @@ aws-cli = "latest"
 "github:sorah/mairu" = "latest"
 terraform = "1.15.9"
 tflint = "0.64.0"
+xcodegen = "2.46.0"
 
 [tasks.setup]
 description = "Install Ruby and Node.js dependencies"
@@ -133,6 +134,31 @@ run = [
   "mise run terraform:lint",
   "mise run terraform:test",
 ]
+
+[tasks."ios:generate"]
+description = "Generate the PhotoInbox Xcode project from project.yml"
+run = "xcodegen generate --spec ios/PhotoInbox/project.yml --project ios/PhotoInbox"
+
+[tasks."ios:format"]
+description = "Format PhotoInbox Swift sources with the Xcode toolchain"
+run = "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift-format format --in-place --recursive ios/PhotoInbox/PhotoInbox ios/PhotoInbox/PhotoInboxTests"
+
+[tasks."ios:lint"]
+description = "Check PhotoInbox Swift formatting without modifying files"
+run = "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift-format lint --strict --recursive ios/PhotoInbox/PhotoInbox ios/PhotoInbox/PhotoInboxTests"
+
+[tasks."ios:test"]
+description = "Run PhotoInbox XCTest with code coverage enabled"
+run = [
+  "command rm -rf /tmp/weblog-photo-inbox.xcresult /tmp/weblog-photo-inbox-derived-data",
+  "mise run ios:generate",
+  "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xcodebuild test -project ios/PhotoInbox/PhotoInbox.xcodeproj -scheme PhotoInbox -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath /tmp/weblog-photo-inbox-derived-data -resultBundlePath /tmp/weblog-photo-inbox.xcresult -enableCodeCoverage YES CODE_SIGNING_ALLOWED=NO",
+]
+
+[tasks."ios:coverage"]
+description = "Report PhotoInbox source coverage from the latest XCTest run"
+depends = ["ios:test"]
+run = "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xccov view --report --files-for-target PhotoInbox.app /tmp/weblog-photo-inbox.xcresult"
 
 [tasks."ruby:format"]
 description = "Format Ruby files with RuboCop"

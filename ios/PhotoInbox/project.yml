@@ -36,4 +36,5 @@ schemes:
         PhotoInbox: all
         PhotoInboxTests: [test]
     test:
+      gatherCoverageData: true
       targets: [PhotoInboxTests]
