@@ -2919,12 +2919,24 @@ td {
   }
 
   .cover-journal__body {
-    gap: var(--space-8);
+    gap: var(--space-3);
     padding: var(--space-6) var(--space-4) var(--space-12);
   }
 
   .cover-journal__index .home-archive__years {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-auto-columns: minmax(12rem, 78vw);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    gap: var(--space-4);
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    padding-block-end: var(--space-3);
+    scroll-snap-type: inline proximity;
+  }
+
+  .cover-journal__index .home-archive__year {
+    scroll-snap-align: start;
   }
 
   .cover-journal__index .home-tags,
@@ -2933,9 +2945,7 @@ td {
   }
 
   .cover-journal__index .home-tags {
-    max-block-size: 4.25rem;
     margin-block-end: var(--space-3);
-    overflow: hidden;
   }
 
   .cover-journal__archive > summary {
