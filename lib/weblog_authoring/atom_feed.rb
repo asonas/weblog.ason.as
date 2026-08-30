@@ -70,7 +70,7 @@ module WeblogAuthoring
 
     def absolute_internal_urls(html)
       html.gsub(/(?<attribute>href|src)="\/(?!\/)/) do
-        %(#{Regexp.last_match[:attribute]}="#{@site_url}/)
+        %(#{Regexp.last_match[:attribute]}="#{@site_url}/) # steep:ignore NoMethod
       end
     end
 

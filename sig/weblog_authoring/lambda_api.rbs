@@ -1,0 +1,119 @@
+module WeblogAuthoring
+  type lambda_event = Hash[String, untyped]
+  type lambda_response = { statusCode: Integer, ?headers: Hash[String, String], ?cookies: Array[String], body: String }
+
+  class LambdaApi
+    class InputError < StandardError
+      attr_reader field: String?
+      attr_reader status: Integer
+      def initialize: (String, ?status: Integer, ?field: String?) -> void
+    end
+
+    JSON_HEADERS: Hash[String, String]
+    EMPTY_HASH: Hash[String, untyped]
+    AUTH_COOKIE: String
+    OAUTH_COOKIE: String
+    SESSION_TTL: Integer
+    OAUTH_TTL: Integer
+    TOKYO_OFFSET: String
+    HASHTAG_PATTERN: Regexp
+    JAPANESE_WEEKDAYS: Array[String]
+    DIARY_DATE_TAG: Regexp
+    RELATED_PAGE_LIMIT: Integer
+    EMBED_CACHE_TTL: Integer
+    EMBED_FALLBACK_CACHE_TTL: Integer
+
+    def initialize: (database: DsqlDatabase, ?oauth: GitHubOAuth?, ?session_codec: LambdaSession?, ?redirect_uri: String?, ?frontend_url: String?, ?allowed_github_user_id: String?, ?s3_client: untyped, ?asset_bucket: String?, ?embed_fetcher: untyped, ?development_asset_bucket: String?, ?site_bucket: String?, ?search_queue_url: String?, ?sqs_client: untyped, ?logger: untyped, ?search_index: untyped, ?lambda_client: untyped, ?inbox_sync_function_name: String?, ?bluesky_oauth_function_name: String?, ?clock: ^() -> Time) -> void
+    def call: (lambda_event) -> lambda_response
+
+    private
+
+    def dispatch: (lambda_event) -> lambda_response
+    def health_response: () -> lambda_response
+    def publish_feed: () -> lambda_response
+    def run_scheduled_maintenance: () -> lambda_response
+    def auth_session_response: (lambda_event) -> lambda_response
+    def github_login_response: (lambda_event) -> lambda_response
+    def github_callback_response: (lambda_event) -> lambda_response
+    def logout_response: (lambda_event) -> lambda_response
+    def pages_response: (lambda_event) -> lambda_response
+    def page_window: (untyped, ?timings: untyped) -> untyped
+    def newer_pages?: (Array[PageDocument], before: page_cursor?, kind: String?) -> bool
+    def older_pages?: (Array[PageDocument], kind: String?) -> bool
+    def page_cursor: (PageDocument, kind: String?) -> page_cursor
+    def encode_page_cursor: (PageDocument, kind: String?) -> String
+    def decode_page_cursor: (String?) -> page_cursor?
+    def month_boundary: (String) -> page_cursor
+    def tags_response: () -> lambda_response
+    def archive_response: () -> lambda_response
+    def page_names_response: (lambda_event) -> lambda_response
+    def new_editor_response: (lambda_event) -> lambda_response
+    def daily_editor_response: (lambda_event) -> lambda_response
+    def save_response: (lambda_event, ?page_id: String?, ?status: Integer) -> lambda_response
+    def notify_search_index: () -> void
+    def upload_response: (lambda_event) -> lambda_response
+    def issue_mobile_pairing_response: (lambda_event) -> lambda_response
+    def exchange_mobile_pairing_response: (lambda_event) -> lambda_response
+    def mobile_upload: () -> untyped
+    def create_mobile_upload_response: (lambda_event) -> lambda_response
+    def bearer_token: (lambda_event) -> String?
+    def complete_mobile_upload_response: (lambda_event) -> lambda_response
+    def revoke_mobile_device_response: (lambda_event) -> lambda_response
+    def mobile_devices_response: (lambda_event) -> lambda_response
+    def inbox_response: (lambda_event) -> lambda_response
+    def start_inbox_sync_response: (lambda_event) -> lambda_response
+    def inbox_sync_status_response: (lambda_event) -> lambda_response
+    def bluesky_oauth_status_response: (lambda_event) -> lambda_response
+    def bluesky_oauth_connect_response: (lambda_event) -> lambda_response
+    def bluesky_oauth_refresh_response: (lambda_event) -> lambda_response
+    def bluesky_oauth_callback_response: (lambda_event) -> lambda_response
+    def bluesky_oauth_disconnect_response: (lambda_event) -> lambda_response
+    def invoke_bluesky_oauth: (Hash[String, untyped]) -> untyped
+    def search_response: (lambda_event) -> lambda_response
+    def search_json_response: (Integer, Hash[String, untyped]) -> lambda_response
+    def search_error_response: (Integer, String, ?field: String?) -> lambda_response
+    def adopt_inbox_response: (lambda_event) -> lambda_response
+    def image_inbox: () -> untyped
+    def inbox_item_json: (InboxItem, ?usages: Array[InboxItemUsage]) -> Hash[String, untyped]
+    def optional_query: (untyped, String) -> String?
+    def page_response: (PageDocument?, event: lambda_event) -> lambda_response
+    def related_pages_response: (lambda_event) -> lambda_response
+    def embed_response: (lambda_event) -> lambda_response
+    def embed_metadata: (String) -> Hash[String, untyped]
+    def read_embed_cache: (String, String) -> Hash[String, untyped]?
+    def write_embed_cache: (String, Hash[String, untyped]) -> Hash[String, untyped]
+    def route_response: (lambda_event) -> lambda_response
+    def page_id_path?: (String) -> bool
+    def authoring_page_id_path?: (String) -> bool
+    def route_path?: (String) -> bool
+    def page_summary: (PageDocument) -> Hash[String, untyped]
+    def editor_json: (?page: PageDocument?, ?title: String?, ?name: String?, ?body: String?, ?linked_pages_has_more: bool?) -> Hash[String, untyped]
+    def line_updated_at: (PageDocument) -> Array[untyped]
+    def related_page_result: (String, String, ?excluding_id: String?, ?offset: Integer) -> Hash[String, untyped]
+    def recent_tags: (Array[PageDocument]) -> Array[String]
+    def archive_years: (Array[PageDocument]) -> Array[Hash[String, untyped]]
+    def page_excerpt: (PageDocument) -> String
+    def page_image_url: (PageDocument) -> String?
+    def saved_page_json: (PageDocument) -> Hash[String, untyped]
+    def parse_json: (lambda_event) -> Hash[String, untyped]
+    def save_request: (Hash[String, untyped], ?page_id: String?) -> SaveRequest
+    def string_array: (Hash[String, untyped], String) -> Array[String]
+    def optional_string: (Hash[String, untyped], String) -> String?
+    def parse_date: (untyped, String) -> Date?
+    def parse_time: (untyped, String) -> Time?
+    def allowed_session?: (Hash[String, untyped]?) -> bool
+    def read_cookie: (lambda_event, String, kind: String) -> Hash[String, untyped]?
+    def csrf_token_from: (lambda_event) -> String
+    def safe_return_to: (untyped) -> String
+    def secure_equal?: (String?, String?) -> bool
+    def cookie: (String, String, max_age: Integer) -> String
+    def expired_cookie: (String) -> String
+    def redirect_response: (String, *String) -> lambda_response
+    def json_response: (Integer, untyped) -> lambda_response
+    def cache_control_response: (lambda_event, lambda_response) -> lambda_response
+    def measure: [A] (untyped, String) { () -> A } -> A
+    def server_timing: (untyped) -> String
+    def conditional_json_response: (lambda_event, untyped) -> lambda_response
+    def json_error: (Integer, String, ?field: String?) -> lambda_response
+  end
+end

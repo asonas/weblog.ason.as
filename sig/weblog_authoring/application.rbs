@@ -1,0 +1,96 @@
+module WeblogAuthoring
+  type api_payload = Hash[String, json_value]
+  type sync_result = Hash[String, json_value]
+
+  class AtomFeed
+    DEFAULT_LIMIT: Integer
+
+    def initialize: (site_url: String, ?title: String, ?limit: Integer) -> void
+    def render: (Array[PageDocument]) -> String
+
+    private
+
+    def entries_xml: (Array[PageDocument], MarkdownRenderer) -> String
+    def page_url: (PageDocument) -> String
+    def updated_time: (PageDocument) -> Time
+    def atom_time: (Time?) -> String
+    def absolute_internal_urls: (String) -> String
+    def xml: (String) -> String
+  end
+
+  module InboxSync
+    class Item
+      attr_reader kind: String
+      attr_reader source_id: String
+      attr_reader occurred_at: Time
+      attr_reader payload: Hash[String, json_value]
+
+      def self.new: (kind: String, source_id: String, occurred_at: Time, payload: Hash[String, json_value]) -> Item
+      def initialize: (kind: String, source_id: String, occurred_at: Time, payload: Hash[String, json_value]) -> void
+    end
+
+    class Snapshot
+      attr_reader items: Array[Item]
+      attr_reader complete: bool
+      attr_reader watermark: String?
+
+      def self.new: (items: Array[Item], complete: bool, watermark: String?) -> Snapshot
+      def initialize: (items: Array[Item], complete: bool, watermark: String?) -> void
+    end
+
+    interface _Source
+      def fetch: (watermark: String?) -> Snapshot
+    end
+
+    interface _SyncRepository
+      def start_inbox_sync_run: (run_id: String, trigger: String, started_at: Time) -> bool
+      def inbox_source_sync_state: (source: String) -> Hash[String, String?]?
+      def apply_inbox_source_snapshot: (run_id: String, source: String, snapshot: Snapshot, completed_at: Time) -> { created_count: Integer, updated_count: Integer, deleted_count: Integer }
+      def fail_inbox_source_sync: (run_id: String, source: String, error: String, completed_at: Time) -> untyped
+      def finish_inbox_sync_run: (run_id: String, status: String, completed_at: Time) -> untyped
+    end
+
+    class PendingSource
+      include _Source
+    end
+
+    class Runner
+      def initialize: (database: _SyncRepository, sources: Array[[String, _Source]], ?clock: ^() -> Time) -> void
+      def call: (trigger: String, run_id: String) -> sync_result
+
+      private
+
+      def run_source: (String, String, _Source) -> sync_result
+    end
+  end
+
+  class LambdaSession
+    def initialize: (secret: String, ?clock: ^() -> Time) -> void
+    def issue: (kind: String, attributes: api_payload, ttl: Integer) -> String
+    def read: (String, kind: String) -> api_payload?
+
+    private
+
+    def signature: (String) -> String
+    def valid_signature?: (String?, String?) -> bool
+  end
+
+  class GitHubOAuthError < StandardError
+  end
+
+  class GitHubOAuth
+    AUTHORIZE_URL: String
+    TOKEN_URL: untyped
+    USER_URL: untyped
+
+    def initialize: (client_id: String, client_secret: String) -> void
+    def authorization_url: (redirect_uri: String, state: String, code_challenge: String) -> String
+    def authenticate: (code: String, redirect_uri: String, code_verifier: String) -> Hash[String, untyped]
+
+    private
+
+    def exchange_code: (code: String, redirect_uri: String, code_verifier: String) -> String
+    def fetch_user: (String) -> Hash[String, untyped]
+    def parse_json: (untyped) -> Hash[String, untyped]
+  end
+end

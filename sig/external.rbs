@@ -12,9 +12,79 @@ end
 module WeblogAuthoring
   module CoverImage
     def self.validate: (untyped, untyped) -> [String, String?]
+    def self.resolve: (PageDocument) -> String?
   end
 
   def self.validate_page_name: (String) -> String
   def self.page_path: (Pathname, String, name: String?, page_date: Date?) -> Pathname
   def self.extract_wiki_links: (String) -> Array[WikiLink]
+  def self.extract_external_urls: (String) -> Array[String]
+  def self.encoded_route: (String) -> String
+  def self.page_name_entries: (Array[PageDocument]) -> Array[Hash[String, String]]
+
+  class MarkdownRenderer
+    def initialize: (pages: Array[PageDocument]) -> void
+    def render: (String, mode: String) -> RenderedMarkdown
+  end
+
+  class RenderedMarkdown
+    attr_reader html: String
+    attr_reader links: Array[WikiLink]
+    attr_reader problems: Array[PageProblem]
+  end
+end
+
+module WeblogAuthoring
+  class MobileUpload
+    class PairingUnavailable < StandardError
+    end
+    class PairingAttemptsExceeded < StandardError
+    end
+    class UnsupportedContentType < StandardError
+    end
+    def self.new: (**untyped) -> untyped
+  end
+
+  class ImageUpload
+    def self.new: (**untyped) -> untyped
+  end
+
+  class ImageInbox
+    def self.new: (**untyped) -> untyped
+  end
+
+  class SearchIndex
+    class Unavailable < StandardError
+    end
+  end
+
+  class EmbedMetadataFetcher
+    class UnsafeUrlError < StandardError
+    end
+    class FetchError < StandardError
+    end
+  end
+end
+
+module Aws
+  module SQS
+    module Errors
+      class ServiceError < StandardError
+      end
+    end
+  end
+  module S3
+    module Errors
+      class NoSuchKey < StandardError
+      end
+      class NotFound < StandardError
+      end
+    end
+  end
+end
+
+module Rack
+  module Utils
+    def self.secure_compare: (String, String) -> bool
+  end
 end

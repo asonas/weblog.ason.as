@@ -25,6 +25,7 @@ module WeblogAuthoring
 
     def read(token, kind:)
       payload, supplied_signature = token.to_s.split(".", 2)
+      payload = payload.to_s
       return nil unless valid_signature?(payload, supplied_signature)
 
       attributes = JSON.parse(Base64.urlsafe_decode64(payload))
@@ -43,7 +44,9 @@ module WeblogAuthoring
     end
 
     def valid_signature?(payload, supplied)
-      return false if payload.to_s.empty? || supplied.to_s.empty?
+      payload = payload.to_s
+      supplied = supplied.to_s
+      return false if payload.empty? || supplied.empty?
 
       expected = signature(payload)
       supplied.bytesize == expected.bytesize && Rack::Utils.secure_compare(supplied, expected)

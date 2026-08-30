@@ -34,6 +34,7 @@ module WeblogAuthoring
     end
 
     JSON_HEADERS = { "content-type" => "application/json; charset=utf-8" }.freeze
+    EMPTY_HASH = {}.freeze # steep:ignore UnannotatedEmptyCollection
 
     AUTH_COOKIE = "weblog_authoring_session"
     OAUTH_COOKIE = "weblog_authoring_oauth"
@@ -184,7 +185,7 @@ module WeblogAuthoring
         "authentication_required" => true,
         "can_edit" => can_edit,
         "login" => session&.fetch("login", nil),
-        "csrf_token" => can_edit ? session.fetch("csrf_token", "").to_s : ""
+        "csrf_token" => can_edit && session ? session.fetch("csrf_token", "").to_s : ""
       )
     end
 
@@ -213,7 +214,7 @@ module WeblogAuthoring
     def github_callback_response(event)
       oauth_session = read_cookie(event, OAUTH_COOKIE, kind: "oauth")
       supplied_state = event.dig("queryStringParameters", "state").to_s
-      unless secure_equal?(oauth_session&.fetch("state", ""), supplied_state)
+      if oauth_session.nil? || !secure_equal?(oauth_session.fetch("state", ""), supplied_state)
         return json_response(422, error: "GitHub OAuth state mismatch")
       end
 
@@ -253,8 +254,9 @@ module WeblogAuthoring
     end
 
     def pages_response(event)
-      timings = {}
-      payload = page_window(event.fetch("queryStringParameters", {}).to_h, timings:).merge("mode" => "home")
+      timings = {} # @type var timings: Hash[String, Float]
+      query = event.fetch("queryStringParameters", EMPTY_HASH) # @type var query: Hash[String, untyped]
+      payload = page_window(query.to_h, timings:).merge("mode" => "home")
       body = measure(timings, "json") { JSON.generate(payload) }
       { statusCode: 200, headers: JSON_HEADERS.merge("server-timing" => server_timing(timings)), body: }
     end
@@ -342,7 +344,7 @@ module WeblogAuthoring
     end
 
     def daily_editor_response(event)
-      date = Time.now.getlocal(TOKYO_OFFSET).to_date
+      date = Time.now.getlocal(TOKYO_OFFSET).to_date # steep:ignore ArgumentTypeMismatch
       title = date.iso8601
       page = @database.find_route(title)
       return page_response(page, event:) unless page.nil?
@@ -449,7 +451,8 @@ module WeblogAuthoring
     end
 
     def bearer_token(event)
-      authorization = event.fetch("headers", {}).to_h.find { |key, _value| key.to_s.downcase == "authorization" }&.last.to_s
+      headers = event.fetch("headers", EMPTY_HASH) # @type var headers: Hash[String, untyped]
+      authorization = headers.to_h.find { |key, _value| key.to_s.downcase == "authorization" }&.last.to_s
       match = /\ABearer ([^\s]+)\z/.match(authorization)
       match&.captures&.first
     end
@@ -490,10 +493,11 @@ module WeblogAuthoring
       return json_response(401, error: "GitHub login is required to view the inbox") if session.nil?
       return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
 
-      query = event.fetch("queryStringParameters", {}).to_h
+      query = event.fetch("queryStringParameters", EMPTY_HASH).to_h # @type var query: Hash[String, untyped]
       items = @database.list_inbox_items(source: optional_query(query, "source"), kind: optional_query(query, "kind"))
       usages = @database.list_inbox_item_usages.group_by(&:item_id)
-      json_response(200, "items" => items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, [])) })
+      empty_usages = [] # @type var empty_usages: Array[InboxItemUsage]
+      json_response(200, "items" => items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, empty_usages)) })
     end
 
     def start_inbox_sync_response(event)
@@ -558,7 +562,8 @@ module WeblogAuthoring
       return json_response(401, error: "GitHub login is required to connect Bluesky") if session.nil?
       return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
 
-      query = URI.encode_www_form(event.fetch("queryStringParameters", {}).to_h)
+      parameters = event.fetch("queryStringParameters", EMPTY_HASH) # @type var parameters: Hash[String, untyped]
+      query = URI.encode_www_form(parameters.to_h)
       invoke_bluesky_oauth("action" => "callback", "query" => query)
       redirect_response("#{@frontend_url}/?bluesky=connected")
     end
@@ -586,7 +591,7 @@ module WeblogAuthoring
     end
 
     def search_response(event)
-      query = event.fetch("queryStringParameters", {}).to_h
+      query = event.fetch("queryStringParameters", EMPTY_HASH).to_h # @type var query: Hash[String, untyped]
       text = query.fetch("q", "").to_s.strip
       limit = Integer(query.fetch("limit", "10").to_s, 10)
       return search_error_response(422, "limit must be between 1 and 20", field: "limit") unless (1..20).cover?(limit)
@@ -664,7 +669,8 @@ module WeblogAuthoring
     end
 
     def related_pages_response(event)
-      query = event.fetch("queryStringParameters", {}).to_h
+      query = event.fetch("queryStringParameters", EMPTY_HASH).to_h # @type var query: Hash[String, untyped]
+      # @type var page: PageDocument?
       page = query["excluding_id"].to_s.empty? ? nil : @database.find(query["excluding_id"])
       result = related_page_result(
         query.fetch("route", ""),
@@ -687,6 +693,7 @@ module WeblogAuthoring
     end
 
     def embed_metadata(url)
+      # @type var key: String
       key = "assets/embed-cache/#{Digest::SHA256.hexdigest(url)}.json"
       cached = read_embed_cache(key, url)
       return cached unless cached.nil?
@@ -769,7 +776,7 @@ module WeblogAuthoring
     end
 
     def editor_json(page: nil, title: nil, name: nil, body: nil, linked_pages_has_more: nil)
-      resolved_name = page&.name.to_s.empty? ? name.to_s : page.name.to_s
+      resolved_name = page.nil? || page.name.to_s.empty? ? name.to_s : page.name.to_s
       resolved_title = page ? page.display_title : title.to_s
       resolved_body = page ? page.body : body.to_s
       {
@@ -847,13 +854,15 @@ module WeblogAuthoring
     end
 
     def archive_years(pages)
-      months_by_year = pages.each_with_object(Hash.new { |hash, year| hash[year] = [] }) do |page, result|
-        date = page.updated_at.getlocal(TOKYO_OFFSET)
-        result[date.year] << date.month unless result[date.year].include?(date.month)
+      # @type var months_by_year: Hash[Integer, Array[Integer]]
+      months_by_year = Hash.new { |hash, year| hash[year] = [] }
+      pages.each do |page|
+        date = page.updated_at.getlocal(TOKYO_OFFSET) # steep:ignore ArgumentTypeMismatch
+        months_by_year[date.year] << date.month unless months_by_year[date.year].include?(date.month)
       end
       return [] if months_by_year.empty?
 
-      newest_year = [Time.now.getlocal(TOKYO_OFFSET).year, months_by_year.keys.max].max
+      newest_year = [Time.now.getlocal(TOKYO_OFFSET).year, months_by_year.keys.max].max # steep:ignore ArgumentTypeMismatch
       newest_year.downto(months_by_year.keys.min).map do |year|
         { "year" => year, "months" => months_by_year.fetch(year, []).sort }
       end
@@ -867,7 +876,7 @@ module WeblogAuthoring
         .gsub(/(?:\A|\s)#[^\s#\[\]]+/, " ")
         .gsub(/\s+/, " ")
         .strip
-        .slice(0, 600)
+        .slice(0, 600).to_s
     end
 
     def page_image_url(page)
@@ -895,7 +904,8 @@ module WeblogAuthoring
     end
 
     def parse_json(event)
-      media_type = event.fetch("headers", {}).to_h.fetch("content-type", "").split(";", 2).first
+      headers = event.fetch("headers", EMPTY_HASH) # @type var headers: Hash[String, untyped]
+      media_type = headers.to_h.fetch("content-type", "").split(";", 2).first
       raise InputError.new("Content-Type: application/json is required", status: 415) unless media_type == "application/json"
 
       body = event.fetch("body", "").to_s
@@ -909,8 +919,12 @@ module WeblogAuthoring
     end
 
     def save_request(payload, page_id: nil)
-      page_type = optional_string(payload, "page_type") || "named"
-      raise InputError.new("Invalid page_type", field: "page_type") unless %w[date named].include?(page_type)
+      # @type var page_type: page_type
+      page_type = case optional_string(payload, "page_type") || "named"
+                  when "date" then "date"
+                  when "named" then "named"
+                  else raise InputError.new("Invalid page_type", field: "page_type")
+                  end
 
       body = payload.fetch("body") { raise InputError.new("body is required", field: "body") }
       raise InputError.new("body must be a string", field: "body") unless body.is_a?(String)
@@ -978,12 +992,14 @@ module WeblogAuthoring
     end
 
     def read_cookie(event, name, kind:)
-      raw = Array(event["cookies"]).find { |value| value.start_with?("#{name}=") }
+      cookies = Array(event["cookies"]) # @type var cookies: Array[String]
+      raw = cookies.find { |value| value.start_with?("#{name}=") }
       @session_codec&.read(raw.to_s.delete_prefix("#{name}="), kind:)
     end
 
     def csrf_token_from(event)
-      header = event.fetch("headers", {}).to_h.fetch("x-csrf-token", "")
+      headers = event.fetch("headers", EMPTY_HASH) # @type var headers: Hash[String, untyped]
+      header = headers.to_h.fetch("x-csrf-token", "")
       return header unless header.empty?
 
       body = event.fetch("body", "").to_s
@@ -999,7 +1015,9 @@ module WeblogAuthoring
     end
 
     def secure_equal?(expected, supplied)
-      return false if expected.to_s.empty? || expected.bytesize != supplied.bytesize
+      expected = expected.to_s
+      supplied = supplied.to_s
+      return false if expected.empty? || expected.bytesize != supplied.bytesize
 
       Rack::Utils.secure_compare(expected, supplied)
     end
@@ -1037,7 +1055,13 @@ module WeblogAuthoring
       authentication_response = path.start_with?("/api/auth/") || path == "/api/inbox/sources/bluesky/callback"
       return response unless authentication_response || !%w[GET HEAD OPTIONS].include?(method)
 
-      response.merge(headers: response.fetch(:headers, {}).merge("cache-control" => "no-store"))
+      existing_headers = response.fetch(:headers, EMPTY_HASH) # @type var existing_headers: Hash[String, String]
+      headers = existing_headers.merge("cache-control" => "no-store")
+      if response.key?(:cookies)
+        { statusCode: response.fetch(:statusCode), headers:, cookies: response.fetch(:cookies), body: response.fetch(:body) }
+      else
+        { statusCode: response.fetch(:statusCode), headers:, body: response.fetch(:body) }
+      end
     end
 
     def measure(timings, name)
@@ -1055,7 +1079,8 @@ module WeblogAuthoring
       body = JSON.generate(payload)
       etag = %Q("#{Digest::SHA256.hexdigest(body)}")
       headers = JSON_HEADERS.merge("cache-control" => "no-cache", "etag" => etag)
-      request_etag = event.fetch("headers", {}).to_h["if-none-match"].to_s.delete_prefix("W/")
+      request_headers = event.fetch("headers", EMPTY_HASH) # @type var request_headers: Hash[String, untyped]
+      request_etag = request_headers.to_h["if-none-match"].to_s.delete_prefix("W/")
       return { statusCode: 304, headers:, body: "" } if request_etag == etag
 
       { statusCode: 200, headers:, body: }
