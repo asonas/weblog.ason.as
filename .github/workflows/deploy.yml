@@ -130,6 +130,11 @@ jobs:
               continue
             fi
             if ! function_error="$(aws lambda get-function --function-name "$function" 2>&1 >/dev/null)"; then
+              if [[ "$service" =~ ^(receiver|worker|publisher|cleanup)$ && "$function_error" == *AccessDeniedException* ]]; then
+                echo "Webmention deploy permission is not provisioned yet; skipping ${service}." >&2
+                echo "${service}=false" >> "$GITHUB_OUTPUT"
+                continue
+              fi
               if [[ "$function_error" != *ResourceNotFoundException* ]]; then
                 echo "$function_error" >&2
                 exit 1
