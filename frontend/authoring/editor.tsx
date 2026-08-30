@@ -315,6 +315,9 @@ export type EditorBootstrap = {
   name: string;
   title: string;
   body: string;
+  cover_mode?: "auto" | "explicit" | "none";
+  cover_image_url?: string | null;
+  resolved_cover_image_url?: string | null;
   line_updated_at?: Array<string | null>;
   expected_updated_at: string;
   save_message: string;
@@ -2182,6 +2185,12 @@ export function AuthoringEditor({
   useEffect(() => {
     document.title = editorDocumentTitle(draft.title, document.documentElement.dataset.environment);
   }, [draft.title]);
+  useEffect(() => {
+    document.documentElement.dataset.view = canEdit ? "article-editing" : "reading";
+    return () => {
+      delete document.documentElement.dataset.view;
+    };
+  }, [canEdit]);
   const initialFocusAppliedRef = useRef(false);
   const editorContentReadyFrameRef = useRef<number | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
@@ -2837,7 +2846,20 @@ export function AuthoringEditor({
       <p className="visually-hidden" role="status" aria-live="polite" aria-busy={saving}>
         {status}
       </p>
-      <div className="article-workspace" ref={workspaceRef}>
+      <div className={`article-workspace${canEdit ? "" : " article-workspace--reading"}`} ref={workspaceRef}>
+        {canEdit && bootstrap.resolved_cover_image_url && (
+          <div className="article-editing-cover">
+            <img src={bootstrap.resolved_cover_image_url} alt="" />
+          </div>
+        )}
+        {!canEdit && (
+          <header className={`article-reading-header${bootstrap.resolved_cover_image_url ? " article-reading-header--covered" : ""}`}>
+            {bootstrap.resolved_cover_image_url && (
+              <img src={bootstrap.resolved_cover_image_url} alt="" />
+            )}
+            <h1>{draft.title}</h1>
+          </header>
+        )}
         {wikiLinkSuggestionStyle && (
           <div
             className="wiki-link-suggestions"

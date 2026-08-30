@@ -202,7 +202,7 @@ function App({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; auth
 
   const header = document.querySelector<HTMLElement>(".site-header");
   return <>
-    {header && createPortal(<SiteSearch />, header)}
+    {auth.can_edit && header && createPortal(<SiteSearch />, header)}
     <AuthoringEditor
       key={auth.can_edit ? "editable" : "readonly"}
       bootstrap={bootstrap}
@@ -571,6 +571,40 @@ function AtlasHome({ initialWindow, tags, archive, archiveRef, auth }: {
   );
 }
 
+function CoverJournalHome({ initialWindow, tags, archive, archiveRef, auth }: Parameters<typeof AtlasHome>[0]) {
+  const featured = initialWindow.pages.find((page) => page.image_url) || initialWindow.pages[0];
+  const heroStyle = featured?.image_url
+    ? { backgroundImage: `linear-gradient(180deg, transparent 12%, rgb(5 29 34 / 86%)), url(${featured.image_url})` }
+    : undefined;
+
+  return (
+    <div className="cover-journal">
+      <header className="cover-journal__hero" style={heroStyle} data-has-cover={String(Boolean(featured?.image_url))}>
+        <HeaderDock />
+        {featured && (
+          <a className="cover-journal__lead" href={`/${encodeURIComponent(featured.route)}`}>
+            <span>{featured.is_diary ? "Latest diary" : "Latest writing"}</span>
+            <strong>{featured.title}</strong>
+            {featured.excerpt && <small>{featured.excerpt}</small>}
+          </a>
+        )}
+      </header>
+      <div className="cover-journal__body">
+        <aside className="cover-journal__index" ref={archiveRef}>
+          <HomeTags tags={tags} />
+          <HomeArchive years={archive} heading="過去の記事" />
+          <GitHubAuthentication auth={auth} />
+        </aside>
+        <section className="cover-journal__stream" aria-label="記事と日記">
+          {initialWindow.pages.length === 0
+            ? <p className="empty-home">まだ記事がありません</p>
+            : <SplitFeed initialPages={initialWindow.pages} selectedMonth={null} />}
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function Home({ bootstrap, auth }: { bootstrap: HomeBootstrap; auth: AuthState }) {
   const [tags, setTags] = useState(bootstrap.tags ?? []);
   const [archive, setArchive] = useState(bootstrap.archive ?? []);
@@ -598,7 +632,7 @@ function Home({ bootstrap, auth }: { bootstrap: HomeBootstrap; auth: AuthState }
 
   return (
     <div className="home-layout">
-      <AtlasHome initialWindow={bootstrap} tags={tags} archive={archive} archiveRef={archiveRef} auth={auth} />
+      <CoverJournalHome initialWindow={bootstrap} tags={tags} archive={archive} archiveRef={archiveRef} auth={auth} />
     </div>
   );
 }

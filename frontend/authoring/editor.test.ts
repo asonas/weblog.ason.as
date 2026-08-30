@@ -817,7 +817,9 @@ test("does not mark a read-only page dirty when navigating a wiki link", async (
   const bootstrap: EditorBootstrap = {
     page_id: "page-id", page_type: "named", date: "", name: "current", title: "current",
     body: "[[example]]", expected_updated_at: "2026-08-29T11:00:00+09:00",
-    save_message: "", linked_pages: [], linked_pages_has_more: false
+    save_message: "", linked_pages: [], linked_pages_has_more: false,
+    cover_mode: "explicit", cover_image_url: "/assets/cover.jpg",
+    resolved_cover_image_url: "/assets/cover.jpg"
   };
   globalThis.fetch = async (input) => {
     const url = String(input);
@@ -836,6 +838,9 @@ test("does not mark a read-only page dirty when navigating a wiki link", async (
     const editorElement = container.querySelector<HTMLElement>(".ProseMirror")!;
     const link = editorElement.querySelector<HTMLAnchorElement>('a[href="/example"]')!;
     assert.equal(editorElement.getAttribute("contenteditable"), "false");
+    assert.equal(container.querySelector(".article-reading-header h1")?.textContent, "current");
+    assert.equal(container.querySelector<HTMLImageElement>(".article-reading-header img")?.src.endsWith("/assets/cover.jpg"), true);
+    assert.equal(document.documentElement.dataset.view, "reading");
 
     link.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
     link.dispatchEvent(new window.MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0 }));
