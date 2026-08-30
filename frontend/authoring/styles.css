@@ -1887,6 +1887,10 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header .header-act
   color: var(--ink);
 }
 
+html[data-header-scrolled="true"] .cover-journal__hero .atlas-header__search .site-search__mobile-button {
+  color: var(--ink);
+}
+
 .cover-journal__hero .atlas-header h1 {
   font-size: clamp(1.15rem, 2vw, 1.6rem);
 }
@@ -3017,33 +3021,6 @@ td {
     margin-block-end: 1rem;
   }
 
-  .atlas-header__actions,
-  .atlas-header__search {
-    display: inline-block;
-    vertical-align: top;
-  }
-
-  .atlas-header__search {
-    margin-block-start: 0;
-    margin-inline-start: 0.75rem;
-  }
-
-  .atlas-header__search .site-search__mobile-button {
-    position: static;
-    inline-size: 2.75rem;
-    block-size: 2.75rem;
-    border-color: transparent;
-    border-radius: 0.25rem;
-    background: transparent;
-    box-shadow: none;
-    color: var(--atlas-paper);
-  }
-
-  .atlas-header__search .site-search__mobile-button:hover {
-    background: color-mix(in oklch, var(--atlas-navy) 35%, transparent);
-    color: var(--atlas-warm);
-  }
-
   .atlas-rail .home-tags,
   .atlas-rail .home-archive {
     inline-size: auto;
@@ -3137,6 +3114,27 @@ td {
 }
 
 @media (max-width: 48rem) {
+  .cover-journal__hero .atlas-header {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+  }
+
+  .atlas-header__search .site-search__mobile-button {
+    position: static;
+    inline-size: 2.75rem;
+    block-size: 2.75rem;
+    border-color: transparent;
+    border-radius: 0.25rem;
+    background: transparent;
+    box-shadow: none;
+    color: var(--atlas-paper);
+  }
+
+  .atlas-header__search .site-search__mobile-button:hover {
+    background: color-mix(in oklch, var(--atlas-navy) 35%, transparent);
+    color: var(--atlas-warm);
+  }
+
   .site-search__desktop {
     display: none;
   }
