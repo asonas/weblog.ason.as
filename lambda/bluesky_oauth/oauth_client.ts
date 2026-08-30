@@ -1,9 +1,16 @@
-import { NodeOAuthClient, type NodeSavedSessionStore } from "@atproto/oauth-client-node";
+import {
+  NodeOAuthClient,
+  type NodeSavedSessionStore,
+} from "@atproto/oauth-client-node";
 import { JoseKey } from "@atproto/jwk-jose";
 
 import { EncryptedJson } from "./crypto.js";
 import type { OAuthRepository } from "./repository.js";
-import { createRequestLock, createSessionStore, createStateStore } from "./stores.js";
+import {
+  createRequestLock,
+  createSessionStore,
+  createStateStore,
+} from "./stores.js";
 
 export type BlueskyOAuthConfig = {
   clientId: string;

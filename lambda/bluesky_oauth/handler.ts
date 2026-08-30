@@ -7,7 +7,10 @@ import { createOAuthClient } from "./oauth_client.js";
 import { BlueskyOAuthService } from "./service.js";
 import type { StagedSessionStore } from "./stores.js";
 
-type InternalEvent = { action: "connect" | "callback" | "status" | "refresh" | "disconnect"; query?: string };
+type InternalEvent = {
+  action: "connect" | "callback" | "status" | "refresh" | "disconnect";
+  query?: string;
+};
 type ApiEvent = { rawPath?: string };
 
 let runtimePromise: ReturnType<typeof createRuntime> | undefined;
@@ -22,35 +25,59 @@ function getRuntime(): ReturnType<typeof createRuntime> {
 
 async function createRuntime() {
   const secret = await loadSecret(process.env.BLUESKY_OAUTH_SECRET_ID!);
-  const repository = DsqlOAuthRepository.forEnvironment(process.env.DSQL_HOST!, process.env.AWS_REGION);
-  const codec = new EncryptedJson(Buffer.from(secret.session_encryption_key, "base64"));
+  const repository = DsqlOAuthRepository.forEnvironment(
+    process.env.DSQL_HOST!,
+    process.env.AWS_REGION,
+  );
+  const codec = new EncryptedJson(
+    Buffer.from(secret.session_encryption_key, "base64"),
+  );
   const config = {
     clientId: "https://weblog.ason.as/oauth/bluesky/client-metadata.json",
     redirectUri: "https://weblog.ason.as/api/inbox/sources/bluesky/callback",
     privateJwk: secret.client_private_jwk,
   };
-  const factory = (store?: StagedSessionStore) => createOAuthClient(config, repository, codec, store);
+  const factory = (store?: StagedSessionStore) =>
+    createOAuthClient(config, repository, codec, store);
   const client = await factory();
   return {
     client,
-    service: new BlueskyOAuthService(secret.allowed_did, repository, codec, factory),
+    service: new BlueskyOAuthService(
+      secret.allowed_did,
+      repository,
+      codec,
+      factory,
+    ),
   };
 }
 
-export const handler: Handler<InternalEvent | ApiEvent, APIGatewayProxyStructuredResultV2 | object> = async (event) => {
+export const handler: Handler<
+  InternalEvent | ApiEvent,
+  APIGatewayProxyStructuredResultV2 | object
+> = async (event) => {
   const runtime = await getRuntime();
   if (!("action" in event)) {
-    if (event.rawPath === "/oauth/bluesky/client-metadata.json") return json(runtime.client.clientMetadata);
-    if (event.rawPath === "/oauth/bluesky/jwks.json") return json(runtime.client.jwks);
+    if (event.rawPath === "/oauth/bluesky/client-metadata.json")
+      return json(runtime.client.clientMetadata);
+    if (event.rawPath === "/oauth/bluesky/jwks.json")
+      return json(runtime.client.jwks);
     return { statusCode: 404, body: "Not Found" };
   }
 
   switch (event.action) {
-    case "connect": return { authorization_url: await runtime.service.connect() };
-    case "callback": await runtime.service.callback(event.query ?? ""); return { status: "connected" };
-    case "status": return runtime.service.status();
-    case "refresh": await runtime.service.refresh(); return runtime.service.status();
-    case "disconnect": await runtime.service.disconnect(); return { status: "disconnected" };
+    case "connect":
+      return { authorization_url: await runtime.service.connect() };
+    case "callback":
+      await runtime.service.callback(event.query ?? "");
+      return { status: "connected" };
+    case "status":
+      return runtime.service.status();
+    case "refresh":
+      await runtime.service.refresh();
+      return runtime.service.status();
+    case "disconnect":
+      await runtime.service.disconnect();
+      return { status: "disconnected" };
   }
   throw new Error("Unsupported Bluesky OAuth action");
 };
@@ -58,7 +85,10 @@ export const handler: Handler<InternalEvent | ApiEvent, APIGatewayProxyStructure
 function json(value: unknown): APIGatewayProxyStructuredResultV2 {
   return {
     statusCode: 200,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" },
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "public, max-age=300",
+    },
     body: JSON.stringify(value),
   };
 }

@@ -21,8 +21,12 @@ test("the OAuth SDK state store atomically consumes encrypted state", async () =
 test("a refreshed OAuth session replaces the encrypted token set", async () => {
   const repository = new MemoryOAuthRepository();
   const store = createSessionStore(repository, codec);
-  const original = { tokenSet: { access_token: "old" } } as unknown as NodeSavedSession;
-  const refreshed = { tokenSet: { access_token: "new", refresh_token: "single-use-new" } } as unknown as NodeSavedSession;
+  const original = {
+    tokenSet: { access_token: "old" },
+  } as unknown as NodeSavedSession;
+  const refreshed = {
+    tokenSet: { access_token: "new", refresh_token: "single-use-new" },
+  } as unknown as NodeSavedSession;
 
   await store.set("did:plc:allowed", original);
   const before = (await repository.getSession("did:plc:allowed"))!.value;
@@ -37,10 +41,15 @@ test("a refreshed OAuth session replaces the encrypted token set", async () => {
 test("SDK deletion retains the session record and requires reauthorization", async () => {
   const repository = new MemoryOAuthRepository();
   const store = createSessionStore(repository, codec);
-  await store.set("did:plc:allowed", { tokenSet: {} } as unknown as NodeSavedSession);
+  await store.set("did:plc:allowed", {
+    tokenSet: {},
+  } as unknown as NodeSavedSession);
 
   await store.del("did:plc:allowed");
 
-  assert.equal((await repository.getSession("did:plc:allowed"))?.status, "reauthorization_required");
+  assert.equal(
+    (await repository.getSession("did:plc:allowed"))?.status,
+    "reauthorization_required",
+  );
   assert.equal(await store.get("did:plc:allowed"), undefined);
 });

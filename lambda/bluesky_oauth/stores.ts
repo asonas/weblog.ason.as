@@ -9,9 +9,17 @@ import type {
 import { EncryptedJson } from "./crypto.js";
 import type { OAuthRepository } from "./repository.js";
 
-export function createStateStore(repository: OAuthRepository, codec: EncryptedJson): NodeSavedStateStore {
+export function createStateStore(
+  repository: OAuthRepository,
+  codec: EncryptedJson,
+): NodeSavedStateStore {
   return {
-    set: (key, value) => repository.saveState(key, codec.encrypt(value), new Date(Date.now() + 10 * 60_000)),
+    set: (key, value) =>
+      repository.saveState(
+        key,
+        codec.encrypt(value),
+        new Date(Date.now() + 10 * 60_000),
+      ),
     async get(key) {
       const value = await repository.consumeState(key);
       return value ? codec.decrypt<NodeSavedState>(value) : undefined;
@@ -28,7 +36,9 @@ export function createSessionStore(
     set: (did, value) => repository.saveSession(did, codec.encrypt(value)),
     async get(did) {
       const session = await repository.getSession(did);
-      return session?.status === "connected" ? codec.decrypt<NodeSavedSession>(session.value) : undefined;
+      return session?.status === "connected"
+        ? codec.decrypt<NodeSavedSession>(session.value)
+        : undefined;
     },
     del: (did) => repository.markReauthorizationRequired(did),
   };

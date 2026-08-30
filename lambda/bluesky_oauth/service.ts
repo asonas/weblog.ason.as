@@ -4,7 +4,9 @@ import { EncryptedJson } from "./crypto.js";
 import type { OAuthRepository } from "./repository.js";
 import { StagedSessionStore } from "./stores.js";
 
-type ClientFactory = (sessionStore?: StagedSessionStore) => Promise<NodeOAuthClient>;
+type ClientFactory = (
+  sessionStore?: StagedSessionStore,
+) => Promise<NodeOAuthClient>;
 
 export class BlueskyOAuthService {
   constructor(
@@ -16,7 +18,9 @@ export class BlueskyOAuthService {
 
   async connect(): Promise<string> {
     const client = await this.createClient();
-    return (await client.authorize(this.allowedDid, { scope: "atproto" })).toString();
+    return (
+      await client.authorize(this.allowedDid, { scope: "atproto" })
+    ).toString();
   }
 
   async callback(query: string): Promise<void> {
@@ -29,12 +33,21 @@ export class BlueskyOAuthService {
     }
     const staged = stagedStore.sessions.get(session.did);
     if (!staged) throw new Error("Bluesky OAuth session was not staged");
-    await this.repository.saveSession(session.did, this.codec.encrypt(staged), "connected");
+    await this.repository.saveSession(
+      session.did,
+      this.codec.encrypt(staged),
+      "connected",
+    );
   }
 
-  async status(): Promise<{ status: "disconnected" | "connected" | "reauthorization_required"; did?: string }> {
+  async status(): Promise<{
+    status: "disconnected" | "connected" | "reauthorization_required";
+    did?: string;
+  }> {
     const session = await this.repository.getSession(this.allowedDid);
-    return session ? { status: session.status, did: this.allowedDid } : { status: "disconnected" };
+    return session
+      ? { status: session.status, did: this.allowedDid }
+      : { status: "disconnected" };
   }
 
   async refresh(): Promise<void> {
@@ -66,6 +79,8 @@ export class BlueskyOAuthService {
 
 function isRevokedSessionError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return ["TokenRevokedError", "TokenInvalidError"].includes(error.name) ||
-    /invalid_grant|revoked|invalid refresh token/i.test(error.message);
+  return (
+    ["TokenRevokedError", "TokenInvalidError"].includes(error.name) ||
+    /invalid_grant|revoked|invalid refresh token/i.test(error.message)
+  );
 }

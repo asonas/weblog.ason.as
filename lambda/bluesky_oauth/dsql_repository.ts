@@ -4,13 +4,19 @@ import { Client, type QueryResultRow } from "pg";
 import type { OAuthConnectionStatus, OAuthRepository } from "./repository.js";
 
 type Queryable = {
-  query<T extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<{ rows: T[]; rowCount: number | null }>;
+  query<T extends QueryResultRow = QueryResultRow>(
+    text: string,
+    values?: unknown[],
+  ): Promise<{ rows: T[]; rowCount: number | null }>;
 };
 
 export class DsqlOAuthRepository implements OAuthRepository {
   constructor(private readonly connect: () => Promise<Queryable>) {}
 
-  static forEnvironment(hostname: string, region?: string): DsqlOAuthRepository {
+  static forEnvironment(
+    hostname: string,
+    region?: string,
+  ): DsqlOAuthRepository {
     return new DsqlOAuthRepository(async () => {
       const signer = new DsqlSigner({ hostname, region });
       const client = new Client({
@@ -49,7 +55,11 @@ export class DsqlOAuthRepository implements OAuthRepository {
     });
   }
 
-  async saveSession(did: string, value: string, status: OAuthConnectionStatus = "connected"): Promise<void> {
+  async saveSession(
+    did: string,
+    value: string,
+    status: OAuthConnectionStatus = "connected",
+  ): Promise<void> {
     await this.run(async (db) => {
       await db.query(
         `INSERT INTO weblog_authoring.bluesky_oauth_sessions
@@ -62,20 +72,30 @@ export class DsqlOAuthRepository implements OAuthRepository {
     });
   }
 
-  async getSession(did: string): Promise<{ value: string; status: OAuthConnectionStatus } | undefined> {
+  async getSession(
+    did: string,
+  ): Promise<{ value: string; status: OAuthConnectionStatus } | undefined> {
     return this.run(async (db) => {
-      const result = await db.query<{ encrypted_value: string; status: OAuthConnectionStatus }>(
+      const result = await db.query<{
+        encrypted_value: string;
+        status: OAuthConnectionStatus;
+      }>(
         `SELECT encrypted_value, status FROM weblog_authoring.bluesky_oauth_sessions WHERE did = $1`,
         [did],
       );
       const row = result.rows[0];
-      return row ? { value: row.encrypted_value, status: row.status } : undefined;
+      return row
+        ? { value: row.encrypted_value, status: row.status }
+        : undefined;
     });
   }
 
   async deleteSession(did: string): Promise<void> {
     await this.run(async (db) => {
-      await db.query(`DELETE FROM weblog_authoring.bluesky_oauth_sessions WHERE did = $1`, [did]);
+      await db.query(
+        `DELETE FROM weblog_authoring.bluesky_oauth_sessions WHERE did = $1`,
+        [did],
+      );
     });
   }
 
@@ -91,7 +111,9 @@ export class DsqlOAuthRepository implements OAuthRepository {
 
   async withLock<T>(key: string, callback: () => Promise<T>): Promise<T> {
     const acquired = await this.run(async (db) => {
-      await db.query(`DELETE FROM weblog_authoring.bluesky_oauth_locks WHERE expires_at <= NOW()`);
+      await db.query(
+        `DELETE FROM weblog_authoring.bluesky_oauth_locks WHERE expires_at <= NOW()`,
+      );
       const result = await db.query(
         `INSERT INTO weblog_authoring.bluesky_oauth_locks (lock_key, expires_at)
          VALUES ($1, NOW() + INTERVAL '45 seconds') ON CONFLICT (lock_key) DO NOTHING RETURNING lock_key`,
@@ -104,7 +126,10 @@ export class DsqlOAuthRepository implements OAuthRepository {
       return await callback();
     } finally {
       await this.run(async (db) => {
-        await db.query(`DELETE FROM weblog_authoring.bluesky_oauth_locks WHERE lock_key = $1`, [key]);
+        await db.query(
+          `DELETE FROM weblog_authoring.bluesky_oauth_locks WHERE lock_key = $1`,
+          [key],
+        );
       });
     }
   }

@@ -18,9 +18,15 @@ test("confidential client metadata exposes only the public ES256 key", async () 
     new EncryptedJson(Buffer.alloc(32, 4)),
   );
 
-  assert.equal(client.clientMetadata.token_endpoint_auth_method, "private_key_jwt");
+  assert.equal(
+    client.clientMetadata.token_endpoint_auth_method,
+    "private_key_jwt",
+  );
   assert.equal(client.clientMetadata.token_endpoint_auth_signing_alg, "ES256");
-  assert.deepEqual(client.clientMetadata.grant_types, ["authorization_code", "refresh_token"]);
+  assert.deepEqual(client.clientMetadata.grant_types, [
+    "authorization_code",
+    "refresh_token",
+  ]);
   assert.equal(client.clientMetadata.scope, "atproto");
   assert.equal(client.jwks.keys.length, 1);
   assert.equal(client.jwks.keys[0]?.kid, "bluesky-client-1");
