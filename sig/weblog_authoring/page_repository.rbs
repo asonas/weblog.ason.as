@@ -1,7 +1,7 @@
 module WeblogAuthoring
   interface _PageRepository
-    def list_pages: (?limit: Integer?, ?before: page_cursor?, ?after: page_cursor?, ?kind: String?) -> Array[PageDocument]
-    def find: (String id) -> PageDocument?
+    def list_pages: (?limit: Integer?, ?before: page_cursor?, ?after: page_cursor?, ?kind: String?, ?timings: Hash[String, Float]?) -> Array[PageDocument]
+    def find: (String id, ?timings: Hash[String, Float]?) -> PageDocument?
     def find_route: (String route) -> PageDocument?
     def save: (SaveRequest request) -> PageDocument?
   end

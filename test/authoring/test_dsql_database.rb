@@ -184,6 +184,27 @@ class DsqlDatabaseTest < Minitest::Test
     assert_equal [{ source_id: page.id, target_name: "リンク先" }], @pool.connection.links
   end
 
+  def test_list_pages_reports_non_overlapping_database_timings
+    samples = (0..7).map(&:to_f)
+    database = dsql_database(monotonic_clock: -> { samples.shift })
+    database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "計測", body: "本文 [[リンク先]]"
+    ))
+    timings = {}
+
+    database.list_pages(timings:)
+
+    assert_equal(
+      {
+        "db_checkout" => 1000.0,
+        "dsql_exec" => 1000.0,
+        "row_build" => 2000.0,
+        "wiki_parse" => 1000.0,
+      },
+      timings
+    )
+  end
+
   def test_checks_database_health
     assert dsql_database.healthy?
   end
@@ -287,14 +308,16 @@ class DsqlDatabaseTest < Minitest::Test
 
   private
 
-  def dsql_database(clock: -> { FIXED_TIME })
+  def dsql_database(clock: -> { FIXED_TIME }, monotonic_clock: nil)
     @pool = Pool.new
-    WeblogAuthoring::DsqlDatabase.new(
+    options = {
       host: "cluster.dsql.ap-northeast-1.on.aws",
       content_dir: Pathname("content"),
       clock:,
-      pool: @pool
-    )
+      pool: @pool,
+    }
+    options[:monotonic_clock] = monotonic_clock unless monotonic_clock.nil?
+    WeblogAuthoring::DsqlDatabase.new(**options)
   end
 
   def inbox_row(id, expires_at:)

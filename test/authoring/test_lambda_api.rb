@@ -66,7 +66,8 @@ class LambdaApiTest < Minitest::Test
       true
     end
 
-    def list_pages(limit: nil, before: nil, after: nil, kind: nil)
+    def list_pages(limit: nil, before: nil, after: nil, kind: nil, timings: nil)
+      timings&.merge!("db_checkout" => 1.0, "dsql_exec" => 2.0, "row_build" => 3.0, "wiki_parse" => 4.0)
       timestamp = ->(page) { kind == "diary" ? page.created_at : page.updated_at }
       selected = pages.sort_by { |page| [timestamp.call(page), page.id] }.reverse
       selected = selected.select do |page|
@@ -83,7 +84,8 @@ class LambdaApiTest < Minitest::Test
       selected
     end
 
-    def find(id)
+    def find(id, timings: nil)
+      timings&.merge!("db_checkout" => 1.0, "dsql_exec" => 2.0, "row_build" => 3.0, "wiki_parse" => 4.0)
       pages.find { |page| page.id == id }
     end
 
@@ -295,6 +297,43 @@ class LambdaApiTest < Minitest::Test
 
     assert_equal %w[開発], JSON.parse(tags.fetch(:body)).fetch("tags")
     assert_equal [{ "year" => 2026, "months" => [8] }], JSON.parse(archive.fetch(:body)).fetch("archive")
+  end
+
+  def test_reports_secondary_tag_timings_with_request_context
+    log = StringIO.new
+    api = WeblogAuthoring::LambdaApi.new(database: @database, logger: log)
+    response = api.call(event("GET", "/api/tags"))
+    warm_response = api.call(event("GET", "/api/archive"))
+
+    assert_equal 200, response.fetch(:statusCode), response.fetch(:body)
+    timing = response.fetch(:headers).fetch("server-timing")
+    %w[db_checkout dsql_exec row_build wiki_parse tag_scan json].each do |name|
+      assert_match(/(?:\A|, )#{name};dur=\d+(?:\.\d+)?/, timing)
+    end
+    entry, warm_entry = log.string.lines.map { |line| JSON.parse(line) }
+    assert_equal "secondary_timing", entry.fetch("event")
+    assert_equal "request-id", entry.fetch("request_id")
+    assert_equal "/api/tags", entry.fetch("route")
+    assert_equal true, entry.fetch("cold")
+    assert_equal 200, entry.fetch("status")
+    assert_equal 200, warm_response.fetch(:statusCode), warm_response.fetch(:body)
+    assert_match(/archive_scan;dur=\d+(?:\.\d+)?/, warm_response.fetch(:headers).fetch("server-timing"))
+    assert_equal "/api/archive", warm_entry.fetch("route")
+    assert_equal false, warm_entry.fetch("cold")
+  end
+
+  def test_reports_related_processing_timings
+    log = StringIO.new
+    api = WeblogAuthoring::LambdaApi.new(database: @database, logger: log)
+    response = api.call(event(
+      "GET", "/api/related", query: { "route" => "記事名", "excluding_id" => "page-id" }
+    ))
+
+    assert_equal 200, response.fetch(:statusCode), response.fetch(:body)
+    timing = response.fetch(:headers).fetch("server-timing")
+    %w[db_checkout dsql_exec row_build wiki_parse related_input related_scan related_summary related_sort json].each do |name|
+      assert_match(/(?:\A|, )#{name};dur=\d+(?:\.\d+)?/, timing)
+    end
   end
 
   def test_lists_cacheable_page_names
@@ -1024,7 +1063,7 @@ class LambdaApiTest < Minitest::Test
       "queryStringParameters" => query,
       "cookies" => cookies,
       "headers" => headers,
-      "requestContext" => { "http" => { "method" => method } },
+      "requestContext" => { "requestId" => "request-id", "http" => { "method" => method } },
     }
   end
 end

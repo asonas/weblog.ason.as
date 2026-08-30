@@ -72,6 +72,7 @@ module WeblogAuthoring
       @inbox_sync_function_name = inbox_sync_function_name
       @bluesky_oauth_function_name = bluesky_oauth_function_name
       @clock = clock
+      @cold_start = true
     end
 
     def call(event)
@@ -88,6 +89,8 @@ module WeblogAuthoring
       cache_control_response(event, json_error(415, error.message))
     rescue ArgumentError, TypeError => error
       cache_control_response(event, json_error(422, error.message))
+    ensure
+      @cold_start = false
     end
 
     private
@@ -136,8 +139,8 @@ module WeblogAuthoring
       end
       return search_response(event) if method == "GET" && path == "/api/search"
       return pages_response(event) if method == "GET" && path == "/api/pages"
-      return tags_response if method == "GET" && path == "/api/tags"
-      return archive_response if method == "GET" && path == "/api/archive"
+      return tags_response(event) if method == "GET" && path == "/api/tags"
+      return archive_response(event) if method == "GET" && path == "/api/archive"
       return page_names_response(event) if method == "GET" && path == "/api/page-names"
       return related_pages_response(event) if method == "GET" && path == "/api/related"
       return embed_response(event) if method == "GET" && path == "/api/embed"
@@ -320,12 +323,18 @@ module WeblogAuthoring
       { timestamp: Time.new(date.year, date.month, 1, 0, 0, 0, TOKYO_OFFSET), id: "" }
     end
 
-    def tags_response
-      json_response(200, "tags" => recent_tags(@database.list_pages))
+    def tags_response(event)
+      timings = {} # @type var timings: Hash[String, Float]
+      pages = @database.list_pages(timings:)
+      tags = measure(timings, "tag_scan") { recent_tags(pages) }
+      timed_json_response(event, timings, { "tags" => tags })
     end
 
-    def archive_response
-      json_response(200, "archive" => archive_years(@database.list_pages))
+    def archive_response(event)
+      timings = {} # @type var timings: Hash[String, Float]
+      pages = @database.list_pages(timings:)
+      archive = measure(timings, "archive_scan") { archive_years(pages) }
+      timed_json_response(event, timings, { "archive" => archive })
     end
 
     def page_names_response(event)
@@ -669,18 +678,20 @@ module WeblogAuthoring
     end
 
     def related_pages_response(event)
+      timings = {} # @type var timings: Hash[String, Float]
       query = event.fetch("queryStringParameters", EMPTY_HASH).to_h # @type var query: Hash[String, untyped]
       # @type var page: PageDocument?
-      page = query["excluding_id"].to_s.empty? ? nil : @database.find(query["excluding_id"])
+      page = query["excluding_id"].to_s.empty? ? nil : @database.find(query["excluding_id"], timings:)
       result = related_page_result(
         query.fetch("route", ""),
         page&.body || query.fetch("body", ""),
         excluding_id: page&.id,
-        offset: Integer(query.fetch("offset", 0))
+        offset: Integer(query.fetch("offset", 0)),
+        timings:
       )
-      json_response(200, result)
+      timed_json_response(event, timings, result)
     rescue ArgumentError
-      json_response(422, error: "Invalid offset")
+      timed_json_response(event, timings, { "error" => "Invalid offset" }, status: 422)
     end
 
     def embed_response(event)
@@ -807,33 +818,43 @@ module WeblogAuthoring
       end
     end
 
-    def related_page_result(route, body, excluding_id: nil, offset: 0)
-      pages = @database.list_pages
-      outgoing_names = WeblogAuthoring.extract_wiki_links(body.to_s).map(&:name).uniq
-      outgoing_urls = WeblogAuthoring.extract_external_urls(body.to_s)
+    def related_page_result(route, body, excluding_id: nil, offset: 0, timings: {})
+      pages = @database.list_pages(timings:)
+      outgoing_names, outgoing_urls = measure(timings, "related_input") do
+        [WeblogAuthoring.extract_wiki_links(body.to_s).map(&:name).uniq,
+         WeblogAuthoring.extract_external_urls(body.to_s),]
+      end
 
-      related = pages.each_with_index.filter_map do |page, index|
-        next if page.id == excluding_id
+      candidates = measure(timings, "related_scan") do
+        pages.each_with_index.filter_map do |page, index|
+          next if page.id == excluding_id
 
-        page_link_names = page.links.map(&:name)
-        related_by = outgoing_names.filter do |name|
-          next page.route == name if name == "日記"
+          page_link_names = page.links.map(&:name)
+          related_by = outgoing_names.filter do |name|
+            next page.route == name if name == "日記"
 
-          page.route == name || page_link_names.include?(name)
+            page.route == name || page_link_names.include?(name)
+          end
+          related_by << route if !route.to_s.empty? && page_link_names.include?(route)
+          related_urls = WeblogAuthoring.extract_external_urls(page.body.to_s) & outgoing_urls
+          next if related_by.empty? && related_urls.empty?
+
+          direct_link_index = outgoing_names.index(page.route)
+          [direct_link_index.nil? ? 1 : 0, direct_link_index || index, page, related_by.uniq, related_urls]
         end
-        related_by << route if !route.to_s.empty? && page_link_names.include?(route)
-        related_urls = WeblogAuthoring.extract_external_urls(page.body.to_s) & outgoing_urls
-        next if related_by.empty? && related_urls.empty?
-
-        direct_link_index = outgoing_names.index(page.route)
-        priority = direct_link_index.nil? ? 1 : 0
-        order = direct_link_index || index
-        summary = page_summary(page).merge(
-          "related_by" => related_by.uniq,
-          "related_urls" => related_urls
-        )
-        [priority, order, summary]
-      end.sort_by { |priority, order, _page| [priority, order] }.map(&:last)
+      end
+      summarized = measure(timings, "related_summary") do
+        candidates.map do |priority, order, page, related_by, related_urls|
+          summary = page_summary(page).merge(
+            "related_by" => related_by.uniq,
+            "related_urls" => related_urls
+          )
+          [priority, order, summary]
+        end
+      end
+      related = measure(timings, "related_sort") do
+        summarized.sort_by { |priority, order, _page| [priority, order] }.map(&:last)
+      end
 
       {
         "pages" => related.slice(offset, RELATED_PAGE_LIMIT) || [],
@@ -1073,6 +1094,19 @@ module WeblogAuthoring
 
     def server_timing(timings)
       timings.map { |name, duration| "#{name};dur=#{duration}" }.join(", ")
+    end
+
+    def timed_json_response(event, timings, payload, status: 200)
+      body = measure(timings, "json") { JSON.generate(payload) }
+      @logger.puts(JSON.generate(
+        "event" => "secondary_timing",
+        "request_id" => event.dig("requestContext", "requestId"),
+        "route" => event.fetch("rawPath", ""),
+        "cold" => @cold_start,
+        "status" => status,
+        "timings" => timings
+      ))
+      { statusCode: status, headers: JSON_HEADERS.merge("server-timing" => server_timing(timings)), body: }
     end
 
     def conditional_json_response(event, payload)

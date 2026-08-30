@@ -44,8 +44,8 @@ module WeblogAuthoring
     def encode_page_cursor: (PageDocument, kind: String?) -> String
     def decode_page_cursor: (String?) -> page_cursor?
     def month_boundary: (String) -> page_cursor
-    def tags_response: () -> lambda_response
-    def archive_response: () -> lambda_response
+    def tags_response: (lambda_event) -> lambda_response
+    def archive_response: (lambda_event) -> lambda_response
     def page_names_response: (lambda_event) -> lambda_response
     def new_editor_response: (lambda_event) -> lambda_response
     def daily_editor_response: (lambda_event) -> lambda_response
@@ -89,7 +89,7 @@ module WeblogAuthoring
     def page_summary: (PageDocument) -> Hash[String, untyped]
     def editor_json: (?page: PageDocument?, ?title: String?, ?name: String?, ?body: String?, ?linked_pages_has_more: bool?) -> Hash[String, untyped]
     def line_updated_at: (PageDocument) -> Array[untyped]
-    def related_page_result: (String, String, ?excluding_id: String?, ?offset: Integer) -> Hash[String, untyped]
+    def related_page_result: (String, String, ?excluding_id: String?, ?offset: Integer, ?timings: Hash[String, Float]) -> Hash[String, untyped]
     def recent_tags: (Array[PageDocument]) -> Array[String]
     def archive_years: (Array[PageDocument]) -> Array[Hash[String, untyped]]
     def page_excerpt: (PageDocument) -> String
@@ -113,6 +113,7 @@ module WeblogAuthoring
     def cache_control_response: (lambda_event, lambda_response) -> lambda_response
     def measure: [A] (untyped, String) { () -> A } -> A
     def server_timing: (untyped) -> String
+    def timed_json_response: (lambda_event, Hash[String, Float], untyped, ?status: Integer) -> lambda_response
     def conditional_json_response: (lambda_event, untyped) -> lambda_response
     def json_error: (Integer, String, ?field: String?) -> lambda_response
   end

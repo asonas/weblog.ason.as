@@ -18,7 +18,7 @@ module WeblogAuthoring
 
     include _PageRepository
 
-    def initialize: (host: String, content_dir: String | Pathname, ?clock: ^() -> Time, ?pool: untyped) -> void
+    def initialize: (host: String, content_dir: String | Pathname, ?clock: ^() -> Time, ?pool: untyped, ?monotonic_clock: ^() -> Float) -> void
     def healthy?: () -> bool
     def close: () -> untyped
     def scrapbox_line_metadata: (String) -> Array[Hash[Symbol, untyped]]
@@ -67,11 +67,15 @@ module WeblogAuthoring
     def replace_links: (untyped, PageDocument) -> untyped
     def replace_line_metadata_after_save: (untyped, PageDocument, PageDocument?, Array[Hash[Symbol, untyped]]) -> untyped
     def page_values: (PageDocument) -> Array[untyped]
-    def page_from_row: (_DsqlPageRow) -> PageDocument
+    def page_from_row: (_DsqlPageRow, ?timings: Hash[String, Float]?) -> PageDocument
     def select_sql: (String) -> String
     def validate_expected_update: (PageDocument, SaveRequest) -> untyped
     def now: () -> Time
     def parse_time: (untyped) -> Time
-    def with_connection: [A] () { (untyped) -> A } -> A
+    def with_connection: [A] (?timings: Hash[String, Float]?) { (untyped) -> A } -> A
+    def monotonic_time: () -> Float
+    def elapsed_ms: (Float) -> Float
+    def record_timing: (Hash[String, Float]?, String, Float?) -> void
+    def add_timing: (Hash[String, Float]?, String, Float) -> void
   end
 end

@@ -45,9 +45,11 @@ module WeblogAuthoring
       %w[c4p track] => { "guid" => String, "permalink" => String, "title" => String, "audio_url" => String, "duration_seconds" => Integer },
     }.freeze
 
-    def initialize(host:, content_dir:, clock: -> { Time.now.getlocal(TOKYO_OFFSET) }, pool: nil) # steep:ignore ArgumentTypeMismatch
+    def initialize(host:, content_dir:, clock: -> { Time.now.getlocal(TOKYO_OFFSET) }, # steep:ignore ArgumentTypeMismatch
+                   pool: nil, monotonic_clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) })
       @content_dir = Pathname(content_dir)
       @clock = clock
+      @monotonic_clock = monotonic_clock
       @pool = pool || AuroraDsql::Pg.create_pool(
         host:,
         user: DATABASE_ROLE,
@@ -56,8 +58,8 @@ module WeblogAuthoring
       )
     end
 
-    def list_pages(limit: nil, before: nil, after: nil, kind: nil)
-      with_connection do |connection|
+    def list_pages(limit: nil, before: nil, after: nil, kind: nil, timings: nil)
+      with_connection(timings:) do |connection|
         order_column = kind == "diary" ? "created_at" : "updated_at"
         sql = <<~SQL
           SELECT id, page_type, name, page_date, title, status,
@@ -84,8 +86,21 @@ module WeblogAuthoring
           values << limit
           sql += "LIMIT $#{values.length}\n"
         end
+        exec_started_at = monotonic_time if timings
         result = values.empty? ? connection.exec(sql) : connection.exec_params(sql, values)
-        pages = result.map { |row| page_from_row(row) }
+        record_timing(timings, "dsql_exec", exec_started_at)
+        pages = result.map do |row|
+          if timings
+            row_started_at = monotonic_time
+            wiki_before = timings.fetch("wiki_parse", 0.0)
+            page = page_from_row(row, timings:)
+            wiki_duration = timings.fetch("wiki_parse", 0.0) - wiki_before
+            add_timing(timings, "row_build", elapsed_ms(row_started_at) - wiki_duration)
+            page
+          else
+            page_from_row(row)
+          end
+        end
         after ? pages.reverse : pages
       end
     end
@@ -95,10 +110,23 @@ module WeblogAuthoring
       true
     end
 
-    def find(id)
-      with_connection do |connection|
+    def find(id, timings: nil)
+      with_connection(timings:) do |connection|
+        exec_started_at = monotonic_time if timings
         result = connection.exec_params("#{select_sql("id")} LIMIT 1", [id])
-        result.ntuples.zero? ? nil : page_from_row(result[0])
+        record_timing(timings, "dsql_exec", exec_started_at)
+        return nil if result.ntuples.zero?
+
+        if timings
+          row_started_at = monotonic_time
+          wiki_before = timings.fetch("wiki_parse", 0.0)
+          page = page_from_row(result[0], timings:)
+          wiki_duration = timings.fetch("wiki_parse", 0.0) - wiki_before
+          add_timing(timings, "row_build", elapsed_ms(row_started_at) - wiki_duration)
+          page
+        else
+          page_from_row(result[0])
+        end
       end
     end
 
@@ -1172,8 +1200,11 @@ module WeblogAuthoring
       ]
     end
 
-    def page_from_row(row)
+    def page_from_row(row, timings: nil)
       body = row.fetch("body")
+      wiki_started_at = monotonic_time if timings
+      links = WeblogAuthoring.extract_wiki_links(body)
+      record_timing(timings, "wiki_parse", wiki_started_at)
       PageDocument.new(
         id: row.fetch("id"),
         page_type: row.fetch("page_type"),
@@ -1186,7 +1217,7 @@ module WeblogAuthoring
         published_at: row["published_at"] && parse_time(row.fetch("published_at")),
         path: Pathname(row.fetch("path")),
         body:,
-        links: WeblogAuthoring.extract_wiki_links(body),
+        links:,
         cover_mode: row["cover_mode"],
         cover_image_url: row["cover_image_url"]
       )
@@ -1220,8 +1251,32 @@ module WeblogAuthoring
       Time.parse(value)
     end
 
-    def with_connection(&)
-      @pool.with(&)
+    def with_connection(timings: nil)
+      started_at = monotonic_time if timings
+      @pool.with do |connection|
+        record_timing(timings, "db_checkout", started_at)
+        yield connection
+      end
+    end
+
+    def monotonic_time
+      @monotonic_clock.call
+    end
+
+    def elapsed_ms(started_at)
+      ((monotonic_time - started_at) * 1000).round(1).to_f
+    end
+
+    def record_timing(timings, name, started_at)
+      return if timings.nil? || started_at.nil?
+
+      add_timing(timings, name, elapsed_ms(started_at))
+    end
+
+    def add_timing(timings, name, duration)
+      return if timings.nil?
+
+      timings[name] = (timings.fetch(name, 0.0) + duration).round(1).to_f
     end
   end
 end
