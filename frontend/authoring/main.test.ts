@@ -70,7 +70,85 @@ registerHooks({
     return nextLoad(url, context);
   },
 });
-const { CoverJournalHome, HeaderSearch } = await import("./main");
+const { CoverJournalHome, HeaderSearch, editorViewMode } = await import(
+  "./main"
+);
+
+const editorBootstrap = {
+  page_id: "page-id",
+  page_type: "named" as const,
+  date: "",
+  name: "article",
+  title: "article",
+  body: "body",
+  expected_updated_at: "2026-08-30T00:00:00+09:00",
+  save_message: "",
+  linked_pages: [],
+  linked_pages_has_more: false,
+};
+
+test("requires edit permission even on an explicit editor URL", () => {
+  assert.equal(
+    editorViewMode({
+      bootstrap: editorBootstrap,
+      canEdit: false,
+      pathname: "/editor/page-id",
+      search: "",
+    }),
+    "reading",
+  );
+  assert.equal(
+    editorViewMode({
+      bootstrap: editorBootstrap,
+      canEdit: true,
+      pathname: "/editor/page-id",
+      search: "",
+    }),
+    "editing",
+  );
+});
+
+test("opens only today's diary in editing mode by default", () => {
+  const now = new Date("2026-08-29T15:30:00Z");
+  const diary = {
+    ...editorBootstrap,
+    page_type: "date" as const,
+    date: "2026-08-30",
+    name: "",
+    title: "2026-08-30",
+  };
+
+  assert.equal(
+    editorViewMode({
+      bootstrap: diary,
+      canEdit: true,
+      pathname: "/2026-08-30",
+      search: "",
+      now,
+    }),
+    "editing",
+  );
+  assert.equal(
+    editorViewMode({
+      bootstrap: diary,
+      canEdit: true,
+      pathname: "/2026-08-30",
+      search: "?view=reading",
+      now,
+    }),
+    "reading",
+  );
+  assert.equal(
+    editorViewMode({
+      bootstrap: { ...diary, date: "2026-08-29" },
+      canEdit: true,
+      pathname: "/2026-08-29",
+      search: "",
+      now,
+    }),
+    "reading",
+  );
+});
 
 test("keeps the shared search field in the header layout", async () => {
   const container = document.createElement("div");

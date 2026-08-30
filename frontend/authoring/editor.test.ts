@@ -1344,6 +1344,10 @@ test("navigates an unfocused wiki link through the editor mouse event path", () 
 });
 
 test("does not mark a read-only page dirty when navigating a wiki link", async () => {
+  const header = document.createElement("header");
+  header.className = "site-header";
+  header.innerHTML = '<div class="header-actions"></div>';
+  document.body.append(header);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -1376,7 +1380,13 @@ test("does not mark a read-only page dirty when navigating a wiki link", async (
   try {
     await act(async () => {
       root.render(
-        createElement(AuthoringEditor, { bootstrap, canEdit: false }),
+        createElement(AuthoringEditor, {
+          bootstrap,
+          canEdit: false,
+          canSwitchToEdit: true,
+          editingHref: "/editor/page-id",
+          readingHref: "/current",
+        }),
       );
       await Promise.resolve();
     });
@@ -1398,6 +1408,12 @@ test("does not mark a read-only page dirty when navigating a wiki link", async (
     );
     assert.equal(container.querySelector(".content-inbox-drawer"), null);
     assert.equal(document.documentElement.dataset.view, "reading");
+    assert.equal(
+      header.querySelector<HTMLAnchorElement>(".header-action--view-mode")
+        ?.href,
+      "http://127.0.0.1:5173/editor/page-id",
+    );
+    assert.equal(header.textContent, "編集");
 
     link.dispatchEvent(
       new window.MouseEvent("mousedown", {
@@ -1426,6 +1442,7 @@ test("does not mark a read-only page dirty when navigating a wiki link", async (
     globalThis.fetch = originalFetch;
     window.open = originalOpen;
     container.remove();
+    header.remove();
   }
 });
 

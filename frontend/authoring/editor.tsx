@@ -33,6 +33,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { markdownForEditor, markdownForSource } from "./markdown";
 
@@ -2801,9 +2802,15 @@ function statusMessage(page: PageResponse): string {
 export function AuthoringEditor({
   bootstrap,
   canEdit = document.documentElement.dataset.canEdit === "true",
+  canSwitchToEdit = false,
+  editingHref,
+  readingHref,
 }: {
   bootstrap: EditorBootstrap;
   canEdit?: boolean;
+  canSwitchToEdit?: boolean;
+  editingHref?: string;
+  readingHref?: string;
 }) {
   const [draft, setDraft] = useState<EditorDraft>(() =>
     initialDraft(bootstrap),
@@ -3003,6 +3010,15 @@ export function AuthoringEditor({
       void savePage();
     }, 300);
   }, [savePage]);
+
+  const showReadingView = useCallback(async () => {
+    if (!readingHref || savingRef.current) return;
+    if (dirtyRef.current) {
+      await savePage();
+      if (dirtyRef.current) return;
+    }
+    window.location.assign(readingHref);
+  }, [readingHref, savePage]);
 
   const updateCover = useCallback(
     (
@@ -3845,9 +3861,33 @@ export function AuthoringEditor({
     () => pendingLineUpdates(savedBodyRef.current, draft.body, lineUpdatedAt),
     [draft.body, lineUpdatedAt],
   );
+  const headerActions = document.querySelector<HTMLElement>(
+    ".site-header .header-actions",
+  );
 
   return (
     <>
+      {headerActions &&
+        createPortal(
+          canEdit && readingHref ? (
+            <button
+              type="button"
+              className="header-action header-action--view-mode"
+              disabled={saving}
+              onClick={() => void showReadingView()}
+            >
+              閲覧
+            </button>
+          ) : canSwitchToEdit && editingHref ? (
+            <a
+              className="header-action header-action--view-mode"
+              href={editingHref}
+            >
+              編集
+            </a>
+          ) : null,
+          headerActions,
+        )}
       <p
         className="visually-hidden"
         role="status"

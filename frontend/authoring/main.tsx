@@ -95,6 +95,47 @@ export function HeaderSearch() {
 
 type AppBootstrap = (EditorBootstrap & { mode: "editor" }) | HomeBootstrap;
 
+type EditorViewMode = "editing" | "reading";
+
+function tokyoDate(now: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+export function editorViewMode({
+  bootstrap,
+  canEdit,
+  pathname,
+  search,
+  now = new Date(),
+}: {
+  bootstrap: EditorBootstrap;
+  canEdit: boolean;
+  pathname: string;
+  search: string;
+  now?: Date;
+}): EditorViewMode {
+  if (!canEdit) return "reading";
+  if (!bootstrap.page_id) return "editing";
+  if (pathname === "/editor/new" || pathname.startsWith("/editor/"))
+    return "editing";
+  if (new URLSearchParams(search).get("view") === "reading") return "reading";
+  if (bootstrap.page_type === "date" && bootstrap.date === tokyoDate(now))
+    return "editing";
+  return "reading";
+}
+
+function pageRoute(bootstrap: EditorBootstrap): string {
+  return bootstrap.name || bootstrap.date || bootstrap.title;
+}
+
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -218,13 +259,30 @@ function App({
   if (bootstrap.mode === "home")
     return <Home bootstrap={bootstrap} auth={auth} />;
 
+  const viewMode = editorViewMode({
+    bootstrap,
+    canEdit: auth.can_edit,
+    pathname: window.location.pathname,
+    search: window.location.search,
+  });
+  const route = pageRoute(bootstrap);
+  const isTodaysDiary =
+    bootstrap.page_type === "date" && bootstrap.date === tokyoDate(new Date());
+  const readingHref = `/${encodeURIComponent(route)}${isTodaysDiary ? "?view=reading" : ""}`;
+  const editingHref = isTodaysDiary
+    ? `/${encodeURIComponent(route)}`
+    : `/editor/${encodeURIComponent(bootstrap.page_id)}`;
+
   return (
     <>
       <HeaderSearch />
       <AuthoringEditor
-        key={auth.can_edit ? "editable" : "readonly"}
+        key={viewMode}
         bootstrap={bootstrap}
-        canEdit={auth.can_edit}
+        canEdit={viewMode === "editing"}
+        canSwitchToEdit={auth.can_edit && Boolean(bootstrap.page_id)}
+        editingHref={editingHref}
+        readingHref={readingHref}
       />
     </>
   );

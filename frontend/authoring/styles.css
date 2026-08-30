@@ -890,6 +890,15 @@ h1 {
   transform: translate(1px, -1px);
 }
 
+.header-action--view-mode {
+  inline-size: auto;
+  min-inline-size: 2.75rem;
+  padding-inline: 0.8rem;
+  border-radius: var(--radius-control);
+  font-size: var(--text-ui);
+  font-weight: 650;
+}
+
 .page-card-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
