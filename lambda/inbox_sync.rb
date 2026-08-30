@@ -3,8 +3,10 @@
 require "pathname"
 require "securerandom"
 require "json"
+require "aws-sdk-lambda"
 require "aws-sdk-secretsmanager"
 
+require "weblog_authoring/bluesky_source"
 require "weblog_authoring/dsql_database"
 require "weblog_authoring/inbox_sync"
 require "weblog_authoring/raindrop_source"
@@ -25,12 +27,22 @@ module WeblogAuthoring
           content_dir: Pathname("/tmp/content")
         ),
         sources: {
-          "bluesky" => InboxSync::PendingSource.new,
+          "bluesky" => bluesky_source,
           "raindrop" => raindrop_source,
           "c4p" => InboxSync::PendingSource.new,
         }
       )
     end
+
+    def bluesky_source
+      BlueskySource.new(
+        client: BlueskySource::Client.new(
+          lambda_client: Aws::Lambda::Client.new,
+          function_name: ENV.fetch("BLUESKY_OAUTH_FUNCTION_NAME")
+        )
+      )
+    end
+    private_class_method :bluesky_source
 
     def raindrop_source
       response = Aws::SecretsManager::Client.new.get_secret_value(

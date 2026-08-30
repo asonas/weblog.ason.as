@@ -428,8 +428,8 @@ test("navigates material tabs with arrows, Home, and End", async () => {
     await press("写真", "End");
     assert.equal(selectedLabel(), "Raindrop");
     await press("Raindrop", "ArrowUp");
-    assert.equal(selectedLabel(), "写真");
-    await press("写真", "ArrowRight");
+    assert.equal(selectedLabel(), "Bluesky");
+    await press("Bluesky", "ArrowRight");
     assert.equal(selectedLabel(), "Raindrop");
     await press("Raindrop", "Home");
     assert.equal(selectedLabel(), "写真");
@@ -745,6 +745,131 @@ test("inserts a Raindrop URL and marks it as used by the current page", async ()
     assert.match(
       String(savedPayloads[0].body),
       /https:\/\/example\.com\/article/,
+    );
+    assert.equal(
+      container.querySelector(".content-inbox__usage")?.textContent,
+      "currentで使用済み",
+    );
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
+test("inserts a Bluesky post URL and marks it as used by the current page", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const savedPayloads: Array<Record<string, unknown>> = [];
+  let resolveSave: (() => void) | null = null;
+  const pageResponse = {
+    mode: "editor",
+    id: "page-id",
+    page_type: "named",
+    date: null,
+    name: "current",
+    title: null,
+    updated_at: "2026-08-29T12:00:00+09:00",
+    route: "current",
+    body: "本文",
+    linked_pages: [],
+    linked_pages_has_more: false,
+  };
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url === "/api/inbox") {
+      return new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "post-1",
+              source: "bluesky",
+              kind: "post",
+              source_id:
+                "at://did:plc:nzhcpsryikfegc27zbimbwhq/app.bsky.feed.post/3mexample",
+              occurred_at: "2026-08-29T11:00:00+09:00",
+              ingested_at: "2026-08-29T12:00:00+09:00",
+              expires_at: "2026-09-05T12:00:00+09:00",
+              payload: {
+                canonical_url:
+                  "https://bsky.app/profile/did:plc:nzhcpsryikfegc27zbimbwhq/post/3mexample",
+              },
+              used_in_pages: [],
+            },
+          ],
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+    }
+    if (url === "/api/authoring/pages/page-id") {
+      savedPayloads.push(JSON.parse(String(init?.body)));
+      resolveSave?.();
+      return new Response(JSON.stringify(pageResponse), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.startsWith("/api/page-names")) {
+      return new Response(JSON.stringify({ names: [] }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.startsWith("/api/routes/") || url.startsWith("/api/related")) {
+      return new Response(JSON.stringify(pageResponse), {
+        headers: { "content-type": "application/json", etag: '"same"' },
+      });
+    }
+    throw new Error(`unexpected request: ${url}`);
+  };
+  const bootstrap: EditorBootstrap = {
+    page_id: "page-id",
+    page_type: "named",
+    date: "",
+    name: "current",
+    title: "current",
+    body: "本文",
+    expected_updated_at: "2026-08-29T11:00:00+09:00",
+    save_message: "",
+    linked_pages: [],
+    linked_pages_has_more: false,
+  };
+
+  try {
+    await act(async () => {
+      root.render(createElement(AuthoringEditor, { bootstrap }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+      const tab = container.querySelector<HTMLButtonElement>(
+        '[role="tab"][aria-label="Bluesky"]',
+      );
+      assert.ok(tab);
+      tab.click();
+      await Promise.resolve();
+    });
+
+    const item = container.querySelector<HTMLButtonElement>(
+      ".content-inbox__item",
+    );
+    assert.ok(item);
+    assert.equal(item.getAttribute("aria-label"), "Bluesky 投稿を本文へ追加");
+
+    const saved = new Promise<void>((resolve) => {
+      resolveSave = resolve;
+    });
+    await act(async () => {
+      item.click();
+      await Promise.race([
+        saved,
+        new Promise((resolve) => setTimeout(resolve, 1_000)),
+      ]);
+    });
+
+    assert.deepEqual(savedPayloads[0].consumed_inbox_item_ids, ["post-1"]);
+    assert.match(
+      String(savedPayloads[0].body),
+      /https:\/\/bsky\.app\/profile\/did:plc:nzhcpsryikfegc27zbimbwhq\/post\/3mexample/,
     );
     assert.equal(
       container.querySelector(".content-inbox__usage")?.textContent,

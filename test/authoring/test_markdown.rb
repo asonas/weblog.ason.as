@@ -65,6 +65,19 @@ class TestMarkdown < Minitest::Test
     assert_includes rendered.html, "allowfullscreen"
   end
 
+  def test_standalone_bluesky_post_url_renders_as_an_official_embed
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+    url = "https://bsky.app/profile/did:plc:nzhcpsryikfegc27zbimbwhq/post/3mexample"
+
+    rendered = renderer.render("#{url}\n", mode: "public")
+
+    assert_includes rendered.html, 'class="bluesky-player"'
+    assert_includes rendered.html,
+                    'src="https://embed.bsky.app/embed/did:plc:nzhcpsryikfegc27zbimbwhq/app.bsky.feed.post/3mexample"'
+    assert_includes rendered.html, 'title="Bluesky投稿"'
+    assert_includes rendered.html, "#{url}</a>"
+  end
+
   def test_raw_html_images_and_unsafe_links_are_not_emitted
     renderer = WeblogAuthoring::MarkdownRenderer.new
 

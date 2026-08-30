@@ -222,10 +222,13 @@ module WeblogAuthoring
       def convert_p(el, indent)
         standalone_url = standalone_url(el)
         youtube_id = youtube_video_id(standalone_url) if standalone_url
+        bluesky_post = bluesky_post_identity(standalone_url) if standalone_url
         if el.options[:transparent]
           inner(el, indent)
         elsif standalone_url && youtube_id
           youtube_player_html(youtube_id, standalone_url, indent)
+        elsif standalone_url && bluesky_post
+          bluesky_player_html(bluesky_post, standalone_url, indent)
         else
           format_as_block_html("p", el.attr, inner(el, indent), indent)
         end
@@ -362,6 +365,26 @@ module WeblogAuthoring
         fallback_thumbnail = "https://i.ytimg.com/vi/#{video_id}/hqdefault.jpg"
         escaped_url = CGI.escapeHTML(url)
         %(#{spaces}<div class="youtube-player"><iframe src="#{src}" data-youtube-player-frame title="YouTube動画" loading="lazy" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe><a class="youtube-player__fallback" href="#{escaped_url}" target="_blank" rel="noreferrer" aria-label="YouTubeで動画を見る"><img src="#{thumbnail}" data-youtube-thumbnail-fallback="#{fallback_thumbnail}" alt="" loading="lazy"><span class="youtube-player__brand" aria-hidden="true">YouTube</span><span class="youtube-player__details"><strong>YouTubeで見る</strong><span class="youtube-player__url">#{escaped_url}</span></span></a></div>\n)
+      end
+
+      def bluesky_post_identity(raw_url)
+        return nil if raw_url.nil? || raw_url.empty?
+
+        url = URI.parse(raw_url)
+        return nil unless url.scheme == "https" && url.host == "bsky.app" && url.query.nil? && url.fragment.nil?
+
+        match = url.path.match(%r{\A/profile/(did:plc:[a-z0-9]+)/post/([a-z0-9]+)\z})
+        match && [match[1], match[2]]
+      rescue URI::InvalidURIError
+        nil
+      end
+
+      def bluesky_player_html(identity, url, indent)
+        did, rkey = identity
+        spaces = " " * indent
+        src = "https://embed.bsky.app/embed/#{did}/app.bsky.feed.post/#{rkey}"
+        escaped_url = CGI.escapeHTML(url)
+        %(#{spaces}<div class="bluesky-player"><iframe src="#{src}" title="Bluesky投稿" loading="lazy"></iframe><a href="#{escaped_url}" target="_blank" rel="noreferrer">#{escaped_url}</a></div>\n)
       end
 
       def safe_html_element?(el)

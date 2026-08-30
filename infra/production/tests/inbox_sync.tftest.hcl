@@ -45,4 +45,9 @@ run "inbox_sync_runtime" {
     condition     = aws_cloudwatch_event_rule.inbox_sync.schedule_expression == "rate(1 hour)"
     error_message = "inbox sources must be synchronized hourly"
   }
+
+  assert {
+    condition     = aws_lambda_function.inbox_sync.environment[0].variables.BLUESKY_OAUTH_FUNCTION_NAME == aws_lambda_function.bluesky_oauth.function_name
+    error_message = "inbox sync Lambda must invoke the Bluesky OAuth Lambda"
+  }
 }

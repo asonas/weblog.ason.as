@@ -2656,6 +2656,11 @@ h2 {
   background: url("./assets/raindrop-logotype.png") center / contain no-repeat;
 }
 
+.content-inbox__bluesky-icon {
+  font-size: 1.15rem;
+  font-weight: 750;
+}
+
 .content-inbox__tabs button[aria-selected="true"] {
   border-inline-start-color: var(--accent);
   background: var(--surface);
@@ -2920,6 +2925,25 @@ h2 {
 
 .youtube-player--fallback .youtube-player__fallback {
   display: block;
+}
+
+.ProseMirror .bluesky-player,
+.page-view .bluesky-player {
+  inline-size: min(100%, 37.5rem);
+  margin-block: 1.5rem;
+}
+
+.ProseMirror .bluesky-player iframe,
+.page-view .bluesky-player iframe {
+  inline-size: 100%;
+  min-block-size: 18.75rem;
+  border: 0;
+}
+
+.bluesky-player > a {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: var(--text-meta);
 }
 
 .input-error {

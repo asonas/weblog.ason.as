@@ -20,6 +20,12 @@ data "aws_iam_policy_document" "inbox_sync_runtime" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_secretsmanager_secret.inbox_sources.arn]
   }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_function.bluesky_oauth.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "inbox_sync_runtime" {
@@ -40,8 +46,9 @@ resource "aws_lambda_function" "inbox_sync" {
 
   environment {
     variables = {
-      DSQL_HOST               = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
-      INBOX_SOURCES_SECRET_ID = aws_secretsmanager_secret.inbox_sources.name
+      DSQL_HOST                   = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
+      INBOX_SOURCES_SECRET_ID     = aws_secretsmanager_secret.inbox_sources.name
+      BLUESKY_OAUTH_FUNCTION_NAME = aws_lambda_function.bluesky_oauth.function_name
     }
   }
 

@@ -537,7 +537,7 @@ type InboxSyncStatus = {
     | "failed";
 };
 
-type MaterialTab = "photo" | "raindrop";
+type MaterialTab = "photo" | "bluesky" | "raindrop";
 
 type ApiError = Error & {
   fields?: Record<string, string[]>;
@@ -802,6 +802,7 @@ function inboxItemLabel(item: InboxItem): string {
 }
 
 function inboxItemName(item: InboxItem): string {
+  if (item.source === "bluesky") return inboxItemLabel(item);
   if (item.source === "raindrop" && item.kind === "bookmark") {
     if (typeof item.payload.title === "string" && item.payload.title.trim())
       return item.payload.title.trim();
@@ -3477,15 +3478,17 @@ export function AuthoringEditor({
     });
   }, [editor?.isEditable, refreshInbox]);
 
-  const visibleInboxItems = inboxItems.filter((item) =>
-    activeMaterialTab === "photo"
-      ? item.source === "photo" && item.kind === "photo"
-      : item.source === "raindrop" && item.kind === "bookmark",
-  );
+  const visibleInboxItems = inboxItems.filter((item) => {
+    if (activeMaterialTab === "photo")
+      return item.source === "photo" && item.kind === "photo";
+    if (activeMaterialTab === "bluesky")
+      return item.source === "bluesky" && item.kind === "post";
+    return item.source === "raindrop" && item.kind === "bookmark";
+  });
 
   const handleMaterialTabKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-      const tabs: Array<MaterialTab> = ["photo", "raindrop"];
+      const tabs: Array<MaterialTab> = ["photo", "bluesky", "raindrop"];
       const current = tabs.indexOf(activeMaterialTab);
       let next = current;
       if (event.key === "ArrowDown" || event.key === "ArrowRight")
@@ -3576,7 +3579,9 @@ export function AuthoringEditor({
       const url =
         item.source === "raindrop" && item.kind === "bookmark"
           ? item.payload.url
-          : null;
+          : item.source === "bluesky" && item.kind === "post"
+            ? item.payload.canonical_url
+            : null;
       if (!editor || typeof url !== "string") return;
 
       consumedInboxItemIdsRef.current = [
@@ -3612,7 +3617,11 @@ export function AuthoringEditor({
         ),
       );
       setImageUploadStatus("");
-      setMaterialStatus("Raindropを本文へ追加しました");
+      setMaterialStatus(
+        item.source === "bluesky"
+          ? "Bluesky投稿を本文へ追加しました"
+          : "Raindropを本文へ追加しました",
+      );
     },
     [adoptInboxImage, editor, inboxItems],
   );
@@ -4019,7 +4028,11 @@ export function AuthoringEditor({
             <section id="content-inbox-panel" className="content-inbox">
               <div className="content-inbox__toolbar">
                 <strong>
-                  {activeMaterialTab === "photo" ? "写真" : "Raindrop"}
+                  {activeMaterialTab === "photo"
+                    ? "写真"
+                    : activeMaterialTab === "bluesky"
+                      ? "Bluesky"
+                      : "Raindrop"}
                 </strong>
                 <button
                   type="button"
@@ -4049,10 +4062,12 @@ export function AuthoringEditor({
                           className="content-inbox__item"
                           disabled={
                             loadingInbox ||
-                            (photoUrl === null && item.source !== "raindrop")
+                            (photoUrl === null &&
+                              item.source !== "raindrop" &&
+                              item.source !== "bluesky")
                           }
                           draggable={
-                            photoUrl !== null || item.source === "raindrop"
+                            photoUrl !== null || item.source !== "photo"
                           }
                           onDragStart={(event) => {
                             event.dataTransfer.setData(
@@ -4067,7 +4082,7 @@ export function AuthoringEditor({
                           {photoUrl && (
                             <img src={photoUrl} alt="" loading="lazy" />
                           )}
-                          {activeMaterialTab === "raindrop" && (
+                          {activeMaterialTab !== "photo" && (
                             <span className="content-inbox__kind">
                               {inboxItemLabel(item)}
                             </span>
@@ -4080,7 +4095,7 @@ export function AuthoringEditor({
                               {page.route}で使用済み
                             </span>
                           ))}
-                          {activeMaterialTab === "raindrop" && (
+                          {activeMaterialTab !== "photo" && (
                             <time dateTime={item.occurred_at}>
                               {new Date(item.occurred_at).toLocaleString(
                                 "ja-JP",
@@ -4129,6 +4144,25 @@ export function AuthoringEditor({
                 onKeyDown={handleMaterialTabKeyDown}
               >
                 <PhotoMaterialIcon />
+              </button>
+              <button
+                type="button"
+                role="tab"
+                data-material-tab="bluesky"
+                tabIndex={activeMaterialTab === "bluesky" ? 0 : -1}
+                aria-selected={activeMaterialTab === "bluesky"}
+                aria-controls="content-inbox-panel"
+                aria-label="Bluesky"
+                title="Bluesky"
+                onClick={() => setActiveMaterialTab("bluesky")}
+                onKeyDown={handleMaterialTabKeyDown}
+              >
+                <span
+                  className="content-inbox__bluesky-icon"
+                  aria-hidden="true"
+                >
+                  B
+                </span>
               </button>
               <button
                 type="button"

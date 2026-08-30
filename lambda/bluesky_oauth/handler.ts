@@ -8,8 +8,15 @@ import { BlueskyOAuthService } from "./service.js";
 import type { StagedSessionStore } from "./stores.js";
 
 type InternalEvent = {
-  action: "connect" | "callback" | "status" | "refresh" | "disconnect";
+  action:
+    | "connect"
+    | "callback"
+    | "status"
+    | "refresh"
+    | "disconnect"
+    | "list_posts";
   query?: string;
+  since?: string;
 };
 type ApiEvent = { rawPath?: string };
 
@@ -82,6 +89,12 @@ export const handler: Handler<
     case "disconnect":
       await runtime.service.disconnect();
       return { status: "disconnected" };
+    case "list_posts": {
+      const since = new Date(event.since ?? "");
+      if (!Number.isFinite(since.getTime()))
+        throw new TypeError("Bluesky post cutoff is invalid");
+      return { posts: await runtime.service.listPosts(since) };
+    }
   }
   throw new Error("Unsupported Bluesky OAuth action");
 };

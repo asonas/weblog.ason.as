@@ -95,6 +95,78 @@ test("revoked refresh requires reauthorization without deleting the session", as
   assert.ok(await repository.getSession(allowedDid));
 });
 
+test("lists recent posts across repository pages", async () => {
+  const repository = new MemoryOAuthRepository();
+  await repository.saveSession(allowedDid, codec.encrypt(savedSession));
+  const requests: Array<string> = [];
+  const responses = [
+    {
+      records: [
+        postRecord("new", "cid-new", "2026-08-30T09:00:00Z"),
+        postRecord("middle", "cid-middle", "2026-08-29T09:00:00Z"),
+      ],
+      cursor: "next-page",
+    },
+    {
+      records: [
+        postRecord("boundary", "cid-boundary", "2026-08-23T09:00:00Z"),
+        postRecord("old", "cid-old", "2026-08-22T08:59:59Z"),
+      ],
+    },
+  ];
+  const service = new BlueskyOAuthService(
+    allowedDid,
+    repository,
+    codec,
+    async () =>
+      fakeClient({
+        restore: async () => ({
+          fetchHandler: async (pathname: string) => {
+            requests.push(pathname);
+            return Response.json(responses.shift());
+          },
+        }),
+      }),
+  );
+
+  const posts = await service.listPosts(new Date("2026-08-23T09:00:00Z"));
+
+  assert.deepEqual(posts, [
+    {
+      uri: `at://${allowedDid}/app.bsky.feed.post/new`,
+      cid: "cid-new",
+      createdAt: "2026-08-30T09:00:00Z",
+      canonicalUrl: `https://bsky.app/profile/${allowedDid}/post/new`,
+      authorDid: allowedDid,
+    },
+    {
+      uri: `at://${allowedDid}/app.bsky.feed.post/middle`,
+      cid: "cid-middle",
+      createdAt: "2026-08-29T09:00:00Z",
+      canonicalUrl: `https://bsky.app/profile/${allowedDid}/post/middle`,
+      authorDid: allowedDid,
+    },
+    {
+      uri: `at://${allowedDid}/app.bsky.feed.post/boundary`,
+      cid: "cid-boundary",
+      createdAt: "2026-08-23T09:00:00Z",
+      canonicalUrl: `https://bsky.app/profile/${allowedDid}/post/boundary`,
+      authorDid: allowedDid,
+    },
+  ]);
+  assert.match(requests[0], /collection=app\.bsky\.feed\.post/);
+  assert.match(requests[0], /reverse=true/);
+  assert.match(requests[1], /cursor=next-page/);
+});
+
+function postRecord(rkey: string, cid: string, createdAt: string) {
+  return {
+    uri: `at://${allowedDid}/app.bsky.feed.post/${rkey}`,
+    cid,
+    value: { createdAt },
+  };
+}
+
 function fakeClient(overrides: Record<string, unknown>): NodeOAuthClient {
   return {
     authorize: async () => new URL("https://bsky.social/oauth/authorize"),
