@@ -1,10 +1,12 @@
 import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import { resolve, sep } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 const authoringApiOrigin = process.env.AUTHORING_API_ORIGIN || "http://127.0.0.1:8000";
+const isLinkedWorktree = projectRoot.includes(`${sep}.worktrees${sep}`);
+const nestedWorktrees = `${resolve(projectRoot, ".worktrees")}${sep}`;
 
 export default defineConfig(({ mode }) => ({
   base: mode === "production" ? "/static/authoring/" : "/",
@@ -50,6 +52,11 @@ export default defineConfig(({ mode }) => ({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
+    watch: {
+      ignored: (path) => path.startsWith(nestedWorktrees),
+      usePolling: isLinkedWorktree,
+      interval: 150
+    },
     proxy: {
       "/feed.xml": {
         target: authoringApiOrigin

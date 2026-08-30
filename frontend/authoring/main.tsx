@@ -10,8 +10,6 @@ import { DesignSystemPage } from "./designSystem";
 import { SearchPage, SiteSearch } from "./search";
 import "./styles.css";
 
-const UNIVERSE_STORAGE_KEY = "weblog-universe";
-
 type AuthState = {
   authenticated: boolean;
   authentication_required: boolean;
@@ -39,30 +37,16 @@ async function setupAuthentication(): Promise<AuthState> {
   return auth;
 }
 
-function applyUniverse(enabled: boolean) {
-  document.documentElement.dataset.universe = enabled ? "on" : "off";
-  const button = document.querySelector<HTMLButtonElement>("#universe-toggle");
-  if (!button) return;
-
-  button.setAttribute("aria-pressed", String(enabled));
-  button.setAttribute("aria-label", enabled ? "ユニバースを閉じる" : "ユニバースを開く");
-  button.title = enabled ? "ユニバースを閉じる" : "ユニバースを開く";
+function setupPublicHeader() {
+  const update = () => {
+    document.documentElement.dataset.headerScrolled = String(window.scrollY > 8);
+  };
+  update();
+  window.addEventListener("scroll", update, { passive: true });
 }
 
-function setupUniverseToggle() {
-  const button = document.querySelector<HTMLButtonElement>("#universe-toggle");
-  if (!button) return;
-
-  let enabled = window.localStorage.getItem(UNIVERSE_STORAGE_KEY) !== "off";
-  applyUniverse(enabled);
-  button.addEventListener("click", () => {
-    enabled = !enabled;
-    window.localStorage.setItem(UNIVERSE_STORAGE_KEY, enabled ? "on" : "off");
-    applyUniverse(enabled);
-  });
-}
-
-setupUniverseToggle();
+document.documentElement.dataset.universe = "on";
+setupPublicHeader();
 
 type HomePage = {
   id: string;
@@ -202,7 +186,7 @@ function App({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; auth
 
   const header = document.querySelector<HTMLElement>(".site-header");
   return <>
-    {auth.can_edit && header && createPortal(<SiteSearch />, header)}
+    {header && createPortal(<SiteSearch />, header)}
     <AuthoringEditor
       key={auth.can_edit ? "editable" : "readonly"}
       bootstrap={bootstrap}
@@ -583,7 +567,6 @@ function CoverJournalHome({ initialWindow, tags, archive, archiveRef, auth }: Pa
         <HeaderDock />
         {featured && (
           <a className="cover-journal__lead" href={`/${encodeURIComponent(featured.route)}`}>
-            <span>{featured.is_diary ? "Latest diary" : "Latest writing"}</span>
             <strong>{featured.title}</strong>
             {featured.excerpt && <small>{featured.excerpt}</small>}
           </a>
