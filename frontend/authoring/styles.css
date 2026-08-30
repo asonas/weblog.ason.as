@@ -1013,6 +1013,7 @@ html[data-view="article-editing"] .page-shell {
 .article-editing-cover__actions label {
   display: flex;
   inline-size: max-content;
+  /* Retain a 44px target so cover controls remain comfortable on iPad. */
   min-block-size: 2.75rem;
   align-items: center;
   gap: var(--space-1);
@@ -2517,6 +2518,7 @@ h2 {
   position: absolute;
   inset-block-end: var(--space-1);
   inset-inline-end: var(--space-1);
+  /* Retain a 44px target so cover controls remain comfortable on iPad. */
   min-block-size: 2.75rem;
   padding-inline: var(--space-2);
   border-color: color-mix(in oklch, var(--separator) 75%, transparent);
