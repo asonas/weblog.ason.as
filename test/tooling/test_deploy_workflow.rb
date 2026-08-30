@@ -52,6 +52,10 @@ class DeployWorkflowTest < Minitest::Test
     assert_includes html, "max-age=0,must-revalidate"
     invalidation = steps.find { |step| step["name"] == "Invalidate CloudFront" }.fetch("run")
     assert_includes invalidation, "wait invalidation-completed"
+
+    deploy_policy = File.read(File.join(ROOT, "infra/bootstrap/github_actions.tf"))
+    assert_includes deploy_policy, '"cloudfront:CreateInvalidation"'
+    assert_includes deploy_policy, '"cloudfront:GetInvalidation"'
   end
 
   def test_each_lambda_has_an_independent_baseline_and_main_is_rechecked

@@ -122,9 +122,12 @@ data "aws_iam_policy_document" "github_deploy" {
   }
 
   statement {
-    sid       = "InvalidateSite"
-    effect    = "Allow"
-    actions   = ["cloudfront:CreateInvalidation"]
+    sid    = "InvalidateSite"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateInvalidation",
+      "cloudfront:GetInvalidation",
+    ]
     resources = ["arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/*"]
   }
 
