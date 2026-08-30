@@ -1,10 +1,10 @@
+import { JoseKey } from "@atproto/jwk-jose";
 import {
   NodeOAuthClient,
   type NodeSavedSessionStore,
 } from "@atproto/oauth-client-node";
-import { JoseKey } from "@atproto/jwk-jose";
 
-import { EncryptedJson } from "./crypto.js";
+import type { EncryptedJson } from "./crypto.js";
 import type { OAuthRepository } from "./repository.js";
 import {
   createRequestLock,

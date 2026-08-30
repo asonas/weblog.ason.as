@@ -8,7 +8,6 @@ import type {
 import { EncryptedJson } from "./crypto.js";
 import { MemoryOAuthRepository } from "./repository.js";
 import { BlueskyOAuthService } from "./service.js";
-import type { StagedSessionStore } from "./stores.js";
 
 const allowedDid = "did:plc:allowed";
 const codec = new EncryptedJson(Buffer.alloc(32, 9));
@@ -37,10 +36,9 @@ test("callback commits a staged session only for the allowed DID", async () => {
     status: "connected",
     did: allowedDid,
   });
-  assert.deepEqual(
-    codec.decrypt((await repository.getSession(allowedDid))!.value),
-    savedSession,
-  );
+  const session = await repository.getSession(allowedDid);
+  assert.ok(session);
+  assert.deepEqual(codec.decrypt(session.value), savedSession);
 });
 
 test("callback from another DID leaves the existing session unchanged", async () => {

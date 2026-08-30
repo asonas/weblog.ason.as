@@ -29,9 +29,13 @@ test("a refreshed OAuth session replaces the encrypted token set", async () => {
   } as unknown as NodeSavedSession;
 
   await store.set("did:plc:allowed", original);
-  const before = (await repository.getSession("did:plc:allowed"))!.value;
+  const beforeSession = await repository.getSession("did:plc:allowed");
+  assert.ok(beforeSession);
   await store.set("did:plc:allowed", refreshed);
-  const after = (await repository.getSession("did:plc:allowed"))!.value;
+  const afterSession = await repository.getSession("did:plc:allowed");
+  assert.ok(afterSession);
+  const before = beforeSession.value;
+  const after = afterSession.value;
 
   assert.notEqual(after, before);
   assert.deepEqual(await store.get("did:plc:allowed"), refreshed);

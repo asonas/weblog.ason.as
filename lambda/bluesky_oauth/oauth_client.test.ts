@@ -8,11 +8,12 @@ import { MemoryOAuthRepository } from "./repository.js";
 
 test("confidential client metadata exposes only the public ES256 key", async () => {
   const key = await JoseKey.generate(["ES256"], "bluesky-client-1");
+  assert.ok(key.privateJwk);
   const client = await createOAuthClient(
     {
       clientId: "https://weblog.ason.as/oauth/bluesky/client-metadata.json",
       redirectUri: "https://weblog.ason.as/api/inbox/sources/bluesky/callback",
-      privateJwk: key.privateJwk!,
+      privateJwk: key.privateJwk,
     },
     new MemoryOAuthRepository(),
     new EncryptedJson(Buffer.alloc(32, 4)),

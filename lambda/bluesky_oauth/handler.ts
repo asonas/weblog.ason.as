@@ -24,9 +24,13 @@ function getRuntime(): ReturnType<typeof createRuntime> {
 }
 
 async function createRuntime() {
-  const secret = await loadSecret(process.env.BLUESKY_OAUTH_SECRET_ID!);
+  const secretId = process.env.BLUESKY_OAUTH_SECRET_ID;
+  const dsqlHost = process.env.DSQL_HOST;
+  if (!secretId || !dsqlHost)
+    throw new Error("Bluesky OAuth environment is incomplete");
+  const secret = await loadSecret(secretId);
   const repository = DsqlOAuthRepository.forEnvironment(
-    process.env.DSQL_HOST!,
+    dsqlHost,
     process.env.AWS_REGION,
   );
   const codec = new EncryptedJson(

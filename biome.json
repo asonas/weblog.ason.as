@@ -1,7 +1,10 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
   "files": {
-    "includes": ["frontend/authoring/**/*.{ts,tsx,css}"]
+    "includes": [
+      "frontend/authoring/**/*.{ts,tsx,css}",
+      "lambda/bluesky_oauth/**/*.ts"
+    ]
   },
   "formatter": {
     "enabled": true,

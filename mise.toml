@@ -53,6 +53,30 @@ run = "npm run coverage:authoring"
 description = "Build the authoring site artifact"
 run = "npm run build"
 
+[tasks."bluesky-oauth:format"]
+description = "Format the Bluesky OAuth TypeScript with Biome"
+run = "npm run format:bluesky-oauth"
+
+[tasks."bluesky-oauth:lint"]
+description = "Lint the Bluesky OAuth TypeScript without changes"
+run = "npm run lint:bluesky-oauth"
+
+[tasks."bluesky-oauth:typecheck"]
+description = "Type-check the Bluesky OAuth Lambda"
+run = "npm run typecheck:bluesky-oauth"
+
+[tasks."bluesky-oauth:test"]
+description = "Run the Bluesky OAuth tests"
+run = "npm run test:bluesky-oauth"
+
+[tasks."bluesky-oauth:coverage"]
+description = "Generate text and LCOV coverage for all Bluesky OAuth TypeScript sources"
+run = "npm run coverage:bluesky-oauth"
+
+[tasks."bluesky-oauth:build"]
+description = "Build the Bluesky OAuth Lambda"
+run = "npm run build:bluesky-oauth"
+
 [tasks."ruby:format"]
 description = "Format Ruby files with RuboCop"
 run = "bundle exec rubocop -a"

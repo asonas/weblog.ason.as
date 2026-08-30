@@ -1,6 +1,6 @@
 import type { NodeOAuthClient } from "@atproto/oauth-client-node";
 
-import { EncryptedJson } from "./crypto.js";
+import type { EncryptedJson } from "./crypto.js";
 import type { OAuthRepository } from "./repository.js";
 import { StagedSessionStore } from "./stores.js";
 
@@ -52,7 +52,7 @@ export class BlueskyOAuthService {
 
   async refresh(): Promise<void> {
     const existing = await this.repository.getSession(this.allowedDid);
-    if (!existing || existing.status !== "connected") return;
+    if (existing?.status !== "connected") return;
     try {
       const client = await this.createClient();
       await client.restore(this.allowedDid, true);

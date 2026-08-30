@@ -6,7 +6,7 @@ import type {
   RuntimeLock,
 } from "@atproto/oauth-client-node";
 
-import { EncryptedJson } from "./crypto.js";
+import type { EncryptedJson } from "./crypto.js";
 import type { OAuthRepository } from "./repository.js";
 
 export function createStateStore(
