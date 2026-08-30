@@ -34,7 +34,8 @@ test("keeps the article crossing the viewport top as the scroll anchor", () => {
 test("scrolls once by the anchor movement after articles are prepended", () => {
   const visibleArticle = entry(-40, 120);
   const anchor = captureScrollAnchor(feed)!;
-  visibleArticle.getBoundingClientRect = () => ({ top: 440, bottom: 600 }) as DOMRect;
+  visibleArticle.getBoundingClientRect = () =>
+    ({ top: 440, bottom: 600 }) as DOMRect;
   const adjustments: number[] = [];
 
   restoreScrollAnchor(anchor, (top) => adjustments.push(top));

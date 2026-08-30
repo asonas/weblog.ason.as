@@ -7,7 +7,10 @@ export class FeedLoadQueue {
   private isRunning = false;
   private pendingReplacement: FeedLoadRequest | null = null;
 
-  async run(request: FeedLoadRequest, load: (request: FeedLoadRequest) => Promise<void>) {
+  async run(
+    request: FeedLoadRequest,
+    load: (request: FeedLoadRequest) => Promise<void>,
+  ) {
     if (this.isRunning) {
       if (request.direction === "replace") this.pendingReplacement = request;
       return;

@@ -10,14 +10,18 @@ export function captureScrollAnchor(container: Element): ScrollAnchor | null {
   const crossingViewportTop = candidates
     .filter(({ rect }) => rect.top <= 0)
     .sort((left, right) => right.rect.top - left.rect.top)[0];
-  const candidate = crossingViewportTop || candidates.sort((left, right) => left.rect.top - right.rect.top)[0];
+  const candidate =
+    crossingViewportTop ||
+    candidates.sort((left, right) => left.rect.top - right.rect.top)[0];
 
-  return candidate ? { element: candidate.element, top: candidate.rect.top } : null;
+  return candidate
+    ? { element: candidate.element, top: candidate.rect.top }
+    : null;
 }
 
 export function restoreScrollAnchor(
   anchor: ScrollAnchor | null,
-  scrollBy: (top: number) => void = (top) => window.scrollBy({ top })
+  scrollBy: (top: number) => void = (top) => window.scrollBy({ top }),
 ) {
   if (!anchor?.element.isConnected) return;
 

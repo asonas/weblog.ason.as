@@ -8,7 +8,7 @@ const COLOR_TOKENS = [
   ["Muted ink", "--muted-ink"],
   ["Accent", "--accent"],
   ["Separator", "--separator"],
-  ["Focus", "--focus-ring"]
+  ["Focus", "--focus-ring"],
 ] as const;
 
 const SPACING_TOKENS = [
@@ -19,10 +19,16 @@ const SPACING_TOKENS = [
   ["6", "24px"],
   ["8", "32px"],
   ["12", "48px"],
-  ["16", "64px"]
+  ["16", "64px"],
 ] as const;
 
-function PatternSection({ title, children }: { title: string; children: ReactNode }) {
+function PatternSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
     <section className="design-system__section">
       <h2>{title}</h2>
@@ -49,7 +55,9 @@ export function DesignSystemPage() {
           <div className="design-system__type-samples">
             <h3>記事を書く場所と、記事を読む場所をひとつの風景にする</h3>
             <h4>本文の見出し</h4>
-            <p>本文は最大52remに収め、長い日本語でも行を追いやすい幅と行間を保ちます。背景と画像は画面端まで伸ばし、文章には内側の余白を残します。</p>
+            <p>
+              本文は最大52remに収め、長い日本語でも行を追いやすい幅と行間を保ちます。背景と画像は画面端まで伸ばし、文章には内側の余白を残します。
+            </p>
             <small>2026-08-28 21:40</small>
           </div>
         </PatternSection>
@@ -58,7 +66,10 @@ export function DesignSystemPage() {
           <ul className="design-system__swatches">
             {COLOR_TOKENS.map(([label, token]) => (
               <li key={token}>
-                <span style={{ background: `var(${token})` }} aria-hidden="true" />
+                <span
+                  style={{ background: `var(${token})` }}
+                  aria-hidden="true"
+                />
                 <strong>{label}</strong>
                 <code>{token}</code>
               </li>
@@ -70,7 +81,10 @@ export function DesignSystemPage() {
           <ul className="design-system__spacing">
             {SPACING_TOKENS.map(([step, size]) => (
               <li key={step}>
-                <span style={{ inlineSize: `var(--space-${step})` }} aria-hidden="true" />
+                <span
+                  style={{ inlineSize: `var(--space-${step})` }}
+                  aria-hidden="true"
+                />
                 <code>--space-{step}</code>
                 <small>{size}</small>
               </li>
@@ -86,21 +100,52 @@ export function DesignSystemPage() {
         <PatternSection title="Controls and states">
           <div className="design-system__controls">
             <button type="button">通常</button>
-            <button type="button" aria-pressed="true">選択中</button>
-            <button type="button" className="is-focus-example">フォーカス</button>
-            <button type="button" disabled>無効</button>
-            <button type="button" aria-busy="true">読込中</button>
+            <button type="button" aria-pressed="true">
+              選択中
+            </button>
+            <button type="button" className="is-focus-example">
+              フォーカス
+            </button>
+            <button type="button" disabled>
+              無効
+            </button>
+            <button type="button" aria-busy="true">
+              読込中
+            </button>
           </div>
         </PatternSection>
 
         <PatternSection title="Material panel">
           <div className="design-system__material-layout">
-            <aside className="design-system__material-panel" aria-label="素材パネルの見本">
-              <header><strong>写真</strong><button type="button" aria-label="素材を更新">更新</button></header>
+            <aside
+              className="design-system__material-panel"
+              aria-label="素材パネルの見本"
+            >
+              <header>
+                <strong>写真</strong>
+                <button type="button" aria-label="素材を更新">
+                  更新
+                </button>
+              </header>
               <div className="design-system__photo-grid">
-                <button type="button" aria-label="写真、8月28日21時40分、本文へ追加"><span aria-hidden="true" /></button>
-                <button type="button" aria-label="写真、8月28日21時42分、本文へ追加"><span aria-hidden="true" /></button>
-                <button type="button" aria-label="写真、8月28日21時45分、本文へ追加"><span aria-hidden="true" /></button>
+                <button
+                  type="button"
+                  aria-label="写真、8月28日21時40分、本文へ追加"
+                >
+                  <span aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="写真、8月28日21時42分、本文へ追加"
+                >
+                  <span aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="写真、8月28日21時45分、本文へ追加"
+                >
+                  <span aria-hidden="true" />
+                </button>
               </div>
               <button className="design-system__bookmark" type="button">
                 <strong>読み書きするためのインターフェース</strong>
@@ -108,9 +153,17 @@ export function DesignSystemPage() {
               </button>
               <p className="design-system__empty">素材はありません</p>
             </aside>
-            <div className="design-system__vertical-tabs" role="tablist" aria-label="素材の種類">
-              <button type="button" role="tab" aria-selected="true">写真</button>
-              <button type="button" role="tab" aria-selected="false">Raindrop</button>
+            <div
+              className="design-system__vertical-tabs"
+              role="tablist"
+              aria-label="素材の種類"
+            >
+              <button type="button" role="tab" aria-selected="true">
+                写真
+              </button>
+              <button type="button" role="tab" aria-selected="false">
+                Raindrop
+              </button>
             </div>
           </div>
         </PatternSection>

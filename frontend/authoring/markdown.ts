@@ -8,8 +8,9 @@ type Fence = {
 };
 
 function encodePageName(name: string): string {
-  return encodeURIComponent(name).replace(/[!'()*]/g, (character) =>
-    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  return encodeURIComponent(name).replace(
+    /[!'()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 }
 
@@ -56,22 +57,27 @@ export function markdownForEditor(source: string): string {
   let fence: Fence | null = null;
   const lines = source.match(/[^\n]*\n|[^\n]+$/g) || [];
 
-  return lines.map((line) => {
-    const fenceMatch = FENCE_PATTERN.exec(line);
-    const insideFence = fence !== null || fenceMatch !== null;
-    const converted = insideFence ? line : replaceWikiLinks(line);
+  return lines
+    .map((line) => {
+      const fenceMatch = FENCE_PATTERN.exec(line);
+      const insideFence = fence !== null || fenceMatch !== null;
+      const converted = insideFence ? line : replaceWikiLinks(line);
 
-    if (fenceMatch !== null) {
-      const marker = fenceMatch[1];
-      if (fence === null) {
-        fence = { marker: marker[0], length: marker.length };
-      } else if (marker[0] === fence.marker && marker.length >= fence.length) {
-        fence = null;
+      if (fenceMatch !== null) {
+        const marker = fenceMatch[1];
+        if (fence === null) {
+          fence = { marker: marker[0], length: marker.length };
+        } else if (
+          marker[0] === fence.marker &&
+          marker.length >= fence.length
+        ) {
+          fence = null;
+        }
       }
-    }
 
-    return converted;
-  }).join("");
+      return converted;
+    })
+    .join("");
 }
 
 function replaceLocalLinks(line: string): string {
@@ -151,20 +157,25 @@ export function markdownForSource(markdown: string): string {
   let fence: Fence | null = null;
   const lines = markdown.match(/[^\n]*\n|[^\n]+$/g) || [];
 
-  return lines.map((line) => {
-    const fenceMatch = FENCE_PATTERN.exec(line);
-    const insideFence = fence !== null || fenceMatch !== null;
-    const converted = insideFence ? line : replaceLocalLinks(line);
+  return lines
+    .map((line) => {
+      const fenceMatch = FENCE_PATTERN.exec(line);
+      const insideFence = fence !== null || fenceMatch !== null;
+      const converted = insideFence ? line : replaceLocalLinks(line);
 
-    if (fenceMatch !== null) {
-      const marker = fenceMatch[1];
-      if (fence === null) {
-        fence = { marker: marker[0], length: marker.length };
-      } else if (marker[0] === fence.marker && marker.length >= fence.length) {
-        fence = null;
+      if (fenceMatch !== null) {
+        const marker = fenceMatch[1];
+        if (fence === null) {
+          fence = { marker: marker[0], length: marker.length };
+        } else if (
+          marker[0] === fence.marker &&
+          marker.length >= fence.length
+        ) {
+          fence = null;
+        }
       }
-    }
 
-    return converted;
-  }).join("");
+      return converted;
+    })
+    .join("");
 }

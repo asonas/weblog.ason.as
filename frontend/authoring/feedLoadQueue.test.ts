@@ -12,18 +12,29 @@ test("loads the last selected month after pagination finishes", async () => {
   const load = async (request: FeedLoadRequest) => {
     requests.push(request);
     if (request.direction === "newer") {
-      await new Promise<void>((resolve) => { finishPagination = resolve; });
+      await new Promise<void>((resolve) => {
+        finishPagination = resolve;
+      });
     }
   };
 
-  const pagination = queue.run({ url: "/api/pages?after=cursor", direction: "newer" }, load);
-  await queue.run({ url: "/api/pages?month=2026-06", direction: "replace" }, load);
-  await queue.run({ url: "/api/pages?month=2026-05", direction: "replace" }, load);
+  const pagination = queue.run(
+    { url: "/api/pages?after=cursor", direction: "newer" },
+    load,
+  );
+  await queue.run(
+    { url: "/api/pages?month=2026-06", direction: "replace" },
+    load,
+  );
+  await queue.run(
+    { url: "/api/pages?month=2026-05", direction: "replace" },
+    load,
+  );
   finishPagination?.();
   await pagination;
 
   assert.deepEqual(requests, [
     { url: "/api/pages?after=cursor", direction: "newer" },
-    { url: "/api/pages?month=2026-05", direction: "replace" }
+    { url: "/api/pages?month=2026-05", direction: "replace" },
   ]);
 });

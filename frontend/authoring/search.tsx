@@ -1,4 +1,11 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import {
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 
 export type SearchResult = {
   route: string;
@@ -9,14 +16,17 @@ export type SearchResult = {
 
 type SearchState = "idle" | "loading" | "ready" | "error";
 
-async function fetchSearch(query: string, signal: AbortSignal): Promise<SearchResult[]> {
+async function fetchSearch(
+  query: string,
+  signal: AbortSignal,
+): Promise<SearchResult[]> {
   const params = new URLSearchParams({ q: query, limit: "10" });
   const response = await fetch(`/api/search?${params}`, {
     headers: { Accept: "application/json" },
-    signal
+    signal,
   });
   if (!response.ok) throw new Error("検索結果を読み込めませんでした");
-  const body = await response.json() as { results: SearchResult[] };
+  const body = (await response.json()) as { results: SearchResult[] };
   return body.results;
 }
 
@@ -40,7 +50,8 @@ function useSearch(query: string) {
           setState("ready");
         })
         .catch((error: unknown) => {
-          if (error instanceof DOMException && error.name === "AbortError") return;
+          if (error instanceof DOMException && error.name === "AbortError")
+            return;
           setResults([]);
           setState("error");
         });
@@ -62,26 +73,39 @@ function SearchField({
   query,
   setQuery,
   inputRef,
-  onKeyDown
+  onKeyDown,
 }: {
   query: string;
   setQuery: (value: string) => void;
   inputRef?: RefObject<HTMLInputElement | null>;
   onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
-  return <label className="site-search__field">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
-    <input
-      ref={inputRef}
-      type="search"
-      value={query}
-      onChange={(event) => setQuery(event.target.value)}
-      onKeyDown={onKeyDown}
-      placeholder="記事を検索"
-      aria-label="記事を検索"
-    />
-    {query && <button type="button" onClick={() => setQuery("")} aria-label="入力を消去">×</button>}
-  </label>;
+  return (
+    <label className="site-search__field">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="6.5" />
+        <path d="m16 16 4 4" />
+      </svg>
+      <input
+        ref={inputRef}
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="記事を検索"
+        aria-label="記事を検索"
+      />
+      {query && (
+        <button
+          type="button"
+          onClick={() => setQuery("")}
+          aria-label="入力を消去"
+        >
+          ×
+        </button>
+      )}
+    </label>
+  );
 }
 
 function SearchResults({
@@ -95,22 +119,49 @@ function SearchResults({
   results: SearchResult[];
   state: SearchState;
 }) {
-  return <div className="site-search__results" id={id} aria-label="検索結果" aria-live="polite">
-    {state === "idle" && <p className="site-search__message">キーワードを入力してください</p>}
-    {state === "loading" && <p className="site-search__message" role="status">検索しています</p>}
-    {state === "error" && <p className="site-search__message" role="alert">検索結果を読み込めませんでした。もう一度お試しください</p>}
-    {state === "ready" && results.length === 0 && <p className="site-search__message">「{query.trim()}」に一致する記事はありません</p>}
-    {results.map((result) => <a
-      href={`/${encodeURIComponent(result.route)}`}
-      key={result.route}
+  return (
+    <div
+      className="site-search__results"
+      id={id}
+      aria-label="検索結果"
+      aria-live="polite"
     >
-      <strong>{result.title}</strong>
-      {result.excerpt && <span>{result.excerpt}</span>}
-    </a>)}
-  </div>;
+      {state === "idle" && (
+        <p className="site-search__message">キーワードを入力してください</p>
+      )}
+      {state === "loading" && (
+        <p className="site-search__message" role="status">
+          検索しています
+        </p>
+      )}
+      {state === "error" && (
+        <p className="site-search__message" role="alert">
+          検索結果を読み込めませんでした。もう一度お試しください
+        </p>
+      )}
+      {state === "ready" && results.length === 0 && (
+        <p className="site-search__message">
+          「{query.trim()}」に一致する記事はありません
+        </p>
+      )}
+      {results.map((result) => (
+        <a href={`/${encodeURIComponent(result.route)}`} key={result.route}>
+          <strong>{result.title}</strong>
+          {result.excerpt && <span>{result.excerpt}</span>}
+        </a>
+      ))}
+    </div>
+  );
 }
 
-function SearchContents({ query, setQuery, results, state, inputRef, showResults = true }: {
+function SearchContents({
+  query,
+  setQuery,
+  results,
+  state,
+  inputRef,
+  showResults = true,
+}: {
   query: string;
   setQuery: (value: string) => void;
   results: SearchResult[];
@@ -127,10 +178,24 @@ function SearchContents({ query, setQuery, results, state, inputRef, showResults
     }
   };
 
-  return <>
-    <SearchField query={query} setQuery={setQuery} inputRef={inputRef} onKeyDown={onKeyDown} />
-    {showResults && <SearchResults id={resultId} query={query} results={results} state={state} />}
-  </>;
+  return (
+    <>
+      <SearchField
+        query={query}
+        setQuery={setQuery}
+        inputRef={inputRef}
+        onKeyDown={onKeyDown}
+      />
+      {showResults && (
+        <SearchResults
+          id={resultId}
+          query={query}
+          results={results}
+          state={state}
+        />
+      )}
+    </>
+  );
 }
 
 export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
@@ -148,12 +213,17 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
-      if (event.target instanceof Node && !desktopRef.current?.contains(event.target)) setDesktopOpen(false);
+      if (
+        event.target instanceof Node &&
+        !desktopRef.current?.contains(event.target)
+      )
+        setDesktopOpen(false);
     };
     const openAfterKeyboardFocus = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Tab") return;
       window.setTimeout(() => {
-        if (desktopRef.current?.contains(document.activeElement)) setDesktopOpen(true);
+        if (desktopRef.current?.contains(document.activeElement))
+          setDesktopOpen(true);
       }, 0);
     };
     document.addEventListener("pointerdown", close);
@@ -169,10 +239,11 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
   useEffect(() => {
     if (!mobileOpen) return;
     const viewport = window.visualViewport;
-    const resize = () => document.documentElement.style.setProperty(
-      "--search-viewport-height",
-      `${viewport?.height ?? window.innerHeight}px`
-    );
+    const resize = () =>
+      document.documentElement.style.setProperty(
+        "--search-viewport-height",
+        `${viewport?.height ?? window.innerHeight}px`,
+      );
     resize();
     viewport?.addEventListener("resize", resize);
     return () => {
@@ -184,7 +255,8 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
     if (!mobileOpen) return;
     const main = document.querySelector<HTMLElement>("#main");
     const navigation = document.querySelector<HTMLElement>(".header-nav");
-    const searchRoot = mobileButtonRef.current?.closest<HTMLElement>(".site-search");
+    const searchRoot =
+      mobileButtonRef.current?.closest<HTMLElement>(".site-search");
     const inertTargets: HTMLElement[] = [];
     if (main && searchRoot && main.contains(searchRoot)) {
       let current: HTMLElement | null = searchRoot;
@@ -192,7 +264,8 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
         const parent: HTMLElement | null = current.parentElement;
         if (!parent) break;
         Array.from(parent.children).forEach((sibling) => {
-          if (sibling !== current && sibling instanceof HTMLElement) inertTargets.push(sibling);
+          if (sibling !== current && sibling instanceof HTMLElement)
+            inertTargets.push(sibling);
         });
         current = parent;
       }
@@ -214,40 +287,83 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
     };
   }, [mobileOpen]);
 
-  return <div className="site-search">
-    <div
-      className={`site-search__desktop${desktopOpen ? " is-open" : ""}`}
-      ref={desktopRef}
-      onPointerDown={() => setDesktopOpen(true)}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setDesktopOpen(false);
-      }}
-    >
-      <div>
-        <SearchContents query={query} setQuery={setQuery} showResults={desktopOpen} {...search} />
-      </div>
-      {desktopOpen && query.trim() && <a className="site-search__all" href={searchPageUrl(query)}>すべての検索結果を表示</a>}
-    </div>
-    <button ref={mobileButtonRef} className="site-search__mobile-button" type="button" onClick={() => setMobileOpen(true)} aria-label="記事を検索" disabled={mobileOpen}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
-    </button>
-    {mobileOpen && <div className="site-search__backdrop" onPointerDown={closeMobile}>
-      <section className="site-search__sheet" role="dialog" aria-modal="true" aria-label="記事を検索" onPointerDown={(event) => event.stopPropagation()}>
-        <div className="site-search__handle" aria-hidden="true" />
-        <div className="site-search__sheet-header">
-          <div><SearchContents query={query} setQuery={setQuery} inputRef={mobileInputRef} {...search} /></div>
-          <button type="button" onClick={closeMobile}>閉じる</button>
+  return (
+    <div className="site-search">
+      <div
+        className={`site-search__desktop${desktopOpen ? " is-open" : ""}`}
+        ref={desktopRef}
+        onPointerDown={() => setDesktopOpen(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            setDesktopOpen(false);
+        }}
+      >
+        <div>
+          <SearchContents
+            query={query}
+            setQuery={setQuery}
+            showResults={desktopOpen}
+            {...search}
+          />
         </div>
-      </section>
-    </div>}
-  </div>;
+        {desktopOpen && query.trim() && (
+          <a className="site-search__all" href={searchPageUrl(query)}>
+            すべての検索結果を表示
+          </a>
+        )}
+      </div>
+      <button
+        ref={mobileButtonRef}
+        className="site-search__mobile-button"
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        aria-label="記事を検索"
+        disabled={mobileOpen}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m16 16 4 4" />
+        </svg>
+      </button>
+      {mobileOpen && (
+        <div className="site-search__backdrop" onPointerDown={closeMobile}>
+          <section
+            className="site-search__sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="記事を検索"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <div className="site-search__handle" aria-hidden="true" />
+            <div className="site-search__sheet-header">
+              <div>
+                <SearchContents
+                  query={query}
+                  setQuery={setQuery}
+                  inputRef={mobileInputRef}
+                  {...search}
+                />
+              </div>
+              <button type="button" onClick={closeMobile}>
+                閉じる
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SearchPage() {
-  const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") || "");
+  const [query, setQuery] = useState(
+    () => new URLSearchParams(window.location.search).get("q") || "",
+  );
   const search = useSearch(query);
-  return <section className="search-page">
-    <h1>記事を検索</h1>
-    <SearchContents query={query} setQuery={setQuery} {...search} />
-  </section>;
+  return (
+    <section className="search-page">
+      <h1>記事を検索</h1>
+      <SearchContents query={query} setQuery={setQuery} {...search} />
+    </section>
+  );
 }

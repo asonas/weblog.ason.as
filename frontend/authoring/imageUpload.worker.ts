@@ -15,20 +15,32 @@ self.addEventListener("message", async (event: MessageEvent<Request>) => {
       imageOrientation: "from-image",
       resizeWidth: dimensions.width,
       resizeHeight: dimensions.height,
-      resizeQuality: "high"
+      resizeQuality: "high",
     });
     try {
       const canvas = new OffscreenCanvas(dimensions.width, dimensions.height);
       const context = canvas.getContext("2d");
       if (!context) throw new Error("画像を処理できませんでした");
       context.drawImage(bitmap, 0, 0, dimensions.width, dimensions.height);
-      const imageData = context.getImageData(0, 0, dimensions.width, dimensions.height);
-      const buffer = await encode(imageData, lossless ? { lossless: 1 } : { quality: 82 });
+      const imageData = context.getImageData(
+        0,
+        0,
+        dimensions.width,
+        dimensions.height,
+      );
+      const buffer = await encode(
+        imageData,
+        lossless ? { lossless: 1 } : { quality: 82 },
+      );
       self.postMessage({ ok: true, buffer }, { transfer: [buffer] });
     } finally {
       bitmap.close();
     }
   } catch (error) {
-    self.postMessage({ ok: false, error: error instanceof Error ? error.message : "画像を変換できませんでした" });
+    self.postMessage({
+      ok: false,
+      error:
+        error instanceof Error ? error.message : "画像を変換できませんでした",
+    });
   }
 });

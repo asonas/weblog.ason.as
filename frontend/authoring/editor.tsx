@@ -1,9 +1,14 @@
-import { Extension, Node as TiptapNode, type Editor } from "@tiptap/core";
+import { type Editor, Extension, Node as TiptapNode } from "@tiptap/core";
+import Image from "@tiptap/extension-image";
 import { Markdown } from "@tiptap/markdown";
 import type { NodeType } from "@tiptap/pm/model";
-import { NodeSelection, Plugin, TextSelection, type EditorState } from "@tiptap/pm/state";
+import {
+  type EditorState,
+  NodeSelection,
+  Plugin,
+  TextSelection,
+} from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
-import Image from "@tiptap/extension-image";
 import StarterKit from "@tiptap/starter-kit";
 import {
   forceCollide,
@@ -13,20 +18,20 @@ import {
   forceX,
   forceY,
   type SimulationLinkDatum,
-  type SimulationNodeDatum
+  type SimulationNodeDatum,
 } from "d3-force";
 import {
+  type CSSProperties,
+  type DragEvent as ReactDragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
-  type DragEvent as ReactDragEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-  type RefObject
 } from "react";
 
 import { markdownForEditor, markdownForSource } from "./markdown";
@@ -34,9 +39,12 @@ import { markdownForEditor, markdownForSource } from "./markdown";
 declare global {
   interface Window {
     YT?: {
-      Player: new (element: HTMLIFrameElement, options: {
-        events: { onError: () => void };
-      }) => unknown;
+      Player: new (
+        element: HTMLIFrameElement,
+        options: {
+          events: { onError: () => void };
+        },
+      ) => unknown;
     };
     onYouTubeIframeAPIReady?: () => void;
   }
@@ -54,7 +62,11 @@ function loadYouTubeApi(): Promise<NonNullable<Window["YT"]>> {
       previousReady?.();
       if (window.YT) resolve(window.YT);
     };
-    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+    if (
+      !document.querySelector(
+        'script[src="https://www.youtube.com/iframe_api"]',
+      )
+    ) {
       const script = document.createElement("script");
       script.src = "https://www.youtube.com/iframe_api";
       script.async = true;
@@ -65,7 +77,9 @@ function loadYouTubeApi(): Promise<NonNullable<Window["YT"]>> {
 }
 
 export function showYouTubeFallback(iframe: HTMLIFrameElement): void {
-  iframe.closest<HTMLElement>(".youtube-player")?.classList.add("youtube-player--fallback");
+  iframe
+    .closest<HTMLElement>(".youtube-player")
+    ?.classList.add("youtube-player--fallback");
 }
 
 export function useYouTubeThumbnailFallback(image: HTMLImageElement): void {
@@ -77,17 +91,23 @@ export function useYouTubeThumbnailFallback(image: HTMLImageElement): void {
 
 function observeYouTubePlayers(root: HTMLElement): () => void {
   const fallbackThumbnail = (event: Event) => {
-    if (event.target instanceof HTMLImageElement) useYouTubeThumbnailFallback(event.target);
+    if (event.target instanceof HTMLImageElement)
+      useYouTubeThumbnailFallback(event.target);
   };
   const register = () => {
-    const iframes = Array.from(root.querySelectorAll<HTMLIFrameElement>("iframe[data-youtube-player-frame]"))
-      .filter((iframe) => iframe.dataset.youtubePlayerObserved !== "true");
+    const iframes = Array.from(
+      root.querySelectorAll<HTMLIFrameElement>(
+        "iframe[data-youtube-player-frame]",
+      ),
+    ).filter((iframe) => iframe.dataset.youtubePlayerObserved !== "true");
     if (iframes.length === 0) return;
     for (const iframe of iframes) iframe.dataset.youtubePlayerObserved = "true";
     void loadYouTubeApi().then(({ Player }) => {
       for (const iframe of iframes) {
         if (!iframe.isConnected) continue;
-        new Player(iframe, { events: { onError: () => showYouTubeFallback(iframe) } });
+        new Player(iframe, {
+          events: { onError: () => showYouTubeFallback(iframe) },
+        });
       }
     });
   };
@@ -102,12 +122,13 @@ function observeYouTubePlayers(root: HTMLElement): () => void {
 }
 
 function encodePageName(name: string): string {
-  return encodeURIComponent(name).replace(/[!'()*]/g, (character) =>
-    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  return encodeURIComponent(name).replace(
+    /[!'()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 }
 
-const WIKI_LINK_PATTERN = /\[\[([^\[\]]+)\]\]/g;
+const WIKI_LINK_PATTERN = /\[\[([^[\]]+)\]\]/g;
 const IMAGE_MARKDOWN_PATTERN = /^!\[([^\]]*)\]\((.+)\)$/;
 
 export function wrapSelectionInWikiLink(editor: Editor): boolean {
@@ -117,7 +138,8 @@ export function wrapSelectionInWikiLink(editor: Editor): boolean {
   const selectedText = editor.state.doc.textBetween(from, to);
   if (selectedText.length === 0) return false;
 
-  return editor.chain()
+  return editor
+    .chain()
     .insertContentAt({ from, to }, `[[${selectedText}]]`)
     .setTextSelection(from + selectedText.length + 2)
     .run();
@@ -128,7 +150,7 @@ const WikiLinks = Extension.create({
 
   addKeyboardShortcuts() {
     return {
-      "Mod-k": () => wrapSelectionInWikiLink(this.editor)
+      "Mod-k": () => wrapSelectionInWikiLink(this.editor),
     };
   },
 
@@ -138,53 +160,96 @@ const WikiLinks = Extension.create({
     return [
       new Plugin({
         appendTransaction(transactions, oldState, newState) {
-          if (!transactions.some((transaction) => transaction.docChanged || transaction.selectionSet)) return null;
-          if (transactions.some((transaction) => transaction.getMeta("wikiLinkRawEditing"))) return null;
+          if (
+            !transactions.some(
+              (transaction) =>
+                transaction.docChanged || transaction.selectionSet,
+            )
+          )
+            return null;
+          if (
+            transactions.some((transaction) =>
+              transaction.getMeta("wikiLinkRawEditing"),
+            )
+          )
+            return null;
           if (editor.view.composing) return null;
 
-          const cursor = newState.selection.empty ? newState.selection.from : -1;
+          const cursor = newState.selection.empty
+            ? newState.selection.from
+            : -1;
           if (transactions.some((transaction) => transaction.selectionSet)) {
             const selectedByCursor = transactions.some(
-              (transaction) => transaction.selectionSet && !transaction.docChanged
+              (transaction) =>
+                transaction.selectionSet && !transaction.docChanged,
             );
             if (selectedByCursor) {
               const selection = newState.selection;
-              const enteredImageFromBefore = selection instanceof NodeSelection
-                && oldState.selection.to <= selection.from;
-              const selectedImage = selection instanceof NodeSelection && selection.node.type.name === "image"
-                ? { from: selection.from, to: selection.to, node: selection.node }
-                : null;
+              const enteredImageFromBefore =
+                selection instanceof NodeSelection &&
+                oldState.selection.to <= selection.from;
+              const selectedImage =
+                selection instanceof NodeSelection &&
+                selection.node.type.name === "image"
+                  ? {
+                      from: selection.from,
+                      to: selection.to,
+                      node: selection.node,
+                    }
+                  : null;
               const src = selectedImage?.node.attrs.src;
               if (selectedImage && typeof src === "string" && src.length > 0) {
-                const alt = typeof selectedImage.node.attrs.alt === "string" ? selectedImage.node.attrs.alt : "";
+                const alt =
+                  typeof selectedImage.node.attrs.alt === "string"
+                    ? selectedImage.node.attrs.alt
+                    : "";
                 const markdown = `![${alt}](${src})`;
-                const paragraph = newState.schema.nodes.paragraph.create(null, newState.schema.text(markdown));
-                const transaction = newState.tr.replaceWith(selectedImage.from, selectedImage.to, paragraph);
+                const paragraph = newState.schema.nodes.paragraph.create(
+                  null,
+                  newState.schema.text(markdown),
+                );
+                const transaction = newState.tr.replaceWith(
+                  selectedImage.from,
+                  selectedImage.to,
+                  paragraph,
+                );
                 return transaction
-                  .setSelection(TextSelection.create(
-                    transaction.doc,
-                    selectedImage.from + (enteredImageFromBefore ? 1 : markdown.length + 1)
-                  ))
+                  .setSelection(
+                    TextSelection.create(
+                      transaction.doc,
+                      selectedImage.from +
+                        (enteredImageFromBefore ? 1 : markdown.length + 1),
+                    ),
+                  )
                   .setMeta("wikiLinkRawEditing", true);
               }
             }
 
-            const activeLinks: Array<{ from: number; to: number; text: string }> = [];
+            const activeLinks: Array<{
+              from: number;
+              to: number;
+              text: string;
+            }> = [];
             newState.doc.descendants((node, from) => {
               const to = from + node.nodeSize;
               if (
-                activeLinks.length > 0
-                || !(newState.selection instanceof TextSelection)
-                || !node.isText
-                || !node.text
-                || (newState.selection.empty
-                  ? newState.selection.from <= from || newState.selection.from >= to
-                  : newState.selection.from >= to || newState.selection.to <= from)
+                activeLinks.length > 0 ||
+                !(newState.selection instanceof TextSelection) ||
+                !node.isText ||
+                !node.text ||
+                (newState.selection.empty
+                  ? newState.selection.from <= from ||
+                    newState.selection.from >= to
+                  : newState.selection.from >= to ||
+                    newState.selection.to <= from)
               ) {
                 return;
               }
               const link = node.marks.find((mark) => mark.type === linkType);
-              if (typeof link?.attrs.href === "string" && link.attrs.href.startsWith("/")) {
+              if (
+                typeof link?.attrs.href === "string" &&
+                link.attrs.href.startsWith("/")
+              ) {
                 activeLinks.push({ from, to, text: node.text });
               }
             });
@@ -194,7 +259,7 @@ const WikiLinks = Extension.create({
               const transaction = newState.tr.replaceWith(
                 activeLink.from,
                 activeLink.to,
-                newState.schema.text(markdown)
+                newState.schema.text(markdown),
               );
               const mapSelectionPosition = (position: number) => {
                 if (position <= activeLink.from) return position;
@@ -202,25 +267,47 @@ const WikiLinks = Extension.create({
                 return position + 2;
               };
               return transaction
-                .setSelection(TextSelection.create(
-                  transaction.doc,
-                  mapSelectionPosition(newState.selection.anchor),
-                  mapSelectionPosition(newState.selection.head)
-                ))
+                .setSelection(
+                  TextSelection.create(
+                    transaction.doc,
+                    mapSelectionPosition(newState.selection.anchor),
+                    mapSelectionPosition(newState.selection.head),
+                  ),
+                )
                 .setMeta("wikiLinkRawEditing", true);
             }
           }
 
-          const matches: Array<{ from: number; to: number; pageName: string }> = [];
-          const imageMatches: Array<{ from: number; to: number; alt: string; src: string }> = [];
-          const changedLinks: Array<{ from: number; to: number; pageName: string }> = [];
+          const matches: Array<{ from: number; to: number; pageName: string }> =
+            [];
+          const imageMatches: Array<{
+            from: number;
+            to: number;
+            alt: string;
+            src: string;
+          }> = [];
+          const changedLinks: Array<{
+            from: number;
+            to: number;
+            pageName: string;
+          }> = [];
           newState.doc.descendants((node, position) => {
-            if (node.type.name === "paragraph" && node.childCount === 1 && node.firstChild?.isText) {
+            if (
+              node.type.name === "paragraph" &&
+              node.childCount === 1 &&
+              node.firstChild?.isText
+            ) {
               const match = IMAGE_MARKDOWN_PATTERN.exec(node.textContent);
-              const selectionTouchesImageMarkdown = newState.selection.from <= position + node.nodeSize - 1
-                && newState.selection.to >= position + 1;
+              const selectionTouchesImageMarkdown =
+                newState.selection.from <= position + node.nodeSize - 1 &&
+                newState.selection.to >= position + 1;
               if (match && !selectionTouchesImageMarkdown) {
-                imageMatches.push({ from: position, to: position + node.nodeSize, alt: match[1], src: match[2] });
+                imageMatches.push({
+                  from: position,
+                  to: position + node.nodeSize,
+                  alt: match[1],
+                  src: match[2],
+                });
               }
             }
             if (!node.isText || !node.text) return;
@@ -231,7 +318,11 @@ const WikiLinks = Extension.create({
               try {
                 const pageName = decodeURIComponent(href.slice(1));
                 if (pageName !== node.text) {
-                  changedLinks.push({ from: position, to: position + node.nodeSize, pageName: node.text });
+                  changedLinks.push({
+                    from: position,
+                    to: position + node.nodeSize,
+                    pageName: node.text,
+                  });
                 }
               } catch (_error) {
                 // Malformed internal links remain untouched.
@@ -255,7 +346,14 @@ const WikiLinks = Extension.create({
           if (imageMatches.length > 0) {
             const transaction = newState.tr;
             for (const match of imageMatches.reverse()) {
-              transaction.replaceWith(match.from, match.to, newState.schema.nodes.image.create({ src: match.src, alt: match.alt }));
+              transaction.replaceWith(
+                match.from,
+                match.to,
+                newState.schema.nodes.image.create({
+                  src: match.src,
+                  alt: match.alt,
+                }),
+              );
             }
             return transaction;
           }
@@ -267,19 +365,24 @@ const WikiLinks = Extension.create({
             transaction.addMark(
               link.from,
               link.to,
-              linkType.create({ href: `/${encodePageName(link.pageName)}`, target: "_self" })
+              linkType.create({
+                href: `/${encodePageName(link.pageName)}`,
+                target: "_self",
+              }),
             );
           }
           for (const match of matches.reverse()) {
             const href = `/${encodePageName(match.pageName)}`;
-            const linkedText = newState.schema.text(match.pageName, [linkType.create({ href })]);
+            const linkedText = newState.schema.text(match.pageName, [
+              linkType.create({ href }),
+            ]);
             transaction.replaceWith(match.from, match.to, linkedText);
           }
           return transaction;
         },
-      })
+      }),
     ];
-  }
+  },
 });
 
 type LinkedPage = {
@@ -354,22 +457,34 @@ export function wikiLinkQuery(editor: Editor): WikiLinkQuery | null {
   const selection = editor.state.selection;
   if (!selection.empty || !(selection instanceof TextSelection)) return null;
 
-  const text = selection.$from.parent.textBetween(0, selection.$from.parentOffset, "\n", "\0");
-  const match = /\[\[([^\[\]\n]*)$/.exec(text);
+  const text = selection.$from.parent.textBetween(
+    0,
+    selection.$from.parentOffset,
+    "\n",
+    "\0",
+  );
+  const match = /\[\[([^[\]\n]*)$/.exec(text);
   if (!match) return null;
 
   return {
     from: selection.from - match[1].length,
     to: selection.from,
-    value: match[1]
+    value: match[1],
   };
 }
 
-export function matchingWikiLinkNames(names: Array<string>, query: string): Array<string> {
+export function matchingWikiLinkNames(
+  names: Array<string>,
+  query: string,
+): Array<string> {
   return names.filter((name) => name.startsWith(query)).slice(0, 8);
 }
 
-export function nextWikiLinkSuggestionIndex(current: number, length: number, backwards: boolean): number {
+export function nextWikiLinkSuggestionIndex(
+  current: number,
+  length: number,
+  backwards: boolean,
+): number {
   return (current + (backwards ? length - 1 : 1)) % length;
 }
 
@@ -417,7 +532,12 @@ type InboxResponse = { items: Array<InboxItem> };
 type InboxSyncResponse = { run_id: string; status: "queued" };
 type InboxSyncStatus = {
   id: string;
-  status: "queued" | "running" | "succeeded" | "completed_with_errors" | "failed";
+  status:
+    | "queued"
+    | "running"
+    | "succeeded"
+    | "completed_with_errors"
+    | "failed";
 };
 
 type MaterialTab = "photo" | "raindrop";
@@ -443,21 +563,30 @@ const LINE_UPDATE_DATE_FORMATTER = new Intl.DateTimeFormat("ja-JP", {
   minute: "2-digit",
   second: "2-digit",
   hourCycle: "h23",
-  timeZone: "Asia/Tokyo"
+  timeZone: "Asia/Tokyo",
 });
 
 export function lineUpdateLabel(value: string, now = new Date()): string {
   const updatedAt = new Date(value);
-  const elapsedSeconds = Math.max(0, Math.floor((now.getTime() - updatedAt.getTime()) / 1000));
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((now.getTime() - updatedAt.getTime()) / 1000),
+  );
   if (elapsedSeconds < 60) return "たった今更新";
-  if (elapsedSeconds < 60 * 60) return `${Math.floor(elapsedSeconds / 60)}分前に更新`;
-  if (elapsedSeconds < 24 * 60 * 60) return `${Math.floor(elapsedSeconds / (60 * 60))}時間前に更新`;
-  if (elapsedSeconds < 30 * 24 * 60 * 60) return `${Math.floor(elapsedSeconds / (24 * 60 * 60))}日前に更新`;
+  if (elapsedSeconds < 60 * 60)
+    return `${Math.floor(elapsedSeconds / 60)}分前に更新`;
+  if (elapsedSeconds < 24 * 60 * 60)
+    return `${Math.floor(elapsedSeconds / (60 * 60))}時間前に更新`;
+  if (elapsedSeconds < 30 * 24 * 60 * 60)
+    return `${Math.floor(elapsedSeconds / (24 * 60 * 60))}日前に更新`;
   return `${LINE_UPDATE_DATE_FORMATTER.format(updatedAt)}に更新`;
 }
 
 export function lineUpdateStrength(value: string, now = new Date()): number {
-  const elapsedSeconds = Math.max(0, (now.getTime() - new Date(value).getTime()) / 1000);
+  const elapsedSeconds = Math.max(
+    0,
+    (now.getTime() - new Date(value).getTime()) / 1000,
+  );
   if (elapsedSeconds < 60 * 60) return 1;
   if (elapsedSeconds < 24 * 60 * 60) return 0.85;
   if (elapsedSeconds < 7 * 24 * 60 * 60) return 0.65;
@@ -474,7 +603,7 @@ export function isVisibleLine(line: string): boolean {
 export function pendingLineUpdates(
   savedBody: string,
   draftBody: string,
-  updates: Array<string | null>
+  updates: Array<string | null>,
 ): Array<string | null> {
   const updatesByLine = new Map<string, Array<string | null>>();
   savedBody.split("\n").forEach((line, index) => {
@@ -501,7 +630,10 @@ function blockLineRects(block: HTMLElement): Array<DOMRect> {
   const textNodes: Array<Text> = [];
   while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
   const text = textNodes.map((node) => node.data).join("");
-  if (!text.includes("\n")) return text.trim() || block.querySelector("img, iframe") ? [block.getBoundingClientRect()] : [];
+  if (!text.includes("\n"))
+    return text.trim() || block.querySelector("img, iframe")
+      ? [block.getBoundingClientRect()]
+      : [];
 
   const locate = (offset: number): [Text, number] | null => {
     let consumed = 0;
@@ -530,7 +662,11 @@ function blockLineRects(block: HTMLElement): Array<DOMRect> {
   });
 }
 
-function LineUpdateRail({ body, editor, updates }: {
+function LineUpdateRail({
+  body,
+  editor,
+  updates,
+}: {
   body: string;
   editor: Editor | null;
   updates: Array<string | null>;
@@ -547,8 +683,12 @@ function LineUpdateRail({ body, editor, updates }: {
       if (!shell) return;
 
       const shellRect = shell.getBoundingClientRect();
-      const blocks = Array.from(editorElement.children).slice(1) as Array<HTMLElement>;
-      const visibleUpdates = lines.flatMap((line, index) => isVisibleLine(line) ? [updates[index] || null] : []);
+      const blocks = Array.from(editorElement.children).slice(
+        1,
+      ) as Array<HTMLElement>;
+      const visibleUpdates = lines.flatMap((line, index) =>
+        isVisibleLine(line) ? [updates[index] || null] : [],
+      );
       let updateIndex = 0;
       const visibleBlocks = blocks.flatMap((block, blockIndex) => {
         return blockLineRects(block).map((rect, lineIndex) => ({
@@ -556,20 +696,28 @@ function LineUpdateRail({ body, editor, updates }: {
           lineIndex,
           blockSize: rect.height,
           insetBlockStart: rect.top - shellRect.top,
-          updatedAt: visibleUpdates[updateIndex++] || null
+          updatedAt: visibleUpdates[updateIndex++] || null,
         }));
       });
-      setMarkers(visibleBlocks.map((block, index) => {
-        const next = visibleBlocks[index + 1];
-        const isAdjacent = next && (
-          (next.blockIndex === block.blockIndex && next.lineIndex === block.lineIndex + 1) ||
-          (next.blockIndex === block.blockIndex + 1 && next.lineIndex === 0)
-        );
-        const blockSize = isAdjacent
-          ? next.insetBlockStart - block.insetBlockStart
-          : block.blockSize;
-        return { blockSize, insetBlockStart: block.insetBlockStart, updatedAt: block.updatedAt };
-      }));
+      setMarkers(
+        visibleBlocks.map((block, index) => {
+          const next = visibleBlocks[index + 1];
+          const isAdjacent =
+            next &&
+            ((next.blockIndex === block.blockIndex &&
+              next.lineIndex === block.lineIndex + 1) ||
+              (next.blockIndex === block.blockIndex + 1 &&
+                next.lineIndex === 0));
+          const blockSize = isAdjacent
+            ? next.insetBlockStart - block.insetBlockStart
+            : block.blockSize;
+          return {
+            blockSize,
+            insetBlockStart: block.insetBlockStart,
+            updatedAt: block.updatedAt,
+          };
+        }),
+      );
     };
 
     measure();
@@ -584,21 +732,34 @@ function LineUpdateRail({ body, editor, updates }: {
       {markers.map((marker, index) => {
         const updatedAt = marker.updatedAt;
         const strength = updatedAt ? lineUpdateStrength(updatedAt) : 0;
-        const state = updatedAt && strength > 0 ? "updated" : updatedAt ? "expired" : "pending";
+        const state =
+          updatedAt && strength > 0
+            ? "updated"
+            : updatedAt
+              ? "expired"
+              : "pending";
         return (
           <span
             className="line-update-rail__segment"
             data-state={state}
-            data-label={state === "updated" ? lineUpdateLabel(updatedAt!) : undefined}
-            title={state === "updated" ? lineUpdateLabel(updatedAt!) : undefined}
-            style={state === "updated" ? {
-              "--line-update-strength": `${strength * 100}%`,
-              blockSize: marker.blockSize,
-              insetBlockStart: marker.insetBlockStart
-            } as CSSProperties : {
-              blockSize: marker.blockSize,
-              insetBlockStart: marker.insetBlockStart
-            }}
+            data-label={
+              state === "updated" ? lineUpdateLabel(updatedAt!) : undefined
+            }
+            title={
+              state === "updated" ? lineUpdateLabel(updatedAt!) : undefined
+            }
+            style={
+              state === "updated"
+                ? ({
+                    "--line-update-strength": `${strength * 100}%`,
+                    blockSize: marker.blockSize,
+                    insetBlockStart: marker.insetBlockStart,
+                  } as CSSProperties)
+                : {
+                    blockSize: marker.blockSize,
+                    insetBlockStart: marker.insetBlockStart,
+                  }
+            }
             key={index}
           />
         );
@@ -609,7 +770,11 @@ function LineUpdateRail({ body, editor, updates }: {
 
 export function isImageDrag(dataTransfer: ImageDragData | null): boolean {
   if (!dataTransfer) return false;
-  if (Array.from(dataTransfer.items || []).some((item) => item.kind === "file" && item.type.startsWith("image/"))) {
+  if (
+    Array.from(dataTransfer.items || []).some(
+      (item) => item.kind === "file" && item.type.startsWith("image/"),
+    )
+  ) {
     return true;
   }
   return Array.from(dataTransfer.types || []).includes(INBOX_ITEM_DRAG_TYPE);
@@ -617,16 +782,23 @@ export function isImageDrag(dataTransfer: ImageDragData | null): boolean {
 
 function inboxPhotoUrl(item: InboxItem): string | null {
   const url = item.payload.preview_url;
-  return item.source === "photo" && item.kind === "photo" && typeof url === "string" ? url : null;
+  return item.source === "photo" &&
+    item.kind === "photo" &&
+    typeof url === "string"
+    ? url
+    : null;
 }
 
 export function autoCoverImageUrl(body: string): string | null {
-  return /!\[[^\]]*\]\((\/assets\/[^\s)]+)(?:\s+[^)]*)?\)/.exec(body)?.[1] || null;
+  return (
+    /!\[[^\]]*\]\((\/assets\/[^\s)]+)(?:\s+[^)]*)?\)/.exec(body)?.[1] || null
+  );
 }
 
 function inboxItemLabel(item: InboxItem): string {
   if (item.source === "photo") return "写真";
-  if (item.source === "bluesky" && item.kind === "like") return "Bluesky いいね";
+  if (item.source === "bluesky" && item.kind === "like")
+    return "Bluesky いいね";
   if (item.source === "bluesky") return "Bluesky 投稿";
   if (item.source === "raindrop") return "Raindrop";
   return "c4p";
@@ -634,8 +806,11 @@ function inboxItemLabel(item: InboxItem): string {
 
 function inboxItemName(item: InboxItem): string {
   if (item.source === "raindrop" && item.kind === "bookmark") {
-    if (typeof item.payload.title === "string" && item.payload.title.trim()) return item.payload.title.trim();
-    return typeof item.payload.url === "string" ? item.payload.url : "Raindrop素材";
+    if (typeof item.payload.title === "string" && item.payload.title.trim())
+      return item.payload.title.trim();
+    return typeof item.payload.url === "string"
+      ? item.payload.url
+      : "Raindrop素材";
   }
   return new Date(item.occurred_at).toLocaleString("ja-JP");
 }
@@ -650,58 +825,80 @@ function PhotoMaterialIcon() {
 }
 
 function groupLinkedPages(pages: Array<LinkedPage>): Array<LinkedPageGroup> {
-  const grouped = new Map<string, { kind: "wiki" | "url"; name: string; pages: Array<LinkedPage> }>();
+  const grouped = new Map<
+    string,
+    { kind: "wiki" | "url"; name: string; pages: Array<LinkedPage> }
+  >();
 
   for (const page of pages) {
     for (const relation of page.related_by || []) {
       const key = `wiki:${relation}`;
-      const group = grouped.get(key) || { kind: "wiki" as const, name: relation, pages: [] };
+      const group = grouped.get(key) || {
+        kind: "wiki" as const,
+        name: relation,
+        pages: [],
+      };
       group.pages.push(page);
       grouped.set(key, group);
     }
     for (const url of page.related_urls || []) {
       const key = `url:${url}`;
-      const group = grouped.get(key) || { kind: "url" as const, name: url, pages: [] };
+      const group = grouped.get(key) || {
+        kind: "url" as const,
+        name: url,
+        pages: [],
+      };
       group.pages.push(page);
       grouped.set(key, group);
     }
   }
 
   return Array.from(grouped.values(), ({ kind, name, pages: relatedPages }) => {
-    const topicPage = kind === "wiki" ? relatedPages.find((page) => page.route === name) : undefined;
-    const isTopicOnly = kind === "wiki" && name === "日記" && topicPage !== undefined;
+    const topicPage =
+      kind === "wiki"
+        ? relatedPages.find((page) => page.route === name)
+        : undefined;
+    const isTopicOnly =
+      kind === "wiki" && name === "日記" && topicPage !== undefined;
     return {
       kind,
       name,
       pages: isTopicOnly ? [topicPage] : relatedPages,
-      isTopicOnly
+      isTopicOnly,
     };
   });
 }
 
 export function extractEmbeddableUrls(body: string): Array<string> {
   let fence: { marker: string; length: number } | null = null;
-  const visibleLines = body.split("\n").filter((line) => {
-    const match = /^\s*(`{3,}|~{3,})/.exec(line);
-    const wasFenced = fence !== null;
-    if (match) {
-      const marker = match[1][0];
-      if (!fence) fence = { marker, length: match[1].length };
-      else if (marker === fence.marker && match[1].length >= fence.length) fence = null;
-    }
-    return !wasFenced && !match;
-  }).map((line) => line.replace(/(`+).*?\1/g, ""));
-  const matches = visibleLines.join("\n").match(/https?:\/\/[^\s<>\[\]\\"')]+/g) || [];
+  const visibleLines = body
+    .split("\n")
+    .filter((line) => {
+      const match = /^\s*(`{3,}|~{3,})/.exec(line);
+      const wasFenced = fence !== null;
+      if (match) {
+        const marker = match[1][0];
+        if (!fence) fence = { marker, length: match[1].length };
+        else if (marker === fence.marker && match[1].length >= fence.length)
+          fence = null;
+      }
+      return !wasFenced && !match;
+    })
+    .map((line) => line.replace(/(`+).*?\1/g, ""));
+  const matches =
+    visibleLines.join("\n").match(/https?:\/\/[^\s<>[\]\\"')]+/g) || [];
   const normalized = matches.map((url) =>
-    url.replace(/\\(?=[^\w\s]|_)/g, "").replace(/[.,;:!?]+$/, "")
+    url.replace(/\\(?=[^\w\s]|_)/g, "").replace(/[.,;:!?]+$/, ""),
   );
-  return Array.from(new Set(normalized))
-    .filter((url) => !/\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|$)/i.test(url));
+  return Array.from(new Set(normalized)).filter(
+    (url) => !/\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|$)/i.test(url),
+  );
 }
 
 function extractWikiLinkNames(body: string): Array<string> {
-  return Array.from(body.matchAll(WIKI_LINK_PATTERN), (match) => match[1].trim())
-    .filter((name, index, names) => name && names.indexOf(name) === index);
+  return Array.from(body.matchAll(WIKI_LINK_PATTERN), (match) =>
+    match[1].trim(),
+  ).filter((name, index, names) => name && names.indexOf(name) === index);
 }
 
 export function universeReferences(body: string) {
@@ -711,40 +908,52 @@ export function universeReferences(body: string) {
     wikiLinkNames,
     externalUrls,
     wikiLinkKey: JSON.stringify(wikiLinkNames),
-    externalUrlKey: JSON.stringify(externalUrls)
+    externalUrlKey: JSON.stringify(externalUrls),
   };
 }
 
 function buildInternalUniverseGroupsFromNames(
   wikiLinkNames: Array<string>,
   route: string,
-  linkedPageGroups: Array<LinkedPageGroup>
+  linkedPageGroups: Array<LinkedPageGroup>,
 ): Array<LinkedPageGroup> {
   const names = wikiLinkNames.filter((name) => name !== route);
-  if (linkedPageGroups.some((group) => group.kind === "wiki" && group.name === route)) {
+  if (
+    linkedPageGroups.some(
+      (group) => group.kind === "wiki" && group.name === route,
+    )
+  ) {
     names.unshift(route);
   }
 
   return names.map((name) => {
-    const group = linkedPageGroups.find((candidate) => candidate.kind === "wiki" && candidate.name === name);
-    return group ? {
-      ...group,
-      pages: group.pages.filter((page) => page.route !== name)
-    } : {
-      kind: "wiki" as const,
-      name,
-      pages: [],
-      isTopicOnly: false
-    };
+    const group = linkedPageGroups.find(
+      (candidate) => candidate.kind === "wiki" && candidate.name === name,
+    );
+    return group
+      ? {
+          ...group,
+          pages: group.pages.filter((page) => page.route !== name),
+        }
+      : {
+          kind: "wiki" as const,
+          name,
+          pages: [],
+          isTopicOnly: false,
+        };
   });
 }
 
 export function buildInternalUniverseGroups(
   body: string,
   route: string,
-  linkedPageGroups: Array<LinkedPageGroup>
+  linkedPageGroups: Array<LinkedPageGroup>,
 ): Array<LinkedPageGroup> {
-  return buildInternalUniverseGroupsFromNames(extractWikiLinkNames(body), route, linkedPageGroups);
+  return buildInternalUniverseGroupsFromNames(
+    extractWikiLinkNames(body),
+    route,
+    linkedPageGroups,
+  );
 }
 
 function externalLinkLabel(url: string): string {
@@ -760,7 +969,8 @@ export function youtubeVideoId(rawUrl: string): string | null {
     const url = new URL(rawUrl);
     const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
     let videoId: string | null = null;
-    if (hostname === "youtu.be") videoId = url.pathname.split("/").filter(Boolean)[0] || null;
+    if (hostname === "youtu.be")
+      videoId = url.pathname.split("/").filter(Boolean)[0] || null;
     if (hostname === "youtube.com" || hostname.endsWith(".youtube.com")) {
       if (url.pathname === "/watch") videoId = url.searchParams.get("v");
       else if (/^\/(?:shorts|live|embed)\//.test(url.pathname)) {
@@ -773,7 +983,10 @@ export function youtubeVideoId(rawUrl: string): string | null {
   }
 }
 
-export function embedImageUrl(url: string, metadata?: EmbedMetadata): string | null {
+export function embedImageUrl(
+  url: string,
+  metadata?: EmbedMetadata,
+): string | null {
   if (metadata?.image_url) return metadata.image_url;
   const videoId = youtubeVideoId(url);
   return videoId ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` : null;
@@ -782,7 +995,7 @@ export function embedImageUrl(url: string, metadata?: EmbedMetadata): string | n
 function EmbedCard({
   url,
   metadata,
-  failed = false
+  failed = false,
 }: {
   url: string;
   metadata?: EmbedMetadata;
@@ -790,13 +1003,18 @@ function EmbedCard({
 }) {
   const imageUrl = embedImageUrl(url, metadata);
   const videoId = youtubeVideoId(url);
-  const fallbackImageUrl = !metadata?.image_url && videoId
-    ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-    : undefined;
+  const fallbackImageUrl =
+    !metadata?.image_url && videoId
+      ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+      : undefined;
   if (!metadata) {
     return (
       <div className="embed-card embed-card--loading" role="status">
-        <span>{failed ? "リンク情報を取得できませんでした" : "リンク情報を読み込んでいます"}</span>
+        <span>
+          {failed
+            ? "リンク情報を取得できませんでした"
+            : "リンク情報を読み込んでいます"}
+        </span>
         <small>{url}</small>
       </div>
     );
@@ -859,7 +1077,7 @@ const EMPTY_INTERNAL_GRAPH_LAYOUT: InternalGraphLayout = {
   height: 520,
   links: [],
   pages: [],
-  topics: []
+  topics: [],
 };
 
 type InternalGraphRect = {
@@ -871,24 +1089,33 @@ type InternalGraphRect = {
 
 function internalTopicRect(node: InternalGraphNode): InternalGraphRect {
   const halfWidth = node.radius + 10;
-  const halfHeight = node.group?.kind === "url" ? 112 : (node.name?.length || 0) > 16 ? 44 : 32;
+  const halfHeight =
+    node.group?.kind === "url" ? 112 : (node.name?.length || 0) > 16 ? 44 : 32;
   return {
     top: (node.y ?? 0) - halfHeight,
     right: (node.x ?? 0) + halfWidth,
     bottom: (node.y ?? 0) + halfHeight,
-    left: (node.x ?? 0) - halfWidth
+    left: (node.x ?? 0) - halfWidth,
   };
 }
 
-function pointInInternalRect(point: UniversePoint, rect: InternalGraphRect): boolean {
-  return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
+function pointInInternalRect(
+  point: UniversePoint,
+  rect: InternalGraphRect,
+): boolean {
+  return (
+    point.x >= rect.left &&
+    point.x <= rect.right &&
+    point.y >= rect.top &&
+    point.y <= rect.bottom
+  );
 }
 
 function internalSegmentsIntersect(
   start: UniversePoint,
   end: UniversePoint,
   edgeStart: UniversePoint,
-  edgeEnd: UniversePoint
+  edgeEnd: UniversePoint,
 ): boolean {
   const cross = (a: UniversePoint, b: UniversePoint, c: UniversePoint) =>
     (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
@@ -902,9 +1129,10 @@ function internalSegmentsIntersect(
 function internalSegmentIntersectsRect(
   start: UniversePoint,
   end: UniversePoint,
-  rect: InternalGraphRect
+  rect: InternalGraphRect,
 ): boolean {
-  if (pointInInternalRect(start, rect) || pointInInternalRect(end, rect)) return true;
+  if (pointInInternalRect(start, rect) || pointInInternalRect(end, rect))
+    return true;
   const topLeft = { x: rect.left, y: rect.top };
   const topRight = { x: rect.right, y: rect.top };
   const bottomRight = { x: rect.right, y: rect.bottom };
@@ -913,14 +1141,16 @@ function internalSegmentIntersectsRect(
     [topLeft, topRight],
     [topRight, bottomRight],
     [bottomRight, bottomLeft],
-    [bottomLeft, topLeft]
-  ].some(([edgeStart, edgeEnd]) => internalSegmentsIntersect(start, end, edgeStart, edgeEnd));
+    [bottomLeft, topLeft],
+  ].some(([edgeStart, edgeEnd]) =>
+    internalSegmentsIntersect(start, end, edgeStart, edgeEnd),
+  );
 }
 
 function separateTopicsFromLinks(
   topics: Array<InternalGraphNode>,
   links: Array<{ source: InternalGraphNode; target: InternalGraphNode }>,
-  width: number
+  width: number,
 ): void {
   for (let iteration = 0; iteration < 120; iteration += 1) {
     let moved = false;
@@ -935,21 +1165,36 @@ function separateTopicsFromLinks(
         const dx = end.x - start.x;
         const dy = end.y - start.y;
         const length = Math.max(1, Math.hypot(dx, dy));
-        const side = dx * ((topic.y ?? 0) - start.y) - dy * ((topic.x ?? 0) - start.x);
-        const direction = side === 0 ? (stableNumber(topic.id) % 2 === 0 ? 1 : -1) : Math.sign(side);
+        const side =
+          dx * ((topic.y ?? 0) - start.y) - dy * ((topic.x ?? 0) - start.x);
+        const direction =
+          side === 0
+            ? stableNumber(topic.id) % 2 === 0
+              ? 1
+              : -1
+            : Math.sign(side);
         topic.x = (topic.x ?? topic.targetX) + (-dy / length) * direction * 5;
         topic.y = (topic.y ?? topic.targetY) + (dx / length) * direction * 5;
         moved = true;
       }
-      topic.x = Math.max(topic.radius, Math.min(width - topic.radius, topic.x ?? topic.targetX));
+      topic.x = Math.max(
+        topic.radius,
+        Math.min(width - topic.radius, topic.x ?? topic.targetX),
+      );
       const verticalInset = topic.group?.kind === "url" ? 112 : 48;
-      topic.y = Math.max(verticalInset, Math.min(240, topic.y ?? topic.targetY));
+      topic.y = Math.max(
+        verticalInset,
+        Math.min(240, topic.y ?? topic.targetY),
+      );
     }
     if (!moved) return;
   }
 }
 
-function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): InternalGraphLayout {
+function internalGraphLayout(
+  groups: Array<LinkedPageGroup>,
+  width: number,
+): InternalGraphLayout {
   const PAGE_NODE_RADIUS = 13;
   const PAGE_NODE_CLEARANCE = 16;
   const PAGE_NODE_MIN_DISTANCE = 54;
@@ -965,27 +1210,33 @@ function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): Int
   const pageCount = pagesById.size;
   const hasExternalTopic = groups.some((group) => group.kind === "url");
   const pageStartY = hasExternalTopic ? 360 : 230;
-  const height = Math.max(hasExternalTopic ? 680 : 520, pageStartY + 80 + Math.sqrt(Math.max(pageCount, 1)) * 82);
+  const height = Math.max(
+    hasExternalTopic ? 680 : 520,
+    pageStartY + 80 + Math.sqrt(Math.max(pageCount, 1)) * 82,
+  );
   const topics = groups.map((group, index): InternalGraphNode => {
-    const targetX = width * (index + 1) / (groups.length + 1);
-    const targetY = 92 + stableNumber(group.name) % 42;
+    const targetX = (width * (index + 1)) / (groups.length + 1);
+    const targetY = 92 + (stableNumber(group.name) % 42);
     return {
       id: `topic:${group.name}`,
       kind: "topic",
       name: group.name,
       group,
       rank: 0,
-      radius: group.kind === "url" ? 150 : Math.min(120, 58 + Math.sqrt(group.name.length) * 11),
+      radius:
+        group.kind === "url"
+          ? 150
+          : Math.min(120, 58 + Math.sqrt(group.name.length) * 11),
       targetX,
       targetY,
       x: targetX,
-      y: targetY
+      y: targetY,
     };
   });
   const pages = Array.from(pagesById.values(), (page): InternalGraphNode => {
     const rank = pageRanks.get(page.id) ?? 0;
     const seed = stableNumber(page.id);
-    const targetX = width * (0.18 + seed % 640 / 1000);
+    const targetX = width * (0.18 + (seed % 640) / 1000);
     const targetY = Math.min(height - 42, pageStartY + rank * 22);
     return {
       id: `page:${page.id}`,
@@ -996,53 +1247,84 @@ function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): Int
       targetX,
       targetY,
       x: targetX,
-      y: targetY
+      y: targetY,
     };
   });
   const nodes = [...topics, ...pages];
   const links: Array<InternalGraphLink> = groups.flatMap((group) =>
     group.pages.map((page) => ({
       source: `topic:${group.name}`,
-      target: `page:${page.id}`
-    }))
+      target: `page:${page.id}`,
+    })),
   );
 
   const simulation = forceSimulation(nodes)
     .stop()
-    .force("link", forceLink<InternalGraphNode, InternalGraphLink>(links)
-      .id((node) => node.id)
-      .distance((link) => {
-        const target = typeof link.target === "string" ? undefined : link.target;
-        return 118 + Math.min(target?.rank ?? 0, 12) * 7;
-      })
-      .strength(0.34))
-    .force("charge", forceManyBody<InternalGraphNode>()
-      .strength((node) => node.kind === "topic" ? -520 : -72)
-      .distanceMax(520))
-    .force("collision", forceCollide<InternalGraphNode>()
-      .radius((node) => node.radius + (node.kind === "topic" ? 18 : PAGE_NODE_CLEARANCE))
-      .iterations(6))
-    .force("x", forceX<InternalGraphNode>((node) => node.targetX)
-      .strength((node) => node.kind === "topic" ? 0.42 : 0.045))
-    .force("y", forceY<InternalGraphNode>((node) => node.targetY)
-      .strength((node) => node.kind === "topic" ? 0.58 : 0.16));
+    .force(
+      "link",
+      forceLink<InternalGraphNode, InternalGraphLink>(links)
+        .id((node) => node.id)
+        .distance((link) => {
+          const target =
+            typeof link.target === "string" ? undefined : link.target;
+          return 118 + Math.min(target?.rank ?? 0, 12) * 7;
+        })
+        .strength(0.34),
+    )
+    .force(
+      "charge",
+      forceManyBody<InternalGraphNode>()
+        .strength((node) => (node.kind === "topic" ? -520 : -72))
+        .distanceMax(520),
+    )
+    .force(
+      "collision",
+      forceCollide<InternalGraphNode>()
+        .radius(
+          (node) =>
+            node.radius + (node.kind === "topic" ? 18 : PAGE_NODE_CLEARANCE),
+        )
+        .iterations(6),
+    )
+    .force(
+      "x",
+      forceX<InternalGraphNode>((node) => node.targetX).strength((node) =>
+        node.kind === "topic" ? 0.42 : 0.045,
+      ),
+    )
+    .force(
+      "y",
+      forceY<InternalGraphNode>((node) => node.targetY).strength((node) =>
+        node.kind === "topic" ? 0.58 : 0.16,
+      ),
+    );
 
   simulation.tick(300);
   for (const node of nodes) {
     const horizontalInset = node.kind === "topic" ? node.radius : 18;
-    node.x = Math.max(horizontalInset, Math.min(width - horizontalInset, node.x ?? node.targetX));
+    node.x = Math.max(
+      horizontalInset,
+      Math.min(width - horizontalInset, node.x ?? node.targetX),
+    );
     if (node.kind === "topic") {
       const verticalInset = node.group?.kind === "url" ? 112 : 54;
       node.y = Math.max(verticalInset, Math.min(220, node.y ?? node.targetY));
     } else {
-      node.y = Math.max(pageStartY - 25, Math.min(height - 28, node.y ?? node.targetY));
+      node.y = Math.max(
+        pageStartY - 25,
+        Math.min(height - 28, node.y ?? node.targetY),
+      );
     }
   }
 
   for (let iteration = 0; iteration < 48; iteration += 1) {
     let moved = false;
     for (let leftIndex = 0; leftIndex < pages.length; leftIndex += 1) {
-      for (let rightIndex = leftIndex + 1; rightIndex < pages.length; rightIndex += 1) {
+      for (
+        let rightIndex = leftIndex + 1;
+        rightIndex < pages.length;
+        rightIndex += 1
+      ) {
         const left = pages[leftIndex];
         const right = pages[rightIndex];
         let dx = (right.x ?? right.targetX) - (left.x ?? left.targetX);
@@ -1051,7 +1333,8 @@ function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): Int
         if (distance >= PAGE_NODE_MIN_DISTANCE) continue;
 
         if (distance < 0.001) {
-          const angle = stableNumber(`${left.id}:${right.id}`) % 360 * Math.PI / 180;
+          const angle =
+            ((stableNumber(`${left.id}:${right.id}`) % 360) * Math.PI) / 180;
           dx = Math.cos(angle);
           dy = Math.sin(angle);
           distance = 1;
@@ -1068,14 +1351,17 @@ function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): Int
     }
     for (const page of pages) {
       page.x = Math.max(24, Math.min(width - 24, page.x ?? page.targetX));
-      page.y = Math.max(pageStartY - 25, Math.min(height - 28, page.y ?? page.targetY));
+      page.y = Math.max(
+        pageStartY - 25,
+        Math.min(height - 28, page.y ?? page.targetY),
+      );
     }
     if (!moved) break;
   }
 
   const resolvedLinks = links.map((link) => ({
     source: link.source as InternalGraphNode,
-    target: link.target as InternalGraphNode
+    target: link.target as InternalGraphNode,
   }));
   separateTopicsFromLinks(topics, resolvedLinks, width);
 
@@ -1083,7 +1369,7 @@ function internalGraphLayout(groups: Array<LinkedPageGroup>, width: number): Int
     height,
     links: resolvedLinks,
     pages,
-    topics
+    topics,
   };
 }
 
@@ -1091,20 +1377,23 @@ export function internalNodeVisual(
   connectionCount: number,
   createdAt: number,
   oldestCreatedAt: number,
-  newestCreatedAt: number
+  newestCreatedAt: number,
 ) {
   const weight = Math.sqrt(Math.max(0, connectionCount - 1));
   const span = newestCreatedAt - oldestCreatedAt;
-  const recency = span > 0 ? Math.max(0, Math.min(1, (createdAt - oldestCreatedAt) / span)) : 1;
+  const recency =
+    span > 0
+      ? Math.max(0, Math.min(1, (createdAt - oldestCreatedAt) / span))
+      : 1;
   return {
     opacity: 0.35 + recency * 0.65,
-    size: Math.min(26, 14 + weight * 3)
+    size: Math.min(26, 14 + weight * 3),
   };
 }
 
 function InternalUniverseGraph({
   groups,
-  onActiveTopicChange
+  onActiveTopicChange,
 }: {
   groups: Array<LinkedPageGroup>;
   onActiveTopicChange: (topic: string | null) => void;
@@ -1112,26 +1401,37 @@ function InternalUniverseGraph({
   const [activePage, setActivePage] = useState<LinkedPage | null>(null);
   const [previewSide, setPreviewSide] = useState<"left" | "right">("right");
   const [width, setWidth] = useState(() => Math.max(1100, window.innerWidth));
-  const [embeds, setEmbeds] = useState<Record<string, EmbedMetadata | null>>({});
+  const [embeds, setEmbeds] = useState<Record<string, EmbedMetadata | null>>(
+    {},
+  );
   const closeTimerRef = useRef<number | null>(null);
   const graphRef = useRef<HTMLElement | null>(null);
-  const [layout, setLayout] = useState<InternalGraphLayout>(EMPTY_INTERNAL_GRAPH_LAYOUT);
+  const [layout, setLayout] = useState<InternalGraphLayout>(
+    EMPTY_INTERNAL_GRAPH_LAYOUT,
+  );
   const connectionCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    layout.links.forEach(({ target }) => counts.set(target.id, (counts.get(target.id) || 0) + 1));
+    layout.links.forEach(({ target }) =>
+      counts.set(target.id, (counts.get(target.id) || 0) + 1),
+    );
     return counts;
   }, [layout]);
   const pageCreatedAtRange = useMemo(() => {
-    const timestamps = layout.pages.map((node) => Date.parse(node.page?.created_at || ""));
+    const timestamps = layout.pages.map((node) =>
+      Date.parse(node.page?.created_at || ""),
+    );
     return { oldest: Math.min(...timestamps), newest: Math.max(...timestamps) };
   }, [layout.pages]);
-  const activeNode = layout.pages.find((node) => node.page?.id === activePage?.id);
+  const activeNode = layout.pages.find(
+    (node) => node.page?.id === activePage?.id,
+  );
   const previewY = activeNode
     ? Math.max(112, Math.min((activeNode.y ?? 0) - 80, layout.height - 176))
     : 0;
   const externalUrls = useMemo(
-    () => groups.filter((group) => group.kind === "url").map((group) => group.name),
-    [groups]
+    () =>
+      groups.filter((group) => group.kind === "url").map((group) => group.name),
+    [groups],
   );
 
   useEffect(() => {
@@ -1143,14 +1443,26 @@ function InternalUniverseGraph({
 
   useEffect(() => {
     let active = true;
-    void Promise.all(externalUrls.map(async (url) => {
-      try {
-        return { url, metadata: await fetchJson<EmbedMetadata>(`/api/embed?${new URLSearchParams({ url })}`) };
-      } catch (_error) {
-        return { url, metadata: null };
-      }
-    })).then((results) => {
-      if (active) setEmbeds(Object.fromEntries(results.map(({ url, metadata }) => [url, metadata])));
+    void Promise.all(
+      externalUrls.map(async (url) => {
+        try {
+          return {
+            url,
+            metadata: await fetchJson<EmbedMetadata>(
+              `/api/embed?${new URLSearchParams({ url })}`,
+            ),
+          };
+        } catch (_error) {
+          return { url, metadata: null };
+        }
+      }),
+    ).then((results) => {
+      if (active)
+        setEmbeds(
+          Object.fromEntries(
+            results.map(({ url, metadata }) => [url, metadata]),
+          ),
+        );
     });
     return () => {
       active = false;
@@ -1167,23 +1479,30 @@ function InternalUniverseGraph({
     return () => observer.disconnect();
   }, []);
   const showPreview = (page: LinkedPage, side: "left" | "right") => {
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    if (closeTimerRef.current !== null)
+      window.clearTimeout(closeTimerRef.current);
     setPreviewSide(side);
     setActivePage(page);
   };
   const previewSideForNode = (
     node: HTMLElement,
-    preferredSide: "left" | "right"
+    preferredSide: "left" | "right",
   ): "left" | "right" => {
     const nodeRect = node.getBoundingClientRect();
     const previewWidth = 256;
-    const canShowRight = nodeRect.right + 18 + previewWidth <= window.innerWidth - 16;
+    const canShowRight =
+      nodeRect.right + 18 + previewWidth <= window.innerWidth - 16;
     const canShowLeft = nodeRect.left - 18 - previewWidth >= 16;
-    if (preferredSide === "right" && !canShowRight && canShowLeft) return "left";
-    if (preferredSide === "left" && !canShowLeft && canShowRight) return "right";
+    if (preferredSide === "right" && !canShowRight && canShowLeft)
+      return "left";
+    if (preferredSide === "left" && !canShowLeft && canShowRight)
+      return "right";
     return preferredSide;
   };
-  const showPreviewFromPointer = (page: LinkedPage, event: ReactPointerEvent<HTMLAnchorElement>) => {
+  const showPreviewFromPointer = (
+    page: LinkedPage,
+    event: ReactPointerEvent<HTMLAnchorElement>,
+  ) => {
     const node = event.currentTarget;
     const nodeRect = node.getBoundingClientRect();
     const nodeCenter = nodeRect.left + nodeRect.width / 2;
@@ -1202,7 +1521,11 @@ function InternalUniverseGraph({
       ref={graphRef}
       style={{ blockSize: `${layout.height}px` }}
     >
-      <svg viewBox={`0 0 ${width} ${layout.height}`} preserveAspectRatio="none" aria-hidden="true">
+      <svg
+        viewBox={`0 0 ${width} ${layout.height}`}
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
         {layout.links.map(({ source, target }) => (
           <line
             key={`${source.id}:${target.id}`}
@@ -1217,47 +1540,62 @@ function InternalUniverseGraph({
         const name = topic.name || "";
         const style = {
           "--internal-topic-x": `${topic.x}px`,
-          "--internal-topic-y": `${topic.y}px`
+          "--internal-topic-y": `${topic.y}px`,
         } as CSSProperties;
-        const content = topic.group?.kind === "url" ? (
-          <EmbedCard
-            url={name}
-            metadata={embeds[name] || undefined}
-            failed={embeds[name] === null}
-          />
-        ) : name;
-        return <span
-          className="internal-universe-group__topic-wrap"
-          key={topic.id}
-          onPointerEnter={() => onActiveTopicChange(name || null)}
-          onPointerLeave={() => onActiveTopicChange(null)}
-          onFocus={() => onActiveTopicChange(name || null)}
-          onBlur={() => onActiveTopicChange(null)}
-        >
-          <a
-            className="internal-universe-group__topic-node"
-            href={topic.group?.kind === "url" ? name : `/${encodePageName(name)}`}
-            data-universe-topic={name}
-            aria-label={name}
-            target={topic.group?.kind === "url" ? "_blank" : undefined}
-            rel={topic.group?.kind === "url" ? "noreferrer" : undefined}
-            style={style}
-          />
-          {topic.group?.kind === "url" && youtubeVideoId(name) ? <span
-            className="internal-universe-group__topic internal-universe-group__topic--external"
-            style={style}
+        const content =
+          topic.group?.kind === "url" ? (
+            <EmbedCard
+              url={name}
+              metadata={embeds[name] || undefined}
+              failed={embeds[name] === null}
+            />
+          ) : (
+            name
+          );
+        return (
+          <span
+            className="internal-universe-group__topic-wrap"
+            key={topic.id}
+            onPointerEnter={() => onActiveTopicChange(name || null)}
+            onPointerLeave={() => onActiveTopicChange(null)}
+            onFocus={() => onActiveTopicChange(name || null)}
+            onBlur={() => onActiveTopicChange(null)}
           >
-            {content}
-          </span> : <a
-            className={`internal-universe-group__topic${topic.group?.kind === "url" ? " internal-universe-group__topic--external" : ""}`}
-            href={topic.group?.kind === "url" ? name : `/${encodePageName(name)}`}
-            target={topic.group?.kind === "url" ? "_blank" : undefined}
-            rel={topic.group?.kind === "url" ? "noreferrer" : undefined}
-            style={style}
-          >
-            {content}
-          </a>}
-        </span>
+            <a
+              className="internal-universe-group__topic-node"
+              href={
+                topic.group?.kind === "url" ? name : `/${encodePageName(name)}`
+              }
+              data-universe-topic={name}
+              aria-label={name}
+              target={topic.group?.kind === "url" ? "_blank" : undefined}
+              rel={topic.group?.kind === "url" ? "noreferrer" : undefined}
+              style={style}
+            />
+            {topic.group?.kind === "url" && youtubeVideoId(name) ? (
+              <span
+                className="internal-universe-group__topic internal-universe-group__topic--external"
+                style={style}
+              >
+                {content}
+              </span>
+            ) : (
+              <a
+                className={`internal-universe-group__topic${topic.group?.kind === "url" ? " internal-universe-group__topic--external" : ""}`}
+                href={
+                  topic.group?.kind === "url"
+                    ? name
+                    : `/${encodePageName(name)}`
+                }
+                target={topic.group?.kind === "url" ? "_blank" : undefined}
+                rel={topic.group?.kind === "url" ? "noreferrer" : undefined}
+                style={style}
+              >
+                {content}
+              </a>
+            )}
+          </span>
+        );
       })}
       {layout.pages.map((node) => {
         const page = node.page;
@@ -1267,7 +1605,7 @@ function InternalUniverseGraph({
           connectionCount,
           Date.parse(page.created_at),
           pageCreatedAtRange.oldest,
-          pageCreatedAtRange.newest
+          pageCreatedAtRange.newest,
         );
         return (
           <a
@@ -1275,17 +1613,23 @@ function InternalUniverseGraph({
             href={`/${encodePageName(page.route)}`}
             aria-label={`${page.title}（関連${connectionCount}件）`}
             key={page.id}
-            style={{
-              "--internal-node-x": `${node.x}px`,
-              "--internal-node-y": `${node.y}px`,
-              "--internal-node-size": `${visual.size}px`,
-              "--internal-node-opacity": visual.opacity
-            } as CSSProperties}
+            style={
+              {
+                "--internal-node-x": `${node.x}px`,
+                "--internal-node-y": `${node.y}px`,
+                "--internal-node-size": `${visual.size}px`,
+                "--internal-node-opacity": visual.opacity,
+              } as CSSProperties
+            }
             onPointerEnter={(event) => showPreviewFromPointer(page, event)}
             onMouseLeave={schedulePreviewClose}
             onFocus={(event) => {
-              const preferredSide = (node.x ?? 0) < width / 2 ? "right" : "left";
-              showPreview(page, previewSideForNode(event.currentTarget, preferredSide));
+              const preferredSide =
+                (node.x ?? 0) < width / 2 ? "right" : "left";
+              showPreview(
+                page,
+                previewSideForNode(event.currentTarget, preferredSide),
+              );
             }}
             onBlur={schedulePreviewClose}
           />
@@ -1295,19 +1639,28 @@ function InternalUniverseGraph({
         <a
           className="internal-universe-group__preview page-card__link"
           href={`/${encodePageName(activePage.route)}`}
-          style={{
-            "--internal-preview-anchor-x": `${activeNode.x}px`,
-            "--internal-preview-y": `${previewY}px`
-          } as CSSProperties}
+          style={
+            {
+              "--internal-preview-anchor-x": `${activeNode.x}px`,
+              "--internal-preview-y": `${previewY}px`,
+            } as CSSProperties
+          }
           data-side={previewSide}
           onMouseEnter={() => showPreview(activePage, previewSide)}
           onMouseLeave={schedulePreviewClose}
         >
           {activePage.image_url && (
-            <img className="page-card__image" src={activePage.image_url} alt="" loading="lazy" />
+            <img
+              className="page-card__image"
+              src={activePage.image_url}
+              alt=""
+              loading="lazy"
+            />
           )}
           <span className="page-card__title">{activePage.title}</span>
-          {activePage.excerpt && <span className="page-card__excerpt">{activePage.excerpt}</span>}
+          {activePage.excerpt && (
+            <span className="page-card__excerpt">{activePage.excerpt}</span>
+          )}
         </a>
       )}
     </section>
@@ -1315,7 +1668,12 @@ function InternalUniverseGraph({
 }
 
 type UniversePoint = { x: number; y: number };
-type UniverseRect = { top: number; right: number; bottom: number; left: number };
+type UniverseRect = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
 type UniverseSize = { width: number; height: number };
 type UniverseLayout = {
   editorRect: UniverseRect;
@@ -1343,14 +1701,17 @@ const UNIVERSE_PREVIEW_GAP = 20;
 const EDITOR_FOCUS_RING_CLEARANCE = 6;
 
 function useUniverseEnabled(): boolean {
-  const [enabled, setEnabled] = useState(document.documentElement.dataset.universe === "on");
+  const [enabled, setEnabled] = useState(
+    document.documentElement.dataset.universe === "on",
+  );
 
   useEffect(() => {
-    const update = () => setEnabled(document.documentElement.dataset.universe === "on");
+    const update = () =>
+      setEnabled(document.documentElement.dataset.universe === "on");
     const observer = new MutationObserver(update);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["data-universe"]
+      attributeFilter: ["data-universe"],
     });
     update();
     return () => observer.disconnect();
@@ -1359,32 +1720,42 @@ function useUniverseEnabled(): boolean {
   return enabled;
 }
 
-function relativeRect(element: Element, containerRect: DOMRect, padding = 0): UniverseRect {
+function relativeRect(
+  element: Element,
+  containerRect: DOMRect,
+  padding = 0,
+): UniverseRect {
   const rect = element.getBoundingClientRect();
   return {
     top: rect.top - containerRect.top - padding,
     right: rect.right - containerRect.left + padding,
     bottom: rect.bottom - containerRect.top + padding,
-    left: rect.left - containerRect.left - padding
+    left: rect.left - containerRect.left - padding,
   };
 }
 
-function constrainNode(node: UniverseNode, obstacles: Array<UniverseRect>, width: number, height: number) {
+function constrainNode(
+  node: UniverseNode,
+  obstacles: Array<UniverseRect>,
+  width: number,
+  height: number,
+) {
   for (const obstacle of obstacles) {
     const left = obstacle.left - UNIVERSE_NODE_RADIUS;
     const right = obstacle.right + UNIVERSE_NODE_RADIUS;
     const top = obstacle.top - UNIVERSE_NODE_RADIUS;
     const bottom = obstacle.bottom + UNIVERSE_NODE_RADIUS;
-    if (node.x <= left || node.x >= right || node.y <= top || node.y >= bottom) continue;
+    if (node.x <= left || node.x >= right || node.y <= top || node.y >= bottom)
+      continue;
 
     const exits = [
       { distance: node.x - left, x: left, y: node.y },
       { distance: right - node.x, x: right, y: node.y },
       { distance: node.y - top, x: node.x, y: top },
-      { distance: bottom - node.y, x: node.x, y: bottom }
+      { distance: bottom - node.y, x: node.x, y: bottom },
     ];
     const nearest = exits.reduce((current, candidate) =>
-      candidate.distance < current.distance ? candidate : current
+      candidate.distance < current.distance ? candidate : current,
     );
     node.x = nearest.x;
     node.y = nearest.y;
@@ -1392,18 +1763,33 @@ function constrainNode(node: UniverseNode, obstacles: Array<UniverseRect>, width
     node.vy *= 0.25;
   }
 
-  node.x = Math.min(width - UNIVERSE_NODE_RADIUS, Math.max(UNIVERSE_NODE_RADIUS, node.x));
-  node.y = Math.min(height - UNIVERSE_NODE_RADIUS, Math.max(UNIVERSE_NODE_RADIUS, node.y));
+  node.x = Math.min(
+    width - UNIVERSE_NODE_RADIUS,
+    Math.max(UNIVERSE_NODE_RADIUS, node.x),
+  );
+  node.y = Math.min(
+    height - UNIVERSE_NODE_RADIUS,
+    Math.max(UNIVERSE_NODE_RADIUS, node.y),
+  );
 }
 
-function tickUniverse(nodes: Array<UniverseNode>, obstacles: Array<UniverseRect>, width: number, height: number) {
+function tickUniverse(
+  nodes: Array<UniverseNode>,
+  obstacles: Array<UniverseRect>,
+  width: number,
+  height: number,
+) {
   for (const node of nodes) {
     node.vx += (node.target.x - node.x) * 0.018;
     node.vy += (node.target.y - node.y) * 0.018;
   }
 
   for (let index = 0; index < nodes.length; index += 1) {
-    for (let otherIndex = index + 1; otherIndex < nodes.length; otherIndex += 1) {
+    for (
+      let otherIndex = index + 1;
+      otherIndex < nodes.length;
+      otherIndex += 1
+    ) {
       const node = nodes[index];
       const other = nodes[otherIndex];
       const dx = other.x - node.x;
@@ -1413,8 +1799,8 @@ function tickUniverse(nodes: Array<UniverseNode>, obstacles: Array<UniverseRect>
       if (distance >= minimum) continue;
 
       const force = (minimum - distance) * 0.08;
-      const forceX = dx / distance * force;
-      const forceY = dy / distance * force;
+      const forceX = (dx / distance) * force;
+      const forceY = (dy / distance) * force;
       node.vx -= forceX;
       node.vy -= forceY;
       other.vx += forceX;
@@ -1443,37 +1829,52 @@ function initialUniverseNodes(
   urls: Array<string>,
   anchors: Map<string, UniversePoint>,
   editorRect: UniverseRect,
-  width: number
+  width: number,
 ): Array<UniverseNode> {
-  const preferredSide = width - editorRect.right >= editorRect.left ? "right" : "left";
+  const preferredSide =
+    width - editorRect.right >= editorRect.left ? "right" : "left";
 
   return urls.flatMap((url, index) => {
     const anchor = anchors.get(url);
     if (!anchor) return [];
 
     const seed = universeSeed(url);
-    const side = index % 2 === 0 ? preferredSide : preferredSide === "right" ? "left" : "right";
-    const horizontalDistance = 34 + seed % 104;
+    const side =
+      index % 2 === 0
+        ? preferredSide
+        : preferredSide === "right"
+          ? "left"
+          : "right";
+    const horizontalDistance = 34 + (seed % 104);
     const verticalOffset = (Math.floor(seed / 104) % 81) - 40;
-    const targetX = side === "right"
-      ? editorRect.right + horizontalDistance
-      : editorRect.left - horizontalDistance;
+    const targetX =
+      side === "right"
+        ? editorRect.right + horizontalDistance
+        : editorRect.left - horizontalDistance;
     const targetY = anchor.y + verticalOffset;
-    return [{
-      url,
-      anchor,
-      target: { x: targetX, y: targetY },
-      x: targetX + (side === "right" ? 18 : -18),
-      y: targetY + (index % 2 === 0 ? -12 : 12),
-      vx: 0,
-      vy: 0
-    }];
+    return [
+      {
+        url,
+        anchor,
+        target: { x: targetX, y: targetY },
+        x: targetX + (side === "right" ? 18 : -18),
+        y: targetY + (index % 2 === 0 ? -12 : 12),
+        vx: 0,
+        vy: 0,
+      },
+    ];
   });
 }
 
 function rectOverlapArea(rect: UniverseRect, other: UniverseRect): number {
-  const width = Math.max(0, Math.min(rect.right, other.right) - Math.max(rect.left, other.left));
-  const height = Math.max(0, Math.min(rect.bottom, other.bottom) - Math.max(rect.top, other.top));
+  const width = Math.max(
+    0,
+    Math.min(rect.right, other.right) - Math.max(rect.left, other.left),
+  );
+  const height = Math.max(
+    0,
+    Math.min(rect.bottom, other.bottom) - Math.max(rect.top, other.top),
+  );
   return width * height;
 }
 
@@ -1481,17 +1882,32 @@ function previewPosition(
   node: UniverseNode,
   nodes: Array<UniverseNode>,
   size: UniverseSize,
-  layout: UniverseLayout
+  layout: UniverseLayout,
 ): UniversePoint {
   const candidates = [
     { x: node.x + UNIVERSE_PREVIEW_GAP, y: node.y - size.height / 2 },
     { x: node.x + UNIVERSE_PREVIEW_GAP, y: node.y + UNIVERSE_PREVIEW_GAP },
-    { x: node.x + UNIVERSE_PREVIEW_GAP, y: node.y - size.height - UNIVERSE_PREVIEW_GAP },
-    { x: node.x - size.width - UNIVERSE_PREVIEW_GAP, y: node.y - size.height / 2 },
-    { x: node.x - size.width - UNIVERSE_PREVIEW_GAP, y: node.y + UNIVERSE_PREVIEW_GAP },
-    { x: node.x - size.width - UNIVERSE_PREVIEW_GAP, y: node.y - size.height - UNIVERSE_PREVIEW_GAP },
+    {
+      x: node.x + UNIVERSE_PREVIEW_GAP,
+      y: node.y - size.height - UNIVERSE_PREVIEW_GAP,
+    },
+    {
+      x: node.x - size.width - UNIVERSE_PREVIEW_GAP,
+      y: node.y - size.height / 2,
+    },
+    {
+      x: node.x - size.width - UNIVERSE_PREVIEW_GAP,
+      y: node.y + UNIVERSE_PREVIEW_GAP,
+    },
+    {
+      x: node.x - size.width - UNIVERSE_PREVIEW_GAP,
+      y: node.y - size.height - UNIVERSE_PREVIEW_GAP,
+    },
     { x: node.x - size.width / 2, y: node.y + UNIVERSE_PREVIEW_GAP },
-    { x: node.x - size.width / 2, y: node.y - size.height - UNIVERSE_PREVIEW_GAP }
+    {
+      x: node.x - size.width / 2,
+      y: node.y - size.height - UNIVERSE_PREVIEW_GAP,
+    },
   ];
   const nodeRects = nodes
     .filter((candidate) => candidate.url !== node.url)
@@ -1499,25 +1915,43 @@ function previewPosition(
       top: candidate.y - UNIVERSE_NODE_RADIUS,
       right: candidate.x + UNIVERSE_NODE_RADIUS,
       bottom: candidate.y + UNIVERSE_NODE_RADIUS,
-      left: candidate.x - UNIVERSE_NODE_RADIUS
+      left: candidate.x - UNIVERSE_NODE_RADIUS,
     }));
 
   return candidates
     .map((candidate) => {
-      const x = Math.max(16, Math.min(candidate.x, layout.width - size.width - 16));
+      const x = Math.max(
+        16,
+        Math.min(candidate.x, layout.width - size.width - 16),
+      );
       const y = Math.max(0, Math.min(candidate.y, layout.height - size.height));
-      const rect = { top: y, right: x + size.width, bottom: y + size.height, left: x };
-      const obstacleOverlap = layout.obstacles
-        .reduce((total, obstacle) => total + rectOverlapArea(rect, obstacle), 0);
-      const nodeOverlap = nodeRects
-        .reduce((total, nodeRect) => total + rectOverlapArea(rect, nodeRect), 0);
+      const rect = {
+        top: y,
+        right: x + size.width,
+        bottom: y + size.height,
+        left: x,
+      };
+      const obstacleOverlap = layout.obstacles.reduce(
+        (total, obstacle) => total + rectOverlapArea(rect, obstacle),
+        0,
+      );
+      const nodeOverlap = nodeRects.reduce(
+        (total, nodeRect) => total + rectOverlapArea(rect, nodeRect),
+        0,
+      );
       const overlap = obstacleOverlap + nodeOverlap * 1000;
       return { x, y, overlap };
     })
-    .reduce((best, candidate) => candidate.overlap < best.overlap ? candidate : best);
+    .reduce((best, candidate) =>
+      candidate.overlap < best.overlap ? candidate : best,
+    );
 }
 
-function editorEdgePoint(anchor: UniversePoint, node: UniversePoint, rect: UniverseRect): UniversePoint {
+function editorEdgePoint(
+  anchor: UniversePoint,
+  node: UniversePoint,
+  rect: UniverseRect,
+): UniversePoint {
   const dx = node.x - anchor.x;
   const dy = node.y - anchor.y;
   const candidates: Array<{ t: number; point: UniversePoint }> = [];
@@ -1541,11 +1975,14 @@ function editorEdgePoint(anchor: UniversePoint, node: UniversePoint, rect: Unive
 
   if (candidates.length === 0) return anchor;
   return candidates.reduce((nearest, candidate) =>
-    candidate.t < nearest.t ? candidate : nearest
+    candidate.t < nearest.t ? candidate : nearest,
   ).point;
 }
 
-function linkUnderlineAnchor(link: HTMLAnchorElement, workspaceRect: DOMRect): UniversePoint {
+function linkUnderlineAnchor(
+  link: HTMLAnchorElement,
+  workspaceRect: DOMRect,
+): UniversePoint {
   const textLength = link.textContent?.length || 0;
   const targetOffset = Math.floor(Math.max(0, textLength - 1) / 2);
   const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
@@ -1563,7 +2000,7 @@ function linkUnderlineAnchor(link: HTMLAnchorElement, workspaceRect: DOMRect): U
       if (rect.width > 0 || rect.height > 0) {
         return {
           x: rect.left - workspaceRect.left + rect.width / 2,
-          y: rect.bottom - workspaceRect.top - 1
+          y: rect.bottom - workspaceRect.top - 1,
         };
       }
     }
@@ -1574,34 +2011,40 @@ function linkUnderlineAnchor(link: HTMLAnchorElement, workspaceRect: DOMRect): U
   const rect = link.getBoundingClientRect();
   return {
     x: rect.left - workspaceRect.left + rect.width / 2,
-    y: rect.bottom - workspaceRect.top - 1
+    y: rect.bottom - workspaceRect.top - 1,
   };
 }
 
 export function topicSourceElement(
   editorRoot: HTMLElement,
   kind: LinkedPageGroup["kind"],
-  name: string
+  name: string,
 ): HTMLElement | null {
   if (kind === "url" && youtubeVideoId(name)) {
-    const player = Array.from(editorRoot.querySelectorAll<HTMLElement>("[data-youtube-player]"))
-      .find((candidate) => candidate.dataset.youtubePlayer === name);
+    const player = Array.from(
+      editorRoot.querySelectorAll<HTMLElement>("[data-youtube-player]"),
+    ).find((candidate) => candidate.dataset.youtubePlayer === name);
     if (player) return player;
   }
-  const href = kind === "url"
-    ? name
-    : new URL(`/${encodePageName(name)}`, window.location.origin).href;
-  const link = Array.from(editorRoot.querySelectorAll<HTMLAnchorElement>("a[href]"))
-    .find((candidate) => candidate.href === href);
+  const href =
+    kind === "url"
+      ? name
+      : new URL(`/${encodePageName(name)}`, window.location.origin).href;
+  const link = Array.from(
+    editorRoot.querySelectorAll<HTMLAnchorElement>("a[href]"),
+  ).find((candidate) => candidate.href === href);
   if (link) return link;
   return null;
 }
 
-function elementCenter(element: HTMLElement, workspaceRect: DOMRect): UniversePoint {
+function elementCenter(
+  element: HTMLElement,
+  workspaceRect: DOMRect,
+): UniversePoint {
   const rect = element.getBoundingClientRect();
   return {
     x: rect.left - workspaceRect.left + rect.width / 2,
-    y: rect.top - workspaceRect.top + rect.height / 2
+    y: rect.top - workspaceRect.top + rect.height / 2,
   };
 }
 
@@ -1612,7 +2055,7 @@ function Universe({
   editor,
   editorContentReady,
   enabled,
-  workspaceRef
+  workspaceRef,
 }: {
   urls: Array<string>;
   topics: Array<Pick<LinkedPageGroup, "kind" | "name">>;
@@ -1624,7 +2067,9 @@ function Universe({
 }) {
   const [nodes, setNodes] = useState<Array<UniverseNode>>([]);
   const [topicLines, setTopicLines] = useState<Array<UniverseTopicLine>>([]);
-  const [embeds, setEmbeds] = useState<Record<string, EmbedMetadata | null>>({});
+  const [embeds, setEmbeds] = useState<Record<string, EmbedMetadata | null>>(
+    {},
+  );
   const [failedEmbeds, setFailedEmbeds] = useState<Array<string>>([]);
   const [cardSizes, setCardSizes] = useState<Record<string, UniverseSize>>({});
   const [layout, setLayout] = useState<UniverseLayout | null>(null);
@@ -1636,17 +2081,27 @@ function Universe({
     if (!enabled) return;
 
     let active = true;
-    void Promise.all(urls.map(async (url) => {
-      try {
-        const metadata = await fetchJson<EmbedMetadata>(`/api/embed?${new URLSearchParams({ url }).toString()}`);
-        return { url, metadata };
-      } catch (_error) {
-        return { url, metadata: null };
-      }
-    })).then((results) => {
+    void Promise.all(
+      urls.map(async (url) => {
+        try {
+          const metadata = await fetchJson<EmbedMetadata>(
+            `/api/embed?${new URLSearchParams({ url }).toString()}`,
+          );
+          return { url, metadata };
+        } catch (_error) {
+          return { url, metadata: null };
+        }
+      }),
+    ).then((results) => {
       if (!active) return;
-      setEmbeds(Object.fromEntries(results.map(({ url, metadata }) => [url, metadata])));
-      setFailedEmbeds(results.filter(({ metadata }) => metadata === null).map(({ url }) => url));
+      setEmbeds(
+        Object.fromEntries(results.map(({ url, metadata }) => [url, metadata])),
+      );
+      setFailedEmbeds(
+        results
+          .filter(({ metadata }) => metadata === null)
+          .map(({ url }) => url),
+      );
     });
 
     return () => {
@@ -1660,17 +2115,23 @@ function Universe({
 
     const update = () => {
       const nextSizes = Object.fromEntries(
-        Array.from(measurements.querySelectorAll<HTMLElement>("[data-universe-card]"))
-          .map((element) => [element.dataset.universeCard || "", {
-            width: element.offsetWidth,
-            height: element.offsetHeight
-          }])
-          .filter(([url]) => url)
+        Array.from(
+          measurements.querySelectorAll<HTMLElement>("[data-universe-card]"),
+        )
+          .map((element) => [
+            element.dataset.universeCard || "",
+            {
+              width: element.offsetWidth,
+              height: element.offsetHeight,
+            },
+          ])
+          .filter(([url]) => url),
       );
       setCardSizes(nextSizes);
     };
     const observer = new ResizeObserver(update);
-    measurements.querySelectorAll<HTMLElement>("[data-universe-card]")
+    measurements
+      .querySelectorAll<HTMLElement>("[data-universe-card]")
       .forEach((element) => observer.observe(element));
     update();
     return () => observer.disconnect();
@@ -1681,13 +2142,20 @@ function Universe({
   }, []);
 
   const openPreview = useCallback((url: string) => {
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    if (closeTimerRef.current !== null)
+      window.clearTimeout(closeTimerRef.current);
     setActiveUrl(url);
   }, []);
 
   useLayoutEffect(() => {
     const workspace = workspaceRef.current;
-    if (!enabled || !editor || !editorContentReady || !workspace || (urls.length === 0 && topics.length === 0)) {
+    if (
+      !enabled ||
+      !editor ||
+      !editorContentReady ||
+      !workspace ||
+      (urls.length === 0 && topics.length === 0)
+    ) {
       setNodes([]);
       setTopicLines([]);
       setActiveUrl(null);
@@ -1703,56 +2171,80 @@ function Universe({
       window.cancelAnimationFrame(animationFrame);
       measureFrame = window.requestAnimationFrame(() => {
         const workspaceRect = workspace.getBoundingClientRect();
-        const editorShell = workspace.querySelector<HTMLElement>(".editor-shell");
+        const editorShell =
+          workspace.querySelector<HTMLElement>(".editor-shell");
         if (!editorShell) return;
 
         const anchors = new Map<string, UniversePoint>();
-        const links = Array.from(editor.view.dom.querySelectorAll<HTMLAnchorElement>("a[href]:not(.youtube-player__fallback)"));
+        const links = Array.from(
+          editor.view.dom.querySelectorAll<HTMLAnchorElement>(
+            "a[href]:not(.youtube-player__fallback)",
+          ),
+        );
         for (const url of urls) {
           const link = links.find((candidate) => candidate.href === url);
           if (!link) continue;
           const rect = link.getBoundingClientRect();
           anchors.set(url, {
             x: rect.left - workspaceRect.left + rect.width / 2,
-            y: rect.top - workspaceRect.top + rect.height / 2
+            y: rect.top - workspaceRect.top + rect.height / 2,
           });
         }
 
-        const obstacles = Array.from(workspace.querySelectorAll<HTMLElement>("[data-universe-obstacle]"))
-          .map((element) => relativeRect(element, workspaceRect, 20));
+        const obstacles = Array.from(
+          workspace.querySelectorAll<HTMLElement>("[data-universe-obstacle]"),
+        ).map((element) => relativeRect(element, workspaceRect, 20));
         const editorRect = relativeRect(editorShell, workspaceRect, 20);
         const focusRingClearance = editor.view.dom.matches(":focus-visible")
           ? EDITOR_FOCUS_RING_CLEARANCE
           : 0;
-        const glassRect = relativeRect(editorShell, workspaceRect, focusRingClearance);
+        const glassRect = relativeRect(
+          editorShell,
+          workspaceRect,
+          focusRingClearance,
+        );
         const width = workspace.clientWidth;
         const height = workspace.scrollHeight;
         setLayout({ editorRect: glassRect, obstacles, width, height });
-        setTopicLines((currentLines) => topics.flatMap(({ kind, name }) => {
-          const source = topicSourceElement(editor.view.dom, kind, name);
-          const topic = workspace.querySelector<HTMLElement>(`[data-universe-topic="${CSS.escape(name)}"]`);
-          if (!topic) return [];
-          if (!source) {
-            const currentLine = currentLines.find((line) => line.kind === kind && line.name === name);
-            return currentLine ? [currentLine] : [];
-          }
-          const anchor = source instanceof HTMLAnchorElement
-            ? linkUnderlineAnchor(source, workspaceRect)
-            : elementCenter(source, workspaceRect);
-          const topicRect = relativeRect(topic, workspaceRect);
-          const center = {
-            x: (topicRect.left + topicRect.right) / 2,
-            y: (topicRect.top + topicRect.bottom) / 2
-          };
-          return [{
-            name,
-            kind,
-            anchor,
-            start: editorEdgePoint(anchor, center, glassRect),
-            end: editorEdgePoint(center, anchor, topicRect)
-          }];
-        }));
-        const nextNodes = initialUniverseNodes(urls, anchors, editorRect, width);
+        setTopicLines((currentLines) =>
+          topics.flatMap(({ kind, name }) => {
+            const source = topicSourceElement(editor.view.dom, kind, name);
+            const topic = workspace.querySelector<HTMLElement>(
+              `[data-universe-topic="${CSS.escape(name)}"]`,
+            );
+            if (!topic) return [];
+            if (!source) {
+              const currentLine = currentLines.find(
+                (line) => line.kind === kind && line.name === name,
+              );
+              return currentLine ? [currentLine] : [];
+            }
+            const anchor =
+              source instanceof HTMLAnchorElement
+                ? linkUnderlineAnchor(source, workspaceRect)
+                : elementCenter(source, workspaceRect);
+            const topicRect = relativeRect(topic, workspaceRect);
+            const center = {
+              x: (topicRect.left + topicRect.right) / 2,
+              y: (topicRect.top + topicRect.bottom) / 2,
+            };
+            return [
+              {
+                name,
+                kind,
+                anchor,
+                start: editorEdgePoint(anchor, center, glassRect),
+                end: editorEdgePoint(center, anchor, topicRect),
+              },
+            ];
+          }),
+        );
+        const nextNodes = initialUniverseNodes(
+          urls,
+          anchors,
+          editorRect,
+          width,
+        );
 
         if (nextNodes.length === 0) {
           setNodes([]);
@@ -1772,7 +2264,8 @@ function Universe({
           tickUniverse(nextNodes, obstacles, width, height);
           setNodes(nextNodes.map((node) => ({ ...node })));
           iteration += 1;
-          if (iteration < 100) animationFrame = window.requestAnimationFrame(animate);
+          if (iteration < 100)
+            animationFrame = window.requestAnimationFrame(animate);
         };
         animate();
       });
@@ -1780,7 +2273,8 @@ function Universe({
 
     const observer = new ResizeObserver(measure);
     observer.observe(workspace);
-    workspace.querySelectorAll<HTMLElement>("[data-universe-obstacle]")
+    workspace
+      .querySelectorAll<HTMLElement>("[data-universe-obstacle]")
       .forEach((element) => observer.observe(element));
     editor.on("update", measure);
     editor.on("focus", measure);
@@ -1797,22 +2291,31 @@ function Universe({
     };
   }, [editor, editorContentReady, enabled, topics, urls, workspaceRef]);
 
-  useEffect(() => () => {
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null)
+        window.clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
 
   if (!enabled) return null;
 
   const activeNode = nodes.find((node) => node.url === activeUrl);
   const activeTopicLine = topicLines.find((line) => line.name === activeTopic);
-  const activeSize = activeNode ? cardSizes[activeNode.url] || { width: 256, height: 128 } : null;
-  const activePosition = activeNode && activeSize && layout
-    ? previewPosition(activeNode, nodes, activeSize, layout)
+  const activeSize = activeNode
+    ? cardSizes[activeNode.url] || { width: 256, height: 128 }
     : null;
-  const previewStyle = activePosition ? {
-    "--universe-preview-x": `${activePosition.x}px`,
-    "--universe-preview-y": `${activePosition.y}px`
-  } as CSSProperties : undefined;
+  const activePosition =
+    activeNode && activeSize && layout
+      ? previewPosition(activeNode, nodes, activeSize, layout)
+      : null;
+  const previewStyle = activePosition
+    ? ({
+        "--universe-preview-x": `${activePosition.x}px`,
+        "--universe-preview-y": `${activePosition.y}px`,
+      } as CSSProperties)
+    : undefined;
 
   return (
     <div className="universe" aria-label="ユニバース">
@@ -1820,12 +2323,29 @@ function Universe({
         <>
           <svg className="universe__graph" aria-hidden="true">
             {nodes.map((node) => {
-              const start = editorEdgePoint(node.anchor, node, layout.editorRect);
-              return <line className="universe__external-line" key={node.url} x1={start.x} y1={start.y} x2={node.x} y2={node.y} />;
+              const start = editorEdgePoint(
+                node.anchor,
+                node,
+                layout.editorRect,
+              );
+              return (
+                <line
+                  className="universe__external-line"
+                  key={node.url}
+                  x1={start.x}
+                  y1={start.y}
+                  x2={node.x}
+                  y2={node.y}
+                />
+              );
             })}
             {topicLines.map((line) => (
               <line
-                className={line.kind === "url" ? "universe__external-line" : "universe__internal-line"}
+                className={
+                  line.kind === "url"
+                    ? "universe__external-line"
+                    : "universe__internal-line"
+                }
                 key={`topic:${line.name}`}
                 x1={line.start.x}
                 y1={line.start.y}
@@ -1835,7 +2355,10 @@ function Universe({
             ))}
           </svg>
           {activeTopicLine && (
-            <svg className="universe__graph universe__graph--active" aria-hidden="true">
+            <svg
+              className="universe__graph universe__graph--active"
+              aria-hidden="true"
+            >
               <line
                 className={`${activeTopicLine.kind === "url" ? "universe__external-line" : "universe__internal-line"} universe__internal-line--active`}
                 x1={activeTopicLine.anchor.x}
@@ -1855,9 +2378,16 @@ function Universe({
             target="_blank"
             rel="noreferrer"
             aria-label={`${externalLinkLabel(node.url)}を開く`}
-            aria-describedby={activeUrl === node.url ? "universe-preview" : undefined}
+            aria-describedby={
+              activeUrl === node.url ? "universe-preview" : undefined
+            }
             key={node.url}
-            style={{ "--universe-x": `${node.x}px`, "--universe-y": `${node.y}px` } as CSSProperties}
+            style={
+              {
+                "--universe-x": `${node.x}px`,
+                "--universe-y": `${node.y}px`,
+              } as CSSProperties
+            }
             onMouseEnter={() => openPreview(node.url)}
             onMouseLeave={closePreview}
             onFocus={() => openPreview(node.url)}
@@ -1881,7 +2411,11 @@ function Universe({
           />
         </div>
       )}
-      <div className="universe__measurements" ref={measurementsRef} aria-hidden="true">
+      <div
+        className="universe__measurements"
+        ref={measurementsRef}
+        aria-hidden="true"
+      >
         {urls.map((url) => (
           <div data-universe-card={url} key={url}>
             <EmbedCard
@@ -1911,7 +2445,7 @@ function replaceYouTubeParagraphs(state: EditorState, nodeType: NodeType) {
     transaction.replaceWith(
       replacement.from,
       replacement.to,
-      nodeType.create({ url: replacement.url })
+      nodeType.create({ url: replacement.url }),
     );
   }
   return transaction;
@@ -1928,10 +2462,14 @@ const YouTubePlayer = TiptapNode.create({
   },
 
   parseHTML() {
-    return [{
-      tag: "div[data-youtube-player]",
-      getAttrs: (element) => ({ url: (element as HTMLElement).dataset.youtubePlayer || "" })
-    }];
+    return [
+      {
+        tag: "div[data-youtube-player]",
+        getAttrs: (element) => ({
+          url: (element as HTMLElement).dataset.youtubePlayer || "",
+        }),
+      },
+    ];
   },
 
   renderHTML({ node }) {
@@ -1942,32 +2480,49 @@ const YouTubePlayer = TiptapNode.create({
     return [
       "div",
       { class: "youtube-player", "data-youtube-player": url },
-      ["iframe", {
-        src: `https://www.youtube.com/embed/${videoId}?enablejsapi=1`,
-        "data-youtube-player-frame": "",
-        title: "YouTube動画",
-        loading: "lazy",
-        allow: "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture",
-        referrerpolicy: "strict-origin-when-cross-origin",
-        allowfullscreen: ""
-      }],
-      ["a", {
-        class: "youtube-player__fallback",
-        href: url,
-        target: "_blank",
-        rel: "noreferrer",
-        "aria-label": "YouTubeで動画を見る"
-      },
-      ["img", {
-        src: thumbnailUrl,
-        alt: "",
-        loading: "lazy",
-        "data-youtube-thumbnail-fallback": fallbackThumbnailUrl
-      }],
-      ["span", { class: "youtube-player__brand", "aria-hidden": "true" }, "YouTube"],
-      ["span", { class: "youtube-player__details" },
-        ["strong", {}, "YouTubeで見る"],
-        ["span", { class: "youtube-player__url" }, url]]]
+      [
+        "iframe",
+        {
+          src: `https://www.youtube.com/embed/${videoId}?enablejsapi=1`,
+          "data-youtube-player-frame": "",
+          title: "YouTube動画",
+          loading: "lazy",
+          allow:
+            "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture",
+          referrerpolicy: "strict-origin-when-cross-origin",
+          allowfullscreen: "",
+        },
+      ],
+      [
+        "a",
+        {
+          class: "youtube-player__fallback",
+          href: url,
+          target: "_blank",
+          rel: "noreferrer",
+          "aria-label": "YouTubeで動画を見る",
+        },
+        [
+          "img",
+          {
+            src: thumbnailUrl,
+            alt: "",
+            loading: "lazy",
+            "data-youtube-thumbnail-fallback": fallbackThumbnailUrl,
+          },
+        ],
+        [
+          "span",
+          { class: "youtube-player__brand", "aria-hidden": "true" },
+          "YouTube",
+        ],
+        [
+          "span",
+          { class: "youtube-player__details" },
+          ["strong", {}, "YouTubeで見る"],
+          ["span", { class: "youtube-player__url" }, url],
+        ],
+      ],
     ];
   },
 
@@ -1979,31 +2534,51 @@ const YouTubePlayer = TiptapNode.create({
   },
 
   addProseMirrorPlugins() {
-    return [new Plugin({
-      appendTransaction: (transactions, oldState, state) => {
-        if (transactions.some((transaction) => transaction.getMeta("youtubePlayerRawEditing"))) return null;
-        if (transactions.some((transaction) => transaction.selectionSet)) {
-          const selection = state.selection;
-          const enteredFromBefore = selection instanceof NodeSelection
-            && oldState.selection.to <= selection.from;
-          if (selection instanceof NodeSelection && selection.node.type === this.type) {
-            const url = selection.node.attrs.url;
-            if (typeof url === "string" && url.length > 0) {
-              const paragraph = state.schema.nodes.paragraph.create(null, state.schema.text(url));
-              const transaction = state.tr.replaceWith(selection.from, selection.to, paragraph);
-              return transaction
-                .setSelection(TextSelection.create(
-                  transaction.doc,
-                  selection.from + (enteredFromBefore ? 1 : url.length + 1)
-                ))
-                .setMeta("youtubePlayerRawEditing", true);
+    return [
+      new Plugin({
+        appendTransaction: (transactions, oldState, state) => {
+          if (
+            transactions.some((transaction) =>
+              transaction.getMeta("youtubePlayerRawEditing"),
+            )
+          )
+            return null;
+          if (transactions.some((transaction) => transaction.selectionSet)) {
+            const selection = state.selection;
+            const enteredFromBefore =
+              selection instanceof NodeSelection &&
+              oldState.selection.to <= selection.from;
+            if (
+              selection instanceof NodeSelection &&
+              selection.node.type === this.type
+            ) {
+              const url = selection.node.attrs.url;
+              if (typeof url === "string" && url.length > 0) {
+                const paragraph = state.schema.nodes.paragraph.create(
+                  null,
+                  state.schema.text(url),
+                );
+                const transaction = state.tr.replaceWith(
+                  selection.from,
+                  selection.to,
+                  paragraph,
+                );
+                return transaction
+                  .setSelection(
+                    TextSelection.create(
+                      transaction.doc,
+                      selection.from + (enteredFromBefore ? 1 : url.length + 1),
+                    ),
+                  )
+                  .setMeta("youtubePlayerRawEditing", true);
+              }
             }
           }
-        }
-        return replaceYouTubeParagraphs(state, this.type);
-      }
-    })];
-  }
+          return replaceYouTubeParagraphs(state, this.type);
+        },
+      }),
+    ];
+  },
 });
 
 export const EDITOR_EXTENSIONS = [
@@ -2016,14 +2591,14 @@ export const EDITOR_EXTENSIONS = [
       autolink: false,
       linkOnPaste: false,
       HTMLAttributes: {
-        target: "_self"
-      }
-    }
+        target: "_self",
+      },
+    },
   }),
   WikiLinks,
   Image.configure({ allowBase64: false }),
   YouTubePlayer,
-  Markdown.configure({ indentation: { style: "space", size: 2 } })
+  Markdown.configure({ indentation: { style: "space", size: 2 } }),
 ];
 
 function isJsonObject(value: unknown): value is JsonObject {
@@ -2041,40 +2616,49 @@ function initialDraft(bootstrap: EditorBootstrap): EditorDraft {
     coverMode: bootstrap.cover_mode || "auto",
     coverImageUrl: bootstrap.cover_image_url || null,
     resolvedCoverImageUrl: bootstrap.resolved_cover_image_url || null,
-    expectedUpdatedAt: bootstrap.expected_updated_at
+    expectedUpdatedAt: bootstrap.expected_updated_at,
   };
 }
 
-export function editorDocumentTitle(title: string, environment?: string): string {
+export function editorDocumentTitle(
+  title: string,
+  environment?: string,
+): string {
   const pageTitle = title ? `${title} : weblog.ason.as` : "weblog.ason.as";
   return environment === "development" ? `[dev] ${pageTitle}` : pageTitle;
 }
 
 function editorDocument(title: string, body: string): string {
-  return [title, markdownForEditor(body)].filter((part) => part.length > 0).join("\n\n");
+  return [title, markdownForEditor(body)]
+    .filter((part) => part.length > 0)
+    .join("\n\n");
 }
 
-export function replaceEditorContentPreservingSelection(editor: Editor, content: string): void {
+export function replaceEditorContentPreservingSelection(
+  editor: Editor,
+  content: string,
+): void {
   const { anchor, head } = editor.state.selection;
   editor.commands.setContent(content, {
     contentType: "markdown",
-    emitUpdate: false
+    emitUpdate: false,
   });
 
   const resolvePosition = (position: number) =>
     editor.state.doc.resolve(Math.min(position, editor.state.doc.content.size));
-  const transaction = editor.state.tr.setSelection(TextSelection.between(
-    resolvePosition(anchor),
-    resolvePosition(head)
-  ));
+  const transaction = editor.state.tr.setSelection(
+    TextSelection.between(resolvePosition(anchor), resolvePosition(head)),
+  );
   editor.view.dispatch(transaction);
 }
 
-function splitEditorDocument(markdown: string): Pick<EditorDraft, "title" | "body"> {
+function splitEditorDocument(
+  markdown: string,
+): Pick<EditorDraft, "title" | "body"> {
   const [title = "", ...bodyLines] = markdownForSource(markdown).split("\n");
   return {
     title: title.trim(),
-    body: bodyLines.join("\n").replace(/^\n+/, "")
+    body: bodyLines.join("\n").replace(/^\n+/, ""),
   };
 }
 
@@ -2083,21 +2667,30 @@ export function ensureBodySelection(editor: Editor): void {
   if (!title || editor.state.selection.from > title.nodeSize) return;
 
   const bodyStart = title.nodeSize;
-  const transaction = editor.state.tr.insert(bodyStart, editor.schema.nodes.paragraph.create());
-  transaction.setSelection(TextSelection.create(transaction.doc, bodyStart + 1));
+  const transaction = editor.state.tr.insert(
+    bodyStart,
+    editor.schema.nodes.paragraph.create(),
+  );
+  transaction.setSelection(
+    TextSelection.create(transaction.doc, bodyStart + 1),
+  );
   editor.view.dispatch(transaction);
 }
 
-async function requestJson<T>(url: string, payload: JsonObject, method: HttpMethod = "POST"): Promise<T> {
+async function requestJson<T>(
+  url: string,
+  payload: JsonObject,
+  method: HttpMethod = "POST",
+): Promise<T> {
   const csrfToken = document.documentElement.dataset.csrfToken;
   const response = await fetch(url, {
     method,
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {})
+      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 
   let raw: unknown;
@@ -2109,7 +2702,11 @@ async function requestJson<T>(url: string, payload: JsonObject, method: HttpMeth
 
   if (!response.ok) {
     const result = isJsonObject(raw) ? raw : {};
-    const error = new Error(typeof result.error === "string" ? result.error : "操作を完了できませんでした") as ApiError;
+    const error = new Error(
+      typeof result.error === "string"
+        ? result.error
+        : "操作を完了できませんでした",
+    ) as ApiError;
     if (isJsonObject(result.errors)) {
       error.fields = result.errors as Record<string, string[]>;
     }
@@ -2120,7 +2717,9 @@ async function requestJson<T>(url: string, payload: JsonObject, method: HttpMeth
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
+  });
   let raw: unknown;
   try {
     raw = await response.json();
@@ -2130,7 +2729,11 @@ async function fetchJson<T>(url: string): Promise<T> {
 
   if (!response.ok) {
     const result = isJsonObject(raw) ? raw : {};
-    throw new Error(typeof result.error === "string" ? result.error : "操作を完了できませんでした");
+    throw new Error(
+      typeof result.error === "string"
+        ? result.error
+        : "操作を完了できませんでした",
+    );
   }
 
   return raw as T;
@@ -2138,17 +2741,17 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 async function fetchPageIfChanged(
   pageId: string,
-  etag: string | null
+  etag: string | null,
 ): Promise<{ page: PageResponse | null; etag: string | null }> {
   const response = await fetch(`/api/pages/${encodeURIComponent(pageId)}`, {
     headers: {
       Accept: "application/json",
-      ...(etag ? { "If-None-Match": etag } : {})
-    }
+      ...(etag ? { "If-None-Match": etag } : {}),
+    },
   });
   if (response.status === 304) return { page: null, etag };
 
-  const page = await response.json() as PageResponse;
+  const page = (await response.json()) as PageResponse;
   if (!response.ok) throw new Error("ページを同期できませんでした");
 
   return { page, etag: response.headers.get("etag") };
@@ -2158,12 +2761,16 @@ async function uploadImage(file: File, inboxDate?: string): Promise<string> {
   const upload = await requestJson<UploadResponse>("/api/uploads", {
     content_type: file.type,
     size: file.size,
-    ...(inboxDate ? { inbox_date: inboxDate } : {})
+    ...(inboxDate ? { inbox_date: inboxDate } : {}),
   });
   const form = new FormData();
-  for (const [key, value] of Object.entries(upload.fields)) form.append(key, value);
+  for (const [key, value] of Object.entries(upload.fields))
+    form.append(key, value);
   form.append("file", file);
-  const response = await fetch(upload.upload_url, { method: "POST", body: form });
+  const response = await fetch(upload.upload_url, {
+    method: "POST",
+    body: form,
+  });
   if (!response.ok) throw new Error("画像をS3へ送信できませんでした");
   return upload.public_url;
 }
@@ -2174,15 +2781,19 @@ function statusMessage(page: PageResponse): string {
 
 export function AuthoringEditor({
   bootstrap,
-  canEdit = document.documentElement.dataset.canEdit === "true"
+  canEdit = document.documentElement.dataset.canEdit === "true",
 }: {
   bootstrap: EditorBootstrap;
   canEdit?: boolean;
 }) {
-  const [draft, setDraft] = useState<EditorDraft>(() => initialDraft(bootstrap));
+  const [draft, setDraft] = useState<EditorDraft>(() =>
+    initialDraft(bootstrap),
+  );
   const [editorContentReady, setEditorContentReady] = useState(false);
   const [status, setStatus] = useState(bootstrap.save_message);
-  const [lineUpdatedAt, setLineUpdatedAt] = useState(bootstrap.line_updated_at || []);
+  const [lineUpdatedAt, setLineUpdatedAt] = useState(
+    bootstrap.line_updated_at || [],
+  );
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -2190,16 +2801,22 @@ export function AuthoringEditor({
   const [imageUploadStatus, setImageUploadStatus] = useState("");
   const [materialStatus, setMaterialStatus] = useState("");
   const [inboxItems, setInboxItems] = useState<Array<InboxItem>>([]);
-  const [activeMaterialTab, setActiveMaterialTab] = useState<MaterialTab>("photo");
+  const [activeMaterialTab, setActiveMaterialTab] =
+    useState<MaterialTab>("photo");
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [syncingInbox, setSyncingInbox] = useState(false);
   const [linkedPages, setLinkedPages] = useState(bootstrap.linked_pages || []);
-  const [linkedPagesHasMore, setLinkedPagesHasMore] = useState(bootstrap.linked_pages_has_more || false);
+  const [linkedPagesHasMore, setLinkedPagesHasMore] = useState(
+    bootstrap.linked_pages_has_more || false,
+  );
   const [loadingLinkedPages, setLoadingLinkedPages] = useState(false);
   const [linkedPagesError, setLinkedPagesError] = useState("");
-  const [activeUniverseTopic, setActiveUniverseTopic] = useState<string | null>(null);
+  const [activeUniverseTopic, setActiveUniverseTopic] = useState<string | null>(
+    null,
+  );
   const [wikiLinkNames, setWikiLinkNames] = useState<Array<string>>([]);
-  const [wikiLinkQueryState, setWikiLinkQueryState] = useState<WikiLinkQuery | null>(null);
+  const [wikiLinkQueryState, setWikiLinkQueryState] =
+    useState<WikiLinkQuery | null>(null);
   const [activeWikiLinkSuggestion, setActiveWikiLinkSuggestion] = useState(0);
   const draftRef = useRef(draft);
   const dirtyRef = useRef(false);
@@ -2217,10 +2834,15 @@ export function AuthoringEditor({
   const consumedInboxItemIdsRef = useRef<Array<string>>([]);
 
   useEffect(() => {
-    document.title = editorDocumentTitle(draft.title, document.documentElement.dataset.environment);
+    document.title = editorDocumentTitle(
+      draft.title,
+      document.documentElement.dataset.environment,
+    );
   }, [draft.title]);
   useEffect(() => {
-    document.documentElement.dataset.view = canEdit ? "article-editing" : "reading";
+    document.documentElement.dataset.view = canEdit
+      ? "article-editing"
+      : "reading";
     return () => {
       delete document.documentElement.dataset.view;
     };
@@ -2230,23 +2852,26 @@ export function AuthoringEditor({
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const isUnpersistedRouteRef = useRef(
     !bootstrap.page_id &&
-    bootstrap.title.length > 0 &&
-    window.location.pathname !== "/" &&
-    window.location.pathname !== "/editor/new"
+      bootstrap.title.length > 0 &&
+      window.location.pathname !== "/" &&
+      window.location.pathname !== "/editor/new",
   );
 
-  const handleEditorContentRef = useCallback((element: HTMLDivElement | null) => {
-    if (editorContentReadyFrameRef.current !== null) {
-      window.cancelAnimationFrame(editorContentReadyFrameRef.current);
-    }
-    if (!element) {
-      setEditorContentReady(false);
-      return;
-    }
-    editorContentReadyFrameRef.current = window.requestAnimationFrame(() => {
-      setEditorContentReady(true);
-    });
-  }, []);
+  const handleEditorContentRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (editorContentReadyFrameRef.current !== null) {
+        window.cancelAnimationFrame(editorContentReadyFrameRef.current);
+      }
+      if (!element) {
+        setEditorContentReady(false);
+        return;
+      }
+      editorContentReadyFrameRef.current = window.requestAnimationFrame(() => {
+        setEditorContentReady(true);
+      });
+    },
+    [],
+  );
 
   const updateDraft = useCallback((changes: Partial<EditorDraft>) => {
     const next = { ...draftRef.current, ...changes };
@@ -2283,18 +2908,22 @@ export function AuthoringEditor({
       const endpoint = snapshot.pageId
         ? `/api/authoring/pages/${encodeURIComponent(snapshot.pageId)}`
         : "/api/authoring/pages";
-      const page = await requestJson<PageResponse>(endpoint, {
-        page_id: snapshot.pageId,
-        page_type: snapshot.pageType,
-        date: snapshot.date,
-        name: snapshot.name || undefined,
-        title: snapshot.title || undefined,
-        body: snapshot.body,
-        cover_mode: snapshot.coverMode,
-        cover_image_url: snapshot.coverImageUrl,
-        expected_updated_at: snapshot.expectedUpdatedAt || undefined,
-        consumed_inbox_item_ids: consumedInboxItemIds
-      }, snapshot.pageId ? "PATCH" : "POST");
+      const page = await requestJson<PageResponse>(
+        endpoint,
+        {
+          page_id: snapshot.pageId,
+          page_type: snapshot.pageType,
+          date: snapshot.date,
+          name: snapshot.name || undefined,
+          title: snapshot.title || undefined,
+          body: snapshot.body,
+          cover_mode: snapshot.coverMode,
+          cover_image_url: snapshot.coverImageUrl,
+          expected_updated_at: snapshot.expectedUpdatedAt || undefined,
+          consumed_inbox_item_ids: consumedInboxItemIds,
+        },
+        snapshot.pageId ? "PATCH" : "POST",
+      );
       const current = draftRef.current;
       const next = {
         ...current,
@@ -2304,8 +2933,9 @@ export function AuthoringEditor({
         name: page.name || current.name,
         coverMode: page.cover_mode || current.coverMode,
         coverImageUrl: page.cover_image_url ?? current.coverImageUrl,
-        resolvedCoverImageUrl: page.resolved_cover_image_url ?? current.resolvedCoverImageUrl,
-        expectedUpdatedAt: page.updated_at || ""
+        resolvedCoverImageUrl:
+          page.resolved_cover_image_url ?? current.resolvedCoverImageUrl,
+        expectedUpdatedAt: page.updated_at || "",
       };
       draftRef.current = next;
       setDraft(next);
@@ -2315,15 +2945,20 @@ export function AuthoringEditor({
       savedBodyRef.current = snapshot.body;
       setLineUpdatedAt(page.line_updated_at || []);
       if (!snapshot.pageId) {
-        window.history.pushState(null, "", `/${encodePageName(page.route || page.name || next.title)}`);
+        window.history.pushState(
+          null,
+          "",
+          `/${encodePageName(page.route || page.name || next.title)}`,
+        );
       }
       setErrors({});
       consumedInboxItemIdsRef.current = consumedInboxItemIdsRef.current.filter(
-        (itemId) => !consumedInboxItemIds.includes(itemId)
+        (itemId) => !consumedInboxItemIds.includes(itemId),
       );
       setStatus(statusMessage(page));
       setDirtyState(editVersionRef.current !== savedVersion);
-      if (editVersionRef.current !== savedVersion) pendingSaveRef.current = true;
+      if (editVersionRef.current !== savedVersion)
+        pendingSaveRef.current = true;
     } catch (error) {
       const apiError = error as ApiError;
       const nextErrors = apiError.fields || { form: [apiError.message] };
@@ -2341,106 +2976,135 @@ export function AuthoringEditor({
   }, [setDirtyState]);
 
   const scheduleSave = useCallback(() => {
-    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    if (saveTimerRef.current !== null)
+      window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null;
       void savePage();
     }, 300);
   }, [savePage]);
 
-  const updateCover = useCallback((
-    coverMode: EditorDraft["coverMode"],
-    coverImageUrl: string | null,
-    resolvedCoverImageUrl: string | null
-  ) => {
-    updateDraft({ coverMode, coverImageUrl, resolvedCoverImageUrl });
-    editVersionRef.current += 1;
-    setErrors({});
-    setDirtyState(true);
-    scheduleSave();
-  }, [scheduleSave, setDirtyState, updateDraft]);
-
-  const handleDocumentChange = useCallback((markdown: string, hasBodyBlock: boolean) => {
-    if (!canEdit) return;
-    const next = updateDraft(splitEditorDocument(markdown));
-    editVersionRef.current += 1;
-    setErrors({});
-    setDirtyState(true);
-    const isRenaming = next.pageId && next.pageType === "named" && next.title !== savedNameRef.current;
-    if (isUnpersistedRouteRef.current && !next.body.trim()) return;
-    if (!isRenaming && (next.pageId || (next.title && hasBodyBlock))) scheduleSave();
-  }, [canEdit, scheduleSave, setDirtyState, updateDraft]);
-
-  const handleEditorBlur = useCallback(async (currentEditor: Editor) => {
-    if (!canEdit) return;
-    const current = draftRef.current;
-    if (!current.pageId) {
-      if (current.title.trim()) void savePage();
-      return;
-    }
-    if (current.pageType !== "named" || current.title === savedNameRef.current) {
-      if (dirtyRef.current) void savePage();
-      return;
-    }
-    if (savingRef.current) {
-      window.setTimeout(() => void handleEditorBlur(currentEditor), 50);
-      return;
-    }
-
-    const previousName = savedNameRef.current;
-    if (!current.title.trim() || !window.confirm(`タイトルを「${previousName}」から「${current.title}」へ変更しますか？`)) {
-      updateDraft({ title: previousName });
-      currentEditor.commands.setContent(editorDocument(previousName, current.body), {
-        contentType: "markdown",
-        emitUpdate: false
-      });
-      scheduleSave();
-      return;
-    }
-
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    const savedVersion = editVersionRef.current;
-    savingRef.current = true;
-    setSaving(true);
-    setStatus("変更中…");
-
-    try {
-      const page = await requestJson<PageResponse>("/api/rename", {
-        page_id: current.pageId,
-        name: current.title,
-        body: current.body,
-        expected_updated_at: current.expectedUpdatedAt || undefined
-      });
-      const nextName = page.name || current.title;
-      const next = updateDraft({
-        name: nextName,
-        title: nextName,
-        expectedUpdatedAt: page.updated_at || ""
-      });
-      savedNameRef.current = nextName;
-      setLinkedPages(page.linked_pages || []);
-      setLinkedPagesHasMore(page.linked_pages_has_more || false);
-      currentEditor.commands.setContent(editorDocument(nextName, next.body), {
-        contentType: "markdown",
-        emitUpdate: false
-      });
-      window.history.replaceState(null, "", `/${encodePageName(page.route || page.name || next.title)}`);
+  const updateCover = useCallback(
+    (
+      coverMode: EditorDraft["coverMode"],
+      coverImageUrl: string | null,
+      resolvedCoverImageUrl: string | null,
+    ) => {
+      updateDraft({ coverMode, coverImageUrl, resolvedCoverImageUrl });
+      editVersionRef.current += 1;
       setErrors({});
-      setStatus(statusMessage(page));
-      setDirtyState(editVersionRef.current !== savedVersion);
-    } catch (error) {
-      const apiError = error as ApiError;
-      setErrors(apiError.fields || { title: [apiError.message] });
-      setStatus(apiError.message);
       setDirtyState(true);
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-    }
-  }, [canEdit, savePage, scheduleSave, setDirtyState, updateDraft]);
+      scheduleSave();
+    },
+    [scheduleSave, setDirtyState, updateDraft],
+  );
+
+  const handleDocumentChange = useCallback(
+    (markdown: string, hasBodyBlock: boolean) => {
+      if (!canEdit) return;
+      const next = updateDraft(splitEditorDocument(markdown));
+      editVersionRef.current += 1;
+      setErrors({});
+      setDirtyState(true);
+      const isRenaming =
+        next.pageId &&
+        next.pageType === "named" &&
+        next.title !== savedNameRef.current;
+      if (isUnpersistedRouteRef.current && !next.body.trim()) return;
+      if (!isRenaming && (next.pageId || (next.title && hasBodyBlock)))
+        scheduleSave();
+    },
+    [canEdit, scheduleSave, setDirtyState, updateDraft],
+  );
+
+  const handleEditorBlur = useCallback(
+    async (currentEditor: Editor) => {
+      if (!canEdit) return;
+      const current = draftRef.current;
+      if (!current.pageId) {
+        if (current.title.trim()) void savePage();
+        return;
+      }
+      if (
+        current.pageType !== "named" ||
+        current.title === savedNameRef.current
+      ) {
+        if (dirtyRef.current) void savePage();
+        return;
+      }
+      if (savingRef.current) {
+        window.setTimeout(() => void handleEditorBlur(currentEditor), 50);
+        return;
+      }
+
+      const previousName = savedNameRef.current;
+      if (
+        !current.title.trim() ||
+        !window.confirm(
+          `タイトルを「${previousName}」から「${current.title}」へ変更しますか？`,
+        )
+      ) {
+        updateDraft({ title: previousName });
+        currentEditor.commands.setContent(
+          editorDocument(previousName, current.body),
+          {
+            contentType: "markdown",
+            emitUpdate: false,
+          },
+        );
+        scheduleSave();
+        return;
+      }
+
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      const savedVersion = editVersionRef.current;
+      savingRef.current = true;
+      setSaving(true);
+      setStatus("変更中…");
+
+      try {
+        const page = await requestJson<PageResponse>("/api/rename", {
+          page_id: current.pageId,
+          name: current.title,
+          body: current.body,
+          expected_updated_at: current.expectedUpdatedAt || undefined,
+        });
+        const nextName = page.name || current.title;
+        const next = updateDraft({
+          name: nextName,
+          title: nextName,
+          expectedUpdatedAt: page.updated_at || "",
+        });
+        savedNameRef.current = nextName;
+        setLinkedPages(page.linked_pages || []);
+        setLinkedPagesHasMore(page.linked_pages_has_more || false);
+        currentEditor.commands.setContent(editorDocument(nextName, next.body), {
+          contentType: "markdown",
+          emitUpdate: false,
+        });
+        window.history.replaceState(
+          null,
+          "",
+          `/${encodePageName(page.route || page.name || next.title)}`,
+        );
+        setErrors({});
+        setStatus(statusMessage(page));
+        setDirtyState(editVersionRef.current !== savedVersion);
+      } catch (error) {
+        const apiError = error as ApiError;
+        setErrors(apiError.fields || { title: [apiError.message] });
+        setStatus(apiError.message);
+        setDirtyState(true);
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
+      }
+    },
+    [canEdit, savePage, scheduleSave, setDirtyState, updateDraft],
+  );
 
   const loadMoreLinkedPages = useCallback(async () => {
     if (!linkedPagesHasMore || loadingLinkedPagesRef.current) return;
@@ -2451,11 +3115,17 @@ export function AuthoringEditor({
     loadingLinkedPagesRef.current = true;
     setLoadingLinkedPages(true);
     setLinkedPagesError("");
-    const query = new URLSearchParams({ route, offset: String(linkedPages.length) });
-    if (draftRef.current.pageId) query.set("excluding_id", draftRef.current.pageId);
+    const query = new URLSearchParams({
+      route,
+      offset: String(linkedPages.length),
+    });
+    if (draftRef.current.pageId)
+      query.set("excluding_id", draftRef.current.pageId);
 
     try {
-      const result = await fetchJson<RelatedPagesResponse>(`/api/related?${query.toString()}`);
+      const result = await fetchJson<RelatedPagesResponse>(
+        `/api/related?${query.toString()}`,
+      );
       setLinkedPages((current) => [...current, ...result.pages]);
       setLinkedPagesHasMore(result.has_more);
     } catch (error) {
@@ -2467,16 +3137,21 @@ export function AuthoringEditor({
   }, [linkedPages.length, linkedPagesHasMore]);
 
   useEffect(() => {
-    if (linkedPages.length === 0 && linkedPagesHasMore) void loadMoreLinkedPages();
+    if (linkedPages.length === 0 && linkedPagesHasMore)
+      void loadMoreLinkedPages();
   }, [linkedPages.length, linkedPagesHasMore, loadMoreLinkedPages]);
 
   useEffect(() => {
     const sentinel = linkedPagesSentinelRef.current;
     if (!sentinel || !linkedPagesHasMore) return;
 
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadMoreLinkedPages();
-    }, { rootMargin: "320px 0px" });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting))
+          void loadMoreLinkedPages();
+      },
+      { rootMargin: "320px 0px" },
+    );
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [linkedPagesHasMore, loadMoreLinkedPages]);
@@ -2490,11 +3165,14 @@ export function AuthoringEditor({
       attributes: {
         role: "textbox",
         "aria-multiline": "true",
-        "aria-label": "記事"
-      }
+        "aria-label": "記事",
+      },
     },
     onUpdate: ({ editor: currentEditor }) => {
-      handleDocumentChange(currentEditor.getMarkdown(), currentEditor.state.doc.childCount > 1);
+      handleDocumentChange(
+        currentEditor.getMarkdown(),
+        currentEditor.state.doc.childCount > 1,
+      );
     },
     onTransaction: ({ editor: currentEditor }) => {
       setWikiLinkQueryState(wikiLinkQuery(currentEditor));
@@ -2502,7 +3180,7 @@ export function AuthoringEditor({
     },
     onBlur: ({ editor: currentEditor }) => {
       void handleEditorBlur(currentEditor);
-    }
+    },
   });
 
   useEffect(() => {
@@ -2511,8 +3189,11 @@ export function AuthoringEditor({
   }, [editor]);
 
   const wikiLinkSuggestions = useMemo(
-    () => wikiLinkQueryState ? matchingWikiLinkNames(wikiLinkNames, wikiLinkQueryState.value) : [],
-    [wikiLinkNames, wikiLinkQueryState]
+    () =>
+      wikiLinkQueryState
+        ? matchingWikiLinkNames(wikiLinkNames, wikiLinkQueryState.value)
+        : [],
+    [wikiLinkNames, wikiLinkQueryState],
   );
 
   useEffect(() => {
@@ -2522,55 +3203,84 @@ export function AuthoringEditor({
       .catch(() => setWikiLinkNames([]));
   }, [editor?.isEditable]);
 
-  const acceptWikiLinkSuggestion = useCallback((name: string) => {
-    if (!editor || !wikiLinkQueryState) return;
-    editor.chain()
-      .focus()
-      .insertContentAt({ from: wikiLinkQueryState.from, to: wikiLinkQueryState.to }, `${name}]]`)
-      .run();
-    setWikiLinkQueryState(null);
-  }, [editor, wikiLinkQueryState]);
+  const acceptWikiLinkSuggestion = useCallback(
+    (name: string) => {
+      if (!editor || !wikiLinkQueryState) return;
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(
+          { from: wikiLinkQueryState.from, to: wikiLinkQueryState.to },
+          `${name}]]`,
+        )
+        .run();
+      setWikiLinkQueryState(null);
+    },
+    [editor, wikiLinkQueryState],
+  );
 
   useEffect(() => {
     if (!editor || wikiLinkSuggestions.length === 0) return;
     editor.view.dom.setAttribute("aria-controls", "wiki-link-suggestions");
-    editor.view.dom.setAttribute("aria-activedescendant", `wiki-link-suggestion-${activeWikiLinkSuggestion}`);
+    editor.view.dom.setAttribute(
+      "aria-activedescendant",
+      `wiki-link-suggestion-${activeWikiLinkSuggestion}`,
+    );
     return () => {
       editor.view.dom.removeAttribute("aria-controls");
       editor.view.dom.removeAttribute("aria-activedescendant");
     };
   }, [activeWikiLinkSuggestion, editor, wikiLinkSuggestions.length]);
 
-  const handleWikiLinkSuggestionKeyDown = useCallback((event: ReactKeyboardEvent) => {
-    if (wikiLinkSuggestions.length === 0) return;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setWikiLinkQueryState(null);
-    } else if (event.key === "Enter") {
-      event.preventDefault();
-      acceptWikiLinkSuggestion(wikiLinkSuggestions[activeWikiLinkSuggestion]);
-    } else if (event.key === "Tab" || event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      const backwards = event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey);
-      setActiveWikiLinkSuggestion((current) =>
-        nextWikiLinkSuggestionIndex(current, wikiLinkSuggestions.length, backwards)
-      );
-    }
-  }, [acceptWikiLinkSuggestion, activeWikiLinkSuggestion, wikiLinkSuggestions]);
+  const handleWikiLinkSuggestionKeyDown = useCallback(
+    (event: ReactKeyboardEvent) => {
+      if (wikiLinkSuggestions.length === 0) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setWikiLinkQueryState(null);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        acceptWikiLinkSuggestion(wikiLinkSuggestions[activeWikiLinkSuggestion]);
+      } else if (
+        event.key === "Tab" ||
+        event.key === "ArrowDown" ||
+        event.key === "ArrowUp"
+      ) {
+        event.preventDefault();
+        const backwards =
+          event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey);
+        setActiveWikiLinkSuggestion((current) =>
+          nextWikiLinkSuggestionIndex(
+            current,
+            wikiLinkSuggestions.length,
+            backwards,
+          ),
+        );
+      }
+    },
+    [acceptWikiLinkSuggestion, activeWikiLinkSuggestion, wikiLinkSuggestions],
+  );
 
   const wikiLinkSuggestionStyle = useMemo(() => {
-    if (!editor || !wikiLinkQueryState || wikiLinkSuggestions.length === 0 || !workspaceRef.current) return undefined;
+    if (
+      !editor ||
+      !wikiLinkQueryState ||
+      wikiLinkSuggestions.length === 0 ||
+      !workspaceRef.current
+    )
+      return undefined;
     const caret = editor.view.coordsAtPos(wikiLinkQueryState.to);
     const workspace = workspaceRef.current.getBoundingClientRect();
     return {
       left: caret.left - workspace.left,
-      top: caret.top - workspace.top
+      top: caret.top - workspace.top,
     } satisfies CSSProperties;
   }, [editor, wikiLinkQueryState, wikiLinkSuggestions.length]);
 
   const refreshPage = useCallback(async () => {
     const pageId = draftRef.current.pageId;
-    if (!editor || !pageId || document.hidden || refreshingPageRef.current) return;
+    if (!editor || !pageId || document.hidden || refreshingPageRef.current)
+      return;
 
     refreshingPageRef.current = true;
     try {
@@ -2586,7 +3296,7 @@ export function AuthoringEditor({
         if (contentChanged) {
           setErrors((currentErrors) => ({
             ...currentErrors,
-            form: ["ページが別の編集で更新されています"]
+            form: ["ページが別の編集で更新されています"],
           }));
         }
         return;
@@ -2603,12 +3313,20 @@ export function AuthoringEditor({
           expectedUpdatedAt: page.updated_at || "",
           coverMode: page.cover_mode || current.coverMode,
           coverImageUrl: page.cover_image_url ?? current.coverImageUrl,
-          resolvedCoverImageUrl: page.resolved_cover_image_url ?? current.resolvedCoverImageUrl
+          resolvedCoverImageUrl:
+            page.resolved_cover_image_url ?? current.resolvedCoverImageUrl,
         });
         savedBodyRef.current = page.body;
         savedNameRef.current = page.name || title;
-        replaceEditorContentPreservingSelection(editor, editorDocument(title, page.body));
-        window.history.replaceState(null, "", `/${encodePageName(page.route || page.name || current.title)}`);
+        replaceEditorContentPreservingSelection(
+          editor,
+          editorDocument(title, page.body),
+        );
+        window.history.replaceState(
+          null,
+          "",
+          `/${encodePageName(page.route || page.name || current.title)}`,
+        );
         setStatus(statusMessage(page));
       }
       setLinkedPages(page.linked_pages || []);
@@ -2632,7 +3350,10 @@ export function AuthoringEditor({
       stop();
       if (document.hidden) return;
       void refreshPage();
-      interval = window.setInterval(() => void refreshPage(), PAGE_REFRESH_INTERVAL);
+      interval = window.setInterval(
+        () => void refreshPage(),
+        PAGE_REFRESH_INTERVAL,
+      );
     };
     const handleVisibilityChange = () => start();
 
@@ -2644,40 +3365,46 @@ export function AuthoringEditor({
     };
   }, [editor, refreshPage]);
 
-  const handleImageFiles = useCallback(async (files: Array<File>) => {
-    if (!editor || files.length === 0 || uploadingImages) return;
-    if (!draftRef.current.title.trim()) {
-      const message = "先にタイトルを入力してください";
-      setStatus(message);
-      setImageUploadStatus(message);
-      editor.commands.focus("start");
-      return;
-    }
-    setUploadingImages(true);
-    setImageUploadStatus("画像を処理中…");
-    setStatus("画像を処理中…");
-    try {
-      for (const [index, source] of files.entries()) {
-        setStatus(`画像を処理中… ${index + 1}/${files.length}`);
-        setImageUploadStatus(`画像を処理中… ${index + 1}/${files.length}`);
-        const { prepareImage } = await import("./imageUpload");
-        const prepared = await prepareImage(source);
-        setStatus(`画像をアップロード中… ${index + 1}/${files.length}`);
-        setImageUploadStatus(`画像をアップロード中… ${index + 1}/${files.length}`);
-        const url = await uploadImage(prepared.file);
-        ensureBodySelection(editor);
-        editor.chain().focus().setImage({ src: url, alt: "" }).run();
+  const handleImageFiles = useCallback(
+    async (files: Array<File>) => {
+      if (!editor || files.length === 0 || uploadingImages) return;
+      if (!draftRef.current.title.trim()) {
+        const message = "先にタイトルを入力してください";
+        setStatus(message);
+        setImageUploadStatus(message);
+        editor.commands.focus("start");
+        return;
       }
-      setStatus("画像を追加しました");
-      setImageUploadStatus("");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "画像を追加できませんでした";
-      setStatus(message);
-      setImageUploadStatus(message);
-    } finally {
-      setUploadingImages(false);
-    }
-  }, [editor, uploadingImages]);
+      setUploadingImages(true);
+      setImageUploadStatus("画像を処理中…");
+      setStatus("画像を処理中…");
+      try {
+        for (const [index, source] of files.entries()) {
+          setStatus(`画像を処理中… ${index + 1}/${files.length}`);
+          setImageUploadStatus(`画像を処理中… ${index + 1}/${files.length}`);
+          const { prepareImage } = await import("./imageUpload");
+          const prepared = await prepareImage(source);
+          setStatus(`画像をアップロード中… ${index + 1}/${files.length}`);
+          setImageUploadStatus(
+            `画像をアップロード中… ${index + 1}/${files.length}`,
+          );
+          const url = await uploadImage(prepared.file);
+          ensureBodySelection(editor);
+          editor.chain().focus().setImage({ src: url, alt: "" }).run();
+        }
+        setStatus("画像を追加しました");
+        setImageUploadStatus("");
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "画像を追加できませんでした";
+        setStatus(message);
+        setImageUploadStatus(message);
+      } finally {
+        setUploadingImages(false);
+      }
+    },
+    [editor, uploadingImages],
+  );
 
   const refreshInbox = useCallback(async () => {
     const result = await fetchJson<InboxResponse>("/api/inbox");
@@ -2690,16 +3417,31 @@ export function AuthoringEditor({
 
     setSyncingInbox(true);
     try {
-      const started = await requestJson<InboxSyncResponse>("/api/inbox/sync", {});
-      let run = await fetchJson<InboxSyncStatus>(`/api/inbox/sync/${encodeURIComponent(started.run_id)}`);
+      const started = await requestJson<InboxSyncResponse>(
+        "/api/inbox/sync",
+        {},
+      );
+      let run = await fetchJson<InboxSyncStatus>(
+        `/api/inbox/sync/${encodeURIComponent(started.run_id)}`,
+      );
       while (run.status === "queued" || run.status === "running") {
         await new Promise((resolve) => window.setTimeout(resolve, 1_000));
-        run = await fetchJson<InboxSyncStatus>(`/api/inbox/sync/${encodeURIComponent(started.run_id)}`);
+        run = await fetchJson<InboxSyncStatus>(
+          `/api/inbox/sync/${encodeURIComponent(started.run_id)}`,
+        );
       }
       await refreshInbox();
-      setImageUploadStatus(run.status === "completed_with_errors" ? "一部の素材を更新できませんでした" : "");
+      setImageUploadStatus(
+        run.status === "completed_with_errors"
+          ? "一部の素材を更新できませんでした"
+          : "",
+      );
     } catch (error) {
-      setImageUploadStatus(error instanceof Error ? error.message : "インボックスを更新できませんでした");
+      setImageUploadStatus(
+        error instanceof Error
+          ? error.message
+          : "インボックスを更新できませんでした",
+      );
     } finally {
       setSyncingInbox(false);
     }
@@ -2708,122 +3450,217 @@ export function AuthoringEditor({
   useEffect(() => {
     if (!editor?.isEditable) return;
     void refreshInbox().catch((error: unknown) => {
-      setImageUploadStatus(error instanceof Error ? error.message : "インボックスを読み込めませんでした");
+      setImageUploadStatus(
+        error instanceof Error
+          ? error.message
+          : "インボックスを読み込めませんでした",
+      );
     });
   }, [editor?.isEditable, refreshInbox]);
 
-  const visibleInboxItems = inboxItems.filter((item) => activeMaterialTab === "photo"
-    ? item.source === "photo" && item.kind === "photo"
-    : item.source === "raindrop" && item.kind === "bookmark");
+  const visibleInboxItems = inboxItems.filter((item) =>
+    activeMaterialTab === "photo"
+      ? item.source === "photo" && item.kind === "photo"
+      : item.source === "raindrop" && item.kind === "bookmark",
+  );
 
-  const handleMaterialTabKeyDown = useCallback((event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    const tabs: Array<MaterialTab> = ["photo", "raindrop"];
-    const current = tabs.indexOf(activeMaterialTab);
-    let next = current;
-    if (event.key === "ArrowDown" || event.key === "ArrowRight") next = (current + 1) % tabs.length;
-    else if (event.key === "ArrowUp" || event.key === "ArrowLeft") next = (current - 1 + tabs.length) % tabs.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = tabs.length - 1;
-    else return;
-    event.preventDefault();
-    const nextTab = tabs[next];
-    const tabList = event.currentTarget.parentElement;
-    setActiveMaterialTab(nextTab);
-    window.setTimeout(() => {
-      tabList?.querySelector<HTMLButtonElement>(`[role="tab"][data-material-tab="${nextTab}"]`)
-        ?.focus();
-    }, 0);
-  }, [activeMaterialTab]);
+  const handleMaterialTabKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      const tabs: Array<MaterialTab> = ["photo", "raindrop"];
+      const current = tabs.indexOf(activeMaterialTab);
+      let next = current;
+      if (event.key === "ArrowDown" || event.key === "ArrowRight")
+        next = (current + 1) % tabs.length;
+      else if (event.key === "ArrowUp" || event.key === "ArrowLeft")
+        next = (current - 1 + tabs.length) % tabs.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      const nextTab = tabs[next];
+      const tabList = event.currentTarget.parentElement;
+      setActiveMaterialTab(nextTab);
+      window.setTimeout(() => {
+        tabList
+          ?.querySelector<HTMLButtonElement>(
+            `[role="tab"][data-material-tab="${nextTab}"]`,
+          )
+          ?.focus();
+      }, 0);
+    },
+    [activeMaterialTab],
+  );
 
-  const adoptInboxImage = useCallback(async (itemId: string) => {
-    if (!editor || loadingInbox) return;
-    setLoadingInbox(true);
-    try {
-      const result = await requestJson<{ public_url: string }>("/api/inbox/adopt", { item_id: itemId });
-      consumedInboxItemIdsRef.current = [...consumedInboxItemIdsRef.current, itemId];
-      ensureBodySelection(editor);
-      editor.chain().focus().setImage({ src: result.public_url, alt: "" }).run();
-      setInboxItems((items) => items.map((item) => item.id === itemId ? {
-        ...item,
-        used_in_pages: item.used_in_pages.some((page) => page.id === draftRef.current.pageId)
-          ? item.used_in_pages
-          : [...item.used_in_pages, { id: draftRef.current.pageId, route: draftRef.current.name || draftRef.current.title }]
-      } : item));
-      setImageUploadStatus("");
-      setMaterialStatus("写真を本文へ追加しました");
-    } catch (error) {
-      setImageUploadStatus(error instanceof Error ? error.message : "写真を記事へ追加できませんでした");
-    } finally {
-      setLoadingInbox(false);
-    }
-  }, [editor, loadingInbox]);
+  const adoptInboxImage = useCallback(
+    async (itemId: string) => {
+      if (!editor || loadingInbox) return;
+      setLoadingInbox(true);
+      try {
+        const result = await requestJson<{ public_url: string }>(
+          "/api/inbox/adopt",
+          { item_id: itemId },
+        );
+        consumedInboxItemIdsRef.current = [
+          ...consumedInboxItemIdsRef.current,
+          itemId,
+        ];
+        ensureBodySelection(editor);
+        editor
+          .chain()
+          .focus()
+          .setImage({ src: result.public_url, alt: "" })
+          .run();
+        setInboxItems((items) =>
+          items.map((item) =>
+            item.id === itemId
+              ? {
+                  ...item,
+                  used_in_pages: item.used_in_pages.some(
+                    (page) => page.id === draftRef.current.pageId,
+                  )
+                    ? item.used_in_pages
+                    : [
+                        ...item.used_in_pages,
+                        {
+                          id: draftRef.current.pageId,
+                          route:
+                            draftRef.current.name || draftRef.current.title,
+                        },
+                      ],
+                }
+              : item,
+          ),
+        );
+        setImageUploadStatus("");
+        setMaterialStatus("写真を本文へ追加しました");
+      } catch (error) {
+        setImageUploadStatus(
+          error instanceof Error
+            ? error.message
+            : "写真を記事へ追加できませんでした",
+        );
+      } finally {
+        setLoadingInbox(false);
+      }
+    },
+    [editor, loadingInbox],
+  );
 
-  const insertInboxItem = useCallback((itemId: string) => {
-    const item = inboxItems.find((candidate) => candidate.id === itemId);
-    if (!item) return;
-    if (item.source === "photo" && item.kind === "photo") {
-      void adoptInboxImage(itemId);
-      return;
-    }
-    const url = item.source === "raindrop" && item.kind === "bookmark" ? item.payload.url : null;
-    if (!editor || typeof url !== "string") return;
-
-    consumedInboxItemIdsRef.current = [...consumedInboxItemIdsRef.current, itemId];
-    ensureBodySelection(editor);
-    editor.chain().insertContent({
-      type: "paragraph",
-      content: [{ type: "text", text: url }]
-    }).run();
-    setInboxItems((items) => items.map((candidate) => candidate.id === itemId ? {
-      ...candidate,
-      used_in_pages: candidate.used_in_pages.some((page) => page.id === draftRef.current.pageId)
-        ? candidate.used_in_pages
-        : [...candidate.used_in_pages, { id: draftRef.current.pageId, route: draftRef.current.name || draftRef.current.title }]
-    } : candidate));
-    setImageUploadStatus("");
-    setMaterialStatus("Raindropを本文へ追加しました");
-  }, [adoptInboxImage, editor, inboxItems]);
-
-  const setInboxPhotoAsCover = useCallback(async (itemId: string) => {
-    if (loadingInbox) return;
-    setLoadingInbox(true);
-    try {
-      const result = await requestJson<{ public_url: string }>("/api/inbox/adopt", { item_id: itemId });
-      consumedInboxItemIdsRef.current = [...consumedInboxItemIdsRef.current, itemId];
-      updateCover("explicit", result.public_url, result.public_url);
-      setImageUploadStatus("");
-      setMaterialStatus("写真をカバーに設定しました");
-    } catch (error) {
-      setImageUploadStatus(error instanceof Error ? error.message : "写真をカバーに設定できませんでした");
-    } finally {
-      setLoadingInbox(false);
-    }
-  }, [loadingInbox, updateCover]);
-
-  const handleCoverDrop = useCallback(async (event: ReactDragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const itemId = event.dataTransfer.getData(INBOX_ITEM_DRAG_TYPE);
-    if (itemId) {
+  const insertInboxItem = useCallback(
+    (itemId: string) => {
       const item = inboxItems.find((candidate) => candidate.id === itemId);
-      if (item?.source === "photo" && item.kind === "photo") void setInboxPhotoAsCover(itemId);
-      return;
-    }
+      if (!item) return;
+      if (item.source === "photo" && item.kind === "photo") {
+        void adoptInboxImage(itemId);
+        return;
+      }
+      const url =
+        item.source === "raindrop" && item.kind === "bookmark"
+          ? item.payload.url
+          : null;
+      if (!editor || typeof url !== "string") return;
 
-    const file = Array.from(event.dataTransfer.files).find((candidate) => candidate.type.startsWith("image/"));
-    if (!file || uploadingImages) return;
-    setUploadingImages(true);
-    try {
-      const { prepareImage } = await import("./imageUpload");
-      const prepared = await prepareImage(file);
-      const url = await uploadImage(prepared.file);
-      updateCover("explicit", url, url);
+      consumedInboxItemIdsRef.current = [
+        ...consumedInboxItemIdsRef.current,
+        itemId,
+      ];
+      ensureBodySelection(editor);
+      editor
+        .chain()
+        .insertContent({
+          type: "paragraph",
+          content: [{ type: "text", text: url }],
+        })
+        .run();
+      setInboxItems((items) =>
+        items.map((candidate) =>
+          candidate.id === itemId
+            ? {
+                ...candidate,
+                used_in_pages: candidate.used_in_pages.some(
+                  (page) => page.id === draftRef.current.pageId,
+                )
+                  ? candidate.used_in_pages
+                  : [
+                      ...candidate.used_in_pages,
+                      {
+                        id: draftRef.current.pageId,
+                        route: draftRef.current.name || draftRef.current.title,
+                      },
+                    ],
+              }
+            : candidate,
+        ),
+      );
       setImageUploadStatus("");
-    } catch (error) {
-      setImageUploadStatus(error instanceof Error ? error.message : "画像をカバーに設定できませんでした");
-    } finally {
-      setUploadingImages(false);
-    }
-  }, [inboxItems, setInboxPhotoAsCover, updateCover, uploadingImages]);
+      setMaterialStatus("Raindropを本文へ追加しました");
+    },
+    [adoptInboxImage, editor, inboxItems],
+  );
+
+  const setInboxPhotoAsCover = useCallback(
+    async (itemId: string) => {
+      if (loadingInbox) return;
+      setLoadingInbox(true);
+      try {
+        const result = await requestJson<{ public_url: string }>(
+          "/api/inbox/adopt",
+          { item_id: itemId },
+        );
+        consumedInboxItemIdsRef.current = [
+          ...consumedInboxItemIdsRef.current,
+          itemId,
+        ];
+        updateCover("explicit", result.public_url, result.public_url);
+        setImageUploadStatus("");
+        setMaterialStatus("写真をカバーに設定しました");
+      } catch (error) {
+        setImageUploadStatus(
+          error instanceof Error
+            ? error.message
+            : "写真をカバーに設定できませんでした",
+        );
+      } finally {
+        setLoadingInbox(false);
+      }
+    },
+    [loadingInbox, updateCover],
+  );
+
+  const handleCoverDrop = useCallback(
+    async (event: ReactDragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const itemId = event.dataTransfer.getData(INBOX_ITEM_DRAG_TYPE);
+      if (itemId) {
+        const item = inboxItems.find((candidate) => candidate.id === itemId);
+        if (item?.source === "photo" && item.kind === "photo")
+          void setInboxPhotoAsCover(itemId);
+        return;
+      }
+
+      const file = Array.from(event.dataTransfer.files).find((candidate) =>
+        candidate.type.startsWith("image/"),
+      );
+      if (!file || uploadingImages) return;
+      setUploadingImages(true);
+      try {
+        const { prepareImage } = await import("./imageUpload");
+        const prepared = await prepareImage(file);
+        const url = await uploadImage(prepared.file);
+        updateCover("explicit", url, url);
+        setImageUploadStatus("");
+      } catch (error) {
+        setImageUploadStatus(
+          error instanceof Error
+            ? error.message
+            : "画像をカバーに設定できませんでした",
+        );
+      } finally {
+        setUploadingImages(false);
+      }
+    },
+    [inboxItems, setInboxPhotoAsCover, updateCover, uploadingImages],
+  );
 
   useEffect(() => {
     if (!editor || !editor.isEditable) return;
@@ -2845,7 +3682,9 @@ export function AuthoringEditor({
       if (imageDragDepthRef.current === 0) setDraggingImages(false);
     };
     const paste = (event: ClipboardEvent) => {
-      const files = Array.from(event.clipboardData?.files || []).filter((file) => file.type.startsWith("image/"));
+      const files = Array.from(event.clipboardData?.files || []).filter(
+        (file) => file.type.startsWith("image/"),
+      );
       if (files.length === 0) return;
       event.preventDefault();
       void handleImageFiles(files);
@@ -2857,15 +3696,23 @@ export function AuthoringEditor({
       if (inboxItemId) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        const position = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+        const position = editor.view.posAtCoords({
+          left: event.clientX,
+          top: event.clientY,
+        });
         if (position) editor.commands.setTextSelection(position.pos);
         insertInboxItem(inboxItemId);
         return;
       }
-      const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith("image/"));
+      const files = Array.from(event.dataTransfer?.files || []).filter((file) =>
+        file.type.startsWith("image/"),
+      );
       if (files.length === 0) return;
       event.preventDefault();
-      const position = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+      const position = editor.view.posAtCoords({
+        left: event.clientX,
+        top: event.clientY,
+      });
       if (position) editor.commands.setTextSelection(position.pos);
       void handleImageFiles(files);
     };
@@ -2887,8 +3734,10 @@ export function AuthoringEditor({
     if (!editor || initialFocusAppliedRef.current) return;
 
     const search = new URLSearchParams(window.location.search);
-    const isDailyEditor = search.get("new") === "daily" || search.get("template") === "daily";
-    const isNewEditor = search.get("new") === "1" || window.location.pathname === "/editor/new";
+    const isDailyEditor =
+      search.get("new") === "daily" || search.get("template") === "daily";
+    const isNewEditor =
+      search.get("new") === "1" || window.location.pathname === "/editor/new";
     if (!isDailyEditor && !isNewEditor) return;
 
     initialFocusAppliedRef.current = true;
@@ -2904,8 +3753,13 @@ export function AuthoringEditor({
     }
 
     const bodyStart = title.nodeSize;
-    const transaction = editor.state.tr.insert(bodyStart, editor.schema.nodes.paragraph.create());
-    transaction.setSelection(TextSelection.create(transaction.doc, bodyStart + 1));
+    const transaction = editor.state.tr.insert(
+      bodyStart,
+      editor.schema.nodes.paragraph.create(),
+    );
+    transaction.setSelection(
+      TextSelection.create(transaction.doc, bodyStart + 1),
+    );
     transaction.setMeta("preventUpdate", true);
     editor.view.dispatch(transaction);
     editor.view.focus();
@@ -2921,55 +3775,79 @@ export function AuthoringEditor({
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current !== null)
+        window.clearTimeout(saveTimerRef.current);
     };
   }, [canEdit]);
 
   const editorErrors = [
     ...(errors.title || []),
     ...(errors.body || []),
-    ...(errors.form || [])
+    ...(errors.form || []),
   ];
   const universeEnabled = useUniverseEnabled();
-  const linkedPageGroups = useMemo(() => groupLinkedPages(linkedPages), [linkedPages]);
-  const references = useMemo(() => universeReferences(draft.body), [draft.body]);
-  const internalUniverseGroups = useMemo(
-    () => buildInternalUniverseGroupsFromNames(
-      references.wikiLinkNames,
-      draft.name || draft.title,
-      linkedPageGroups
-    ),
-    [references.wikiLinkKey, draft.name, draft.title, linkedPageGroups]
+  const linkedPageGroups = useMemo(
+    () => groupLinkedPages(linkedPages),
+    [linkedPages],
   );
-  const externalUniverseGroups = useMemo(() =>
-    references.externalUrls.map((url) => linkedPageGroups.find((group) => group.kind === "url" && group.name === url) || {
-      kind: "url" as const,
-      name: url,
-      pages: [],
-      isTopicOnly: false
-    }), [references.externalUrlKey, linkedPageGroups]);
+  const references = useMemo(
+    () => universeReferences(draft.body),
+    [draft.body],
+  );
+  const internalUniverseGroups = useMemo(
+    () =>
+      buildInternalUniverseGroupsFromNames(
+        references.wikiLinkNames,
+        draft.name || draft.title,
+        linkedPageGroups,
+      ),
+    [references.wikiLinkKey, draft.name, draft.title, linkedPageGroups],
+  );
+  const externalUniverseGroups = useMemo(
+    () =>
+      references.externalUrls.map(
+        (url) =>
+          linkedPageGroups.find(
+            (group) => group.kind === "url" && group.name === url,
+          ) || {
+            kind: "url" as const,
+            name: url,
+            pages: [],
+            isTopicOnly: false,
+          },
+      ),
+    [references.externalUrlKey, linkedPageGroups],
+  );
   const universeGroups = useMemo(
     () => [...internalUniverseGroups, ...externalUniverseGroups],
-    [externalUniverseGroups, internalUniverseGroups]
+    [externalUniverseGroups, internalUniverseGroups],
   );
   const universeTopics = useMemo(
     () => universeGroups.map(({ kind, name }) => ({ kind, name })),
-    [universeGroups]
+    [universeGroups],
   );
   const visibleLineUpdates = useMemo(
     () => pendingLineUpdates(savedBodyRef.current, draft.body, lineUpdatedAt),
-    [draft.body, lineUpdatedAt]
+    [draft.body, lineUpdatedAt],
   );
 
   return (
     <>
-      <p className="visually-hidden" role="status" aria-live="polite" aria-busy={saving}>
+      <p
+        className="visually-hidden"
+        role="status"
+        aria-live="polite"
+        aria-busy={saving}
+      >
         {status}
       </p>
       <p className="visually-hidden" role="status" aria-live="polite">
         {materialStatus}
       </p>
-      <div className={`article-workspace${canEdit ? "" : " article-workspace--reading"}`} ref={workspaceRef}>
+      <div
+        className={`article-workspace${canEdit ? "" : " article-workspace--reading"}`}
+        ref={workspaceRef}
+      >
         {canEdit && (
           <div
             className={`article-editing-cover${draft.resolvedCoverImageUrl ? "" : " article-editing-cover--empty"}`}
@@ -2978,10 +3856,18 @@ export function AuthoringEditor({
             }}
             onDrop={(event) => void handleCoverDrop(event)}
           >
-            {draft.resolvedCoverImageUrl
-              ? <img src={draft.resolvedCoverImageUrl} alt="" />
-              : <span className="article-editing-cover__prompt">画像をドロップしてカバーに設定</span>}
-            <fieldset className="article-editing-cover__actions" role="radiogroup" aria-label="カバーモード">
+            {draft.resolvedCoverImageUrl ? (
+              <img src={draft.resolvedCoverImageUrl} alt="" />
+            ) : (
+              <span className="article-editing-cover__prompt">
+                画像をドロップしてカバーに設定
+              </span>
+            )}
+            <fieldset
+              className="article-editing-cover__actions"
+              role="radiogroup"
+              aria-label="カバーモード"
+            >
               <legend className="visually-hidden">カバーモード</legend>
               <label>
                 <input
@@ -2989,7 +3875,9 @@ export function AuthoringEditor({
                   name="cover-mode"
                   value="auto"
                   checked={draft.coverMode === "auto"}
-                  onChange={() => updateCover("auto", null, autoCoverImageUrl(draft.body))}
+                  onChange={() =>
+                    updateCover("auto", null, autoCoverImageUrl(draft.body))
+                  }
                 />
                 自動
               </label>
@@ -3000,7 +3888,13 @@ export function AuthoringEditor({
                   value="explicit"
                   checked={draft.coverMode === "explicit"}
                   disabled={!draft.coverImageUrl}
-                  onChange={() => updateCover("explicit", draft.coverImageUrl, draft.coverImageUrl)}
+                  onChange={() =>
+                    updateCover(
+                      "explicit",
+                      draft.coverImageUrl,
+                      draft.coverImageUrl,
+                    )
+                  }
                 />
                 指定画像
               </label>
@@ -3018,7 +3912,9 @@ export function AuthoringEditor({
           </div>
         )}
         {!canEdit && (
-          <header className={`article-reading-header${bootstrap.resolved_cover_image_url ? " article-reading-header--covered" : ""}`}>
+          <header
+            className={`article-reading-header${bootstrap.resolved_cover_image_url ? " article-reading-header--covered" : ""}`}
+          >
             {bootstrap.resolved_cover_image_url && (
               <img src={bootstrap.resolved_cover_image_url} alt="" />
             )}
@@ -3056,19 +3952,29 @@ export function AuthoringEditor({
             data-universe-obstacle
             aria-label="記事を編集"
             onClick={(event) => {
-              if (!editor || editor.view.dom.contains(event.target as Node)) return;
+              if (!editor || editor.view.dom.contains(event.target as Node))
+                return;
               editor.commands.focus("end");
             }}
           >
-            <LineUpdateRail body={draft.body} editor={editor} updates={visibleLineUpdates} />
+            <LineUpdateRail
+              body={draft.body}
+              editor={editor}
+              updates={visibleLineUpdates}
+            />
             {draggingImages && (
               <div className="editor-shell__drop-target" role="status">
                 ここにドロップして記事へ追加
               </div>
             )}
             {editor?.isEditable && imageUploadStatus && (
-              <div className="editor-shell__actions" onClick={(event) => event.stopPropagation()}>
-                <span className="editor-shell__upload-status" role="status">{imageUploadStatus}</span>
+              <div
+                className="editor-shell__actions"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <span className="editor-shell__upload-status" role="status">
+                  {imageUploadStatus}
+                </span>
               </div>
             )}
             <div
@@ -3079,7 +3985,9 @@ export function AuthoringEditor({
               <EditorContent editor={editor} ref={handleEditorContentRef} />
             </div>
             {editorErrors.length > 0 && (
-              <p className="input-error" role="alert">{editorErrors.join(" ")}</p>
+              <p className="input-error" role="alert">
+                {editorErrors.join(" ")}
+              </p>
             )}
           </section>
         </div>
@@ -3087,7 +3995,9 @@ export function AuthoringEditor({
           <aside className="content-inbox-drawer" aria-label="素材">
             <section id="content-inbox-panel" className="content-inbox">
               <div className="content-inbox__toolbar">
-                <strong>{activeMaterialTab === "photo" ? "写真" : "Raindrop"}</strong>
+                <strong>
+                  {activeMaterialTab === "photo" ? "写真" : "Raindrop"}
+                </strong>
                 <button
                   type="button"
                   className="content-inbox__sync"
@@ -3104,7 +4014,9 @@ export function AuthoringEditor({
               {visibleInboxItems.length === 0 ? (
                 <p className="content-inbox__empty">素材はありません</p>
               ) : (
-                <ol className={`content-inbox__items content-inbox__items--${activeMaterialTab}`}>
+                <ol
+                  className={`content-inbox__items content-inbox__items--${activeMaterialTab}`}
+                >
                   {visibleInboxItems.map((item) => {
                     const photoUrl = inboxPhotoUrl(item);
                     return (
@@ -3112,23 +4024,50 @@ export function AuthoringEditor({
                         <button
                           type="button"
                           className="content-inbox__item"
-                          disabled={loadingInbox || (photoUrl === null && item.source !== "raindrop")}
-                          draggable={photoUrl !== null || item.source === "raindrop"}
+                          disabled={
+                            loadingInbox ||
+                            (photoUrl === null && item.source !== "raindrop")
+                          }
+                          draggable={
+                            photoUrl !== null || item.source === "raindrop"
+                          }
                           onDragStart={(event) => {
-                            event.dataTransfer.setData(INBOX_ITEM_DRAG_TYPE, item.id);
+                            event.dataTransfer.setData(
+                              INBOX_ITEM_DRAG_TYPE,
+                              item.id,
+                            );
                             event.dataTransfer.effectAllowed = "copy";
                           }}
                           aria-label={`${inboxItemName(item)}を本文へ追加`}
                           onClick={() => insertInboxItem(item.id)}
                         >
-                          {photoUrl && <img src={photoUrl} alt="" loading="lazy" />}
-                          {activeMaterialTab === "raindrop" && <span className="content-inbox__kind">{inboxItemLabel(item)}</span>}
+                          {photoUrl && (
+                            <img src={photoUrl} alt="" loading="lazy" />
+                          )}
+                          {activeMaterialTab === "raindrop" && (
+                            <span className="content-inbox__kind">
+                              {inboxItemLabel(item)}
+                            </span>
+                          )}
                           {item.used_in_pages.map((page) => (
-                            <span className="content-inbox__usage" key={page.id}>{page.route}で使用済み</span>
+                            <span
+                              className="content-inbox__usage"
+                              key={page.id}
+                            >
+                              {page.route}で使用済み
+                            </span>
                           ))}
                           {activeMaterialTab === "raindrop" && (
                             <time dateTime={item.occurred_at}>
-                              {new Date(item.occurred_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              {new Date(item.occurred_at).toLocaleString(
+                                "ja-JP",
+                                {
+                                  month: "numeric",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
                             </time>
                           )}
                         </button>
@@ -3149,7 +4088,11 @@ export function AuthoringEditor({
                 </ol>
               )}
             </section>
-            <div className="content-inbox__tabs" role="tablist" aria-label="素材の種類">
+            <div
+              className="content-inbox__tabs"
+              role="tablist"
+              aria-label="素材の種類"
+            >
               <button
                 type="button"
                 role="tab"
@@ -3176,7 +4119,10 @@ export function AuthoringEditor({
                 onClick={() => setActiveMaterialTab("raindrop")}
                 onKeyDown={handleMaterialTabKeyDown}
               >
-                <span className="content-inbox__raindrop-icon" aria-hidden="true" />
+                <span
+                  className="content-inbox__raindrop-icon"
+                  aria-hidden="true"
+                />
               </button>
             </div>
           </aside>
@@ -3188,62 +4134,94 @@ export function AuthoringEditor({
           />
         )}
         {linkedPageGroups.length > 0 && (
-          <section className="linked-pages" data-universe-obstacle aria-labelledby="related-pages-heading">
-          <h2 id="related-pages-heading">関連する記事</h2>
-          <div className="linked-page-groups">
-            {linkedPageGroups.map((group) => (
-              <section
-                className="linked-page-group"
-                key={group.name}
-                aria-label={group.isTopicOnly ? `${group.name}へのリンク` : undefined}
-                aria-labelledby={group.isTopicOnly ? undefined : `related-${encodePageName(group.name)}`}
-              >
-                {!group.isTopicOnly && (
-                  <h3 id={`related-${encodePageName(group.name)}`}>
-                    <a
-                      href={group.kind === "wiki" ? `/${encodePageName(group.name)}` : group.name}
-                      target={group.kind === "url" ? "_blank" : undefined}
-                      rel={group.kind === "url" ? "noreferrer" : undefined}
-                    >
-                      {group.kind === "url" ? externalLinkLabel(group.name) : group.name}
-                    </a>
-                  </h3>
-                )}
-                <ul className="page-card-list" aria-label={group.isTopicOnly ? `${group.name}へのリンク` : undefined}>
-                  {group.pages.map((page) => (
-                    <li className="page-card" key={page.id}>
-                      <a className="page-card__link" href={`/${encodePageName(page.route)}`}>
-                        {page.image_url && (
-                          <img
-                            className="page-card__image"
-                            src={page.image_url}
-                            alt=""
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                          />
-                        )}
-                        <span className="page-card__title">{page.title}</span>
-                        {page.excerpt && <span className="page-card__excerpt">{page.excerpt}</span>}
+          <section
+            className="linked-pages"
+            data-universe-obstacle
+            aria-labelledby="related-pages-heading"
+          >
+            <h2 id="related-pages-heading">関連する記事</h2>
+            <div className="linked-page-groups">
+              {linkedPageGroups.map((group) => (
+                <section
+                  className="linked-page-group"
+                  key={group.name}
+                  aria-label={
+                    group.isTopicOnly ? `${group.name}へのリンク` : undefined
+                  }
+                  aria-labelledby={
+                    group.isTopicOnly
+                      ? undefined
+                      : `related-${encodePageName(group.name)}`
+                  }
+                >
+                  {!group.isTopicOnly && (
+                    <h3 id={`related-${encodePageName(group.name)}`}>
+                      <a
+                        href={
+                          group.kind === "wiki"
+                            ? `/${encodePageName(group.name)}`
+                            : group.name
+                        }
+                        target={group.kind === "url" ? "_blank" : undefined}
+                        rel={group.kind === "url" ? "noreferrer" : undefined}
+                      >
+                        {group.kind === "url"
+                          ? externalLinkLabel(group.name)
+                          : group.name}
                       </a>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
-          {(linkedPagesHasMore || loadingLinkedPages || linkedPagesError) && (
-            <div className="linked-pages__more" ref={linkedPagesSentinelRef}>
-              {linkedPagesHasMore && (
-                <button type="button" onClick={() => void loadMoreLinkedPages()} disabled={loadingLinkedPages}>
-                  {loadingLinkedPages ? "読み込んでいます" : "続きを読む"}
-                </button>
-              )}
-              {linkedPagesError && <p role="alert">{linkedPagesError}</p>}
+                    </h3>
+                  )}
+                  <ul
+                    className="page-card-list"
+                    aria-label={
+                      group.isTopicOnly ? `${group.name}へのリンク` : undefined
+                    }
+                  >
+                    {group.pages.map((page) => (
+                      <li className="page-card" key={page.id}>
+                        <a
+                          className="page-card__link"
+                          href={`/${encodePageName(page.route)}`}
+                        >
+                          {page.image_url && (
+                            <img
+                              className="page-card__image"
+                              src={page.image_url}
+                              alt=""
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                            />
+                          )}
+                          <span className="page-card__title">{page.title}</span>
+                          {page.excerpt && (
+                            <span className="page-card__excerpt">
+                              {page.excerpt}
+                            </span>
+                          )}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
             </div>
-          )}
-          <p className="visually-hidden" role="status" aria-live="polite">
-            {loadingLinkedPages ? "関連する記事を読み込んでいます" : ""}
-          </p>
+            {(linkedPagesHasMore || loadingLinkedPages || linkedPagesError) && (
+              <div className="linked-pages__more" ref={linkedPagesSentinelRef}>
+                {linkedPagesHasMore && (
+                  <button
+                    type="button"
+                    onClick={() => void loadMoreLinkedPages()}
+                    disabled={loadingLinkedPages}
+                  >
+                    {loadingLinkedPages ? "読み込んでいます" : "続きを読む"}
+                  </button>
+                )}
+                {linkedPagesError && <p role="alert">{linkedPagesError}</p>}
+              </div>
+            )}
+            <p className="visually-hidden" role="status" aria-live="polite">
+              {loadingLinkedPages ? "関連する記事を読み込んでいます" : ""}
+            </p>
           </section>
         )}
         <Universe
