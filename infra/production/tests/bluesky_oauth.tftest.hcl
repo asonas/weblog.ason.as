@@ -38,3 +38,16 @@ run "bluesky_oauth_runtime" {
     error_message = "Bluesky OAuth Lambda must receive its dedicated secret name"
   }
 }
+
+run "bluesky_oauth_refresh_route" {
+  command = plan
+
+  plan_options {
+    target = [aws_apigatewayv2_route.authoring]
+  }
+
+  assert {
+    condition     = aws_apigatewayv2_route.authoring["POST /api/inbox/sources/bluesky/refresh"].route_key == "POST /api/inbox/sources/bluesky/refresh"
+    error_message = "Bluesky OAuth refresh must be routed to the authoring Lambda"
+  }
+}

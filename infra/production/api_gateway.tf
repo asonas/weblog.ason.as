@@ -60,6 +60,7 @@ resource "aws_apigatewayv2_route" "authoring" {
     "POST /api/inbox/sync"                          = "NONE"
     "GET /api/inbox/sources/bluesky/status"         = "NONE"
     "POST /api/inbox/sources/bluesky/connect"       = "NONE"
+    "POST /api/inbox/sources/bluesky/refresh"       = "NONE"
     "GET /api/inbox/sources/bluesky/callback"       = "NONE"
     "DELETE /api/inbox/sources/bluesky/connection"  = "NONE"
     "PATCH /api/authoring/pages/{id}"               = "NONE"
