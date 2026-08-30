@@ -4,14 +4,14 @@ require "date"
 require "pathname"
 
 module WeblogAuthoring
-  WikiLink = Struct.new(:name, :start, :end, keyword_init: true) do
+  class WikiLink < Struct.new(:name, :start, :end, keyword_init: true)
     def initialize(name:, start: 0, end: 0)
       super(name:, start:, end:)
       freeze
     end
   end
 
-  PageDocument = Struct.new(
+  class PageDocument < Struct.new(
     :id,
     :page_type,
     :name,
@@ -27,7 +27,7 @@ module WeblogAuthoring
     :cover_mode,
     :cover_image_url,
     keyword_init: true
-  ) do
+  )
     def initialize(**attributes)
       attributes[:links] = Array(attributes[:links]).freeze
       attributes[:cover_mode] ||= "auto"
@@ -51,25 +51,25 @@ module WeblogAuthoring
     end
   end
 
-  PageProblem = Struct.new(:path, :detail, keyword_init: true) do
+  class PageProblem < Struct.new(:path, :detail, keyword_init: true)
     def initialize(path:, detail:)
       super(path: Pathname(path), detail:)
       freeze
     end
   end
 
-  Redirect = Struct.new(:old_route, :new_route, keyword_init: true) do
+  class Redirect < Struct.new(:old_route, :new_route, keyword_init: true)
     def initialize(old_route:, new_route:)
       super(old_route:, new_route:)
       freeze
     end
   end
 
-  InboxItem = Struct.new(
+  class InboxItem < Struct.new(
     :id, :source, :kind, :source_id, :occurred_at, :ingested_at,
     :expires_at, :payload, :created_at, :updated_at,
     keyword_init: true
-  ) do
+  )
     def initialize(**attributes)
       attributes[:payload] = attributes.fetch(:payload).freeze
       super(**attributes)
@@ -77,31 +77,31 @@ module WeblogAuthoring
     end
   end
 
-  InboxImageAdoption = Struct.new(
+  class InboxImageAdoption < Struct.new(
     :item_id, :inbox_key, :public_key, :prepared_at, :committed_at, :expires_at,
     keyword_init: true
-  ) do
+  )
     def initialize(**attributes)
       super(**attributes)
       freeze
     end
   end
 
-  InboxItemUsage = Struct.new(:item_id, :page_id, :page_route, :used_at, keyword_init: true) do
+  class InboxItemUsage < Struct.new(:item_id, :page_id, :page_route, :used_at, keyword_init: true)
     def initialize(**attributes)
       super(**attributes)
       freeze
     end
   end
 
-  ReleaseSnapshot = Struct.new(:pages, :redirects, :published_at, keyword_init: true) do
+  class ReleaseSnapshot < Struct.new(:pages, :redirects, :published_at, keyword_init: true)
     def initialize(pages: [], redirects: [], published_at: nil)
       super(pages: Array(pages).freeze, redirects: Array(redirects).freeze, published_at:)
       freeze
     end
   end
 
-  SaveRequest = Struct.new(
+  class SaveRequest < Struct.new(
     :page_type,
     :body,
     :page_id,
@@ -113,7 +113,7 @@ module WeblogAuthoring
     :cover_mode,
     :cover_image_url,
     keyword_init: true
-  ) do
+  )
     def initialize(page_type:, body:, page_id: nil, name: nil, page_date: nil, title: nil, expected_updated_at: nil,
                    consumed_inbox_item_ids: [], cover_mode: nil, cover_image_url: nil)
       super(
@@ -132,7 +132,7 @@ module WeblogAuthoring
     end
   end
 
-  PublishRequest = Struct.new(:page_id, :expected_updated_at, keyword_init: true) do
+  class PublishRequest < Struct.new(:page_id, :expected_updated_at, keyword_init: true)
     def initialize(page_id:, expected_updated_at: nil)
       super(page_id:, expected_updated_at:)
       freeze
