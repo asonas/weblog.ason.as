@@ -37,7 +37,11 @@ const specialBlockIndent = (line: string): number | null => {
   return match ? match[1].length : null;
 };
 
-const renderNode = (node: Node, imagePaths: ImagePaths, mode: ConversionMode): string => {
+const renderNode = (
+  node: Node,
+  imagePaths: ImagePaths,
+  mode: ConversionMode,
+): string => {
   if (node.type === "image" || node.type === "strongImage") {
     const imagePath = imagePaths.get(sourceImageUrl(node.src));
     return imagePath ? `![](${imagePath})` : node.raw;
@@ -57,7 +61,9 @@ const renderNode = (node: Node, imagePaths: ImagePaths, mode: ConversionMode): s
   }
 
   if (hasNodes(node)) {
-    return node.nodes.map((child) => renderNode(child, imagePaths, mode)).join("");
+    return node.nodes
+      .map((child) => renderNode(child, imagePaths, mode))
+      .join("");
   }
 
   return node.raw;
@@ -74,8 +80,11 @@ const renderLine = (
     .map((block) => {
       if (block.type !== "line") return "text" in block ? block.text : "";
 
-      const text = block.nodes.map((node) => renderNode(node, imagePaths, mode)).join("");
-      if (!renderList || block.indent === 0 || text.trim().length === 0) return text;
+      const text = block.nodes
+        .map((node) => renderNode(node, imagePaths, mode))
+        .join("");
+      if (!renderList || block.indent === 0 || text.trim().length === 0)
+        return text;
 
       return `${"  ".repeat(block.indent - 1)}- ${text}`;
     })
@@ -104,7 +113,12 @@ const convertPageLines = (
 
     if (!isSpecialBlockChild) specialBlock = specialBlockIndent(text);
 
-    return renderLine(text, imagePaths, mode, !isSpecialBlockChild && specialBlock === null);
+    return renderLine(
+      text,
+      imagePaths,
+      mode,
+      !isSpecialBlockChild && specialBlock === null,
+    );
   });
 };
 
@@ -127,7 +141,10 @@ export const convertExport = (
   }),
 });
 
-export const buildImagePaths = (manifest: unknown, report: unknown): Map<string, string> => {
+export const buildImagePaths = (
+  manifest: unknown,
+  report: unknown,
+): Map<string, string> => {
   if (!isJsonObject(manifest) || !Array.isArray(manifest.assets)) {
     throw new Error("asset manifest must contain an assets array");
   }
@@ -138,7 +155,10 @@ export const buildImagePaths = (manifest: unknown, report: unknown): Map<string,
   const localPaths = new Map<string, string>();
   for (const result of report.results) {
     if (!isJsonObject(result) || typeof result.id !== "string") continue;
-    if (result.status === "downloaded" && typeof result.local_path === "string") {
+    if (
+      result.status === "downloaded" &&
+      typeof result.local_path === "string"
+    ) {
       localPaths.set(result.id, result.local_path);
     }
   }
@@ -162,7 +182,11 @@ const option = (argv: string[], name: string): string => {
   return value;
 };
 
-const optionalOption = (argv: string[], name: string, fallback: string): string => {
+const optionalOption = (
+  argv: string[],
+  name: string,
+  fallback: string,
+): string => {
   const index = argv.indexOf(name);
   if (index < 0) return fallback;
   const value = argv[index + 1];
@@ -176,15 +200,31 @@ const main = async (): Promise<void> => {
   const argv = process.argv.slice(2);
   const inputPath = option(argv, "--input");
   const outputPath = option(argv, "--output");
-  const manifestPath = optionalOption(argv, "--asset-manifest", "data/normalized/asset-manifest.json");
-  const reportPath = optionalOption(argv, "--asset-fetch-report", "data/reports/asset-fetch-report.json");
-  const mode: ConversionMode = argv.includes("--assets-only") ? "assets" : "all";
-  const payload = JSON.parse(await readFile(inputPath, "utf8")) as ScrapboxExport;
+  const manifestPath = optionalOption(
+    argv,
+    "--asset-manifest",
+    "data/normalized/asset-manifest.json",
+  );
+  const reportPath = optionalOption(
+    argv,
+    "--asset-fetch-report",
+    "data/reports/asset-fetch-report.json",
+  );
+  const mode: ConversionMode = argv.includes("--assets-only")
+    ? "assets"
+    : "all";
+  const payload = JSON.parse(
+    await readFile(inputPath, "utf8"),
+  ) as ScrapboxExport;
   const imagePaths = buildImagePaths(
     JSON.parse(await readFile(manifestPath, "utf8")) as unknown,
     JSON.parse(await readFile(reportPath, "utf8")) as unknown,
   );
-  await writeFile(outputPath, `${JSON.stringify(convertExport(payload, imagePaths, mode), null, 2)}\n`, "utf8");
+  await writeFile(
+    outputPath,
+    `${JSON.stringify(convertExport(payload, imagePaths, mode), null, 2)}\n`,
+    "utf8",
+  );
 };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
