@@ -90,11 +90,11 @@ export function DesignSystemPage() {
               </li>
             ))}
           </ul>
-          <div className="design-system__shapes" aria-label="角丸の見本">
+          <section className="design-system__shapes" aria-label="角丸の見本">
             <span>Control</span>
             <span>Media</span>
             <span>Round</span>
-          </div>
+          </section>
         </PatternSection>
 
         <PatternSection title="Controls and states">

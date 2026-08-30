@@ -29,6 +29,30 @@ run = "npm run dev"
 description = "Build the production site artifact"
 run = "npm run build"
 
+[tasks."frontend:format"]
+description = "Format the authoring frontend with Biome"
+run = "npm run format:authoring"
+
+[tasks."frontend:lint"]
+description = "Check frontend formatting and lint rules without changes"
+run = "npm run lint:authoring"
+
+[tasks."frontend:typecheck"]
+description = "Type-check the authoring frontend"
+run = "npm run typecheck"
+
+[tasks."frontend:test"]
+description = "Run authoring frontend tests"
+run = "npm run test:authoring"
+
+[tasks."frontend:coverage"]
+description = "Generate text and LCOV coverage for all authoring TypeScript sources"
+run = "npm run coverage:authoring"
+
+[tasks."frontend:build"]
+description = "Build the authoring site artifact"
+run = "npm run build"
+
 [tasks."ruby:format"]
 description = "Format Ruby files with RuboCop"
 run = "bundle exec rubocop -a"

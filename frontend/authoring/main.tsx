@@ -1,5 +1,11 @@
 import type { RefObject } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { DesignSystemPage } from "./designSystem";
@@ -89,20 +95,6 @@ export function HeaderSearch() {
 
 type AppBootstrap = (EditorBootstrap & { mode: "editor" }) | HomeBootstrap;
 
-const DATE_PARTS_FORMATTER = new Intl.DateTimeFormat("ja-JP", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  timeZone: "Asia/Tokyo",
-});
-
-function formatDate(value: string): string {
-  const parts = DATE_PARTS_FORMATTER.formatToParts(new Date(value));
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((candidate) => candidate.type === type)?.value || "";
-  return `${part("year")}-${part("month")}-${part("day")}`;
-}
-
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -177,6 +169,7 @@ function App({
 
   useEffect(() => {
     if (initialBootstrap) return;
+    void requestVersion;
 
     let active = true;
     void fetchBootstrap<AppBootstrap>(routeBootstrapUrl())
@@ -283,6 +276,7 @@ function HomeTags({
 
   useEffect(() => {
     if (!fitMobileRows) return;
+    void tags;
     const tagsElement = tagsRef.current;
     if (!tagsElement) return;
 
@@ -509,63 +503,66 @@ function FeedColumn({
   const newerRef = useRef<HTMLDivElement | null>(null);
   const olderRef = useRef<HTMLDivElement | null>(null);
 
-  const loadWindow = async (
-    url: string,
-    direction: "replace" | "newer" | "older",
-  ) => {
-    await loadQueueRef.current.run({ url, direction }, async (request) => {
-      loadingRef.current = true;
-      setIsLoading(true);
-      setLoadError(null);
-      try {
-        const response = await fetchBootstrap<PageWindow>(request.url);
-        if (
-          request.direction === "newer" &&
-          feedRef.current &&
-          !pendingScrollAnchorRef.current
-        ) {
-          pendingScrollAnchorRef.current = captureScrollAnchor(feedRef.current);
+  const loadWindow = useCallback(
+    async (url: string, direction: "replace" | "newer" | "older") => {
+      await loadQueueRef.current.run({ url, direction }, async (request) => {
+        loadingRef.current = true;
+        setIsLoading(true);
+        setLoadError(null);
+        try {
+          const response = await fetchBootstrap<PageWindow>(request.url);
+          if (
+            request.direction === "newer" &&
+            feedRef.current &&
+            !pendingScrollAnchorRef.current
+          ) {
+            pendingScrollAnchorRef.current = captureScrollAnchor(
+              feedRef.current,
+            );
+          }
+          setWindowState((current) => ({
+            pages:
+              request.direction === "replace"
+                ? response.pages
+                : request.direction === "newer"
+                  ? [...response.pages, ...current.pages]
+                  : [...current.pages, ...response.pages],
+            newer_cursor:
+              request.direction === "older"
+                ? current.newer_cursor
+                : response.newer_cursor,
+            older_cursor:
+              request.direction === "newer"
+                ? current.older_cursor
+                : response.older_cursor,
+            has_newer:
+              request.direction === "older"
+                ? current.has_newer
+                : response.has_newer,
+            has_older:
+              request.direction === "newer"
+                ? current.has_older
+                : response.has_older,
+          }));
+        } catch (reason: unknown) {
+          setLoadError(
+            reason instanceof Error
+              ? reason.message
+              : "記事を読み込めませんでした",
+          );
+        } finally {
+          loadingRef.current = false;
+          setIsLoading(false);
         }
-        setWindowState((current) => ({
-          pages:
-            request.direction === "replace"
-              ? response.pages
-              : request.direction === "newer"
-                ? [...response.pages, ...current.pages]
-                : [...current.pages, ...response.pages],
-          newer_cursor:
-            request.direction === "older"
-              ? current.newer_cursor
-              : response.newer_cursor,
-          older_cursor:
-            request.direction === "newer"
-              ? current.older_cursor
-              : response.older_cursor,
-          has_newer:
-            request.direction === "older"
-              ? current.has_newer
-              : response.has_newer,
-          has_older:
-            request.direction === "newer"
-              ? current.has_older
-              : response.has_older,
-        }));
-      } catch (reason: unknown) {
-        setLoadError(
-          reason instanceof Error
-            ? reason.message
-            : "記事を読み込めませんでした",
-        );
-      } finally {
-        loadingRef.current = false;
-        setIsLoading(false);
-      }
-    });
-  };
+      });
+    },
+    [feedRef, pendingScrollAnchorRef],
+  );
 
   useLayoutEffect(() => {
     const anchor = pendingScrollAnchorRef.current;
     if (!anchor) return;
+    void windowState.pages;
 
     pendingScrollAnchorRef.current = null;
     restoreScrollAnchor(anchor);
@@ -575,7 +572,7 @@ function FeedColumn({
     const query = new URLSearchParams({ kind });
     if (selectedMonth) query.set("month", selectedMonth);
     void loadWindow(`/api/pages?${query}`, "replace");
-  }, [kind, selectedMonth]);
+  }, [kind, selectedMonth, loadWindow]);
 
   useEffect(() => {
     const newerTarget = newerRef.current;
@@ -613,7 +610,7 @@ function FeedColumn({
     if (newerTarget) observer.observe(newerTarget);
     if (olderTarget) observer.observe(olderTarget);
     return () => observer.disconnect();
-  }, [kind, windowState]);
+  }, [kind, windowState, loadWindow]);
 
   return (
     <section

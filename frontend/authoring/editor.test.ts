@@ -72,7 +72,7 @@ const {
   topicSourceElement,
   universeReferences,
   showYouTubeFallback,
-  useYouTubeThumbnailFallback,
+  applyYouTubeThumbnailFallback,
   youtubeVideoId,
 } = await import("./editor");
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
@@ -415,13 +415,13 @@ test("navigates material tabs with arrows, Home, and End", async () => {
         ?.getAttribute("aria-label");
     const press = async (label: string, key: string) => {
       await act(async () => {
-        container
-          .querySelector<HTMLButtonElement>(
-            `[role="tab"][aria-label="${label}"]`,
-          )!
-          .dispatchEvent(
-            new window.KeyboardEvent("keydown", { key, bubbles: true }),
-          );
+        const tab = container.querySelector<HTMLButtonElement>(
+          `[role="tab"][aria-label="${label}"]`,
+        );
+        assert.ok(tab);
+        tab.dispatchEvent(
+          new window.KeyboardEvent("keydown", { key, bubbles: true }),
+        );
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
     };
@@ -560,7 +560,8 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
     };
     const remainingItem = container.querySelector<HTMLButtonElement>(
       ".content-inbox__item",
-    )!;
+    );
+    assert.ok(remainingItem);
     const dragStart = new window.Event("dragstart", {
       bubbles: true,
       cancelable: true,
@@ -570,7 +571,8 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
     assert.equal(dataTransfer.effectAllowed, "copy");
 
     let nativeDropObserved = false;
-    const editorElement = container.querySelector<HTMLElement>(".ProseMirror")!;
+    const editorElement = container.querySelector<HTMLElement>(".ProseMirror");
+    assert.ok(editorElement);
     editorElement.addEventListener("drop", () => {
       nativeDropObserved = true;
     });
@@ -605,9 +607,11 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
     );
     const coverSave = waitForSave();
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[aria-label$="をカバーに設定"]')!
-        .click();
+      const coverButton = container.querySelector<HTMLButtonElement>(
+        '[aria-label$="をカバーに設定"]',
+      );
+      assert.ok(coverButton);
+      coverButton.click();
       await coverSave;
     });
     assert.equal(savedPayloads.at(-1)?.cover_mode, "explicit");
@@ -617,7 +621,7 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
     );
     assert.equal(
       container
-        .querySelector('[role="radiogroup"] input:checked')
+        .querySelector(".article-editing-cover__actions input:checked")
         ?.getAttribute("value"),
       "explicit",
     );
@@ -712,17 +716,18 @@ test("inserts a Raindrop URL and marks it as used by the current page", async ()
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[role="tab"][aria-label="Raindrop"]',
-        )!
-        .click();
+      const tab = container.querySelector<HTMLButtonElement>(
+        '[role="tab"][aria-label="Raindrop"]',
+      );
+      assert.ok(tab);
+      tab.click();
       await Promise.resolve();
     });
 
     const item = container.querySelector<HTMLButtonElement>(
       ".content-inbox__item",
-    )!;
+    );
+    assert.ok(item);
     assert.equal(item.getAttribute("aria-label"), "Articleを本文へ追加");
 
     const saved = new Promise<void>((resolve) => {
@@ -847,9 +852,11 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(".content-inbox__sync")!
-        .click();
+      const syncButton = container.querySelector<HTMLButtonElement>(
+        ".content-inbox__sync",
+      );
+      assert.ok(syncButton);
+      syncButton.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
@@ -858,11 +865,11 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
       ["/api/inbox", "/api/inbox/sync", "/api/inbox/sync/run-1", "/api/inbox"],
     );
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[role="tab"][aria-label="Raindrop"]',
-        )!
-        .click();
+      const tab = container.querySelector<HTMLButtonElement>(
+        '[role="tab"][aria-label="Raindrop"]',
+      );
+      assert.ok(tab);
+      tab.click();
     });
     assert.equal(
       container.querySelector(".content-inbox__kind")?.textContent,
@@ -913,7 +920,7 @@ test("falls back when a maximum resolution YouTube thumbnail is unavailable", ()
   image.dataset.youtubeThumbnailFallback =
     "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg";
 
-  useYouTubeThumbnailFallback(image);
+  applyYouTubeThumbnailFallback(image);
 
   assert.equal(image.src, "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg");
   assert.equal(image.dataset.youtubeThumbnailFallback, undefined);
@@ -924,7 +931,8 @@ test("shows the YouTube thumbnail and URL after a player error", () => {
   wrapper.className = "youtube-player";
   wrapper.innerHTML =
     '<iframe data-youtube-player-frame></iframe><a class="youtube-player__fallback" href="https://www.youtube.com/watch?v=dQw4w9WgXcQ">URL</a>';
-  const iframe = wrapper.querySelector("iframe")!;
+  const iframe = wrapper.querySelector("iframe");
+  assert.ok(iframe);
 
   showYouTubeFallback(iframe);
 
@@ -963,7 +971,9 @@ test("edits a selected YouTube player as its original URL", async () => {
     contentType: "markdown",
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  const playerPosition = editor.state.doc.firstChild!.nodeSize;
+  const firstChild = editor.state.doc.firstChild;
+  assert.ok(firstChild);
+  const playerPosition = firstChild.nodeSize;
 
   editor.commands.setNodeSelection(playerPosition);
 
@@ -1052,7 +1062,8 @@ test("applies JPEG EXIF orientation before resizing", () => {
 
   const dimensions = imageDimensions(bytes.buffer, "image/jpeg");
   assert.deepEqual(dimensions, { width: 4016, height: 6016 });
-  assert.deepEqual(resizedDimensions(dimensions!), {
+  assert.ok(dimensions);
+  assert.deepEqual(resizedDimensions(dimensions), {
     width: 1709,
     height: 2560,
   });
@@ -1244,9 +1255,11 @@ test("does not mark a read-only page dirty when navigating a wiki link", async (
       );
       await Promise.resolve();
     });
-    const editorElement = container.querySelector<HTMLElement>(".ProseMirror")!;
+    const editorElement = container.querySelector<HTMLElement>(".ProseMirror");
+    assert.ok(editorElement);
     const link =
-      editorElement.querySelector<HTMLAnchorElement>('a[href="/example"]')!;
+      editorElement.querySelector<HTMLAnchorElement>('a[href="/example"]');
+    assert.ok(link);
     assert.equal(editorElement.getAttribute("contenteditable"), "false");
     assert.equal(
       container.querySelector(".article-reading-header h1")?.textContent,
@@ -1412,7 +1425,9 @@ test("edits a selected image as Markdown and renders it again after leaving", ()
     content: "title\n\n![犬](/assets/uploads/2026/08/image.webp)\n\nbody",
     contentType: "markdown",
   });
-  const imagePosition = editor.state.doc.firstChild!.nodeSize;
+  const firstChild = editor.state.doc.firstChild;
+  assert.ok(firstChild);
+  const imagePosition = firstChild.nodeSize;
 
   editor.commands.setTextSelection(imagePosition - 1);
   editor.commands.setNodeSelection(imagePosition);
@@ -1456,10 +1471,10 @@ test("keeps an image rendered when the cursor moves to the start of the followin
     content: "title\n\n![](/assets/uploads/2026/08/image.webp)\n\nbody",
     contentType: "markdown",
   });
+  const firstChild = editor.state.doc.firstChild;
+  assert.ok(firstChild);
   const bodyStart =
-    editor.state.doc.firstChild!.nodeSize +
-    editor.state.doc.child(1).nodeSize +
-    1;
+    firstChild.nodeSize + editor.state.doc.child(1).nodeSize + 1;
 
   editor.commands.setTextSelection(bodyStart);
 

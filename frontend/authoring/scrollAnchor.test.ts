@@ -8,7 +8,9 @@ import { JSDOM } from "jsdom";
 import { captureScrollAnchor, restoreScrollAnchor } from "./scrollAnchor";
 
 const dom = new JSDOM("<!doctype html><body><div id=feed></div></body>");
-const feed = dom.window.document.querySelector("#feed")!;
+const feedElement = dom.window.document.querySelector("#feed");
+assert.ok(feedElement);
+const feed = feedElement;
 
 beforeEach(() => feed.replaceChildren());
 
@@ -33,7 +35,8 @@ test("keeps the article crossing the viewport top as the scroll anchor", () => {
 
 test("scrolls once by the anchor movement after articles are prepended", () => {
   const visibleArticle = entry(-40, 120);
-  const anchor = captureScrollAnchor(feed)!;
+  const anchor = captureScrollAnchor(feed);
+  assert.ok(anchor);
   visibleArticle.getBoundingClientRect = () =>
     ({ top: 440, bottom: 600 }) as DOMRect;
   const adjustments: number[] = [];

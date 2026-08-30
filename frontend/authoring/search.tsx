@@ -1,6 +1,7 @@
 import {
   type KeyboardEvent,
   type RefObject,
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -120,7 +121,7 @@ function SearchResults({
   state: SearchState;
 }) {
   return (
-    <div
+    <section
       className="site-search__results"
       id={id}
       aria-label="検索結果"
@@ -150,7 +151,7 @@ function SearchResults({
           {result.excerpt && <span>{result.excerpt}</span>}
         </a>
       ))}
-    </div>
+    </section>
   );
 }
 
@@ -206,10 +207,10 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
   const desktopRef = useRef<HTMLDivElement>(null);
   const mobileInputRef = useRef<HTMLInputElement>(null);
   const mobileButtonRef = useRef<HTMLButtonElement>(null);
-  const closeMobile = () => {
+  const closeMobile = useCallback(() => {
     setMobileOpen(false);
     window.setTimeout(() => mobileButtonRef.current?.focus(), 0);
-  };
+  }, []);
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
@@ -272,7 +273,9 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
     } else if (main) {
       inertTargets.push(main);
     }
-    inertTargets.forEach((target) => target.setAttribute("inert", ""));
+    inertTargets.forEach((target) => {
+      target.setAttribute("inert", "");
+    });
     navigation?.setAttribute("inert", "");
     document.body.style.overflow = "hidden";
     const close = (event: globalThis.KeyboardEvent) => {
@@ -281,17 +284,22 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
     document.addEventListener("keydown", close);
     return () => {
       document.removeEventListener("keydown", close);
-      inertTargets.forEach((target) => target.removeAttribute("inert"));
+      inertTargets.forEach((target) => {
+        target.removeAttribute("inert");
+      });
       navigation?.removeAttribute("inert");
       document.body.style.removeProperty("overflow");
     };
-  }, [mobileOpen]);
+  }, [mobileOpen, closeMobile]);
 
   return (
     <div className="site-search">
+      {/* The wrapper coordinates pointer and focus state for the nested search controls. */}
+      {/* biome-ignore lint/a11y/useSemanticElements: keep the broadly supported div with an explicit landmark */}
       <div
         className={`site-search__desktop${desktopOpen ? " is-open" : ""}`}
         ref={desktopRef}
+        role="search"
         onPointerDown={() => setDesktopOpen(true)}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget))

@@ -82,7 +82,7 @@ export function showYouTubeFallback(iframe: HTMLIFrameElement): void {
     ?.classList.add("youtube-player--fallback");
 }
 
-export function useYouTubeThumbnailFallback(image: HTMLImageElement): void {
+export function applyYouTubeThumbnailFallback(image: HTMLImageElement): void {
   const fallback = image.dataset.youtubeThumbnailFallback;
   if (!fallback || image.src === fallback) return;
   delete image.dataset.youtubeThumbnailFallback;
@@ -92,7 +92,7 @@ export function useYouTubeThumbnailFallback(image: HTMLImageElement): void {
 function observeYouTubePlayers(root: HTMLElement): () => void {
   const fallbackThumbnail = (event: Event) => {
     if (event.target instanceof HTMLImageElement)
-      useYouTubeThumbnailFallback(event.target);
+      applyYouTubeThumbnailFallback(event.target);
   };
   const register = () => {
     const iframes = Array.from(
@@ -175,9 +175,6 @@ const WikiLinks = Extension.create({
             return null;
           if (editor.view.composing) return null;
 
-          const cursor = newState.selection.empty
-            ? newState.selection.from
-            : -1;
           if (transactions.some((transaction) => transaction.selectionSet)) {
             const selectedByCursor = transactions.some(
               (transaction) =>
@@ -619,6 +616,7 @@ export function pendingLineUpdates(
 }
 
 type LineUpdateMarker = {
+  key: string;
   blockSize: number;
   insetBlockStart: number;
   updatedAt: string | null;
@@ -671,11 +669,11 @@ function LineUpdateRail({
   editor: Editor | null;
   updates: Array<string | null>;
 }) {
-  const lines = body.split("\n");
   const [markers, setMarkers] = useState<Array<LineUpdateMarker>>([]);
 
   useLayoutEffect(() => {
     if (!editor) return;
+    const lines = body.split("\n");
 
     const measure = () => {
       const editorElement = editor.view.dom;
@@ -712,6 +710,7 @@ function LineUpdateRail({
             ? next.insetBlockStart - block.insetBlockStart
             : block.blockSize;
           return {
+            key: `${block.blockIndex}:${block.lineIndex}`,
             blockSize,
             insetBlockStart: block.insetBlockStart,
             updatedAt: block.updatedAt,
@@ -729,7 +728,7 @@ function LineUpdateRail({
 
   return (
     <div className="line-update-rail" aria-hidden="true">
-      {markers.map((marker, index) => {
+      {markers.map((marker) => {
         const updatedAt = marker.updatedAt;
         const strength = updatedAt ? lineUpdateStrength(updatedAt) : 0;
         const state =
@@ -738,16 +737,14 @@ function LineUpdateRail({
             : updatedAt
               ? "expired"
               : "pending";
+        const label =
+          updatedAt && strength > 0 ? lineUpdateLabel(updatedAt) : undefined;
         return (
           <span
             className="line-update-rail__segment"
             data-state={state}
-            data-label={
-              state === "updated" ? lineUpdateLabel(updatedAt!) : undefined
-            }
-            title={
-              state === "updated" ? lineUpdateLabel(updatedAt!) : undefined
-            }
+            data-label={label}
+            title={label}
             style={
               state === "updated"
                 ? ({
@@ -760,7 +757,7 @@ function LineUpdateRail({
                     insetBlockStart: marker.insetBlockStart,
                   }
             }
-            key={index}
+            key={marker.key}
           />
         );
       })}
@@ -1034,7 +1031,9 @@ function EmbedCard({
           loading="lazy"
           referrerPolicy="no-referrer"
           data-youtube-thumbnail-fallback={fallbackImageUrl}
-          onError={(event) => useYouTubeThumbnailFallback(event.currentTarget)}
+          onError={(event) =>
+            applyYouTubeThumbnailFallback(event.currentTarget)
+          }
         />
       )}
     </div>
@@ -1411,9 +1410,9 @@ function InternalUniverseGraph({
   );
   const connectionCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    layout.links.forEach(({ target }) =>
-      counts.set(target.id, (counts.get(target.id) || 0) + 1),
-    );
+    layout.links.forEach(({ target }) => {
+      counts.set(target.id, (counts.get(target.id) || 0) + 1);
+    });
     return counts;
   }, [layout]);
   const pageCreatedAtRange = useMemo(() => {
@@ -1553,6 +1552,8 @@ function InternalUniverseGraph({
             name
           );
         return (
+          // Pointer and focus events only synchronize the graph preview with the nested links.
+          // biome-ignore lint/a11y/noStaticElementInteractions: the links remain the interactive controls
           <span
             className="internal-universe-group__topic-wrap"
             key={topic.id}
@@ -1571,7 +1572,9 @@ function InternalUniverseGraph({
               target={topic.group?.kind === "url" ? "_blank" : undefined}
               rel={topic.group?.kind === "url" ? "noreferrer" : undefined}
               style={style}
-            />
+            >
+              <span className="visually-hidden">{name}</span>
+            </a>
             {topic.group?.kind === "url" && youtubeVideoId(name) ? (
               <span
                 className="internal-universe-group__topic internal-universe-group__topic--external"
@@ -1591,7 +1594,8 @@ function InternalUniverseGraph({
                 rel={topic.group?.kind === "url" ? "noreferrer" : undefined}
                 style={style}
               >
-                {content}
+                <span className="visually-hidden">{name}</span>
+                <span aria-hidden="true">{content}</span>
               </a>
             )}
           </span>
@@ -1632,7 +1636,11 @@ function InternalUniverseGraph({
               );
             }}
             onBlur={schedulePreviewClose}
-          />
+          >
+            <span className="visually-hidden">
+              {page.title}（関連{connectionCount}件）
+            </span>
+          </a>
         );
       })}
       {activePage && activeNode && (
@@ -2112,6 +2120,9 @@ function Universe({
   useLayoutEffect(() => {
     const measurements = measurementsRef.current;
     if (!enabled || !measurements) return;
+    // The cards are rendered from these values before they are measured.
+    void embeds;
+    void urls;
 
     const update = () => {
       const nextSizes = Object.fromEntries(
@@ -2132,7 +2143,9 @@ function Universe({
     const observer = new ResizeObserver(update);
     measurements
       .querySelectorAll<HTMLElement>("[data-universe-card]")
-      .forEach((element) => observer.observe(element));
+      .forEach((element) => {
+        observer.observe(element);
+      });
     update();
     return () => observer.disconnect();
   }, [embeds, enabled, urls]);
@@ -2275,7 +2288,9 @@ function Universe({
     observer.observe(workspace);
     workspace
       .querySelectorAll<HTMLElement>("[data-universe-obstacle]")
-      .forEach((element) => observer.observe(element));
+      .forEach((element) => {
+        observer.observe(element);
+      });
     editor.on("update", measure);
     editor.on("focus", measure);
     editor.on("blur", measure);
@@ -2318,7 +2333,7 @@ function Universe({
     : undefined;
 
   return (
-    <div className="universe" aria-label="ユニバース">
+    <section className="universe" aria-label="ユニバース">
       {layout && (
         <>
           <svg className="universe__graph" aria-hidden="true">
@@ -2392,7 +2407,11 @@ function Universe({
             onMouseLeave={closePreview}
             onFocus={() => openPreview(node.url)}
             onBlur={closePreview}
-          />
+          >
+            <span className="visually-hidden">
+              {externalLinkLabel(node.url)}を開く
+            </span>
+          </a>
         ))}
       </div>
       {activeNode && previewStyle && (
@@ -2426,7 +2445,7 @@ function Universe({
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -3628,7 +3647,7 @@ export function AuthoringEditor({
   );
 
   const handleCoverDrop = useCallback(
-    async (event: ReactDragEvent<HTMLDivElement>) => {
+    async (event: ReactDragEvent<HTMLElement>) => {
       event.preventDefault();
       const itemId = event.dataTransfer.getData(INBOX_ITEM_DRAG_TYPE);
       if (itemId) {
@@ -3663,7 +3682,7 @@ export function AuthoringEditor({
   );
 
   useEffect(() => {
-    if (!editor || !editor.isEditable) return;
+    if (!editor?.isEditable) return;
     const element = editor.view.dom;
     const dragenter = (event: DragEvent) => {
       if (!isImageDrag(event.dataTransfer)) return;
@@ -3801,7 +3820,7 @@ export function AuthoringEditor({
         draft.name || draft.title,
         linkedPageGroups,
       ),
-    [references.wikiLinkKey, draft.name, draft.title, linkedPageGroups],
+    [references.wikiLinkNames, draft.name, draft.title, linkedPageGroups],
   );
   const externalUniverseGroups = useMemo(
     () =>
@@ -3816,7 +3835,7 @@ export function AuthoringEditor({
             isTopicOnly: false,
           },
       ),
-    [references.externalUrlKey, linkedPageGroups],
+    [references.externalUrls, linkedPageGroups],
   );
   const universeGroups = useMemo(
     () => [...internalUniverseGroups, ...externalUniverseGroups],
@@ -3849,8 +3868,9 @@ export function AuthoringEditor({
         ref={workspaceRef}
       >
         {canEdit && (
-          <div
+          <section
             className={`article-editing-cover${draft.resolvedCoverImageUrl ? "" : " article-editing-cover--empty"}`}
+            aria-label="記事カバー"
             onDragOver={(event) => {
               if (isImageDrag(event.dataTransfer)) event.preventDefault();
             }}
@@ -3865,7 +3885,6 @@ export function AuthoringEditor({
             )}
             <fieldset
               className="article-editing-cover__actions"
-              role="radiogroup"
               aria-label="カバーモード"
             >
               <legend className="visually-hidden">カバーモード</legend>
@@ -3909,7 +3928,7 @@ export function AuthoringEditor({
                 なし
               </label>
             </fieldset>
-          </div>
+          </section>
         )}
         {!canEdit && (
           <header
@@ -3947,11 +3966,18 @@ export function AuthoringEditor({
           </div>
         )}
         <div className="editor-canvas">
+          {/* Keyboard users focus the editor directly; this handler only delegates clicks on surrounding whitespace. */}
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: no keyboard equivalent is needed for whitespace */}
           <section
             className="editor-shell"
             data-universe-obstacle
             aria-label="記事を編集"
             onClick={(event) => {
+              if (
+                event.target instanceof Element &&
+                event.target.closest(".editor-shell__actions")
+              )
+                return;
               if (!editor || editor.view.dom.contains(event.target as Node))
                 return;
               editor.commands.focus("end");
@@ -3968,10 +3994,7 @@ export function AuthoringEditor({
               </div>
             )}
             {editor?.isEditable && imageUploadStatus && (
-              <div
-                className="editor-shell__actions"
-                onClick={(event) => event.stopPropagation()}
-              >
+              <div className="editor-shell__actions">
                 <span className="editor-shell__upload-status" role="status">
                   {imageUploadStatus}
                 </span>
