@@ -90,6 +90,10 @@ module WeblogAuthoring
     def embed_metadata: (String) -> Hash[String, untyped]
     def read_embed_cache: (String, String) -> Hash[String, untyped]?
     def write_embed_cache: (String, Hash[String, untyped]) -> Hash[String, untyped]
+    def s3_client: () -> untyped
+    def lambda_client: () -> untyped
+    def search_index: () -> untyped
+    def resolve_dependency: (untyped) -> untyped
     def route_response: (lambda_event) -> lambda_response
     def page_id_path?: (String) -> bool
     def authoring_page_id_path?: (String) -> bool

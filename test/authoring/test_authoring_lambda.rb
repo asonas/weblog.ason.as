@@ -17,6 +17,8 @@ class AuthoringLambdaTest < Minitest::Test
     end
     pool = Object.new
     client = Object.new
+    s3_client_constructions = 0
+    lambda_client_constructions = 0
     variables = {
       "OAUTH_SECRET_ID" => "oauth", "DSQL_HOST" => "cluster", "ASSET_BUCKET" => "assets",
       "SITE_BUCKET" => "site", "GITHUB_REDIRECT_URI" => "https://example.com/callback",
@@ -28,9 +30,9 @@ class AuthoringLambdaTest < Minitest::Test
 
     output, _stderr = capture_io do
       with_new_returning(Aws::SecretsManager::Client, secret_client) do
-        with_new_returning(Aws::S3::Client, client) do
+        with_new_returning(Aws::S3::Client, -> { s3_client_constructions += 1; client }) do
           with_new_returning(Aws::SQS::Client, client) do
-            with_new_returning(Aws::Lambda::Client, client) do
+            with_new_returning(Aws::Lambda::Client, -> { lambda_client_constructions += 1; client }) do
               with_method_returning(AuroraDsql::Pg, :create_pool, pool) do
                 WeblogAuthoring::LambdaHandler.api(request_id: "request-id", route: "/api/tags")
               end
@@ -48,6 +50,10 @@ class AuthoringLambdaTest < Minitest::Test
     %w[api_total secrets_client secret_get secret_decode s3_client dsql_pool sqs_client lambda_client object_graph].each do |name|
       assert_kind_of Numeric, entry.fetch("timings").fetch(name)
     end
+    assert_equal 0.0, entry.fetch("timings").fetch("s3_client")
+    assert_equal 0.0, entry.fetch("timings").fetch("lambda_client")
+    assert_equal 0, s3_client_constructions
+    assert_equal 0, lambda_client_constructions
     assert_kind_of Numeric, entry.fetch("unaccounted_ms")
   ensure
     WeblogAuthoring::LambdaHandler.remove_instance_variable(:@api) if WeblogAuthoring::LambdaHandler.instance_variable_defined?(:@api)
@@ -57,12 +63,13 @@ class AuthoringLambdaTest < Minitest::Test
   private
 
   def with_new_returning(target, value)
-    with_method_returning(target, :new, value) { yield }
+    replacement = value.respond_to?(:call) ? value : -> { value }
+    with_method_returning(target, :new, replacement) { yield }
   end
 
   def with_method_returning(target, method_name, value)
     original = target.method(method_name)
-    target.define_singleton_method(method_name) { |**| value }
+    target.define_singleton_method(method_name) { |**| value.respond_to?(:call) ? value.call : value }
     yield
   ensure
     target.define_singleton_method(method_name, original)

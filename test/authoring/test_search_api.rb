@@ -137,6 +137,27 @@ class SearchApiTest < Minitest::Test
     assert_equal ["limit must be between 1 and 20"], JSON.parse(response.fetch(:body)).dig("errors", "limit")
   end
 
+  def test_constructs_the_search_index_only_for_the_first_nonempty_search
+    constructions = 0
+    index = Object.new
+    index.define_singleton_method(:search) do |query:, limit:|
+      raise "unexpected search" unless query == "query" && limit == 10
+
+      WeblogAuthoring::SearchIndex::Result.new(results: [], generated_at: Time.now.iso8601)
+    end
+    api = WeblogAuthoring::LambdaApi.new(
+      database: Object.new,
+      search_index: -> { constructions += 1; index },
+      logger: StringIO.new
+    )
+
+    api.call(event(query: { "q" => " " }))
+    api.call(event(query: { "q" => "query" }))
+    api.call(event(query: { "q" => "query" }))
+
+    assert_equal 1, constructions
+  end
+
   def test_returns_no_results_for_empty_and_unmatched_queries
     index = search_index_fixture
     Dir.mktmpdir("search-cache-") do |cache_dir|

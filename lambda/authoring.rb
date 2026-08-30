@@ -29,7 +29,9 @@ module WeblogAuthoring
         secrets = ProductionSecrets.new(
           secret_id: ENV.fetch("OAUTH_SECRET_ID"), client: secrets_client, timings:
         ).fetch
-        s3_client = measure(timings, "s3_client") { Aws::S3::Client.new }
+        timings["s3_client"] = 0.0
+        s3_client_instance = nil
+        s3_client = -> { s3_client_instance ||= Aws::S3::Client.new }
         database = measure(timings, "dsql_pool") do
           DsqlDatabase.new(
             host: ENV.fetch("DSQL_HOST"),
@@ -37,7 +39,9 @@ module WeblogAuthoring
           )
         end
         sqs_client = measure(timings, "sqs_client") { Aws::SQS::Client.new }
-        lambda_client = measure(timings, "lambda_client") { Aws::Lambda::Client.new }
+        timings["lambda_client"] = 0.0
+        lambda_client_instance = nil
+        lambda_client = -> { lambda_client_instance ||= Aws::Lambda::Client.new }
         instance = measure(timings, "object_graph") do
           LambdaApi.new(
             database:, s3_client:, asset_bucket: ENV.fetch("ASSET_BUCKET"),
@@ -51,7 +55,7 @@ module WeblogAuthoring
             webmention_queue_arn: ENV["WEBMENTION_QUEUE_ARN"],
             webmention_publish_dead_letter_arn: ENV["WEBMENTION_PUBLISH_DEAD_LETTER_ARN"],
             webmention_publish_queue_arn: ENV["WEBMENTION_PUBLISH_QUEUE_ARN"],
-            search_index: SearchIndex.new(s3_client:, bucket: ENV.fetch("SITE_BUCKET")),
+            search_index: -> { SearchIndex.new(s3_client: s3_client.call, bucket: ENV.fetch("SITE_BUCKET")) },
             embed_fetcher: EmbedMetadataFetcher.new,
             oauth: GitHubOAuth.new(client_id: secrets.fetch("github_client_id"),
                                    client_secret: secrets.fetch("github_client_secret")),

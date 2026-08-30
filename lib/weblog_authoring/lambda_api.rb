@@ -187,7 +187,7 @@ module WeblogAuthoring
 
     def publish_feed
       body = AtomFeed.new(site_url: @frontend_url).render(@database.list_pages)
-      @s3_client.put_object(
+      s3_client.put_object(
         bucket: @site_bucket,
         key: "feed.xml",
         body:,
@@ -453,7 +453,7 @@ module WeblogAuthoring
 
       payload = parse_json(event)
       upload = ImageUpload.new(
-        s3_client: @s3_client,
+        s3_client:,
         bucket: @asset_bucket,
         clock: @clock
       ).create(
@@ -487,7 +487,7 @@ module WeblogAuthoring
     def mobile_upload
       MobileUpload.new(
         database: @database,
-        s3_client: @s3_client,
+        s3_client:,
         bucket: @asset_bucket,
         development_bucket: @development_asset_bucket,
         clock: @clock
@@ -674,7 +674,7 @@ module WeblogAuthoring
       queued = @database.queue_inbox_sync_run(run_id:, trigger: "manual", queued_at: @clock.call)
       return json_response(409, error: "Inbox sync is already running") unless queued
 
-      @lambda_client.invoke(
+      lambda_client.invoke(
         function_name: @inbox_sync_function_name,
         invocation_type: "Event",
         payload: JSON.generate("type" => "inbox_sync", "trigger" => "manual", "run_id" => run_id)
@@ -742,7 +742,7 @@ module WeblogAuthoring
     end
 
     def invoke_bluesky_oauth(payload)
-      response = @lambda_client.invoke(
+      response = lambda_client.invoke(
         function_name: @bluesky_oauth_function_name,
         invocation_type: "RequestResponse",
         payload: JSON.generate(payload)
@@ -762,7 +762,7 @@ module WeblogAuthoring
       return search_json_response(200, "results" => []) if text.empty?
 
       started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      result = @search_index.search(query: text, limit:)
+      result = search_index.search(query: text, limit:)
       duration_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000
       @logger.puts(JSON.generate(
         "event" => "search_completed",
@@ -803,7 +803,7 @@ module WeblogAuthoring
     end
 
     def image_inbox
-      ImageInbox.new(s3_client: @s3_client, bucket: @asset_bucket, database: @database)
+      ImageInbox.new(s3_client:, bucket: @asset_bucket, database: @database)
     end
 
     def inbox_item_json(item, usages: [])
@@ -880,7 +880,7 @@ module WeblogAuthoring
     end
 
     def read_embed_cache(key, url)
-      object = @s3_client.get_object(bucket: @asset_bucket, key:)
+      object = s3_client.get_object(bucket: @asset_bucket, key:)
       metadata = JSON.parse(object.body.read)
       return nil unless metadata["url"] == url
 
@@ -892,13 +892,29 @@ module WeblogAuthoring
     end
 
     def write_embed_cache(key, metadata)
-      @s3_client.put_object(
+      s3_client.put_object(
         bucket: @asset_bucket,
         key:,
         body: JSON.generate(metadata),
         content_type: "application/json; charset=utf-8"
       )
       metadata
+    end
+
+    def s3_client
+      @s3_client = resolve_dependency(@s3_client)
+    end
+
+    def lambda_client
+      @lambda_client = resolve_dependency(@lambda_client)
+    end
+
+    def search_index
+      @search_index = resolve_dependency(@search_index)
+    end
+
+    def resolve_dependency(dependency)
+      dependency.respond_to?(:call) ? dependency.call : dependency
     end
 
     def route_response(event)
