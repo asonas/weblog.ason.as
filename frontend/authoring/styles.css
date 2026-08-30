@@ -1952,6 +1952,10 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header__search .si
   position: sticky;
   inset-block-start: var(--space-8);
   align-self: start;
+  max-block-size: calc(100svh - var(--space-16));
+  overflow-y: auto;
+  overscroll-behavior-block: contain;
+  scrollbar-gutter: stable;
 }
 
 .cover-journal__index .home-tags,
@@ -2857,6 +2861,8 @@ td {
 
   .cover-journal__index {
     position: static;
+    max-block-size: none;
+    overflow-y: visible;
   }
 
   .cover-journal__index .home-archive__years {
