@@ -4,6 +4,7 @@ node = "24"
 aws-cli = "latest"
 "github:sorah/mairu" = "latest"
 terraform = "1.15.9"
+tflint = "0.64.0"
 
 [tasks.setup]
 description = "Install Ruby and Node.js dependencies"
@@ -96,6 +97,42 @@ run = "npm run test:scrapbox"
 [tasks."scrapbox:coverage"]
 description = "Generate text and LCOV coverage for the Scrapbox converter"
 run = "npm run coverage:scrapbox"
+
+[tasks."terraform:format"]
+description = "Check Terraform formatting"
+run = "terraform fmt -check -recursive infra/bootstrap infra/production"
+
+[tasks."terraform:validate"]
+description = "Initialize without backends and validate both Terraform roots"
+run = [
+  "TF_DATA_DIR=/tmp/weblog-terraform-bootstrap terraform -chdir=infra/bootstrap init -backend=false -input=false -lockfile=readonly",
+  "TF_DATA_DIR=/tmp/weblog-terraform-bootstrap terraform -chdir=infra/bootstrap validate",
+  "TF_DATA_DIR=/tmp/weblog-terraform-production terraform -chdir=infra/production init -backend=false -input=false -lockfile=readonly",
+  "TF_DATA_DIR=/tmp/weblog-terraform-production terraform -chdir=infra/production validate",
+]
+
+[tasks."terraform:lint"]
+description = "Lint both Terraform roots with warnings as failures"
+run = [
+  "tflint --chdir=infra/bootstrap --minimum-failure-severity=warning",
+  "tflint --chdir=infra/production --minimum-failure-severity=warning",
+]
+
+[tasks."terraform:test"]
+description = "Run production Terraform tests with mock providers"
+run = [
+  "TF_DATA_DIR=/tmp/weblog-terraform-production terraform -chdir=infra/production init -backend=false -input=false -lockfile=readonly",
+  "TF_DATA_DIR=/tmp/weblog-terraform-production terraform -chdir=infra/production test",
+]
+
+[tasks."terraform:check"]
+description = "Run non-destructive Terraform format, validate, lint, and mock tests"
+run = [
+  "mise run terraform:format",
+  "mise run terraform:validate",
+  "mise run terraform:lint",
+  "mise run terraform:test",
+]
 
 [tasks."ruby:format"]
 description = "Format Ruby files with RuboCop"
