@@ -182,6 +182,27 @@ coverageは言語別の`*:coverage`で実行します。
 production credentialを使う読み取り確認は`mise run check:production`で実行します。
 どちらも通常checkには含めません。
 
+変更箇所に近いfocused checkは、次のtaskを使います。
+
+```sh
+mise run ruby:lint
+mise run ruby:typecheck
+mise run ruby:test
+mise run frontend:lint
+mise run frontend:typecheck
+mise run frontend:test
+mise run bluesky-oauth:lint
+mise run bluesky-oauth:typecheck
+mise run bluesky-oauth:test
+mise run scrapbox:lint
+mise run scrapbox:typecheck
+mise run scrapbox:test
+mise run terraform:check
+mise run check:ios
+```
+
+production deployment、OAuth rotation、障害時の確認と復旧は、[production runbook](docs/production-runbook.md)を参照してください。
+
 Terraformのmock testは対象resourceだけを評価するため、Terraform自身が
 `Resource targeting is in effect`を表示します。実providerやproductionには接続しません。
 XcodeはApp Intentsを使わないtargetに対してmetadata抽出skipのwarningを表示します。
