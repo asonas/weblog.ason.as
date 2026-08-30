@@ -121,6 +121,9 @@ module WeblogAuthoring
       if method == "POST" && path == "/api/inbox/sources/bluesky/connect"
         return bluesky_oauth_connect_response(event)
       end
+      if method == "POST" && path == "/api/inbox/sources/bluesky/refresh"
+        return bluesky_oauth_refresh_response(event)
+      end
       if method == "GET" && path == "/api/inbox/sources/bluesky/callback"
         return bluesky_oauth_callback_response(event)
       end
@@ -538,6 +541,16 @@ module WeblogAuthoring
       return json_response(403, error: "CSRF token mismatch") unless valid_csrf
 
       json_response(200, invoke_bluesky_oauth("action" => "connect"))
+    end
+
+    def bluesky_oauth_refresh_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to refresh Bluesky") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+      valid_csrf = secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
+      return json_response(403, error: "CSRF token mismatch") unless valid_csrf
+
+      json_response(200, invoke_bluesky_oauth("action" => "refresh"))
     end
 
     def bluesky_oauth_callback_response(event)

@@ -502,6 +502,19 @@ class LambdaApiTest < Minitest::Test
       "POST", "/api/inbox/sources/bluesky/connect", cookies: ["weblog_authoring_session=#{token}"]
     ))
     assert_equal 403, missing_csrf.fetch(:statusCode)
+    missing_refresh_csrf = api.call(event(
+      "POST", "/api/inbox/sources/bluesky/refresh", cookies: ["weblog_authoring_session=#{token}"]
+    ))
+    assert_equal 403, missing_refresh_csrf.fetch(:statusCode)
+
+    refreshed = api.call(event(
+      "POST",
+      "/api/inbox/sources/bluesky/refresh",
+      cookies: ["weblog_authoring_session=#{token}"],
+      headers: { "x-csrf-token" => "csrf-token" }
+    ))
+    assert_equal 200, refreshed.fetch(:statusCode)
+    assert_equal "refresh", JSON.parse(lambda_client.invocations.last.fetch(:payload)).fetch("action")
 
     connected = api.call(event(
       "POST",
