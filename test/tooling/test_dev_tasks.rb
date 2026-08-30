@@ -14,7 +14,7 @@ class TestDevTasks < Minitest::Test
     rescue Errno::EADDRINUSE
       nil
     end
-    output, status = Open3.capture2e("mise", "run", "dev:web", chdir: ROOT)
+    output, status = Open3.capture2e("npm", "run", "dev", chdir: ROOT)
 
     refute status.success?
     assert_includes output, "Port 5173 is already in use"
