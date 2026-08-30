@@ -1,0 +1,39 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "net/http"
+require "uri"
+
+class ProductionSmokeCheck
+  ASSET_PATTERN = %r{(?:src|href)=["'](?<path>/static/authoring/assets/[^"']+)["']}
+
+  def initialize(site_url, http: Net::HTTP)
+    @site_url = URI(site_url)
+    @http = http
+  end
+
+  def call
+    html = fetch(@site_url)
+    asset_paths = html.scan(ASSET_PATTERN).flatten.uniq
+    raise "Production HTML does not reference an authoring asset" if asset_paths.empty?
+
+    asset_paths.each { |path| fetch(URI.join(@site_url, path)) }
+    JSON.parse(fetch(URI.join(@site_url, "/api/pages")))
+  end
+
+  private
+
+  def fetch(uri)
+    response = @http.get_response(uri)
+    raise "#{uri} returned HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
+
+    response.body
+  end
+end
+
+if $PROGRAM_NAME == __FILE__
+  site_url = ARGV.fetch(0, "https://weblog.ason.as")
+  ProductionSmokeCheck.new(site_url).call
+  puts "Production HTML, referenced asset, and public pages API are reachable."
+end
