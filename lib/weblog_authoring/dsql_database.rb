@@ -28,21 +28,21 @@ module WeblogAuthoring
       "photo" => ["photo"],
       "bluesky" => %w[post like],
       "raindrop" => ["bookmark"],
-      "c4p" => ["track"]
+      "c4p" => ["track"],
     }.freeze
     INBOX_PAYLOAD_KEYS = {
-      ["photo", "photo"] => %w[inbox_key preview_url captured_at_source],
-      ["bluesky", "post"] => %w[record_uri record_cid canonical_url author_did],
-      ["bluesky", "like"] => %w[like_uri like_cid subject_uri subject_cid canonical_url author_did],
-      ["raindrop", "bookmark"] => %w[raindrop_id url title],
-      ["c4p", "track"] => %w[guid permalink title audio_url duration_seconds]
+      %w[photo photo] => %w[inbox_key preview_url captured_at_source],
+      %w[bluesky post] => %w[record_uri record_cid canonical_url author_did],
+      %w[bluesky like] => %w[like_uri like_cid subject_uri subject_cid canonical_url author_did],
+      %w[raindrop bookmark] => %w[raindrop_id url title],
+      %w[c4p track] => %w[guid permalink title audio_url duration_seconds],
     }.freeze
     INBOX_PAYLOAD_TYPES = {
-      ["photo", "photo"] => { "inbox_key" => String, "preview_url" => String, "captured_at_source" => String },
-      ["bluesky", "post"] => %w[record_uri record_cid canonical_url author_did].to_h { |key| [key, String] },
-      ["bluesky", "like"] => %w[like_uri like_cid subject_uri subject_cid canonical_url author_did].to_h { |key| [key, String] },
-      ["raindrop", "bookmark"] => { "raindrop_id" => Integer, "url" => String, "title" => String },
-      ["c4p", "track"] => { "guid" => String, "permalink" => String, "title" => String, "audio_url" => String, "duration_seconds" => Integer }
+      %w[photo photo] => { "inbox_key" => String, "preview_url" => String, "captured_at_source" => String },
+      %w[bluesky post] => %w[record_uri record_cid canonical_url author_did].to_h { |key| [key, String] },
+      %w[bluesky like] => %w[like_uri like_cid subject_uri subject_cid canonical_url author_did].to_h { |key| [key, String] },
+      %w[raindrop bookmark] => { "raindrop_id" => Integer, "url" => String, "title" => String },
+      %w[c4p track] => { "guid" => String, "permalink" => String, "title" => String, "audio_url" => String, "duration_seconds" => Integer },
     }.freeze
 
     def initialize(host:, content_dir:, clock: -> { Time.now.getlocal(TOKYO_OFFSET) }, pool: nil)
@@ -300,7 +300,7 @@ module WeblogAuthoring
               RETURNING #{mobile_upload_columns}
             SQL
             [upload_id, device_id, client_upload_id, s3_key, content_type, size, sha256,
-             captured_at, captured_at_source, timestamp]
+             captured_at, captured_at_source, timestamp,]
           )
           [mobile_upload_from_row(result[0]), true]
         end
@@ -358,7 +358,7 @@ module WeblogAuthoring
                         expires_at, payload, created_at, updated_at
             SQL
             [SecureRandom.uuid.delete("-"), upload_id, upload.fetch("captured_at") ? parse_time(upload.fetch("captured_at")) : timestamp, timestamp,
-             timestamp + INBOX_RETENTION_SECONDS, payload]
+             timestamp + INBOX_RETENTION_SECONDS, payload,]
           )
           connection.exec_params(
             "UPDATE #{SCHEMA}.mobile_uploads SET state = 'completed', captured_at = COALESCE(captured_at, $2), completed_at = $2 WHERE id = $1",
@@ -434,7 +434,7 @@ module WeblogAuthoring
             SQL
             [
               source, kind, source_id, occurred_at, JSON.generate(payload),
-              SecureRandom.uuid.delete("-"), timestamp, timestamp + INBOX_RETENTION_SECONDS
+              SecureRandom.uuid.delete("-"), timestamp, timestamp + INBOX_RETENTION_SECONDS,
             ]
           )
           inbox_item_from_row(result[0])

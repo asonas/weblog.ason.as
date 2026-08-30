@@ -42,7 +42,7 @@ class TestLinks < Minitest::Test
 
     assert_equal [
       "https://example.com/article",
-      "https://example.net/path?item=1"
+      "https://example.net/path?item=1",
     ], WeblogAuthoring.extract_external_urls(body)
   end
 
@@ -52,7 +52,7 @@ class TestLinks < Minitest::Test
     MARKDOWN
 
     assert_equal [
-      "https://example.com/culture_history.php"
+      "https://example.com/culture_history.php",
     ], WeblogAuthoring.extract_external_urls(body)
   end
 

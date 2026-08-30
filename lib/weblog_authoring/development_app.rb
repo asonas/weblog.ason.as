@@ -57,7 +57,7 @@ module WeblogAuthoring
         method: env.fetch("REQUEST_METHOD"),
         path: env.fetch("PATH_INFO"),
         status:,
-        duration_ms: (elapsed * 1000).round(1)
+        duration_ms: (elapsed * 1000).round(1),
       }
       server_timing = headers["server-timing"] || headers["Server-Timing"]
       entry[:server_timing] = server_timing if server_timing
@@ -661,7 +661,7 @@ module WeblogAuthoring
         "image_url" => nil,
         "site_name" => URI.parse(url).host,
         "status" => "fallback",
-        "fetched_at" => settings.clock.call.iso8601
+        "fetched_at" => settings.clock.call.iso8601,
       }
       write_embed_cache(key, fallback)
     end
@@ -725,7 +725,7 @@ module WeblogAuthoring
         JAPANESE_WEEKDAYS.fetch(date.wday),
         date.strftime("%Y%m"),
         date.strftime("%m%d"),
-        "日記"
+        "日記",
       ].map { |name| "[[#{name}]]" }.join(" ")
 
       editor_json(
@@ -793,7 +793,7 @@ module WeblogAuthoring
         "expected_updated_at" => expected_updated_at,
         "save_message" => save_message,
         "linked_pages" => [],
-        "linked_pages_has_more" => linked_pages_has_more.nil? ? !page.nil? : linked_pages_has_more
+        "linked_pages_has_more" => linked_pages_has_more.nil? ? !page.nil? : linked_pages_has_more,
       }
     end
 
@@ -828,7 +828,7 @@ module WeblogAuthoring
 
       {
         "pages" => related.slice(offset, RELATED_PAGE_LIMIT) || [],
-        "has_more" => offset + RELATED_PAGE_LIMIT < related.length
+        "has_more" => offset + RELATED_PAGE_LIMIT < related.length,
       }
     end
 
@@ -966,7 +966,7 @@ module WeblogAuthoring
         "cover_image_url" => page.cover_image_url,
         "resolved_cover_image_url" => page_image_url(page),
         "linked_pages" => related.fetch("pages"),
-        "linked_pages_has_more" => related.fetch("has_more")
+        "linked_pages_has_more" => related.fetch("has_more"),
       }
     end
 
@@ -985,7 +985,7 @@ module WeblogAuthoring
         "updated_at" => page.updated_at.iso8601(9),
         "excerpt" => page_excerpt(page),
         "image_url" => page_image_url(page),
-        "is_diary" => page.links.any? { |link| link.name == "日記" }
+        "is_diary" => page.links.any? { |link| link.name == "日記" },
       }
     end
 
@@ -1007,7 +1007,7 @@ module WeblogAuthoring
         "newer_cursor" => pages.empty? ? nil : encode_page_cursor(pages.first, kind:),
         "older_cursor" => pages.empty? ? nil : encode_page_cursor(pages.last, kind:),
         "has_newer" => after ? has_more : newer_pages?(pages, before:, kind:),
-        "has_older" => after ? older_pages?(pages, kind:) : has_more
+        "has_older" => after ? older_pages?(pages, kind:) : has_more,
       }
     end
 

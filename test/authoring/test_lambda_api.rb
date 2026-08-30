@@ -255,7 +255,7 @@ class LambdaApiTest < Minitest::Test
   def test_page_windows_filter_diaries_and_articles_independently
     @database.pages.replace([
       page_document(id: "diary", name: "2026-08-28", body: "本文 [[日記]]"),
-      page_document(id: "article", name: "article", body: "本文")
+      page_document(id: "article", name: "article", body: "本文"),
     ])
 
     diaries = @api.call(event("GET", "/api/pages", query: { "kind" => "diary" }))
@@ -272,7 +272,7 @@ class LambdaApiTest < Minitest::Test
       page_document(id: "new-diary", name: "2026-08-21", body: "[[日記]]", created_at: newer, updated_at: older),
       page_document(id: "edited-diary", name: "2026-08-20", body: "[[日記]]", created_at: older, updated_at: newer),
       page_document(id: "new-article", name: "new-article", body: "本文", created_at: newer, updated_at: older),
-      page_document(id: "edited-article", name: "edited-article", body: "本文", created_at: older, updated_at: newer)
+      page_document(id: "edited-article", name: "edited-article", body: "本文", created_at: older, updated_at: newer),
     ])
 
     diaries = @api.call(event("GET", "/api/pages", query: { "kind" => "diary" }))

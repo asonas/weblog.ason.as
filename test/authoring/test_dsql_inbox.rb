@@ -42,11 +42,16 @@ class DsqlInboxTest < Minitest::Test
       when /INSERT INTO weblog_authoring\.inbox_items/
         key = params.take(3)
         existing = @items[key]
-        @items[key] = existing ? existing.merge("occurred_at" => params[3], "payload" => params[4], "updated_at" => params[6]) : {
-          "source" => params[0], "kind" => params[1], "source_id" => params[2], "occurred_at" => params[3],
-          "payload" => params[4], "id" => params[5], "ingested_at" => params[6], "expires_at" => params[7],
-          "created_at" => params[6], "updated_at" => params[6]
-        }
+        @items[key] = if existing
+                        existing.merge("occurred_at" => params[3], "payload" => params[4], "updated_at" => params[6])
+                      else
+                        {
+                          "source" => params[0], "kind" => params[1], "source_id" => params[2],
+                          "occurred_at" => params[3], "payload" => params[4], "id" => params[5],
+                          "ingested_at" => params[6], "expires_at" => params[7], "created_at" => params[6],
+                          "updated_at" => params[6],
+                        }
+                      end
         Result.new([@items.fetch(key)])
       when /INSERT INTO weblog_authoring\.consumed_inbox_items/
         item = @items.values.find { |candidate| candidate.fetch("id") == params[0] }

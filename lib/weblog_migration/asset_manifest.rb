@@ -13,7 +13,7 @@ module WeblogMigration
       ".jpg" => "image/jpeg", ".jpeg" => "image/jpeg", ".png" => "image/png", ".gif" => "image/gif",
       ".webp" => "image/webp", ".svg" => "image/svg+xml", ".mp3" => "audio/mpeg", ".wav" => "audio/wav",
       ".m4a" => "audio/mp4", ".ogg" => "audio/ogg", ".mp4" => "video/mp4", ".webm" => "video/webm",
-      ".mov" => "video/quicktime"
+      ".mov" => "video/quicktime",
     }.freeze
 
     module_function

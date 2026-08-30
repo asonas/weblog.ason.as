@@ -301,7 +301,7 @@ class DsqlDatabaseTest < Minitest::Test
     {
       "id" => id, "source" => "photo", "kind" => "photo", "source_id" => id,
       "occurred_at" => FIXED_TIME, "ingested_at" => FIXED_TIME, "expires_at" => expires_at,
-      "payload" => {}, "created_at" => FIXED_TIME, "updated_at" => FIXED_TIME
+      "payload" => {}, "created_at" => FIXED_TIME, "updated_at" => FIXED_TIME,
     }
   end
 end

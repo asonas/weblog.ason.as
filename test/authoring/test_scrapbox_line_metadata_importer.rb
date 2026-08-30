@@ -24,8 +24,8 @@ class TestScrapboxLineMetadataImporter < Minitest::Test
           { "text" => "- 記事", "created" => 1_700_000_000, "updated" => 1_700_000_001, "userId" => "user-1" },
           { "text" => "最初の行", "created" => 1_700_000_010, "updated" => 1_700_000_011, "userId" => "user-1" },
           { "text" => "次の行", "created" => 1_700_000_020, "updated" => 1_700_000_021, "userId" => "user-1" },
-          { "text" => "", "created" => 1_700_000_030, "updated" => 1_700_000_031, "userId" => "user-1" }
-        ]
+          { "text" => "", "created" => 1_700_000_030, "updated" => 1_700_000_031, "userId" => "user-1" },
+        ],
       }]
     ))
 
@@ -38,7 +38,7 @@ class TestScrapboxLineMetadataImporter < Minitest::Test
         unmatched_pages: 0,
         skipped_pages: 0,
         unmatched_titles: [],
-        skipped_titles: []
+        skipped_titles: [],
       },
       counts
     )

@@ -70,7 +70,7 @@ class NetworkFetchMigrationTest < Minitest::Test
       manifest = root.join("asset-manifest.json")
       manifest.write(JSON.pretty_generate("assets" => [
         { "source_post_ids" => [], "id" => "asset-image", "url" => "#{base}/image.png", "kind" => "image" },
-        { "source_post_ids" => [], "id" => "asset-missing", "url" => "#{base}/missing", "kind" => "url" }
+        { "source_post_ids" => [], "id" => "asset-missing", "url" => "#{base}/missing", "kind" => "url" },
       ]))
       before = manifest.binread
       report = WeblogMigration::Assets.fetch_assets(manifest, root.join("assets"), root.join("fetch.json"))

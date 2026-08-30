@@ -189,7 +189,7 @@ module WeblogAuthoring
       SAFE_INPUT_ATTRIBUTES = {
         "type" => "checkbox",
         "class" => "task-list-item-checkbox",
-        "disabled" => "disabled"
+        "disabled" => "disabled",
       }.freeze
       SHARED_ATTRIBUTES = %w[class id].freeze
       TAG_ATTRIBUTE_WHITELIST = Hash.new(SHARED_ATTRIBUTES).merge(
@@ -273,8 +273,8 @@ module WeblogAuthoring
       def convert_xml_comment(el, indent)
         convert_raw(el, indent)
       end
-      alias convert_xml_pi convert_xml_comment
-      alias convert_comment convert_xml_comment
+      alias_method :convert_xml_pi, :convert_xml_comment
+      alias_method :convert_comment, :convert_xml_comment
 
       def convert_codeblock(el, indent)
         attr = el.attr.dup
@@ -305,7 +305,7 @@ module WeblogAuthoring
         end
         output << "</#{el.type}>\n"
       end
-      alias convert_dd convert_li
+      alias_method :convert_dd, :convert_li
 
       def format_as_span_html(name, attr, body)
         "<#{name}#{sanitized_html_attributes(name, attr)}>#{body}</#{name}>"
@@ -428,7 +428,7 @@ module WeblogAuthoring
         attributes.each do |name, value|
           next if value.nil? || value.to_s.empty?
 
-          if !allowed_names.include?(name)
+          unless allowed_names.include?(name)
             warning("attribute omitted from <#{tag_name}>: #{name}")
             next
           end

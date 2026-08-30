@@ -29,7 +29,7 @@ module WeblogMigration
         "run_at" => TimeFormat.iso8601(Time.now),
         "downloaded" => results.count { |result| result["status"] == "downloaded" },
         "failed" => results.count { |result| result["status"] == "failed" },
-        "results" => results
+        "results" => results,
       }
       report_path = Pathname(report_path)
       FileUtils.mkdir_p(report_path.dirname)

@@ -9,7 +9,7 @@ class ManifestAndIndexMigrationTest < Minitest::Test
         id: "post-#{("a".ord + index).chr}",
         frontmatter: {
           "title" => "Post #{index}", "source_project" => "memo", "created_at" => nil,
-          "updated_at" => nil, "published_at" => nil, "visibility" => "public"
+          "updated_at" => nil, "published_at" => nil, "visibility" => "public",
         },
         body: "", links: [], asset_references: [], external_urls: urls, issues: []
       )

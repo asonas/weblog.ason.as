@@ -76,7 +76,7 @@ module WeblogMigration
         "id" => id,
         "url" => url,
         "kind" => kind,
-        "source_post_ids" => source_post_ids
+        "source_post_ids" => source_post_ids,
       }
     end
   end

@@ -31,7 +31,7 @@ module WeblogMigration
         "source_kind" => "scrapbox",
         "source_project" => page.project,
         "source_title" => page.title,
-        "source_url" => page.source_url
+        "source_url" => page.source_url,
       }
 
       NormalizedPost.new(

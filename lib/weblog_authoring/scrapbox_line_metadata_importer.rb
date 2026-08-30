@@ -48,7 +48,7 @@ module WeblogAuthoring
         unmatched_pages: unmatched_titles.length,
         skipped_pages: skipped_titles.length,
         unmatched_titles:,
-        skipped_titles:
+        skipped_titles:,
       }
     rescue Errno::ENOENT, Errno::EACCES, JSON::ParserError => error
       raise ArgumentError, "could not read Scrapbox export: #{@export_path}: #{error.message}"
@@ -77,7 +77,7 @@ module WeblogAuthoring
         {
           created_at: timestamp(line["created"]),
           updated_at: timestamp(line["updated"]),
-          user_id: line["userId"].is_a?(String) ? line["userId"] : nil
+          user_id: line["userId"].is_a?(String) ? line["userId"] : nil,
         }
       end
     end

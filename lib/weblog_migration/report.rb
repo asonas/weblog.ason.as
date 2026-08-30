@@ -49,7 +49,7 @@ module WeblogMigration
         "undated_posts" => undated_posts,
         "invalid_dates" => [],
         "asset_manifest_path" => manifest_path.to_s,
-        "output_paths" => { "index" => Pathname(index_path).to_s, "site" => Pathname(site_path).to_s }
+        "output_paths" => { "index" => Pathname(index_path).to_s, "site" => Pathname(site_path).to_s },
       }
     end
 
@@ -74,7 +74,7 @@ module WeblogMigration
         "- Resolved internal links: #{report["resolved_internal_links"]}",
         "- Unresolved links: #{report["unresolved_links"]}",
         "- Missing assets: #{report["missing_assets"]}", "",
-        "## Unresolved links", ""
+        "## Unresolved links", "",
       ]
       details = report.fetch("unresolved_link_details")
       lines.concat(details.map { |item| "- `#{item["source"]}` -> `#{item["target"]}`" })

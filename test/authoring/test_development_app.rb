@@ -56,7 +56,7 @@ class TestDevelopmentApp < Minitest::Test
         "description" => "Cached description",
         "image_url" => "https://example.com/card.jpg",
         "site_name" => "Example",
-        "status" => "ready"
+        "status" => "ready",
       }
     end
   end
@@ -185,7 +185,7 @@ class TestDevelopmentApp < Minitest::Test
       application, "POST", "/api/mobile/uploads", payload: {
         client_upload_id: "11111111-2222-4333-8444-555555555555",
         content_type: "image/jpeg", size: 1024, sha256: "a" * 64,
-        captured_at: FIXED_TIME.iso8601, captured_at_source: "photos"
+        captured_at: FIXED_TIME.iso8601, captured_at_source: "photos",
       }, headers: { "HTTP_AUTHORIZATION" => "Bearer #{token}" }
     )
     ordinary_mutation_status, = request_with(
@@ -397,7 +397,7 @@ class TestDevelopmentApp < Minitest::Test
       "/design-system",
       "/example-page",
       "/static/authoring/app.js",
-      "/static/authoring/assets/imageUpload.worker.js"
+      "/static/authoring/assets/imageUpload.worker.js",
     ]
 
     frontend_paths.each do |path|
@@ -427,7 +427,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "image-data", body
     assert_equal [{
       bucket: "weblog-asonas-assets-dev-282782318939",
-      key: "assets/asset_00685adfb0b588d4.jpg"
+      key: "assets/asset_00685adfb0b588d4.jpg",
     }], s3_client.requests
   end
 
@@ -441,7 +441,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "image-data", body
     assert_equal [{
       bucket: "weblog-asonas-assets-dev-282782318939",
-      key: "assets/inbox/2026/08/28/#{filename}"
+      key: "assets/inbox/2026/08/28/#{filename}",
     }], s3_client.requests
   end
 
@@ -468,7 +468,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "image-data", body
     assert_equal [{
       bucket: "weblog-asonas-assets-dev-282782318939",
-      key: "assets/uploads/2026/08/#{filename}"
+      key: "assets/uploads/2026/08/#{filename}",
     }], s3_client.requests
   end
 
@@ -478,11 +478,11 @@ class TestDevelopmentApp < Minitest::Test
     root.join("data/normalized/asset-manifest.json").write(JSON.generate("assets" => [{
       "id" => "asset_00685adfb0b588d4",
       "kind" => "image",
-      "url" => "https://gyazo.com/example"
+      "url" => "https://gyazo.com/example",
     }]))
     root.join("data/reports/asset-fetch-report.json").write(JSON.generate("results" => [{
       "id" => "asset_00685adfb0b588d4",
-      "local_path" => "asset_00685adfb0b588d4.jpg"
+      "local_path" => "asset_00685adfb0b588d4.jpg",
     }]))
     application = WeblogAuthoring::DevelopmentApp.application(
       root:,
@@ -547,7 +547,7 @@ class TestDevelopmentApp < Minitest::Test
       date: "2026-08-21",
       title: "最初の記事",
       body: "更新した本文",
-      expected_updated_at: page.fetch("updated_at")
+      expected_updated_at: page.fetch("updated_at"),
     })
 
     assert_equal 200, status
@@ -643,7 +643,7 @@ class TestDevelopmentApp < Minitest::Test
       body_hash: Digest::SHA256.hexdigest(page.body),
       lines: [
         { created_at: Time.at(1_700_000_000).utc, updated_at: Time.at(1_700_000_001).utc, user_id: "user-1" },
-        { created_at: Time.at(1_700_000_010).utc, updated_at: Time.at(1_700_000_011).utc, user_id: "user-1" }
+        { created_at: Time.at(1_700_000_010).utc, updated_at: Time.at(1_700_000_011).utc, user_id: "user-1" },
       ]
     )
 
@@ -705,7 +705,7 @@ class TestDevelopmentApp < Minitest::Test
 
     cursor = CGI.escape(january_window.fetch("newer_cursor"))
     newer_window = JSON.parse(request("GET", "/api/pages?after=#{cursor}").last)
-    assert_equal ["march", "february"], newer_window.fetch("pages").map { |page| page.fetch("title") }
+    assert_equal %w[march february], newer_window.fetch("pages").map { |page| page.fetch("title") }
     assert_equal false, newer_window.fetch("has_newer")
   end
 

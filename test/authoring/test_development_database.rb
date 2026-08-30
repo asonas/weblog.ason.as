@@ -171,7 +171,7 @@ class TestDevelopmentDatabase < Minitest::Test
       body: "更新した記事", expected_updated_at: older.updated_at
     ))
 
-    assert_equal ["older", "newer"], database.list_pages.map(&:name)
+    assert_equal %w[older newer], database.list_pages.map(&:name)
   end
 
   def test_list_pages_reads_only_the_records_next_to_a_cursor
@@ -191,7 +191,7 @@ class TestDevelopmentDatabase < Minitest::Test
     assert_equal ["january"], database.list_pages(limit: 1, before: { timestamp: february.updated_at, id: february.id }).map(&:name)
     assert_equal ["february"], database.list_pages(limit: 1, after: { timestamp: january.updated_at, id: january.id }).map(&:name)
     assert_equal ["january"], database.list_pages(kind: "diary").map(&:name)
-    assert_equal ["march", "february"], database.list_pages(kind: "article").map(&:name)
+    assert_equal %w[march february], database.list_pages(kind: "article").map(&:name)
   end
 
   def test_save_records_inbox_usage_and_commits_its_image_adoption_atomically

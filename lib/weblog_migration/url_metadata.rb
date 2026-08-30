@@ -34,7 +34,7 @@ module WeblogMigration
         "metadata_path" => output_path.to_s,
         "ready" => results.count { |result| result["status"] == "ready" },
         "results" => results,
-        "run_at" => TimeFormat.iso8601(Time.now)
+        "run_at" => TimeFormat.iso8601(Time.now),
       }
       report_path = Pathname(report_path)
       FileUtils.mkdir_p(report_path.dirname)
@@ -102,7 +102,7 @@ module WeblogMigration
         "source_post_ids" => entry.fetch("source_post_ids").dup,
         "status" => "fallback",
         "title" => nil,
-        "url" => url
+        "url" => url,
       }
 
       begin
@@ -162,7 +162,7 @@ module WeblogMigration
         "mime_type" => response.content_type,
         "sha256" => Digest::SHA256.hexdigest(data),
         "size" => data.bytesize,
-        "url" => url
+        "url" => url,
       }
     end
 

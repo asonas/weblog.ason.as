@@ -109,7 +109,7 @@ module WeblogAuthoring
                 line_index,
                 serialize_time(line[:created_at]),
                 serialize_time(line[:updated_at]),
-                line[:user_id]
+                line[:user_id],
               ]
             )
           end
@@ -133,7 +133,7 @@ module WeblogAuthoring
             line_index:,
             created_at: created_at && Time.iso8601(created_at),
             updated_at: updated_at && Time.iso8601(updated_at),
-            user_id:
+            user_id:,
           }
         end
       end
@@ -189,7 +189,7 @@ module WeblogAuthoring
           [
             id, source, kind, source_id, serialize_time(occurred_at), serialize_time(timestamp),
             serialize_time(timestamp + INBOX_RETENTION_SECONDS), JSON.generate(payload),
-            serialize_time(timestamp), serialize_time(timestamp)
+            serialize_time(timestamp), serialize_time(timestamp),
           ]
         )
         find_inbox_item_by_identity(database, source, kind, source_id)
@@ -501,12 +501,12 @@ module WeblogAuthoring
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_upload', ?, NULL)
           SQL
           [upload_id, device_id, client_upload_id, s3_key, content_type, size, sha256,
-           serialize_time(captured_at), captured_at_source, serialize_time(timestamp)]
+           serialize_time(captured_at), captured_at_source, serialize_time(timestamp),]
         )
         [mobile_upload_from_row(database.get_first_row(
           "SELECT #{mobile_upload_columns} FROM mobile_uploads WHERE id = ?",
           upload_id
-        )), true]
+        )), true,]
       end
     end
 
@@ -550,7 +550,7 @@ module WeblogAuthoring
             SQL
             [item_id, upload_id, occurred_at, serialize_time(timestamp),
              serialize_time(timestamp + INBOX_RETENTION_SECONDS), JSON.generate(payload),
-             serialize_time(timestamp), serialize_time(timestamp)]
+             serialize_time(timestamp), serialize_time(timestamp),]
           )
           database.execute(
             "UPDATE mobile_uploads SET state = 'completed', captured_at = COALESCE(captured_at, ?), completed_at = ? WHERE id = ?",
@@ -705,7 +705,7 @@ module WeblogAuthoring
               Digest::SHA256.hexdigest(renamed.body),
               renamed.empty? ? 1 : 0,
               renamed.body,
-              renamed.id
+              renamed.id,
             ]
           )
           replace_links(database, renamed)
@@ -1283,7 +1283,7 @@ module WeblogAuthoring
         metadata ||= {
           created_at: current.updated_at,
           updated_at: current.updated_at,
-          user_id: nil
+          user_id: nil,
         } if current && current_metadata.empty?
         metadata_by_line[line] << metadata unless metadata.nil?
       end
@@ -1294,7 +1294,7 @@ module WeblogAuthoring
         {
           created_at: previous&.fetch(:created_at, nil) || timestamp,
           updated_at: previous&.fetch(:updated_at, nil) || timestamp,
-          user_id: previous&.fetch(:user_id, nil)
+          user_id: previous&.fetch(:user_id, nil),
         }
       end
 
@@ -1312,7 +1312,7 @@ module WeblogAuthoring
             line_index,
             serialize_time(line.fetch(:created_at)),
             serialize_time(line.fetch(:updated_at)),
-            line.fetch(:user_id)
+            line.fetch(:user_id),
           ]
         )
       end

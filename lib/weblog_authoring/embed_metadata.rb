@@ -33,7 +33,7 @@ module WeblogAuthoring
         "description" => metadata.description,
         "image_url" => image_url,
         "site_name" => metadata.site_name || URI.parse(final_url).host,
-        "status" => "ready"
+        "status" => "ready",
       }
     rescue URI::InvalidURIError => error
       raise FetchError, error.message

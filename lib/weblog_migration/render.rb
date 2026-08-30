@@ -256,7 +256,7 @@ module WeblogMigration
           "id" => asset_id,
           "kind" => source_path.start_with?("http://", "https://") ? AssetManifest.classify_url(source_path) : "asset",
           "references" => edges.select { |_source, target| target == asset_id }.map(&:first),
-          "source_path" => source_path
+          "source_path" => source_path,
         }
         unless metadata.nil?
           asset["description"] = metadata["description"] if metadata.key?("description")

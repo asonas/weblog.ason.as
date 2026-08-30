@@ -148,7 +148,7 @@ module WeblogMigration
             frontmatter["updated_at"],
             frontmatter["published_at"],
             frontmatter.fetch("visibility"),
-            "posts/#{post.id}.md"
+            "posts/#{post.id}.md",
           ]
         )
         source_project = frontmatter.fetch("source_project").to_s

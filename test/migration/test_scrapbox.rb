@@ -21,7 +21,7 @@ class ScrapboxMigrationTest < Minitest::Test
       "projectName" => "memo",
       "pages" => [
         { "title" => "A", "lines" => [{ "text" => "[B]" }, { "text" => "[https://gyazo.com/abc image] https://gyazo.com/abc" }, { "text" => "[missing]" }] },
-        { "title" => "B", "lines" => [] }
+        { "title" => "B", "lines" => [] },
       ]
     ))
 

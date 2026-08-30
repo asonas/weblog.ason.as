@@ -275,7 +275,7 @@ module WeblogAuthoring
         "newer_cursor" => pages.empty? ? nil : encode_page_cursor(pages.first, kind:),
         "older_cursor" => pages.empty? ? nil : encode_page_cursor(pages.last, kind:),
         "has_newer" => after ? has_more : newer_pages?(pages, before:, kind:),
-        "has_older" => after ? older_pages?(pages, kind:) : has_more
+        "has_older" => after ? older_pages?(pages, kind:) : has_more,
       }
     end
 

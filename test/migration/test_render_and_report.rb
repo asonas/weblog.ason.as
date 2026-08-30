@@ -61,7 +61,7 @@ class RenderAndReportMigrationTest < Minitest::Test
       id: source.id,
       frontmatter: source.frontmatter,
       body: source.body,
-      links: ["B", "202408"],
+      links: %w[B 202408],
       asset_references: source.asset_references,
       external_urls: source.external_urls,
       issues: source.issues
