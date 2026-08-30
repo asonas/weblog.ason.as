@@ -1280,6 +1280,11 @@ module WeblogAuthoring
       metadata_by_line = Hash.new { |lines, body| lines[body] = [] }
       previous_lines.each_with_index do |line, index|
         metadata = current_metadata[index]
+        metadata ||= {
+          created_at: current.updated_at,
+          updated_at: current.updated_at,
+          user_id: nil
+        } if current && current_metadata.empty?
         metadata_by_line[line] << metadata unless metadata.nil?
       end
 

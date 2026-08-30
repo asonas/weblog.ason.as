@@ -97,6 +97,31 @@ class TestDevelopmentDatabase < Minitest::Test
                  database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at).to_i }
   end
 
+  def test_first_tracked_save_preserves_existing_lines_at_the_page_update_time
+    current_time = Time.iso8601("2026-08-21T12:00:00+09:00")
+    database = WeblogAuthoring::DevelopmentDatabase.new(
+      tmpdir.join("data/development/authoring.sqlite3"),
+      content_dir: tmpdir.join("content"),
+      clock: -> { current_time }
+    )
+    database.setup!
+    page = database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "既存記事", body: "以前からある行"
+    ))
+    SQLite3::Database.new(database.path.to_s) do |sqlite|
+      sqlite.execute("DELETE FROM scrapbox_line_metadata WHERE page_id = ?", page.id)
+    end
+
+    current_time = Time.iso8601("2026-08-21T13:00:00+09:00")
+    updated = database.save(WeblogAuthoring::SaveRequest.new(
+      page_id: page.id, page_type: page.page_type, name: page.name,
+      body: "新しい行\n以前からある行", expected_updated_at: page.updated_at
+    ))
+
+    assert_equal [current_time.to_i, page.updated_at.to_i],
+                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at).to_i }
+  end
+
   def test_titles_are_unique_and_the_same_date_can_have_multiple_pages
     database = development_database
     database.save(WeblogAuthoring::SaveRequest.new(

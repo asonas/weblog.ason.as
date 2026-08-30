@@ -50,6 +50,7 @@ class DsqlDatabaseTest < Minitest::Test
 
     def add_inbox_item(row) = @items[row.fetch("id")] = row
     def add_adoption(item_id, expires_at:) = @adoptions[item_id] = expires_at
+    def clear_line_metadata(page_id) = @line_metadata.delete(page_id)
 
     def exec(statement)
       return Result.new([{ "?column?" => "1" }]) if statement.strip == "SELECT 1"
@@ -217,6 +218,24 @@ class DsqlDatabaseTest < Minitest::Test
     ))
 
     assert_equal [FIXED_TIME, later],
+                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at) }
+  end
+
+  def test_first_tracked_save_preserves_existing_lines_at_the_page_update_time
+    later = FIXED_TIME + 3600
+    times = [FIXED_TIME, later]
+    database = dsql_database(clock: -> { times.shift || later })
+    page = database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "既存記事", body: "以前からある行"
+    ))
+    @pool.connection.clear_line_metadata(page.id)
+
+    updated = database.save(WeblogAuthoring::SaveRequest.new(
+      page_id: page.id, page_type: page.page_type, name: page.name,
+      body: "新しい行\n以前からある行", expected_updated_at: page.updated_at
+    ))
+
+    assert_equal [later, FIXED_TIME],
                  database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at) }
   end
 
