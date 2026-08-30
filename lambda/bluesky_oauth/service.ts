@@ -66,5 +66,6 @@ export class BlueskyOAuthService {
 
 function isRevokedSessionError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return ["TokenRevokedError", "TokenInvalidError"].includes(error.name) || /invalid_grant|revoked/i.test(error.message);
+  return ["TokenRevokedError", "TokenInvalidError"].includes(error.name) ||
+    /invalid_grant|revoked|invalid refresh token/i.test(error.message);
 }

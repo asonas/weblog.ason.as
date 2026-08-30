@@ -47,7 +47,7 @@ test("callback from another DID leaves the existing session unchanged", async ()
 test("revoked refresh requires reauthorization without deleting the session", async () => {
   const repository = new MemoryOAuthRepository();
   await repository.saveSession(allowedDid, codec.encrypt(savedSession));
-  const revoked = Object.assign(new Error("invalid_grant"), { name: "TokenRevokedError" });
+  const revoked = new Error("Invalid refresh token");
   const service = new BlueskyOAuthService(allowedDid, repository, codec, async () => fakeClient({
     restore: async () => { throw revoked; },
   }));
