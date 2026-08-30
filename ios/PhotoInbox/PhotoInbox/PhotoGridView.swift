@@ -1,138 +1,139 @@
 import SwiftUI
 
 struct PhotoGridView: View {
-    @Environment(\.scenePhase) private var scenePhase
-    @Bindable var library: PhotoLibrary
-    @Bindable var uploads: UploadCoordinator
-    @Bindable var selection: PhotoSelectionStore
-    @State private var showingSettings = false
+  @Environment(\.scenePhase) private var scenePhase
+  @Bindable var library: PhotoLibrary
+  @Bindable var uploads: UploadCoordinator
+  @Bindable var selection: PhotoSelectionStore
+  @State private var showingSettings = false
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
+  private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
 
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Color.black.ignoresSafeArea()
-            content
-            Button("A") { showingSettings = true }
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
-                .background(.regularMaterial, in: Circle())
-                .padding()
-                .accessibilityLabel("設定")
-        }
-        .safeAreaInset(edge: .bottom) { sendBar }
-        .sheet(isPresented: $showingSettings) { SettingsView() }
-        .task {
-            library.refreshAuthorizationAndPhotos()
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
-                library.refreshAuthorizationAndPhotos()
-            }
-        }
-        .onChange(of: library.photos.map(\.id)) { _, identifiers in
-            selection.updatePhotos(identifiers)
-        }
-    }
-
-    @ViewBuilder private var content: some View {
-        if library.canRead {
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 2) {
-                    ForEach(library.photos) { photo in
-                        PhotoCell(
-                            photo: photo,
-                            library: library,
-                            status: selection.status(of: photo.id)
-                        ) { selection.toggle(photo.id) }
-                    }
-                }
-            }
-        } else {
-            Button("写真へのアクセスを許可") { Task { await library.requestAccess() } }
-                .buttonStyle(.borderedProminent)
-        }
-    }
-
-    private var sendBar: some View {
-        HStack {
-            Text("\(selection.selectedIDs.count)枚")
-                .font(.headline.monospacedDigit())
-            Spacer()
-            Button(uploads.isSending ? "送信中" : "すべて送る") {
-                let selected = library.photos.filter { selection.selectedIDs.contains($0.id) }
-                Task { await uploads.enqueue(selected) }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(selection.selectedIDs.isEmpty || uploads.isSending)
-        }
+  var body: some View {
+    ZStack(alignment: .topTrailing) {
+      Color.black.ignoresSafeArea()
+      content
+      Button("A") { showingSettings = true }
+        .font(.headline)
+        .foregroundStyle(.primary)
+        .frame(width: 44, height: 44)
+        .background(.regularMaterial, in: Circle())
         .padding()
-        .background(.ultraThinMaterial)
+        .accessibilityLabel("設定")
     }
+    .safeAreaInset(edge: .bottom) { sendBar }
+    .sheet(isPresented: $showingSettings) { SettingsView() }
+    .task {
+      library.refreshAuthorizationAndPhotos()
+    }
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active {
+        library.refreshAuthorizationAndPhotos()
+      }
+    }
+    .onChange(of: library.photos.map(\.id)) { _, identifiers in
+      selection.updatePhotos(identifiers)
+    }
+  }
+
+  @ViewBuilder private var content: some View {
+    if library.canRead {
+      ScrollView {
+        LazyVGrid(columns: columns, spacing: 2) {
+          ForEach(library.photos) { photo in
+            PhotoCell(
+              photo: photo,
+              library: library,
+              status: selection.status(of: photo.id)
+            ) { selection.toggle(photo.id) }
+          }
+        }
+      }
+    } else {
+      Button("写真へのアクセスを許可") { Task { await library.requestAccess() } }
+        .buttonStyle(.borderedProminent)
+    }
+  }
+
+  private var sendBar: some View {
+    HStack {
+      Text("\(selection.selectedIDs.count)枚")
+        .font(.headline.monospacedDigit())
+      Spacer()
+      Button(uploads.isSending ? "送信中" : "すべて送る") {
+        let selected = library.photos.filter { selection.selectedIDs.contains($0.id) }
+        Task { await uploads.enqueue(selected) }
+      }
+      .buttonStyle(.borderedProminent)
+      .disabled(selection.selectedIDs.isEmpty || uploads.isSending)
+    }
+    .padding()
+    .background(.ultraThinMaterial)
+  }
 }
 
 private struct PhotoCell: View {
-    let photo: LibraryPhoto
-    let library: PhotoLibrary
-    let status: PhotoSelectionStatus
-    let toggle: () -> Void
-    @State private var image: UIImage?
+  let photo: LibraryPhoto
+  let library: PhotoLibrary
+  let status: PhotoSelectionStatus
+  let toggle: () -> Void
+  @State private var image: UIImage?
 
-    var body: some View {
-        Button(action: toggle) {
-            GeometryReader { geometry in
-                ZStack(alignment: .topTrailing) {
-                    Group {
-                        if let image {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                        } else {
-                            Color.secondary.opacity(0.25)
-                        }
-                    }
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-                    .opacity(status == .selected ? 1 : 0.55)
-                    if status == .selected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title3)
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .blue)
-                            .padding(6)
-                    } else if status == .uploaded {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title3)
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .green)
-                            .padding(6)
-                    } else {
-                        Image(systemName: "circle")
-                            .font(.title3)
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.7), radius: 2)
-                            .padding(6)
-                    }
-                }
+  var body: some View {
+    Button(action: toggle) {
+      GeometryReader { geometry in
+        ZStack(alignment: .topTrailing) {
+          Group {
+            if let image {
+              Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+            } else {
+              Color.secondary.opacity(0.25)
             }
-            .aspectRatio(1, contentMode: .fit)
+          }
+          .frame(width: geometry.size.width, height: geometry.size.height)
+          .clipped()
+          .opacity(status == .selected ? 1 : 0.55)
+          if status == .selected {
+            Image(systemName: "checkmark.circle.fill")
+              .font(.title3)
+              .symbolRenderingMode(.palette)
+              .foregroundStyle(.white, .blue)
+              .padding(6)
+          } else if status == .uploaded {
+            Image(systemName: "arrow.up.circle.fill")
+              .font(.title3)
+              .symbolRenderingMode(.palette)
+              .foregroundStyle(.white, .green)
+              .padding(6)
+          } else {
+            Image(systemName: "circle")
+              .font(.title3)
+              .foregroundStyle(.white)
+              .shadow(color: .black.opacity(0.7), radius: 2)
+              .padding(6)
+          }
         }
-        .buttonStyle(.plain)
-        .disabled(status == .uploaded)
-        .accessibilityLabel("\(photo.capturedAt.formatted(date: .omitted, time: .shortened))の写真")
-        .accessibilityValue(accessibilityValue)
-        .task {
-            let scale = UIScreen.main.scale
-            image = await library.thumbnail(for: photo, size: CGSize(width: 240 * scale, height: 240 * scale))
-        }
+      }
+      .aspectRatio(1, contentMode: .fit)
     }
+    .buttonStyle(.plain)
+    .disabled(status == .uploaded)
+    .accessibilityLabel("\(photo.capturedAt.formatted(date: .omitted, time: .shortened))の写真")
+    .accessibilityValue(accessibilityValue)
+    .task {
+      let scale = UIScreen.main.scale
+      image = await library.thumbnail(
+        for: photo, size: CGSize(width: 240 * scale, height: 240 * scale))
+    }
+  }
 
-    private var accessibilityValue: String {
-        switch status {
-        case .selected: "選択中"
-        case .excluded: "除外"
-        case .uploaded: "アップロード済み"
-        }
+  private var accessibilityValue: String {
+    switch status {
+    case .selected: "選択中"
+    case .excluded: "除外"
+    case .uploaded: "アップロード済み"
     }
+  }
 }
