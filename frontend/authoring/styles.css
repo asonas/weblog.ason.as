@@ -868,6 +868,10 @@ h1 {
   stroke-width: 1.75;
 }
 
+.header-action--feed svg {
+  transform: translate(1px, -1px);
+}
+
 .page-card-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
@@ -3193,6 +3197,12 @@ td {
     background: transparent;
     box-shadow: none;
     color: var(--atlas-paper);
+  }
+
+  .atlas-header__search .site-search__mobile-button svg {
+    inline-size: 1.4rem;
+    block-size: 1.4rem;
+    stroke-width: 1.75;
   }
 
   .atlas-header__search .site-search__mobile-button:hover {
