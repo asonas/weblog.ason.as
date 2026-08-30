@@ -320,6 +320,8 @@ class LambdaApiTest < Minitest::Test
     page = JSON.parse(response.fetch(:body))
 
     assert_equal 200, response.fetch(:statusCode)
+    assert_equal "no-cache", response.fetch(:headers).fetch("cache-control")
+    refute_empty response.fetch(:headers).fetch("etag")
     assert_equal "editor", page.fetch("mode")
     assert_equal "本文", page.fetch("body")
     assert_equal ["2026-08-29T13:23:44.000000000+00:00"], page.fetch("line_updated_at")
@@ -608,6 +610,16 @@ class LambdaApiTest < Minitest::Test
     ))
     assert_equal 403, missing_csrf.fetch(:statusCode)
 
+    invalid = event(
+      "POST",
+      "/api/authoring/pages",
+      cookies: ["weblog_authoring_session=#{allowed_token}"],
+      headers: { "content-type" => "application/json", "x-csrf-token" => "csrf-token" }
+    ).merge("body" => "{")
+    invalid_response = api.call(invalid)
+    assert_equal 422, invalid_response.fetch(:statusCode)
+    assert_equal "no-store", invalid_response.fetch(:headers).fetch("cache-control")
+
     allowed = api.call(json_event(
       "POST",
       "/api/authoring/pages",
@@ -616,9 +628,48 @@ class LambdaApiTest < Minitest::Test
       headers: { "x-csrf-token" => "csrf-token" }
     ))
     assert_equal 201, allowed.fetch(:statusCode)
+    assert_equal "no-store", allowed.fetch(:headers).fetch("cache-control")
     assert_equal "本文", @database.saved_requests.fetch(0).body
     assert_equal ["2026-08-29T13:23:44.000000000+00:00"],
                  JSON.parse(allowed.fetch(:body)).fetch("line_updated_at")
+  end
+
+  def test_saved_page_is_read_back_from_the_route_without_stale_content
+    api, token = authenticated_api(sqs: FakeSqs.new)
+    saved_page = page_document(id: "page-id", name: "記事名", body: "更新後の本文")
+    before = api.call(event(
+      "GET",
+      "/api/routes/%E8%A8%98%E4%BA%8B%E5%90%8D",
+      { "route" => "%E8%A8%98%E4%BA%8B%E5%90%8D" }
+    ))
+    previous_etag = before.fetch(:headers).fetch("etag")
+    @database.define_singleton_method(:save) do |request|
+      saved_requests << request
+      pages.replace([saved_page])
+      saved_page
+    end
+
+    saved = api.call(json_event(
+      "PATCH",
+      "/api/authoring/pages/page-id",
+      { title: "記事名", body: "更新後の本文" },
+      path_parameters: { "id" => "page-id" },
+      cookies: ["weblog_authoring_session=#{token}"],
+      headers: { "x-csrf-token" => "csrf-token" }
+    ))
+    reloaded = api.call(event(
+      "GET",
+      "/api/routes/%E8%A8%98%E4%BA%8B%E5%90%8D",
+      { "route" => "%E8%A8%98%E4%BA%8B%E5%90%8D" },
+      headers: { "if-none-match" => previous_etag }
+    ))
+
+    assert_equal 200, saved.fetch(:statusCode)
+    assert_equal "no-store", saved.fetch(:headers).fetch("cache-control")
+    assert_equal 200, reloaded.fetch(:statusCode)
+    refute_equal previous_etag, reloaded.fetch(:headers).fetch("etag")
+    assert_equal "更新後の本文", JSON.parse(reloaded.fetch(:body)).fetch("body")
+    assert_equal "no-cache", reloaded.fetch(:headers).fetch("cache-control")
   end
 
   def test_successful_save_requests_a_debounced_search_index_update
@@ -851,6 +902,9 @@ class LambdaApiTest < Minitest::Test
     session_cookie = callback.fetch(:cookies).find { |cookie| cookie.start_with?("weblog_authoring_session=") }
     session = api.call(event("GET", "/api/auth/session", cookies: [session_cookie.split(";", 2).fetch(0)]))
     auth = JSON.parse(session.fetch(:body))
+    assert_equal "no-store", login.fetch(:headers).fetch("cache-control")
+    assert_equal "no-store", callback.fetch(:headers).fetch("cache-control")
+    assert_equal "no-store", session.fetch(:headers).fetch("cache-control")
     assert_equal true, auth.fetch("authenticated")
     assert_equal true, auth.fetch("can_edit")
     assert_equal "asonas", auth.fetch("login")
@@ -901,6 +955,7 @@ class LambdaApiTest < Minitest::Test
     response = api.call(logout_event)
 
     assert_equal 302, response.fetch(:statusCode)
+    assert_equal "no-store", response.fetch(:headers).fetch("cache-control")
     assert_equal "https://weblog.ason.as", response.dig(:headers, "location")
     assert_includes response.fetch(:cookies), "weblog_authoring_session=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
   end

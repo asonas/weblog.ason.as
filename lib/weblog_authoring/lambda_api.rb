@@ -74,6 +74,24 @@ module WeblogAuthoring
     end
 
     def call(event)
+      cache_control_response(event, dispatch(event))
+    rescue InputError => error
+      cache_control_response(event, json_error(error.status, error.message, field: error.field))
+    rescue ConflictError => error
+      cache_control_response(event, json_error(409, error.message))
+    rescue MobileUpload::PairingUnavailable
+      cache_control_response(event, json_error(410, "Pairing code is expired or already used"))
+    rescue MobileUpload::PairingAttemptsExceeded
+      cache_control_response(event, json_error(429, "Pairing exchange attempts exceeded"))
+    rescue MobileUpload::UnsupportedContentType => error
+      cache_control_response(event, json_error(415, error.message))
+    rescue ArgumentError, TypeError => error
+      cache_control_response(event, json_error(422, error.message))
+    end
+
+    private
+
+    def dispatch(event)
       return run_scheduled_maintenance if event["source"] == "aws.events" && event["detail-type"] == "Scheduled Event"
 
       method = event.dig("requestContext", "http", "method").to_s
@@ -85,7 +103,9 @@ module WeblogAuthoring
       return logout_response(event) if method == "POST" && path == "/api/auth/logout"
       return upload_response(event) if method == "POST" && path == "/api/uploads"
       return issue_mobile_pairing_response(event) if method == "POST" && path == "/api/mobile/pairings"
-      return exchange_mobile_pairing_response(event) if method == "POST" && path == "/api/mobile/pairings/exchange"
+      if method == "POST" && path == "/api/mobile/pairings/exchange"
+        return exchange_mobile_pairing_response(event)
+      end
       return mobile_devices_response(event) if method == "GET" && path == "/api/mobile/devices"
       return create_mobile_upload_response(event) if method == "POST" && path == "/api/mobile/uploads"
       if method == "POST" && %r{\A/api/mobile/uploads/[^/]+/complete\z}.match?(path)
@@ -98,9 +118,15 @@ module WeblogAuthoring
       return adopt_inbox_response(event) if method == "POST" && path == "/api/inbox/adopt"
       return start_inbox_sync_response(event) if method == "POST" && path == "/api/inbox/sync"
       return bluesky_oauth_status_response(event) if method == "GET" && path == "/api/inbox/sources/bluesky/status"
-      return bluesky_oauth_connect_response(event) if method == "POST" && path == "/api/inbox/sources/bluesky/connect"
-      return bluesky_oauth_callback_response(event) if method == "GET" && path == "/api/inbox/sources/bluesky/callback"
-      return bluesky_oauth_disconnect_response(event) if method == "DELETE" && path == "/api/inbox/sources/bluesky/connection"
+      if method == "POST" && path == "/api/inbox/sources/bluesky/connect"
+        return bluesky_oauth_connect_response(event)
+      end
+      if method == "GET" && path == "/api/inbox/sources/bluesky/callback"
+        return bluesky_oauth_callback_response(event)
+      end
+      if method == "DELETE" && path == "/api/inbox/sources/bluesky/connection"
+        return bluesky_oauth_disconnect_response(event)
+      end
       if method == "GET" && %r{\A/api/inbox/sync/[^/]+\z}.match?(path)
         return inbox_sync_status_response(event)
       end
@@ -120,21 +146,7 @@ module WeblogAuthoring
       end
 
       json_response(404, error: "Not Found")
-    rescue InputError => error
-      json_error(error.status, error.message, field: error.field)
-    rescue ConflictError => error
-      json_error(409, error.message)
-    rescue MobileUpload::PairingUnavailable
-      json_error(410, "Pairing code is expired or already used")
-    rescue MobileUpload::PairingAttemptsExceeded
-      json_error(429, "Pairing exchange attempts exceeded")
-    rescue MobileUpload::UnsupportedContentType => error
-      json_error(415, error.message)
-    rescue ArgumentError, TypeError => error
-      json_error(422, error.message)
     end
-
-    private
 
     def health_response
       @database.healthy?
@@ -1002,6 +1014,17 @@ module WeblogAuthoring
         headers: JSON_HEADERS,
         body: JSON.generate(payload),
       }
+    end
+
+    def cache_control_response(event, response)
+      method = event.dig("requestContext", "http", "method").to_s
+      path = event.fetch("rawPath", "")
+      return response if method.empty?
+
+      authentication_response = path.start_with?("/api/auth/") || path == "/api/inbox/sources/bluesky/callback"
+      return response unless authentication_response || !%w[GET HEAD OPTIONS].include?(method)
+
+      response.merge(headers: response.fetch(:headers, {}).merge("cache-control" => "no-store"))
     end
 
     def measure(timings, name)
