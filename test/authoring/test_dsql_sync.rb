@@ -151,7 +151,7 @@ class DsqlSyncTest < Minitest::Test
       @snapshot = snapshot
     end
 
-    def fetch(watermark:)
+    def fetch(**)
       snapshot
     end
   end

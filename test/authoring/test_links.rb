@@ -67,7 +67,7 @@ class TestLinks < Minitest::Test
 
     entries = WeblogAuthoring.page_name_entries([source])
 
-    assert_equal ["source", "weblog.ason.asの書き心地"], entries.map { |entry| entry.fetch("name") }
+    assert_equal(["source", "weblog.ason.asの書き心地"], entries.map { |entry| entry.fetch("name") })
     assert_equal "source-id", entries.fetch(0).fetch("id")
     assert entries.fetch(0).fetch("materialized")
     assert_match(/\Ahub-[0-9a-f]{32}\z/, entries.fetch(1).fetch("id"))

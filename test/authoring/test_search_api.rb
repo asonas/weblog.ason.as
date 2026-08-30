@@ -18,7 +18,7 @@ class SearchApiTest < Minitest::Test
       self.index = index
     end
 
-    def get_object(bucket:, key:, response_target: nil)
+    def get_object(key:, response_target: nil, **)
       body = key == "search/manifest.json" ? manifest : index
       if response_target
         File.binwrite(response_target, body)
@@ -56,7 +56,7 @@ class SearchApiTest < Minitest::Test
 
       assert_equal 200, response.fetch(:statusCode)
       assert_equal "private, no-store", response.fetch(:headers).fetch("cache-control")
-      assert_equal %w[title-match body-match], results.map { |result| result.fetch("route") }
+      assert_equal(%w[title-match body-match], results.map { |result| result.fetch("route") })
       assert_equal "全文検索の設計", results.fetch(0).fetch("title")
       assert_includes results.fetch(0).fetch("excerpt"), "本文で全文検索を扱う"
       assert_equal "2026-08-20T12:00:00+09:00", results.fetch(0).fetch("updated_at")

@@ -333,7 +333,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal 403, status
     assert_includes body, "CSRFトークン"
 
-    status, headers, body = request_with(
+    _, headers, body = request_with(
       application,
       "GET",
       "/api/auth/session",
@@ -455,7 +455,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal 202, status
     assert_equal 200, sync_status
     assert_equal "succeeded", run.fetch("status")
-    assert_equal %w[bluesky raindrop c4p], run.fetch("sources").map { |source| source.fetch("source") }
+    assert_equal(%w[bluesky raindrop c4p], run.fetch("sources").map { |source| source.fetch("source") })
   end
 
   def test_uploaded_images_with_generated_hex_names_are_read_from_the_development_bucket
@@ -571,7 +571,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal false, home.fetch("has_newer")
     assert_equal false, home.fetch("has_older")
 
-    status, _headers, body = json_request(
+    _, _headers, body = json_request(
       "POST",
       "/api/authoring/pages",
       page_type: "date",
@@ -699,13 +699,13 @@ class TestDevelopmentApp < Minitest::Test
     january_window = JSON.parse(body)
 
     assert_equal 200, status
-    assert_equal ["january"], january_window.fetch("pages").map { |page| page.fetch("title") }
+    assert_equal(["january"], january_window.fetch("pages").map { |page| page.fetch("title") })
     assert_equal true, january_window.fetch("has_newer")
     assert_equal false, january_window.fetch("has_older")
 
     cursor = CGI.escape(january_window.fetch("newer_cursor"))
     newer_window = JSON.parse(request("GET", "/api/pages?after=#{cursor}").last)
-    assert_equal %w[march february], newer_window.fetch("pages").map { |page| page.fetch("title") }
+    assert_equal(%w[march february], newer_window.fetch("pages").map { |page| page.fetch("title") })
     assert_equal false, newer_window.fetch("has_newer")
   end
 
@@ -753,7 +753,7 @@ class TestDevelopmentApp < Minitest::Test
     )
     source = JSON.parse(source_body)
 
-    assert_equal ["target"], source.fetch("linked_pages").map { |page| page.fetch("title") }
+    assert_equal(["target"], source.fetch("linked_pages").map { |page| page.fetch("title") })
     refute source.fetch("linked_pages_has_more")
 
     status, _headers, body = request(
@@ -785,7 +785,7 @@ class TestDevelopmentApp < Minitest::Test
 
     assert_equal 200, status
     related = JSON.parse(body)
-    assert_equal [source.fetch("id")], related.fetch("pages").map { |page| page.fetch("id") }
+    assert_equal([source.fetch("id")], related.fetch("pages").map { |page| page.fetch("id") })
   end
 
   def test_missing_route_requests_its_related_pages
@@ -845,7 +845,7 @@ class TestDevelopmentApp < Minitest::Test
 
     assert_equal 200, status
     related = JSON.parse(body).fetch("pages")
-    assert_equal [sibling.fetch("id")], related.map { |page| page.fetch("id") }
+    assert_equal([sibling.fetch("id")], related.map { |page| page.fetch("id") })
     assert_equal [shared_url], related.fetch(0).fetch("related_urls")
   end
 

@@ -20,6 +20,7 @@ gem "dotenv"
 
 group :test do
   gem "minitest"
+  gem "simplecov", "~> 0.22.0", require: false
 end
 
 group :development do

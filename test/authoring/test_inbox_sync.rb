@@ -55,7 +55,7 @@ class InboxSyncTest < Minitest::Test
   end
 
   class BusyDatabase < FixtureDatabase
-    def start_inbox_sync_run(run_id:, trigger:, started_at:)
+    def start_inbox_sync_run(**)
       false
     end
   end
@@ -67,7 +67,7 @@ class InboxSyncTest < Minitest::Test
       @snapshot = snapshot
     end
 
-    def fetch(watermark:)
+    def fetch(**)
       snapshot
     end
   end
@@ -96,7 +96,7 @@ class InboxSyncTest < Minitest::Test
 
     assert_equal [%w[bluesky cursor-1], ["raindrop", nil], ["c4p", nil]], calls
     assert_equal "completed_with_errors", result.fetch("status")
-    assert_equal %w[succeeded failed succeeded], result.fetch("sources").map { |source| source.fetch("status") }
+    assert_equal(%w[succeeded failed succeeded], result.fetch("sources").map { |source| source.fetch("status") })
     assert_equal "temporary failure", result.fetch("sources").fetch(1).fetch("error")
     assert_equal [:run_finished, "run-1", "completed_with_errors", FIXED_TIME], database.events.last
   end

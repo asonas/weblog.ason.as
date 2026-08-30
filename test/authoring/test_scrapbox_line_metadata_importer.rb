@@ -42,8 +42,8 @@ class TestScrapboxLineMetadataImporter < Minitest::Test
       },
       counts
     )
-    assert_equal [1_700_000_011, 1_700_000_021],
-                 database.scrapbox_line_metadata(page.id).map { |line| line.fetch(:updated_at).to_i }
+    assert_equal([1_700_000_011, 1_700_000_021],
+                 database.scrapbox_line_metadata(page.id).map { |line| line.fetch(:updated_at).to_i })
 
     database.save(WeblogAuthoring::SaveRequest.new(
       page_id: page.id,
@@ -52,8 +52,8 @@ class TestScrapboxLineMetadataImporter < Minitest::Test
       body: "変更した行",
       expected_updated_at: page.updated_at
     ))
-    assert_equal [FIXED_TIME.to_i],
-                 database.scrapbox_line_metadata(page.id).map { |line| line.fetch(:updated_at).to_i }
+    assert_equal([FIXED_TIME.to_i],
+                 database.scrapbox_line_metadata(page.id).map { |line| line.fetch(:updated_at).to_i })
   end
 
   private

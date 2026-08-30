@@ -28,3 +28,20 @@ run = "npm run dev"
 [tasks.build]
 description = "Build the production site artifact"
 run = "npm run build"
+
+[tasks."ruby:format"]
+description = "Format Ruby files with RuboCop"
+run = "bundle exec rubocop -a"
+
+[tasks."ruby:lint"]
+description = "Lint Ruby files without modifying them"
+run = "bundle exec rubocop"
+
+[tasks."ruby:test"]
+description = "Run the Ruby test suite"
+run = "bundle exec ruby -Itest -e 'Dir[\"test/authoring/test_*.rb\", \"test/migration/test_*.rb\", \"test/tooling/test_*.rb\"].sort.each { |file| require_relative file }'"
+
+[tasks."ruby:coverage"]
+description = "Generate Ruby coverage in coverage/ruby"
+env = { COVERAGE = "1" }
+run = "bundle exec ruby -Itest -e 'Dir[\"test/authoring/test_*.rb\", \"test/migration/test_*.rb\", \"test/tooling/test_*.rb\"].sort.each { |file| require_relative file }'"

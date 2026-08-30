@@ -49,19 +49,19 @@ class DsqlBootstrapTest < Minitest::Test
     bootstrap(connection).run
 
     assert_includes connection.statements, "CREATE ROLE weblog_authoring WITH LOGIN"
-    assert connection.statements.any? { |statement| statement.to_s.start_with?("AWS IAM GRANT") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.pages") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.links") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.scrapbox_line_metadata") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_items") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.consumed_inbox_items") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_item_usages") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.mobile_pairings") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.mobile_devices") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.mobile_uploads") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_source_sync_states") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_sync_runs") }
-    assert connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_sync_run_sources") }
+    assert(connection.statements.any? { |statement| statement.to_s.start_with?("AWS IAM GRANT") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.pages") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.links") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.scrapbox_line_metadata") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_items") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.consumed_inbox_items") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_item_usages") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.mobile_pairings") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.mobile_devices") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.mobile_uploads") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_source_sync_states") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_sync_runs") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_sync_run_sources") })
     assert_equal :closed, connection.statements.last
   end
 
@@ -70,7 +70,7 @@ class DsqlBootstrapTest < Minitest::Test
     bootstrap(connection).run
 
     refute_includes connection.statements, "CREATE ROLE weblog_authoring WITH LOGIN"
-    refute connection.statements.any? { |statement| statement.to_s.start_with?("AWS IAM GRANT") }
+    refute(connection.statements.any? { |statement| statement.to_s.start_with?("AWS IAM GRANT") })
   end
 
   def test_adds_cover_mode_with_dsql_supported_statements

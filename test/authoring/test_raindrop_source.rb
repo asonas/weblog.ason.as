@@ -27,7 +27,7 @@ class RaindropSourceTest < Minitest::Test
       @collections = collections
     end
 
-    def list(collection_id:, created_since:)
+    def list(collection_id:, **)
       @collections.fetch(collection_id)
     end
   end
@@ -45,9 +45,9 @@ class RaindropSourceTest < Minitest::Test
     trash = client.list(collection_id: -99)
 
     assert_equal 51, current.length
-    assert_equal [9], trash.map { |item| item.fetch("_id") }
-    assert_equal %w[0 1 0], request.uris.map { |uri| URI.decode_www_form(uri.query).to_h.fetch("page") }
-    assert request.uris.all? { |uri| URI.decode_www_form(uri.query).to_h.fetch("perpage") == "50" }
+    assert_equal([9], trash.map { |item| item.fetch("_id") })
+    assert_equal(%w[0 1 0], request.uris.map { |uri| URI.decode_www_form(uri.query).to_h.fetch("page") })
+    assert(request.uris.all? { |uri| URI.decode_www_form(uri.query).to_h.fetch("perpage") == "50" })
   end
 
   def test_client_stops_after_crossing_the_recent_window

@@ -26,7 +26,7 @@ class NetworkFetchMigrationTest < Minitest::Test
         response.status = 200
         response["Content-Type"] = "image/jpeg"
         response.body = PNG_BYTES
-      when "/html-as-image"
+      when "/html-as-image", "/not-an-image"
         response.status = 200
         response["Content-Type"] = "text/html"
         response.body = "<html>not an image</html>"
@@ -46,10 +46,6 @@ class NetworkFetchMigrationTest < Minitest::Test
         response.status = 200
         response["Content-Type"] = "text/html"
         response.body = '<html><head><meta property="og:title" content="Broken preview"><meta property="og:image" content="/not-an-image"></head></html>'
-      when "/not-an-image"
-        response.status = 200
-        response["Content-Type"] = "text/html"
-        response.body = "<html>not an image</html>"
       else
         response.status = 404
         response["Content-Type"] = "text/plain"

@@ -1,2 +1,108 @@
-inherit_from:
-  - https://raw.githubusercontent.com/cookpad/styleguide/master/rubocop.yml
+AllCops:
+  DisabledByDefault: true
+  DisplayCopNames: true
+  NewCops: enable
+  SuggestExtensions: false
+  TargetRubyVersion: 4.0
+  CacheRootDirectory: tmp/rubocop_cache
+  Exclude:
+    - vendor/**/*
+    - db/**/*
+    - node_modules/**/*
+
+Layout/CommentIndentation:
+  Enabled: true
+Layout/IndentationConsistency:
+  Enabled: true
+Layout/IndentationStyle:
+  EnforcedStyle: spaces
+Layout/IndentationWidth:
+  Width: 2
+Layout/InitialIndentation:
+  Enabled: true
+Layout/MultilineArrayBraceLayout:
+  EnforcedStyle: symmetrical
+Layout/SpaceAfterColon:
+  Enabled: true
+Layout/SpaceAfterMethodName:
+  Enabled: true
+Layout/SpaceAroundOperators:
+  Enabled: true
+Layout/SpaceBeforeBlockBraces:
+  EnforcedStyle: space
+Layout/SpaceInsideBlockBraces:
+  EnforcedStyle: space
+Layout/SpaceInsideHashLiteralBraces:
+  EnforcedStyle: space
+Layout/TrailingEmptyLines:
+  EnforcedStyle: final_newline
+Layout/TrailingWhitespace:
+  Enabled: true
+
+Lint/AssignmentInCondition:
+  AllowSafeAssignment: false
+
+Lint/RedundantRequireStatement:
+  Enabled: false
+
+Lint:
+  Enabled: true
+
+Security:
+  Enabled: true
+
+Style/Alias:
+  EnforcedStyle: prefer_alias_method
+Style/AndOr:
+  Enabled: true
+Style/Attr:
+  Enabled: true
+Style/BeginBlock:
+  Enabled: true
+Style/ClassMethods:
+  Enabled: true
+Style/ClassVars:
+  Enabled: true
+Style/EmptyLiteral:
+  Enabled: true
+Style/EndBlock:
+  Enabled: true
+Style/GlobalVars:
+  Enabled: true
+Style/HashSyntax:
+  EnforcedStyle: ruby19
+Style/MethodDefParentheses:
+  Enabled: true
+Style/MultilineTernaryOperator:
+  Enabled: true
+Style/NegatedIf:
+  Enabled: true
+Style/NegatedWhile:
+  Enabled: true
+Style/NestedTernaryOperator:
+  Enabled: true
+Style/NumericLiterals:
+  MinDigits: 7
+  Strict: true
+Style/ParallelAssignment:
+  Enabled: true
+Style/PercentLiteralDelimiters:
+  Enabled: false
+Style/RedundantInterpolation:
+  Enabled: true
+Style/TrailingBodyOnMethodDefinition:
+  Enabled: true
+Style/TrailingCommaInArrayLiteral:
+  EnforcedStyleForMultiline: consistent_comma
+Style/TrailingCommaInHashLiteral:
+  EnforcedStyleForMultiline: consistent_comma
+Style/UnlessElse:
+  Enabled: true
+Style/WhenThen:
+  Enabled: true
+Style/WhileUntilDo:
+  Enabled: true
+Style/WhileUntilModifier:
+  Enabled: true
+Style/WordArray:
+  EnforcedStyle: percent

@@ -6,6 +6,8 @@
 .env
 node_modules/
 dist/
+coverage/
+tmp/
 xcuserdata/
 data/raw/
 data/normalized/

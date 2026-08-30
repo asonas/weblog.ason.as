@@ -39,8 +39,8 @@ class RenderAndReportMigrationTest < Minitest::Test
     assert_includes html, "photo.jpg"
     assert site.join("undated", "index.html").read.include?("data-post-id=\"undated-post\"")
     assert_equal 1, data.fetch("version")
-    refute data.fetch("posts").any? { |post| post["id"] == "private-post" }
-    assert data.fetch("posts").any? { |post| post["id"] == "undated-post" }
+    refute(data.fetch("posts").any? { |post| post["id"] == "private-post" })
+    assert(data.fetch("posts").any? { |post| post["id"] == "undated-post" })
   end
 
   def test_card_view_deduplicates_nodes_and_exposes_controls
@@ -98,7 +98,7 @@ class RenderAndReportMigrationTest < Minitest::Test
     project = WeblogMigration::Scrapbox.load_export(input)
     normalized = WeblogMigration::Normalize.normalize_project(project, root.join("normalized"))
     index_path = root.join("index", "log.sqlite3")
-    index = WeblogMigration::Index.build_index(normalized, index_path)
+    WeblogMigration::Index.build_index(normalized, index_path)
     report = WeblogMigration::Report.build_report(input, project, normalized, index_path:, site_path: root.join("site"))
     assert_equal 1, report["unresolved_links"]
     assert_equal ["photo.jpg"], report["missing_asset_paths"]

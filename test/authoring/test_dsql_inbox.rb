@@ -72,15 +72,11 @@ class DsqlInboxTest < Minitest::Test
         before = @items.length
         @items.delete_if { |_key, item| item.fetch("id") == params[0] }
         Result.new([], cmd_tuples: before - @items.length)
-      when /UPDATE weblog_authoring\.inbox_image_adoptions SET committed_at/
+      when /(?:UPDATE weblog_authoring\.inbox_image_adoptions SET committed_at|DELETE FROM weblog_authoring\.(?:inbox_image_adoptions|inbox_item_usages))/
         Result.new
       when /SELECT 1 FROM weblog_authoring\.inbox_image_adoptions/
         expires_at = @adoptions[params.fetch(0)]
         Result.new(expires_at && expires_at > params.fetch(1) ? [{ "?column?" => "1" }] : [])
-      when /DELETE FROM weblog_authoring\.inbox_image_adoptions/
-        Result.new
-      when /DELETE FROM weblog_authoring\.inbox_item_usages/
-        Result.new
       when /FROM weblog_authoring\.inbox_items\s+WHERE expires_at/
         rows = @items.values.select { |item| item.fetch("expires_at") > params[0] }
         Result.new(rows.sort_by { |item| [item.fetch("occurred_at"), item.fetch("ingested_at"), item.fetch("id")] }.reverse)

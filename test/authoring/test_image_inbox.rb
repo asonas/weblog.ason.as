@@ -35,7 +35,7 @@ class ImageInboxTest < Minitest::Test
     assert_equal "images.example/#{key}", @s3.api_requests[0].fetch(:params).fetch(:copy_source)
     assert_equal "weblog-inbox-adoption=pending", @s3.api_requests[0].fetch(:params).fetch(:tagging)
     assert_equal "REPLACE", @s3.api_requests[0].fetch(:params).fetch(:tagging_directive)
-    assert_equal [:copy_object], @s3.api_requests.map { |request| request.fetch(:operation_name) }
+    assert_equal([:copy_object], @s3.api_requests.map { |request| request.fetch(:operation_name) })
   end
 
   def test_rejects_a_non_photo_item
@@ -55,7 +55,7 @@ class ImageInboxTest < Minitest::Test
     @database.define_singleton_method(:complete_inbox_image_adoption) { |item_id:| completed << item_id }
 
     assert_equal 1, @inbox.finalize(limit: 10)
-    assert_equal [:put_object_tagging], @s3.api_requests.map { |request| request.fetch(:operation_name) }
+    assert_equal([:put_object_tagging], @s3.api_requests.map { |request| request.fetch(:operation_name) })
     assert_empty @s3.api_requests.fetch(0).fetch(:params).fetch(:tagging).fetch(:tag_set)
     assert_equal ["item-1"], completed
   end

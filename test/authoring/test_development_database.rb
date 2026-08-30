@@ -81,8 +81,8 @@ class TestDevelopmentDatabase < Minitest::Test
       page_type: "named", name: "行更新", body: "残る行\n変更前\n末尾"
     ))
 
-    assert_equal [current_time.to_i] * 3,
-                 database.scrapbox_line_metadata(page.id).map { |line| line.fetch(:updated_at).to_i }
+    assert_equal([current_time.to_i] * 3,
+                 database.scrapbox_line_metadata(page.id).map { |line| line.fetch(:updated_at).to_i })
 
     current_time = Time.iso8601("2026-08-21T13:00:00+09:00")
     updated = database.save(WeblogAuthoring::SaveRequest.new(
@@ -93,8 +93,8 @@ class TestDevelopmentDatabase < Minitest::Test
       expected_updated_at: page.updated_at
     ))
 
-    assert_equal [current_time.to_i, page.updated_at.to_i, current_time.to_i, page.updated_at.to_i],
-                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at).to_i }
+    assert_equal([current_time.to_i, page.updated_at.to_i, current_time.to_i, page.updated_at.to_i],
+                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at).to_i })
   end
 
   def test_first_tracked_save_preserves_existing_lines_at_the_page_update_time
@@ -118,8 +118,8 @@ class TestDevelopmentDatabase < Minitest::Test
       body: "新しい行\n以前からある行", expected_updated_at: page.updated_at
     ))
 
-    assert_equal [current_time.to_i, page.updated_at.to_i],
-                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at).to_i }
+    assert_equal([current_time.to_i, page.updated_at.to_i],
+                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at).to_i })
   end
 
   def test_titles_are_unique_and_the_same_date_can_have_multiple_pages
@@ -211,8 +211,8 @@ class TestDevelopmentDatabase < Minitest::Test
 
     assert_equal "写真の日記", page.name
     assert_equal [item.id], database.list_inbox_items.map(&:id)
-    assert_equal [[item.id, page.id, "写真の日記"]],
-                 database.list_inbox_item_usages.map { |usage| [usage.item_id, usage.page_id, usage.page_route] }
+    assert_equal([[item.id, page.id, "写真の日記"]],
+                 database.list_inbox_item_usages.map { |usage| [usage.item_id, usage.page_id, usage.page_route] })
     SQLite3::Database.new(database.path.to_s) do |sqlite|
       refute_nil sqlite.get_first_value("SELECT committed_at FROM inbox_image_adoptions WHERE item_id = ?", item.id)
       assert_equal page.id, sqlite.get_first_value("SELECT page_id FROM inbox_item_usages WHERE item_id = ?", item.id)

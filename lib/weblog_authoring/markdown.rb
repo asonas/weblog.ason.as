@@ -220,10 +220,12 @@ module WeblogAuthoring
       end
 
       def convert_p(el, indent)
+        standalone_url = standalone_url(el)
+        youtube_id = youtube_video_id(standalone_url) if standalone_url
         if el.options[:transparent]
           inner(el, indent)
-        elsif (url = standalone_url(el)) && (video_id = youtube_video_id(url))
-          youtube_player_html(video_id, url, indent)
+        elsif standalone_url && youtube_id
+          youtube_player_html(youtube_id, standalone_url, indent)
         else
           format_as_block_html("p", el.attr, inner(el, indent), indent)
         end
@@ -231,7 +233,8 @@ module WeblogAuthoring
 
       def convert_a(el, indent)
         href = el.attr["href"].to_s
-        if (target = self.class.context.fetch(:wiki_targets, {})[href])
+        target = self.class.context.fetch(:wiki_targets, {})[href]
+        if target
           attributes = { "href" => target.fetch("route") }
           if self.class.context[:mode] == "local"
             attributes["target"] = "_blank"
@@ -296,12 +299,12 @@ module WeblogAuthoring
       end
 
       def convert_li(el, indent)
-        output = ' ' * indent << "<#{el.type}" << sanitized_html_attributes(el.type.to_s, el.attr) << ">"
+        output = (' ' * indent) << "<#{el.type}" << sanitized_html_attributes(el.type.to_s, el.attr) << ">"
         res = inner(el, indent)
         if el.children.empty? || (el.children.first.type == :p && el.children.first.options[:transparent])
           output << res << (res.match?(/\n\Z/) ? ' ' * indent : '')
         else
-          output << "\n" << res << ' ' * indent
+          output << "\n" << res << (' ' * indent)
         end
         output << "</#{el.type}>\n"
       end

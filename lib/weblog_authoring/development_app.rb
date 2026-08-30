@@ -426,8 +426,6 @@ module WeblogAuthoring
       json_error(409, error.message)
     end
 
-    private
-
     def self.application(root: ROOT, clock: -> { Time.now.getlocal(DevelopmentDatabase::TOKYO_OFFSET) },
                          s3_client: nil, asset_bucket: DEVELOPMENT_ASSET_BUCKET, embed_fetcher: nil,
                          oauth_client: default_oauth_client, allowed_github_user_id: default_allowed_github_user_id,
@@ -476,6 +474,8 @@ module WeblogAuthoring
     rescue Errno::EEXIST
       path.read
     end
+
+    private
 
     def image_inbox
       ImageInbox.new(s3_client: s3_client, bucket: settings.asset_bucket, database: settings.database)
@@ -552,30 +552,34 @@ module WeblogAuthoring
       }
     end
 
-    def self.default_oauth_client
-      client_id = ENV["GITHUB_CLIENT_ID"]
-      client_secret = ENV["GITHUB_CLIENT_SECRET"]
-      return nil if client_id.to_s.empty? || client_secret.to_s.empty?
+    class << self
+      private
 
-      GitHubOAuth.new(client_id:, client_secret:)
-    end
+      def default_oauth_client
+        client_id = ENV["GITHUB_CLIENT_ID"]
+        client_secret = ENV["GITHUB_CLIENT_SECRET"]
+        return nil if client_id.to_s.empty? || client_secret.to_s.empty?
 
-    def self.default_allowed_github_user_id
-      Integer(ENV.fetch("GITHUB_ALLOWED_USER_ID", DEFAULT_ALLOWED_GITHUB_USER_ID.to_s), 10)
-    end
-
-    def self.asset_image_paths(root_path)
-      manifest_path = root_path.join("data/normalized/asset-manifest.json")
-      report_path = root_path.join("data/reports/asset-fetch-report.json")
-      return {} unless manifest_path.file? && report_path.file?
-
-      manifest = JSON.parse(manifest_path.read(encoding: "UTF-8")).fetch("assets")
-      local_paths = JSON.parse(report_path.read(encoding: "UTF-8")).fetch("results").to_h do |result|
-        [result["id"], result["local_path"]]
+        GitHubOAuth.new(client_id:, client_secret:)
       end
-      manifest.each_with_object({}) do |asset, paths|
-        local_path = local_paths[asset.fetch("id")]
-        paths[asset.fetch("url")] = local_path if asset.fetch("kind") == "image" && local_path
+
+      def default_allowed_github_user_id
+        Integer(ENV.fetch("GITHUB_ALLOWED_USER_ID", DEFAULT_ALLOWED_GITHUB_USER_ID.to_s), 10)
+      end
+
+      def asset_image_paths(root_path)
+        manifest_path = root_path.join("data/normalized/asset-manifest.json")
+        report_path = root_path.join("data/reports/asset-fetch-report.json")
+        return {} unless manifest_path.file? && report_path.file?
+
+        manifest = JSON.parse(manifest_path.read(encoding: "UTF-8")).fetch("assets")
+        local_paths = JSON.parse(report_path.read(encoding: "UTF-8")).fetch("results").to_h do |result|
+          [result["id"], result["local_path"]]
+        end
+        manifest.each_with_object({}) do |asset, paths|
+          local_path = local_paths[asset.fetch("id")]
+          paths[asset.fetch("url")] = local_path if asset.fetch("kind") == "image" && local_path
+        end
       end
     end
 

@@ -261,8 +261,8 @@ class LambdaApiTest < Minitest::Test
     diaries = @api.call(event("GET", "/api/pages", query: { "kind" => "diary" }))
     articles = @api.call(event("GET", "/api/pages", query: { "kind" => "article" }))
 
-    assert_equal ["2026-08-28"], JSON.parse(diaries.fetch(:body)).fetch("pages").map { |page| page.fetch("route") }
-    assert_equal ["article"], JSON.parse(articles.fetch(:body)).fetch("pages").map { |page| page.fetch("route") }
+    assert_equal(["2026-08-28"], JSON.parse(diaries.fetch(:body)).fetch("pages").map { |page| page.fetch("route") })
+    assert_equal(["article"], JSON.parse(articles.fetch(:body)).fetch("pages").map { |page| page.fetch("route") })
   end
 
   def test_page_windows_order_diaries_by_creation_and_articles_by_update
@@ -278,8 +278,8 @@ class LambdaApiTest < Minitest::Test
     diaries = @api.call(event("GET", "/api/pages", query: { "kind" => "diary" }))
     articles = @api.call(event("GET", "/api/pages", query: { "kind" => "article" }))
 
-    assert_equal %w[2026-08-21 2026-08-20], JSON.parse(diaries.fetch(:body)).fetch("pages").map { |page| page.fetch("route") }
-    assert_equal %w[edited-article new-article], JSON.parse(articles.fetch(:body)).fetch("pages").map { |page| page.fetch("route") }
+    assert_equal(%w[2026-08-21 2026-08-20], JSON.parse(diaries.fetch(:body)).fetch("pages").map { |page| page.fetch("route") })
+    assert_equal(%w[edited-article new-article], JSON.parse(articles.fetch(:body)).fetch("pages").map { |page| page.fetch("route") })
   end
 
   def test_lists_home_tags_and_archive_separately
@@ -309,7 +309,7 @@ class LambdaApiTest < Minitest::Test
     payload = JSON.parse(first.fetch(:body))
 
     assert_equal ["source", "記事名", "weblog.ason.asの書き心地"], payload.fetch("names")
-    assert_equal [true, true, false], payload.fetch("entries").map { |entry| entry.fetch("materialized") }
+    assert_equal([true, true, false], payload.fetch("entries").map { |entry| entry.fetch("materialized") })
     assert_match(/\Ahub-[0-9a-f]{32}\z/, payload.fetch("entries").last.fetch("id"))
     assert_equal "no-cache", first.fetch(:headers).fetch("cache-control")
     assert_equal 304, unchanged.fetch(:statusCode)
@@ -394,7 +394,7 @@ class LambdaApiTest < Minitest::Test
     ))
     linked_pages = JSON.parse(response.fetch(:body)).fetch("pages")
 
-    assert_equal ["target"], linked_pages.map { |page| page.fetch("route") }
+    assert_equal(["target"], linked_pages.map { |page| page.fetch("route") })
   end
 
   def test_route_response_etag_does_not_include_deferred_related_pages
@@ -803,12 +803,12 @@ class LambdaApiTest < Minitest::Test
       headers: { "x-csrf-token" => "csrf-token" }
     ))
 
-    assert_equal ["item-1"], JSON.parse(listed.fetch(:body)).fetch("items").map { |inbox_item| inbox_item.fetch("id") }
+    assert_equal(["item-1"], JSON.parse(listed.fetch(:body)).fetch("items").map { |inbox_item| inbox_item.fetch("id") })
     assert_equal [{ "id" => @page.id, "route" => "2026-08-27" }],
                  JSON.parse(listed.fetch(:body)).dig("items", 0, "used_in_pages")
     assert_equal "/assets/uploads/2026/08/11111111-2222-3333-4444-555555555555.webp",
                  JSON.parse(adopted.fetch(:body)).fetch("public_url")
-    assert_equal %i[copy_object], s3.api_requests.map { |request| request.fetch(:operation_name) }
+    assert_equal(%i[copy_object], s3.api_requests.map { |request| request.fetch(:operation_name) })
     assert_equal "weblog-inbox-adoption=pending", s3.api_requests.fetch(0).fetch(:params).fetch(:tagging)
   end
 

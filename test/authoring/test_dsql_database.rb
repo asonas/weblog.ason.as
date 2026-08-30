@@ -217,8 +217,8 @@ class DsqlDatabaseTest < Minitest::Test
       body: "維持\n変更後", expected_updated_at: page.updated_at
     ))
 
-    assert_equal [FIXED_TIME, later],
-                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at) }
+    assert_equal([FIXED_TIME, later],
+                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at) })
   end
 
   def test_first_tracked_save_preserves_existing_lines_at_the_page_update_time
@@ -235,8 +235,8 @@ class DsqlDatabaseTest < Minitest::Test
       body: "新しい行\n以前からある行", expected_updated_at: page.updated_at
     ))
 
-    assert_equal [later, FIXED_TIME],
-                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at) }
+    assert_equal([later, FIXED_TIME],
+                 database.scrapbox_line_metadata(updated.id).map { |line| line.fetch(:updated_at) })
   end
 
   def test_page_save_records_inbox_usage_without_removing_the_item
@@ -253,8 +253,8 @@ class DsqlDatabaseTest < Minitest::Test
     assert_empty @pool.connection.consumed
     assert_equal [["item-1", page.id]], @pool.connection.usages
     assert_equal ["item-1"], @pool.connection.committed_adoptions
-    assert_equal [["item-1", page.id, "インボックス採用"]],
-                 database.list_inbox_item_usages.map { |usage| [usage.item_id, usage.page_id, usage.page_route] }
+    assert_equal([["item-1", page.id, "インボックス採用"]],
+                 database.list_inbox_item_usages.map { |usage| [usage.item_id, usage.page_id, usage.page_route] })
   end
 
   def test_expired_inbox_item_rejects_page_save
