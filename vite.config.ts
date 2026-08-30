@@ -31,7 +31,8 @@ export default defineConfig(({ mode }) => ({
           }
 
           const route = pathname.slice(1).replace(/\/$/, "");
-          if (route.includes("/") || /[<>\\]/.test(route)) {
+          const isEditorRoute = /^\/editor\/[^/]+\/?$/.test(pathname);
+          if ((!isEditorRoute && route.includes("/")) || /[<>\\]/.test(route)) {
             response.statusCode = 404;
             response.end("Not Found");
             return;
