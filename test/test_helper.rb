@@ -9,5 +9,4 @@ require "time"
 
 $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 
-require "weblog_authoring"
 require "weblog_migration"
