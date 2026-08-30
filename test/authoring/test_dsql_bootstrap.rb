@@ -73,6 +73,22 @@ class DsqlBootstrapTest < Minitest::Test
     refute connection.statements.any? { |statement| statement.to_s.start_with?("AWS IAM GRANT") }
   end
 
+  def test_adds_cover_mode_with_dsql_supported_statements
+    connection = Connection.new
+    bootstrap(connection).run
+
+    unsupported = connection.statements.any? { |statement|
+      statement == "ALTER TABLE weblog_authoring.pages ADD COLUMN IF NOT EXISTS cover_mode TEXT NOT NULL DEFAULT 'auto'"
+    }
+    refute unsupported
+    assert_includes connection.statements,
+                    "ALTER TABLE weblog_authoring.pages ADD COLUMN IF NOT EXISTS cover_mode TEXT"
+    assert_includes connection.statements,
+                    "ALTER TABLE weblog_authoring.pages ALTER COLUMN cover_mode SET DEFAULT 'auto'"
+    assert_includes connection.statements,
+                    "UPDATE weblog_authoring.pages SET cover_mode = 'auto' WHERE cover_mode IS NULL"
+  end
+
   private
 
   def bootstrap(connection)

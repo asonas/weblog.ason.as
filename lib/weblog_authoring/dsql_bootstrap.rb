@@ -68,7 +68,9 @@ module WeblogAuthoring
           cover_image_url TEXT
         )
       SQL
-      connection.exec("ALTER TABLE #{SCHEMA}.pages ADD COLUMN IF NOT EXISTS cover_mode TEXT NOT NULL DEFAULT 'auto'")
+      connection.exec("ALTER TABLE #{SCHEMA}.pages ADD COLUMN IF NOT EXISTS cover_mode TEXT")
+      connection.exec("ALTER TABLE #{SCHEMA}.pages ALTER COLUMN cover_mode SET DEFAULT 'auto'")
+      connection.exec("UPDATE #{SCHEMA}.pages SET cover_mode = 'auto' WHERE cover_mode IS NULL")
       connection.exec("ALTER TABLE #{SCHEMA}.pages ADD COLUMN IF NOT EXISTS cover_image_url TEXT")
       connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.links (
