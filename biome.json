@@ -3,7 +3,9 @@
   "files": {
     "includes": [
       "frontend/authoring/**/*.{ts,tsx,css}",
-      "lambda/bluesky_oauth/**/*.ts"
+      "lambda/bluesky_oauth/**/*.ts",
+      "scripts/scrapbox-to-weblog.ts",
+      "scripts/scrapbox-to-weblog.test.ts"
     ]
   },
   "formatter": {

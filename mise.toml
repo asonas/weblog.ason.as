@@ -77,6 +77,26 @@ run = "npm run coverage:bluesky-oauth"
 description = "Build the Bluesky OAuth Lambda"
 run = "npm run build:bluesky-oauth"
 
+[tasks."scrapbox:format"]
+description = "Format the Scrapbox converter with Biome"
+run = "npm run format:scrapbox"
+
+[tasks."scrapbox:lint"]
+description = "Lint the Scrapbox converter without changes"
+run = "npm run lint:scrapbox"
+
+[tasks."scrapbox:typecheck"]
+description = "Type-check the Scrapbox converter and tests"
+run = "npm run typecheck:scrapbox"
+
+[tasks."scrapbox:test"]
+description = "Run the Scrapbox converter tests"
+run = "npm run test:scrapbox"
+
+[tasks."scrapbox:coverage"]
+description = "Generate text and LCOV coverage for the Scrapbox converter"
+run = "npm run coverage:scrapbox"
+
 [tasks."ruby:format"]
 description = "Format Ruby files with RuboCop"
 run = "bundle exec rubocop -a"

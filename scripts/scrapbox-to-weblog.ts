@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { parse, type Node, type Page } from "@progfay/scrapbox-parser";
+import { type Node, type Page, parse } from "@progfay/scrapbox-parser";
 
 type ExportLine = string | { text: string; [key: string]: unknown };
 

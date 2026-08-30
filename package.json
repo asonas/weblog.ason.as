@@ -15,7 +15,11 @@
     "test:bluesky-oauth": "tsx --test lambda/bluesky_oauth/*.test.ts",
     "coverage:bluesky-oauth": "c8 --all --include='lambda/bluesky_oauth/**/*.ts' --exclude='lambda/bluesky_oauth/*.test.ts' --reporter=text --reporter=lcov --reports-dir=coverage/bluesky-oauth npm run test:bluesky-oauth",
     "build:bluesky-oauth": "tsc --project tsconfig.bluesky-oauth.json",
+    "format:scrapbox": "biome format --write scripts/scrapbox-to-weblog.ts scripts/scrapbox-to-weblog.test.ts",
+    "lint:scrapbox": "biome check --error-on-warnings scripts/scrapbox-to-weblog.ts scripts/scrapbox-to-weblog.test.ts",
+    "typecheck:scrapbox": "tsc --project tsconfig.scrapbox.json",
     "test:scrapbox": "tsx --test scripts/scrapbox-to-weblog.test.ts",
+    "coverage:scrapbox": "c8 --all --include='scripts/scrapbox-to-weblog.ts' --reporter=text --reporter=lcov --reports-dir=coverage/scrapbox npm run test:scrapbox",
     "convert:scrapbox:all": "tsx scripts/scrapbox-to-weblog.ts",
     "convert:scrapbox:assets": "tsx scripts/scrapbox-to-weblog.ts --assets-only"
   },
