@@ -1,7 +1,7 @@
 name: Apply production Terraform
 
-on:
-  workflow_dispatch:
+'on':
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -16,72 +16,87 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
+    env:
+      TF_IN_AUTOMATION: "true"
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+        with:
+          install_args: terraform tflint
+
+      - name: Run Terraform quality checks
+        run: mise run terraform:check
 
       - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
         with:
           role-to-assume: arn:aws:iam::282782318939:role/WeblogGitHubTerraform
           aws-region: ap-northeast-1
 
-      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
-        with:
-          terraform_version: 1.15.9
+      - name: Initialize production state
+        run: terraform -chdir=infra/production init -input=false -lockfile=readonly
 
-      - name: Initialize Terraform
-        run: terraform -chdir=infra/production init -input=false
-
-      - name: Validate Terraform
-        run: terraform -chdir=infra/production validate
-
-      - name: Create search indexer repository
-        run: terraform -chdir=infra/production apply -input=false -auto-approve -target=aws_ecr_repository.search_indexer -target=aws_ecr_lifecycle_policy.search_indexer
-
-      - name: Create inbox sync repository
-        run: terraform -chdir=infra/production apply -input=false -auto-approve -target=aws_ecr_repository.inbox_sync -target=aws_ecr_lifecycle_policy.inbox_sync
-
-      - name: Create Bluesky OAuth repository
-        run: terraform -chdir=infra/production apply -input=false -auto-approve -target=aws_ecr_repository.bluesky_oauth -target=aws_ecr_lifecycle_policy.bluesky_oauth
-
-      - name: Detect bootstrap image
-        id: search-bootstrap
+      - name: Detect bootstrap images
+        id: bootstrap
         run: |
-          if aws ecr describe-images --repository-name weblog-search-indexer-production --image-ids imageTag=bootstrap >/dev/null 2>&1; then
-            echo "missing=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "missing=true" >> "$GITHUB_OUTPUT"
-          fi
+          detect() {
+            service="$1"
+            repository="$2"
+            if error="$(aws ecr describe-images --repository-name "$repository" --image-ids imageTag=bootstrap 2>&1 >/dev/null)"; then
+              echo "${service}=false" >> "$GITHUB_OUTPUT"
+            elif [[ "$error" == *ImageNotFoundException* || "$error" == *RepositoryNotFoundException* ]]; then
+              echo "${service}=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$error" >&2
+              exit 1
+            fi
+          }
+          detect search weblog-search-indexer-production
+          detect inbox weblog-inbox-sync-production
+          detect oauth weblog-bluesky-oauth-production
 
-      - name: Detect inbox sync bootstrap image
-        id: inbox-sync-bootstrap
-        run: |
-          if aws ecr describe-images --repository-name weblog-inbox-sync-production --image-ids imageTag=bootstrap >/dev/null 2>&1; then
-            echo "missing=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "missing=true" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Plan search indexer bootstrap repository
+        if: steps.bootstrap.outputs.search == 'true'
+        run: >-
+          terraform -chdir=infra/production plan -input=false
+          -target=aws_ecr_repository.search_indexer
+          -target=aws_ecr_lifecycle_policy.search_indexer
+          -out=search-bootstrap.tfplan
+      - name: Apply search indexer bootstrap repository plan
+        if: steps.bootstrap.outputs.search == 'true'
+        run: terraform -chdir=infra/production apply -input=false -auto-approve search-bootstrap.tfplan
 
-      - name: Detect Bluesky OAuth bootstrap image
-        id: bluesky-oauth-bootstrap
-        run: |
-          if aws ecr describe-images --repository-name weblog-bluesky-oauth-production --image-ids imageTag=bootstrap >/dev/null 2>&1; then
-            echo "missing=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "missing=true" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Plan inbox sync bootstrap repository
+        if: steps.bootstrap.outputs.inbox == 'true'
+        run: >-
+          terraform -chdir=infra/production plan -input=false
+          -target=aws_ecr_repository.inbox_sync
+          -target=aws_ecr_lifecycle_policy.inbox_sync
+          -out=inbox-bootstrap.tfplan
+      - name: Apply inbox sync bootstrap repository plan
+        if: steps.bootstrap.outputs.inbox == 'true'
+        run: terraform -chdir=infra/production apply -input=false -auto-approve inbox-bootstrap.tfplan
+
+      - name: Plan Bluesky OAuth bootstrap repository
+        if: steps.bootstrap.outputs.oauth == 'true'
+        run: >-
+          terraform -chdir=infra/production plan -input=false
+          -target=aws_ecr_repository.bluesky_oauth
+          -target=aws_ecr_lifecycle_policy.bluesky_oauth
+          -out=oauth-bootstrap.tfplan
+      - name: Apply Bluesky OAuth bootstrap repository plan
+        if: steps.bootstrap.outputs.oauth == 'true'
+        run: terraform -chdir=infra/production apply -input=false -auto-approve oauth-bootstrap.tfplan
 
       - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
-        if: steps.search-bootstrap.outputs.missing == 'true' || steps.inbox-sync-bootstrap.outputs.missing == 'true' || steps.bluesky-oauth-bootstrap.outputs.missing == 'true'
-
+        if: steps.bootstrap.outputs.search == 'true' || steps.bootstrap.outputs.inbox == 'true' || steps.bootstrap.outputs.oauth == 'true'
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-        if: steps.search-bootstrap.outputs.missing == 'true' || steps.inbox-sync-bootstrap.outputs.missing == 'true' || steps.bluesky-oauth-bootstrap.outputs.missing == 'true'
-
+        if: steps.bootstrap.outputs.search == 'true' || steps.bootstrap.outputs.inbox == 'true' || steps.bootstrap.outputs.oauth == 'true'
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-        if: steps.search-bootstrap.outputs.missing == 'true' || steps.inbox-sync-bootstrap.outputs.missing == 'true' || steps.bluesky-oauth-bootstrap.outputs.missing == 'true'
+        if: steps.bootstrap.outputs.search == 'true' || steps.bootstrap.outputs.inbox == 'true' || steps.bootstrap.outputs.oauth == 'true'
 
       - name: Publish search indexer bootstrap image
-        if: steps.search-bootstrap.outputs.missing == 'true'
+        if: steps.bootstrap.outputs.search == 'true'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -94,7 +109,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Publish inbox sync bootstrap image
-        if: steps.inbox-sync-bootstrap.outputs.missing == 'true'
+        if: steps.bootstrap.outputs.inbox == 'true'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -107,7 +122,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Publish Bluesky OAuth bootstrap image
-        if: steps.bluesky-oauth-bootstrap.outputs.missing == 'true'
+        if: steps.bootstrap.outputs.oauth == 'true'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -119,8 +134,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Plan Terraform
-        run: terraform -chdir=infra/production plan -input=false -out=tfplan
+      - name: Create production plan
+        run: terraform -chdir=infra/production plan -input=false -out=production.tfplan
 
-      - name: Apply Terraform
-        run: terraform -chdir=infra/production apply -input=false -auto-approve tfplan
+      - name: Apply saved production plan
+        run: terraform -chdir=infra/production apply -input=false -auto-approve production.tfplan
