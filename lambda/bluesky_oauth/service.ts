@@ -84,7 +84,6 @@ export class BlueskyOAuthService {
         repo: this.allowedDid,
         collection: "app.bsky.feed.post",
         limit: "100",
-        reverse: "true",
       });
       if (cursor) query.set("cursor", cursor);
       const response = await session.fetchHandler(

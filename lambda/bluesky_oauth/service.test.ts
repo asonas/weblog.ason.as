@@ -155,7 +155,7 @@ test("lists recent posts across repository pages", async () => {
     },
   ]);
   assert.match(requests[0], /collection=app\.bsky\.feed\.post/);
-  assert.match(requests[0], /reverse=true/);
+  assert.doesNotMatch(requests[0], /reverse=/);
   assert.match(requests[1], /cursor=next-page/);
 });
 
