@@ -926,16 +926,36 @@ html[data-view="article-editing"] .site-header {
   inline-size: auto;
 }
 
-html[data-view="article-editing"] .site-header .header-actions {
-  position: fixed;
-  inset-block-start: var(--space-3);
-  inset-inline-end: calc(var(--material-panel-width) + var(--material-tabs-width) + clamp(var(--space-4), 3vw, var(--space-8)));
-}
-
 html[data-view="reading"] .site-header .header-nav,
 html[data-view="article-editing"] .site-header .header-nav {
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) minmax(16rem, 32rem) auto;
+  align-items: center;
   max-inline-size: 90rem;
   margin-inline: auto;
+}
+
+html[data-view="reading"] .site-header .site-search,
+html[data-view="article-editing"] .site-header .site-search {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+html[data-view="reading"] .site-header .site-search__desktop,
+html[data-view="article-editing"] .site-header .site-search__desktop,
+html[data-view="reading"] .site-header .site-search__desktop.is-open,
+html[data-view="article-editing"] .site-header .site-search__desktop.is-open {
+  position: relative;
+  inset: auto;
+  inline-size: 100%;
+  min-inline-size: 0;
+  transform: none;
+}
+
+html[data-view="reading"] .site-header .header-actions,
+html[data-view="article-editing"] .site-header .header-actions {
+  grid-column: 3;
+  grid-row: 1;
 }
 
 html[data-view="reading"] .site-header .header-nav > a,
@@ -2611,10 +2631,6 @@ h2 {
     inset-inline-end: max(18rem, 30vw);
   }
 
-  html[data-view="article-editing"] .site-header .header-actions {
-    inset-inline-end: calc(max(18rem, 30vw) + clamp(var(--space-4), 3vw, var(--space-8)));
-  }
-
   .content-inbox__tabs {
     inline-size: 3rem;
   }
@@ -2638,13 +2654,14 @@ h2 {
   html[data-view="article-editing"] .site-header {
     inset-inline-end: 0;
   }
-
-  html[data-view="article-editing"] .site-header .header-actions {
-    inset-inline-end: var(--space-4);
-  }
 }
 
 @media (max-width: 48rem) {
+  html[data-view="reading"] .site-header .header-nav,
+  html[data-view="article-editing"] .site-header .header-nav {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
   html[data-view="article-editing"] .article-editing-cover,
   html[data-view="article-editing"] .content-inbox-drawer {
     display: none;

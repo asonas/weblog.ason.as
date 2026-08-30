@@ -73,6 +73,11 @@ type HomeBootstrap = {
   }>;
 };
 
+export function HeaderSearch() {
+  const navigation = document.querySelector<HTMLElement>(".site-header .header-nav");
+  return navigation ? createPortal(<SiteSearch />, navigation) : null;
+}
+
 type AppBootstrap = (EditorBootstrap & { mode: "editor" }) | HomeBootstrap;
 
 const DATE_PARTS_FORMATTER = new Intl.DateTimeFormat("ja-JP", {
@@ -184,9 +189,8 @@ function App({ initialBootstrap, auth }: { initialBootstrap?: AppBootstrap; auth
 
   if (bootstrap.mode === "home") return <Home bootstrap={bootstrap} auth={auth} />;
 
-  const header = document.querySelector<HTMLElement>(".site-header");
   return <>
-    {header && createPortal(<SiteSearch />, header)}
+    <HeaderSearch />
     <AuthoringEditor
       key={auth.can_edit ? "editable" : "readonly"}
       bootstrap={bootstrap}
@@ -213,10 +217,9 @@ function RootApp({ initialBootstrap, initialAuth }: { initialBootstrap?: AppBoot
     };
   }, []);
 
-  const header = document.querySelector<HTMLElement>(".site-header");
   if (window.location.pathname === "/search") {
     return <>
-      {header && createPortal(<SiteSearch />, header)}
+      <HeaderSearch />
       <SearchPage />
     </>;
   }

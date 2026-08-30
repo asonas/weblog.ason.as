@@ -61,7 +61,24 @@ registerHooks({
     return nextLoad(url, context);
   }
 });
-const { CoverJournalHome } = await import("./main");
+const { CoverJournalHome, HeaderSearch } = await import("./main");
+
+test("keeps the shared search field in the header layout", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () => root.render(createElement(HeaderSearch)));
+
+    const search = document.querySelector(".site-header .site-search");
+    assert.ok(search);
+    assert.equal(search.parentElement?.className, "header-nav");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
 
 test("selects a calendar month without navigating to its hub", async () => {
   const container = document.createElement("div");
