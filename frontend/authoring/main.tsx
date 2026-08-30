@@ -369,13 +369,11 @@ type PageWindow = Pick<HomeBootstrap,
 function AtlasEntry({ page }: { page: HomePage }) {
   return (
     <article className="atlas-entry">
-      <a href={`/${encodeURIComponent(page.route)}`}>
-        {page.image_url && <img src={page.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />}
-        <span className="atlas-entry__body">
-          <strong>{page.title}</strong>
-          {page.excerpt && <span>{page.excerpt}</span>}
-        </span>
-      </a>
+      {page.image_url && <img src={page.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />}
+      <span className="atlas-entry__body">
+        <strong><a href={`/${encodeURIComponent(page.route)}`}>{page.title}</a></strong>
+        {page.excerpt && <span>{page.excerpt}</span>}
+      </span>
     </article>
   );
 }
@@ -566,10 +564,10 @@ function CoverJournalHome({ initialWindow, tags, archive, archiveRef, auth }: Pa
       <header className="cover-journal__hero" style={heroStyle} data-has-cover={String(Boolean(featured?.image_url))}>
         <HeaderDock />
         {featured && (
-          <a className="cover-journal__lead" href={`/${encodeURIComponent(featured.route)}`}>
-            <strong>{featured.title}</strong>
+          <div className="cover-journal__lead">
+            <strong><a href={`/${encodeURIComponent(featured.route)}`}>{featured.title}</a></strong>
             {featured.excerpt && <small>{featured.excerpt}</small>}
-          </a>
+          </div>
         )}
       </header>
       <div className="cover-journal__body">

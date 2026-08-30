@@ -1846,7 +1846,7 @@ html[data-universe="on"] .linked-pages {
 
 .cover-journal__hero {
   display: flex;
-  min-block-size: min(72vh, 46rem);
+  min-block-size: clamp(28rem, 52svh, 38rem);
   flex-direction: column;
   padding: clamp(var(--space-4), 3vw, var(--space-8));
   background: var(--atlas-teal);
@@ -1866,9 +1866,9 @@ html[data-universe="on"] .linked-pages {
   inset-block-start: 0;
   inset-inline: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(16rem, 32rem);
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(10rem, 32rem);
   align-items: start;
-  gap: var(--space-6);
+  gap: clamp(var(--space-3), 2vw, var(--space-6));
   margin: 0;
   padding: clamp(var(--space-3), 2vw, var(--space-6)) clamp(var(--space-4), 3vw, var(--space-8));
   border-block-end: var(--border-width) solid transparent;
@@ -1898,13 +1898,12 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header .header-act
 .cover-journal__lead {
   display: flex;
   inline-size: min(100%, 76rem);
-  min-block-size: 48vh;
+  min-block-size: 0;
   margin-inline: auto;
   flex: 1;
   flex-direction: column;
   justify-content: end;
   color: var(--atlas-paper);
-  text-decoration: none;
 }
 
 .cover-journal__lead > strong {
@@ -1914,6 +1913,15 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header .header-act
   letter-spacing: -0.055em;
   line-height: 0.98;
   text-wrap: balance;
+}
+
+.cover-journal__lead > strong a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cover-journal__lead > strong a:hover {
+  color: var(--atlas-warm);
 }
 
 .cover-journal__lead > small {
@@ -2160,13 +2168,16 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header .header-act
   color: var(--atlas-warm);
 }
 
-.atlas-entry a {
+.atlas-entry {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 8rem;
   min-block-size: 10rem;
   overflow: hidden;
   border-block-end: 1px solid var(--separator);
   background: transparent;
+}
+
+.atlas-entry__body a {
   color: var(--ink);
   text-decoration: none;
 }
@@ -2192,7 +2203,7 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header .header-act
   padding: 1.5rem 1.5rem 1.5rem 0;
 }
 
-.atlas-entry a:not(:has(img)) .atlas-entry__body {
+.atlas-entry:not(:has(img)) .atlas-entry__body {
   grid-column: 1 / -1;
 }
 
@@ -2212,11 +2223,11 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header .header-act
   -webkit-line-clamp: 3;
 }
 
-.atlas-entry a:hover strong {
+.atlas-entry__body a:hover {
   color: var(--accent);
 }
 
-.atlas-entry a:focus-visible {
+.atlas-entry__body a:focus-visible {
   outline-color: var(--atlas-blue);
 }
 
@@ -2836,15 +2847,6 @@ td {
 }
 
 @media (max-width: 64rem) {
-  .cover-journal__hero .atlas-header {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .cover-journal__hero .atlas-header__search {
-    grid-column: 1 / -1;
-    max-inline-size: 32rem;
-  }
-
   .cover-journal__body {
     grid-template-columns: 1fr;
   }
@@ -2893,16 +2895,8 @@ td {
   }
 
   .cover-journal__hero {
-    min-block-size: 32rem;
+    min-block-size: clamp(22rem, 48svh, 28rem);
     padding: var(--space-4);
-  }
-
-  .cover-journal__hero .atlas-header__search {
-    grid-column: auto;
-  }
-
-  .cover-journal__lead {
-    min-block-size: 20rem;
   }
 
   .cover-journal__lead > strong {
@@ -3120,7 +3114,7 @@ td {
     scroll-snap-align: start;
   }
 
-  .atlas-entry a {
+  .atlas-entry {
     grid-template-columns: 1fr;
     min-block-size: 20rem;
   }
@@ -3136,7 +3130,7 @@ td {
     block-size: 13rem;
   }
 
-  .atlas-entry a:has(img) .atlas-entry__body {
+  .atlas-entry:has(img) .atlas-entry__body {
     grid-column: 1;
     grid-row: 2;
   }
