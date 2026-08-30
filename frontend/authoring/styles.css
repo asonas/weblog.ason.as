@@ -1892,6 +1892,7 @@ html[data-header-scrolled="true"] .cover-journal__hero .atlas-header__search .si
 }
 
 .cover-journal__hero .atlas-header h1 {
+  margin: 0;
   font-size: clamp(1.15rem, 2vw, 1.6rem);
 }
 
