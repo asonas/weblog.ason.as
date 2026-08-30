@@ -22,6 +22,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
   type CSSProperties,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -638,6 +639,108 @@ function inboxItemName(item: InboxItem): string {
     return typeof item.payload.url === "string" ? item.payload.url : "Raindrop素材";
   }
   return new Date(item.occurred_at).toLocaleString("ja-JP");
+}
+
+export function materialSheetBackgroundTargets(drawer: HTMLElement): Array<HTMLElement> {
+  const targets: Array<HTMLElement> = [];
+  let current: HTMLElement | null = drawer;
+  while (current && current !== document.body) {
+    const parent: HTMLElement | null = current.parentElement;
+    if (!parent) break;
+    for (const sibling of Array.from(parent.children)) {
+      if (
+        sibling !== current
+        && sibling instanceof HTMLElement
+        && !sibling.classList.contains("content-inbox__backdrop")
+        && !sibling.hasAttribute("inert")
+      ) targets.push(sibling);
+    }
+    current = parent;
+  }
+  return targets;
+}
+
+export function MaterialDrawer({
+  isSheet,
+  open,
+  setOpen,
+  children
+}: {
+  isSheet: boolean;
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  children: (close: () => void) => ReactNode;
+}) {
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const close = useCallback(() => {
+    setOpen(false);
+    window.setTimeout(() => openerRef.current?.focus(), 0);
+  }, [setOpen]);
+
+  useEffect(() => {
+    if (!isSheet || !open) return;
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+    const inertTargets = materialSheetBackgroundTargets(drawer);
+    inertTargets.forEach((target) => target.setAttribute("inert", ""));
+    document.body.style.overflow = "hidden";
+    const focusable = () => Array.from(drawer.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    ));
+    focusable()[0]?.focus();
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const controls = focusable();
+      if (controls.length === 0) return;
+      const first = controls[0];
+      const last = controls.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      inertTargets.forEach((target) => target.removeAttribute("inert"));
+      document.body.style.removeProperty("overflow");
+    };
+  }, [close, isSheet, open]);
+
+  return <>
+    {isSheet && !open && (
+      <button
+        ref={openerRef}
+        className="content-inbox__open"
+        type="button"
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+      >
+        素材
+      </button>
+    )}
+    {isSheet && open && <div className="content-inbox__backdrop" onPointerDown={close} />}
+    {(!isSheet || open) && (
+      <aside
+        ref={drawerRef}
+        className={`content-inbox-drawer${isSheet ? " content-inbox-drawer--sheet" : ""}`}
+        aria-label="素材"
+        role={isSheet ? "dialog" : undefined}
+        aria-modal={isSheet ? "true" : undefined}
+      >
+        {children(close)}
+      </aside>
+    )}
+  </>;
 }
 
 function PhotoMaterialIcon() {
@@ -2219,8 +2322,6 @@ export function AuthoringEditor({
   const refreshingPageRef = useRef(false);
   const imageDragDepthRef = useRef(0);
   const consumedInboxItemIdsRef = useRef<Array<string>>([]);
-  const materialDrawerRef = useRef<HTMLElement | null>(null);
-  const materialSheetButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     document.title = editorDocumentTitle(draft.title, document.documentElement.dataset.environment);
@@ -2242,52 +2343,6 @@ export function AuthoringEditor({
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
-  const closeMaterialSheet = useCallback(() => {
-    setMaterialSheetOpen(false);
-    window.setTimeout(() => materialSheetButtonRef.current?.focus(), 0);
-  }, []);
-  useEffect(() => {
-    if (!materialSheetViewport || !materialSheetOpen) return;
-    const drawer = materialDrawerRef.current;
-    const workspace = workspaceRef.current;
-    if (!drawer || !workspace) return;
-    const inertTargets = Array.from(workspace.children).filter(
-      (element): element is HTMLElement => element instanceof HTMLElement
-        && element !== drawer
-        && !element.classList.contains("content-inbox__backdrop")
-    );
-    inertTargets.forEach((target) => target.setAttribute("inert", ""));
-    document.body.style.overflow = "hidden";
-    const focusable = () => Array.from(drawer.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
-    ));
-    focusable()[0]?.focus();
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeMaterialSheet();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const controls = focusable();
-      if (controls.length === 0) return;
-      const first = controls[0];
-      const last = controls.at(-1)!;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      inertTargets.forEach((target) => target.removeAttribute("inert"));
-      document.body.style.removeProperty("overflow");
-    };
-  }, [closeMaterialSheet, materialSheetOpen, materialSheetViewport]);
   const initialFocusAppliedRef = useRef(false);
   const editorContentReadyFrameRef = useRef<number | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
@@ -3146,28 +3201,13 @@ export function AuthoringEditor({
             )}
           </section>
         </div>
-        {editor?.isEditable && materialSheetViewport && !materialSheetOpen && (
-          <button
-            ref={materialSheetButtonRef}
-            className="content-inbox__open"
-            type="button"
-            aria-haspopup="dialog"
-            onClick={() => setMaterialSheetOpen(true)}
+        {editor?.isEditable && (
+          <MaterialDrawer
+            isSheet={materialSheetViewport}
+            open={materialSheetOpen}
+            setOpen={setMaterialSheetOpen}
           >
-            素材
-          </button>
-        )}
-        {editor?.isEditable && materialSheetViewport && materialSheetOpen && (
-          <div className="content-inbox__backdrop" onPointerDown={closeMaterialSheet} />
-        )}
-        {editor?.isEditable && (!materialSheetViewport || materialSheetOpen) && (
-          <aside
-            ref={materialDrawerRef}
-            className={`content-inbox-drawer${materialSheetViewport ? " content-inbox-drawer--sheet" : ""}`}
-            aria-label="素材"
-            role={materialSheetViewport ? "dialog" : undefined}
-            aria-modal={materialSheetViewport ? "true" : undefined}
-          >
+            {(closeMaterialSheet) => <>
             <section id="content-inbox-panel" className="content-inbox">
               <div className="content-inbox__toolbar">
                 <strong>{activeMaterialTab === "photo" ? "写真" : "Raindrop"}</strong>
@@ -3265,7 +3305,8 @@ export function AuthoringEditor({
                 <span className="content-inbox__raindrop-icon" aria-hidden="true" />
               </button>
             </div>
-          </aside>
+            </>}
+          </MaterialDrawer>
         )}
         {universeEnabled && universeGroups.length > 0 && (
           <InternalUniverseGraph

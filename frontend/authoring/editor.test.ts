@@ -6,7 +6,7 @@ import test from "node:test";
 import { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { JSDOM } from "jsdom";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { EditorBootstrap } from "./editor";
@@ -59,6 +59,8 @@ const {
   isVisibleLine,
   lineUpdateLabel,
   lineUpdateStrength,
+  MaterialDrawer,
+  materialSheetBackgroundTargets,
   pendingLineUpdates,
   matchingWikiLinkNames,
   nextWikiLinkSuggestionIndex,
@@ -260,6 +262,112 @@ test("recognizes image files and inbox photos as image drags", () => {
   assert.equal(isImageDrag({ items: [{ kind: "file", type: "image/png" }] }), true);
   assert.equal(isImageDrag({ items: [{ kind: "file", type: "text/plain" }] }), false);
   assert.equal(isImageDrag({ types: ["application/x-weblog-inbox-item-id"] }), true);
+});
+
+function minimalEditorBootstrap(): EditorBootstrap {
+  return {
+    page_id: "page-id", page_type: "named", date: "", name: "current", title: "current", body: "本文",
+    expected_updated_at: "2026-08-29T11:00:00+09:00", save_message: "", linked_pages: [], linked_pages_has_more: false
+  };
+}
+
+function minimalEditorFetch(input: RequestInfo | URL): Promise<Response> {
+  const url = String(input);
+  if (url === "/api/inbox") {
+    return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "content-type": "application/json" } }));
+  }
+  if (url.startsWith("/api/page-names")) {
+    return Promise.resolve(new Response(JSON.stringify({ names: [] }), { headers: { "content-type": "application/json" } }));
+  }
+  if (url.startsWith("/api/routes/") || url.startsWith("/api/related")) {
+    return Promise.resolve(new Response(JSON.stringify({
+      mode: "editor", id: "page-id", page_type: "named", date: null, name: "current", title: null,
+      updated_at: "2026-08-29T12:00:00+09:00", route: "current", body: "本文",
+      linked_pages: [], linked_pages_has_more: false
+    }), { headers: { "content-type": "application/json", etag: '"same"' } }));
+  }
+  return Promise.reject(new Error(`unexpected request: ${url}`));
+}
+
+test("navigates material tabs with arrows, Home, and End", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = minimalEditorFetch;
+  try {
+    await act(async () => {
+      root.render(createElement(AuthoringEditor, { bootstrap: minimalEditorBootstrap() }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const selectedLabel = () => container.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("aria-label");
+    const press = async (label: string, key: string) => {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(`[role="tab"][aria-label="${label}"]`)!
+          .dispatchEvent(new window.KeyboardEvent("keydown", { key, bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+    await press("写真", "End");
+    assert.equal(selectedLabel(), "Raindrop");
+    await press("Raindrop", "ArrowUp");
+    assert.equal(selectedLabel(), "写真");
+    await press("写真", "ArrowRight");
+    assert.equal(selectedLabel(), "Raindrop");
+    await press("Raindrop", "Home");
+    assert.equal(selectedLabel(), "写真");
+    assert.equal(document.activeElement?.getAttribute("aria-label"), "写真");
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
+test("traps focus in the mobile material sheet and restores the page", async () => {
+  const outsideHeader = document.createElement("header");
+  const container = document.createElement("main");
+  document.body.append(outsideHeader, container);
+  const root = createRoot(container);
+  function Harness() {
+    const [open, setOpen] = useState(false);
+    return createElement(MaterialDrawer, {
+      isSheet: true,
+      open,
+      setOpen,
+      children: (close) => createElement("div", null,
+        createElement("button", { type: "button", className: "content-inbox__close", onClick: close }, "閉じる"),
+        createElement("button", { type: "button" }, "最後")
+      )
+    });
+  }
+  try {
+    await act(async () => root.render(createElement(Harness)));
+    const opener = container.querySelector<HTMLButtonElement>(".content-inbox__open")!;
+    await act(async () => { opener.click(); });
+    const dialog = container.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]')!;
+    assert.ok(dialog);
+    assert.equal(outsideHeader.hasAttribute("inert"), true);
+    assert.equal(materialSheetBackgroundTargets(dialog).length, 0);
+    const first = dialog.querySelector<HTMLButtonElement>(".content-inbox__close")!;
+    const last = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button")).at(-1)!;
+    assert.equal(document.activeElement, first);
+    last.focus();
+    document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    assert.equal(document.activeElement, first);
+    await act(async () => {
+      document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.equal(container.querySelector('[role="dialog"]'), null);
+    assert.equal(document.activeElement?.classList.contains("content-inbox__open"), true);
+    assert.equal(outsideHeader.hasAttribute("inert"), false);
+    assert.equal(document.body.style.overflow, "");
+  } finally {
+    await act(async () => root.unmount());
+    outsideHeader.remove();
+    container.remove();
+  }
 });
 
 test("adopts an inbox photo and marks it as used by the current page", async () => {
@@ -520,12 +628,6 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
       container.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Raindrop"]')!.click();
     });
     assert.equal(container.querySelector(".content-inbox__kind")?.textContent, "Raindrop");
-    const raindropTab = container.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Raindrop"]')!;
-    await act(async () => {
-      raindropTab.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Home", bubbles: true }));
-    });
-    assert.equal(container.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("aria-label"), "写真");
-    assert.equal(document.activeElement?.getAttribute("aria-label"), "写真");
   } finally {
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;
