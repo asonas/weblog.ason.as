@@ -1012,6 +1012,7 @@ html[data-view="article-editing"] .page-shell {
 
 .article-editing-cover__actions label {
   display: flex;
+  inline-size: max-content;
   min-block-size: 2.75rem;
   align-items: center;
   gap: var(--space-1);
@@ -1021,11 +1022,16 @@ html[data-view="article-editing"] .page-shell {
   border-radius: var(--radius-control);
   background: color-mix(in oklch, var(--surface) 90%, transparent);
   font-size: var(--text-meta);
+  white-space: nowrap;
   backdrop-filter: blur(0.5rem);
 }
 
 .article-editing-cover__actions input {
   margin: 0;
+}
+
+.article-editing-cover__actions input:disabled {
+  cursor: not-allowed;
 }
 
 .article-reading-header {
