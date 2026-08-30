@@ -6,7 +6,7 @@ import test from "node:test";
 import { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { JSDOM } from "jsdom";
-import { act, createElement, useState } from "react";
+import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { EditorBootstrap } from "./editor";
@@ -59,8 +59,6 @@ const {
   isVisibleLine,
   lineUpdateLabel,
   lineUpdateStrength,
-  MaterialDrawer,
-  materialSheetBackgroundTargets,
   pendingLineUpdates,
   matchingWikiLinkNames,
   nextWikiLinkSuggestionIndex,
@@ -320,52 +318,6 @@ test("navigates material tabs with arrows, Home, and End", async () => {
   } finally {
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;
-    container.remove();
-  }
-});
-
-test("traps focus in the mobile material sheet and restores the page", async () => {
-  const outsideHeader = document.createElement("header");
-  const container = document.createElement("main");
-  document.body.append(outsideHeader, container);
-  const root = createRoot(container);
-  function Harness() {
-    const [open, setOpen] = useState(false);
-    return createElement(MaterialDrawer, {
-      isSheet: true,
-      open,
-      setOpen,
-      children: (close) => createElement("div", null,
-        createElement("button", { type: "button", className: "content-inbox__close", onClick: close }, "閉じる"),
-        createElement("button", { type: "button" }, "最後")
-      )
-    });
-  }
-  try {
-    await act(async () => root.render(createElement(Harness)));
-    const opener = container.querySelector<HTMLButtonElement>(".content-inbox__open")!;
-    await act(async () => { opener.click(); });
-    const dialog = container.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]')!;
-    assert.ok(dialog);
-    assert.equal(outsideHeader.hasAttribute("inert"), true);
-    assert.equal(materialSheetBackgroundTargets(dialog).length, 0);
-    const first = dialog.querySelector<HTMLButtonElement>(".content-inbox__close")!;
-    const last = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button")).at(-1)!;
-    assert.equal(document.activeElement, first);
-    last.focus();
-    document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
-    assert.equal(document.activeElement, first);
-    await act(async () => {
-      document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    assert.equal(container.querySelector('[role="dialog"]'), null);
-    assert.equal(document.activeElement?.classList.contains("content-inbox__open"), true);
-    assert.equal(outsideHeader.hasAttribute("inert"), false);
-    assert.equal(document.body.style.overflow, "");
-  } finally {
-    await act(async () => root.unmount());
-    outsideHeader.remove();
     container.remove();
   }
 });

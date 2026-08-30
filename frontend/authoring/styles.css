@@ -2420,29 +2420,6 @@ h2 {
   border-inline-start: var(--border-width) solid var(--separator);
 }
 
-.content-inbox__open {
-  position: fixed;
-  z-index: 6;
-  inset-block-end: var(--space-4);
-  inset-inline-end: var(--space-4);
-  min-inline-size: 4rem;
-  min-block-size: 2.75rem;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--surface);
-}
-
-.content-inbox__backdrop {
-  position: fixed;
-  z-index: 7;
-  inset: 0;
-  background: color-mix(in oklch, var(--ink) 28%, transparent);
-}
-
-.content-inbox__close {
-  min-block-size: 2.75rem;
-}
-
 .content-inbox__tabs button:focus-visible,
 .content-inbox__item:focus-visible {
   outline: 2px solid var(--accent);
@@ -2655,19 +2632,10 @@ h2 {
   }
 }
 
-@media (max-width: 52rem) {
-  html[data-view="article-editing"] .content-inbox-drawer--sheet {
-    position: fixed;
-    z-index: 8;
-    inset-block: auto 0;
-    inset-inline: 0;
-    display: flex;
-    inline-size: 100%;
-    max-block-size: min(80vh, 42rem);
-    border-block-start: var(--border-width) solid var(--separator);
-    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-    background: var(--surface);
-    box-shadow: 0 -1rem 3rem color-mix(in oklch, var(--ink) 18%, transparent);
+@media (max-width: 48rem) {
+  html[data-view="article-editing"] .article-editing-cover,
+  html[data-view="article-editing"] .content-inbox-drawer {
+    display: none;
   }
 }
 
