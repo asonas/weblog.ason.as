@@ -1,0 +1,77 @@
+module WeblogAuthoring
+  interface _DsqlPageRow
+    def fetch: ("page_type") -> page_type
+             | ("status") -> page_status
+             | (String) -> String
+    def []: (String) -> String?
+  end
+
+  class DsqlDatabase
+    DATABASE_ROLE: String
+    SCHEMA: String
+    TOKYO_OFFSET: String
+    INBOX_RETENTION_SECONDS: Integer
+    ADOPTION_RETENTION_SECONDS: Integer
+    INBOX_KINDS: Hash[String, Array[String]]
+    INBOX_PAYLOAD_KEYS: Hash[Array[String], Array[String]]
+    INBOX_PAYLOAD_TYPES: Hash[Array[String], Hash[String, singleton(String) | singleton(Integer)]]
+
+    include _PageRepository
+
+    def initialize: (host: String, content_dir: String | Pathname, ?clock: ^() -> Time, ?pool: untyped) -> void
+    def healthy?: () -> bool
+    def close: () -> untyped
+    def scrapbox_line_metadata: (String) -> Array[Hash[Symbol, untyped]]
+    def create_mobile_pairing: (code_digest: untyped, expires_at: untyped) -> untyped
+    def exchange_mobile_pairing: (code_digest: untyped, device_name: untyped, token_digest: untyped) -> untyped
+    def revoke_mobile_device: (untyped) -> bool
+    def active_mobile_devices: () -> Array[Hash[String, untyped]]
+    def touch_mobile_device: (untyped) -> untyped
+    def create_mobile_upload: (device_id: untyped, upload_id: untyped, s3_key: untyped, client_upload_id: untyped, content_type: untyped, size: untyped, sha256: untyped, captured_at: untyped, captured_at_source: untyped) -> untyped
+    def find_mobile_upload: (upload_id: untyped, device_id: untyped) -> untyped
+    def find_inbox_item_by_source: (source: untyped, kind: untyped, source_id: untyped) -> InboxItem?
+    def complete_mobile_upload: (upload_id: untyped, device_id: untyped) -> untyped
+    def cleanup_mobile_uploads: (?limit: Integer) -> untyped
+    def upsert_inbox_item: (source: untyped, kind: untyped, source_id: untyped, occurred_at: untyped, payload: untyped) -> InboxItem?
+    def start_inbox_sync_run: (run_id: untyped, trigger: untyped, started_at: untyped) -> bool
+    def queue_inbox_sync_run: (run_id: untyped, trigger: untyped, queued_at: untyped) -> bool
+    def inbox_sync_run: (run_id: untyped) -> untyped
+    def inbox_source_sync_state: (source: String) -> untyped
+    def apply_inbox_source_snapshot: (run_id: untyped, source: untyped, snapshot: untyped, completed_at: untyped) -> untyped
+    def fail_inbox_source_sync: (run_id: untyped, source: untyped, error: untyped, completed_at: untyped) -> untyped
+    def finish_inbox_sync_run: (run_id: untyped, status: untyped, completed_at: untyped) -> untyped
+    def list_inbox_items: (?source: untyped, ?kind: untyped) -> Array[InboxItem]
+    def list_inbox_item_usages: () -> Array[InboxItemUsage]
+    def find_inbox_item: (String) -> InboxItem?
+    def prepare_inbox_image_adoption: (item_id: untyped, inbox_key: untyped, public_key: untyped) -> untyped
+    def consume_inbox_item: (String) -> untyped
+    def list_pending_inbox_image_finalizations: (?limit: Integer) -> Array[InboxImageAdoption]
+    def complete_inbox_image_adoption: (item_id: String) -> untyped
+    def cleanup_inbox_items: (?limit: Integer) -> untyped
+
+    private
+
+    def record_inbox_source_success: (untyped, run_id: untyped, source: untyped, snapshot: untyped, counts: untyped, completed_at: untyped) -> untyped
+    def record_inbox_item_usage_with_connection: (untyped, untyped, untyped) -> untyped
+    def consume_inbox_item_with_connection: (untyped, untyped, required: bool) -> untyped
+    def validate_inbox_identity!: (untyped, untyped, untyped) -> untyped
+    def inbox_item_from_row: (untyped) -> InboxItem
+    def inbox_image_adoption_from_row: (untyped) -> InboxImageAdoption
+    def mobile_upload_columns: () -> String
+    def mobile_upload_from_row: (untyped) -> Hash[String, untyped]
+    def new_document: (SaveRequest) -> PageDocument
+    def updated_document: (PageDocument, SaveRequest) -> PageDocument
+    def ensure_unique_route!: (untyped, PageDocument, PageDocument?) -> untyped
+    def insert_page: (untyped, PageDocument) -> untyped
+    def update_page: (untyped, PageDocument) -> untyped
+    def replace_links: (untyped, PageDocument) -> untyped
+    def replace_line_metadata_after_save: (untyped, PageDocument, PageDocument?, Array[Hash[Symbol, untyped]]) -> untyped
+    def page_values: (PageDocument) -> Array[untyped]
+    def page_from_row: (_DsqlPageRow) -> PageDocument
+    def select_sql: (String) -> String
+    def validate_expected_update: (PageDocument, SaveRequest) -> untyped
+    def now: () -> Time
+    def parse_time: (untyped) -> Time
+    def with_connection: [A] () { (untyped) -> A } -> A
+  end
+end

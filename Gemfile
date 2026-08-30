@@ -24,5 +24,8 @@ group :test do
 end
 
 group :development do
+  gem "rbs", "~> 3.9"
   gem "rubocop", "~> 1.89"
+  gem "steep", "~> 1.10"
+  gem "typeprof", "~> 0.30"
 end

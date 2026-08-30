@@ -45,7 +45,7 @@ module WeblogAuthoring
       %w[c4p track] => { "guid" => String, "permalink" => String, "title" => String, "audio_url" => String, "duration_seconds" => Integer },
     }.freeze
 
-    def initialize(host:, content_dir:, clock: -> { Time.now.getlocal(TOKYO_OFFSET) }, pool: nil)
+    def initialize(host:, content_dir:, clock: -> { Time.now.getlocal(TOKYO_OFFSET) }, pool: nil) # steep:ignore ArgumentTypeMismatch
       @content_dir = Pathname(content_dir)
       @clock = clock
       @pool = pool || AuroraDsql::Pg.create_pool(
@@ -64,8 +64,8 @@ module WeblogAuthoring
                  created_at, updated_at, published_at, path, body, cover_mode, cover_image_url
           FROM #{SCHEMA}.pages
         SQL
-        conditions = []
-        values = []
+        conditions = [] # @type var conditions: Array[String]
+        values = [] # @type var values: Array[untyped]
         if kind
           values << "日記"
           exists = "EXISTS (SELECT 1 FROM #{SCHEMA}.links WHERE links.source_id = pages.id AND links.target_name = $#{values.length})"
@@ -1029,9 +1029,17 @@ module WeblogAuthoring
                                       CoverImage.validate(request.cover_mode, request.cover_image_url)
                                     end
       PageDocument.new(
-        **current.to_h,
+        id: current.id,
+        page_type: current.page_type,
+        name: current.name,
+        page_date: current.page_date,
+        title: current.title,
+        status: current.status,
+        created_at: current.created_at,
         body:,
         updated_at: now,
+        published_at: current.published_at,
+        path: current.path,
         links: WeblogAuthoring.extract_wiki_links(body),
         cover_mode:,
         cover_image_url:
@@ -1102,6 +1110,7 @@ module WeblogAuthoring
 
     def replace_line_metadata_after_save(connection, document, current, current_metadata)
       previous_lines = current&.body.to_s.split("\n", -1)
+      # @type var metadata_by_line: Hash[String, Array[Hash[Symbol, untyped]]]
       metadata_by_line = Hash.new { |lines, body| lines[body] = [] }
       previous_lines.each_with_index do |line, index|
         metadata = current_metadata[index]
@@ -1202,11 +1211,13 @@ module WeblogAuthoring
       value = @clock.call
       raise ArgumentError, "clock must return a Time" unless value.is_a?(Time)
 
-      value.getlocal(TOKYO_OFFSET)
+      value.getlocal(TOKYO_OFFSET) # steep:ignore ArgumentTypeMismatch
     end
 
     def parse_time(value)
-      value.is_a?(Time) ? value : Time.parse(value)
+      return value if value.is_a?(Time)
+
+      Time.parse(value)
     end
 
     def with_connection(&)

@@ -1,0 +1,8 @@
+module WeblogAuthoring
+  interface _PageRepository
+    def list_pages: (?limit: Integer?, ?before: page_cursor?, ?after: page_cursor?, ?kind: String?) -> Array[PageDocument]
+    def find: (String id) -> PageDocument?
+    def find_route: (String route) -> PageDocument?
+    def save: (SaveRequest request) -> PageDocument?
+  end
+end

@@ -1,0 +1,129 @@
+module WeblogAuthoring
+  type page_type = "date" | "named"
+  type page_status = "draft" | "published"
+  type page_cursor = { timestamp: Time, id: String }
+  type json_scalar = String | Integer | Float | bool | nil
+  type json_value = json_scalar | Array[json_value] | Hash[String, json_value]
+
+  class WikiLink < Struct[untyped]
+    def self.new: (name: String, ?start: Integer, ?end: Integer) -> WikiLink
+    attr_reader name: String
+    attr_reader start: Integer
+    attr_reader end: Integer
+
+    def initialize: (name: String, ?start: Integer, ?end: Integer) -> void
+  end
+
+  class PageDocument < Struct[untyped]
+    def self.new: (id: String, page_type: page_type, name: String?, page_date: Date?, title: String?, status: page_status, created_at: Time, updated_at: Time, published_at: Time?, path: Pathname, body: String, links: Array[WikiLink], cover_mode: String?, cover_image_url: String?) -> PageDocument
+    attr_reader id: String
+    attr_reader page_type: page_type
+    attr_reader name: String?
+    attr_reader page_date: Date?
+    attr_reader title: String?
+    attr_reader status: page_status
+    attr_reader created_at: Time
+    attr_reader updated_at: Time
+    attr_reader published_at: Time?
+    attr_reader path: Pathname
+    attr_reader body: String
+    attr_reader links: Array[WikiLink]
+    attr_reader cover_mode: String
+    attr_reader cover_image_url: String?
+
+    def initialize: (id: String, page_type: page_type, name: String?, page_date: Date?, title: String?, status: page_status, created_at: Time, updated_at: Time, published_at: Time?, path: Pathname, body: String, links: Array[WikiLink], cover_mode: String?, cover_image_url: String?) -> void
+    def display_title: () -> String
+    def route: () -> String
+    def empty?: () -> bool
+  end
+
+  class PageProblem < Struct[untyped]
+    def self.new: (path: String | Pathname, detail: String) -> PageProblem
+    attr_reader path: Pathname
+    attr_reader detail: String
+
+    def initialize: (path: String | Pathname, detail: String) -> void
+  end
+
+  class Redirect < Struct[untyped]
+    def self.new: (old_route: String, new_route: String) -> Redirect
+    attr_reader old_route: String
+    attr_reader new_route: String
+
+    def initialize: (old_route: String, new_route: String) -> void
+  end
+
+  class InboxItem < Struct[untyped]
+    def self.new: (id: String, source: String, kind: String, source_id: String, occurred_at: Time, ingested_at: Time, expires_at: Time, payload: Hash[String, json_value], created_at: Time, updated_at: Time) -> InboxItem
+    attr_reader id: String
+    attr_reader source: String
+    attr_reader kind: String
+    attr_reader source_id: String
+    attr_reader occurred_at: Time
+    attr_reader ingested_at: Time
+    attr_reader expires_at: Time
+    attr_reader payload: Hash[String, json_value]
+    attr_reader created_at: Time
+    attr_reader updated_at: Time
+
+    def initialize: (id: String, source: String, kind: String, source_id: String, occurred_at: Time, ingested_at: Time, expires_at: Time, payload: Hash[String, json_value], created_at: Time, updated_at: Time) -> void
+  end
+
+  class InboxImageAdoption < Struct[untyped]
+    def self.new: (item_id: String, inbox_key: String, public_key: String, prepared_at: Time, committed_at: Time?, expires_at: Time) -> InboxImageAdoption
+    attr_reader item_id: String
+    attr_reader inbox_key: String
+    attr_reader public_key: String
+    attr_reader prepared_at: Time
+    attr_reader committed_at: Time?
+    attr_reader expires_at: Time
+
+    def initialize: (item_id: String, inbox_key: String, public_key: String, prepared_at: Time, committed_at: Time?, expires_at: Time) -> void
+  end
+
+  class InboxItemUsage < Struct[untyped]
+    def self.new: (item_id: String, page_id: String, page_route: String, used_at: Time) -> InboxItemUsage
+    attr_reader item_id: String
+    attr_reader page_id: String
+    attr_reader page_route: String
+    attr_reader used_at: Time
+
+    def initialize: (item_id: String, page_id: String, page_route: String, used_at: Time) -> void
+  end
+
+  class ReleaseSnapshot < Struct[untyped]
+    def self.new: (?pages: Array[PageDocument], ?redirects: Array[Redirect], ?published_at: Time?) -> ReleaseSnapshot
+    attr_reader pages: Array[PageDocument]
+    attr_reader redirects: Array[Redirect]
+    attr_reader published_at: Time?
+
+    def initialize: (?pages: Array[PageDocument], ?redirects: Array[Redirect], ?published_at: Time?) -> void
+  end
+
+  class SaveRequest < Struct[untyped]
+    def self.new: (page_type: page_type, body: String, ?page_id: String?, ?name: String?, ?page_date: Date?, ?title: String?, ?expected_updated_at: Time?, ?consumed_inbox_item_ids: Array[String], ?cover_mode: String?, ?cover_image_url: String?) -> SaveRequest
+    attr_reader page_type: page_type
+    attr_reader body: String
+    attr_reader page_id: String?
+    attr_reader name: String?
+    attr_reader page_date: Date?
+    attr_reader title: String?
+    attr_reader expected_updated_at: Time?
+    attr_reader consumed_inbox_item_ids: Array[String]
+    attr_reader cover_mode: String?
+    attr_reader cover_image_url: String?
+
+    def initialize: (page_type: page_type, body: String, ?page_id: String?, ?name: String?, ?page_date: Date?, ?title: String?, ?expected_updated_at: Time?, ?consumed_inbox_item_ids: Array[String], ?cover_mode: String?, ?cover_image_url: String?) -> void
+  end
+
+  class PublishRequest < Struct[untyped]
+    def self.new: (page_id: String, ?expected_updated_at: Time?) -> PublishRequest
+    attr_reader page_id: String
+    attr_reader expected_updated_at: Time?
+
+    def initialize: (page_id: String, ?expected_updated_at: Time?) -> void
+  end
+
+  class ConflictError < StandardError
+  end
+end

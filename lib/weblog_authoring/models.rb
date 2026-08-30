@@ -6,7 +6,7 @@ require "pathname"
 module WeblogAuthoring
   class WikiLink < Struct.new(:name, :start, :end, keyword_init: true)
     def initialize(name:, start: 0, end: 0)
-      super(name:, start:, end:)
+      super(name:, start:, end:) # steep:ignore UnexpectedKeywordArgument
       freeze
     end
   end
@@ -29,7 +29,7 @@ module WeblogAuthoring
     keyword_init: true
   )
     def initialize(**attributes)
-      attributes[:links] = Array(attributes[:links]).freeze
+      attributes[:links] = Array(attributes[:links]).freeze # steep:ignore ArgumentTypeMismatch
       attributes[:cover_mode] ||= "auto"
       super(**attributes)
       freeze
@@ -53,14 +53,14 @@ module WeblogAuthoring
 
   class PageProblem < Struct.new(:path, :detail, keyword_init: true)
     def initialize(path:, detail:)
-      super(path: Pathname(path), detail:)
+      super(path: Pathname(path), detail:) # steep:ignore UnexpectedKeywordArgument
       freeze
     end
   end
 
   class Redirect < Struct.new(:old_route, :new_route, keyword_init: true)
     def initialize(old_route:, new_route:)
-      super(old_route:, new_route:)
+      super(old_route:, new_route:) # steep:ignore UnexpectedKeywordArgument
       freeze
     end
   end
@@ -96,7 +96,7 @@ module WeblogAuthoring
 
   class ReleaseSnapshot < Struct.new(:pages, :redirects, :published_at, keyword_init: true)
     def initialize(pages: [], redirects: [], published_at: nil)
-      super(pages: Array(pages).freeze, redirects: Array(redirects).freeze, published_at:)
+      super(pages: Array(pages).freeze, redirects: Array(redirects).freeze, published_at:) # steep:ignore UnexpectedKeywordArgument
       freeze
     end
   end
@@ -116,6 +116,7 @@ module WeblogAuthoring
   )
     def initialize(page_type:, body:, page_id: nil, name: nil, page_date: nil, title: nil, expected_updated_at: nil,
                    consumed_inbox_item_ids: [], cover_mode: nil, cover_image_url: nil)
+      # steep:ignore:start
       super(
         page_type:,
         body:,
@@ -128,13 +129,14 @@ module WeblogAuthoring
         cover_mode:,
         cover_image_url:
       )
+      # steep:ignore:end
       freeze
     end
   end
 
   class PublishRequest < Struct.new(:page_id, :expected_updated_at, keyword_init: true)
     def initialize(page_id:, expected_updated_at: nil)
-      super(page_id:, expected_updated_at:)
+      super(page_id:, expected_updated_at:) # steep:ignore UnexpectedKeywordArgument
       freeze
     end
   end

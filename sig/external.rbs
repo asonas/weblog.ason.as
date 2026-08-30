@@ -1,0 +1,20 @@
+module AuroraDsql
+  module Pg
+    def self.create_pool: (**untyped) -> untyped
+  end
+end
+
+module PG
+  class UniqueViolation < StandardError
+  end
+end
+
+module WeblogAuthoring
+  module CoverImage
+    def self.validate: (untyped, untyped) -> [String, String?]
+  end
+
+  def self.validate_page_name: (String) -> String
+  def self.page_path: (Pathname, String, name: String?, page_date: Date?) -> Pathname
+  def self.extract_wiki_links: (String) -> Array[WikiLink]
+end

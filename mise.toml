@@ -45,3 +45,11 @@ run = "bundle exec ruby -Itest -e 'Dir[\"test/authoring/test_*.rb\", \"test/migr
 description = "Generate Ruby coverage in coverage/ruby"
 env = { COVERAGE = "1" }
 run = "bundle exec ruby -Itest -e 'Dir[\"test/authoring/test_*.rb\", \"test/migration/test_*.rb\", \"test/tooling/test_*.rb\"].sort.each { |file| require_relative file }'"
+
+[tasks."ruby:typecheck"]
+description = "Type-check Ruby domain and persistence boundaries with Steep"
+run = "bundle exec steep check"
+
+[tasks."ruby:typeprof"]
+description = "Inspect inferred Ruby signatures without updating sig"
+run = "bundle exec typeprof lib/weblog_authoring/models.rb lib/weblog_authoring/dsql_database.rb"
