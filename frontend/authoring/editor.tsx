@@ -108,7 +108,7 @@ function encodePageName(name: string): string {
 }
 
 const WIKI_LINK_PATTERN = /\[\[([^\[\]]+)\]\]/g;
-const IMAGE_MARKDOWN_PATTERN = /^!\[\]\((.+)\)$/;
+const IMAGE_MARKDOWN_PATTERN = /^!\[([^\]]*)\]\((.+)\)$/;
 
 export function wrapSelectionInWikiLink(editor: Editor): boolean {
   const { from, to } = editor.state.selection;
@@ -156,7 +156,8 @@ const WikiLinks = Extension.create({
                 : null;
               const src = selectedImage?.node.attrs.src;
               if (selectedImage && typeof src === "string" && src.length > 0) {
-                const markdown = `![](${src})`;
+                const alt = typeof selectedImage.node.attrs.alt === "string" ? selectedImage.node.attrs.alt : "";
+                const markdown = `![${alt}](${src})`;
                 const paragraph = newState.schema.nodes.paragraph.create(null, newState.schema.text(markdown));
                 const transaction = newState.tr.replaceWith(selectedImage.from, selectedImage.to, paragraph);
                 return transaction
@@ -211,7 +212,7 @@ const WikiLinks = Extension.create({
           }
 
           const matches: Array<{ from: number; to: number; pageName: string }> = [];
-          const imageMatches: Array<{ from: number; to: number; src: string }> = [];
+          const imageMatches: Array<{ from: number; to: number; alt: string; src: string }> = [];
           const changedLinks: Array<{ from: number; to: number; pageName: string }> = [];
           newState.doc.descendants((node, position) => {
             if (node.type.name === "paragraph" && node.childCount === 1 && node.firstChild?.isText) {
@@ -219,7 +220,7 @@ const WikiLinks = Extension.create({
               const selectionTouchesImageMarkdown = newState.selection.from <= position + node.nodeSize - 1
                 && newState.selection.to >= position + 1;
               if (match && !selectionTouchesImageMarkdown) {
-                imageMatches.push({ from: position, to: position + node.nodeSize, src: match[1] });
+                imageMatches.push({ from: position, to: position + node.nodeSize, alt: match[1], src: match[2] });
               }
             }
             if (!node.isText || !node.text) return;
@@ -254,7 +255,7 @@ const WikiLinks = Extension.create({
           if (imageMatches.length > 0) {
             const transaction = newState.tr;
             for (const match of imageMatches.reverse()) {
-              transaction.replaceWith(match.from, match.to, newState.schema.nodes.image.create({ src: match.src, alt: "" }));
+              transaction.replaceWith(match.from, match.to, newState.schema.nodes.image.create({ src: match.src, alt: match.alt }));
             }
             return transaction;
           }
@@ -629,6 +630,14 @@ function inboxItemLabel(item: InboxItem): string {
   if (item.source === "bluesky") return "Bluesky 投稿";
   if (item.source === "raindrop") return "Raindrop";
   return "c4p";
+}
+
+function inboxItemName(item: InboxItem): string {
+  if (item.source === "raindrop" && item.kind === "bookmark") {
+    if (typeof item.payload.title === "string" && item.payload.title.trim()) return item.payload.title.trim();
+    return typeof item.payload.url === "string" ? item.payload.url : "Raindrop素材";
+  }
+  return new Date(item.occurred_at).toLocaleString("ja-JP");
 }
 
 function PhotoMaterialIcon() {
@@ -2179,8 +2188,13 @@ export function AuthoringEditor({
   const [uploadingImages, setUploadingImages] = useState(false);
   const [draggingImages, setDraggingImages] = useState(false);
   const [imageUploadStatus, setImageUploadStatus] = useState("");
+  const [materialStatus, setMaterialStatus] = useState("");
   const [inboxItems, setInboxItems] = useState<Array<InboxItem>>([]);
   const [activeMaterialTab, setActiveMaterialTab] = useState<MaterialTab>("photo");
+  const [materialSheetOpen, setMaterialSheetOpen] = useState(false);
+  const [materialSheetViewport, setMaterialSheetViewport] = useState(
+    () => window.matchMedia?.("(max-width: 52rem)").matches ?? false
+  );
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [syncingInbox, setSyncingInbox] = useState(false);
   const [linkedPages, setLinkedPages] = useState(bootstrap.linked_pages || []);
@@ -2205,6 +2219,8 @@ export function AuthoringEditor({
   const refreshingPageRef = useRef(false);
   const imageDragDepthRef = useRef(0);
   const consumedInboxItemIdsRef = useRef<Array<string>>([]);
+  const materialDrawerRef = useRef<HTMLElement | null>(null);
+  const materialSheetButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     document.title = editorDocumentTitle(draft.title, document.documentElement.dataset.environment);
@@ -2215,6 +2231,63 @@ export function AuthoringEditor({
       delete document.documentElement.dataset.view;
     };
   }, [canEdit]);
+  useEffect(() => {
+    const media = window.matchMedia?.("(max-width: 52rem)");
+    if (!media) return;
+    const update = () => {
+      setMaterialSheetViewport(media.matches);
+      if (!media.matches) setMaterialSheetOpen(false);
+    };
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  const closeMaterialSheet = useCallback(() => {
+    setMaterialSheetOpen(false);
+    window.setTimeout(() => materialSheetButtonRef.current?.focus(), 0);
+  }, []);
+  useEffect(() => {
+    if (!materialSheetViewport || !materialSheetOpen) return;
+    const drawer = materialDrawerRef.current;
+    const workspace = workspaceRef.current;
+    if (!drawer || !workspace) return;
+    const inertTargets = Array.from(workspace.children).filter(
+      (element): element is HTMLElement => element instanceof HTMLElement
+        && element !== drawer
+        && !element.classList.contains("content-inbox__backdrop")
+    );
+    inertTargets.forEach((target) => target.setAttribute("inert", ""));
+    document.body.style.overflow = "hidden";
+    const focusable = () => Array.from(drawer.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    ));
+    focusable()[0]?.focus();
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMaterialSheet();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const controls = focusable();
+      if (controls.length === 0) return;
+      const first = controls[0];
+      const last = controls.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      inertTargets.forEach((target) => target.removeAttribute("inert"));
+      document.body.style.removeProperty("overflow");
+    };
+  }, [closeMaterialSheet, materialSheetOpen, materialSheetViewport]);
   const initialFocusAppliedRef = useRef(false);
   const editorContentReadyFrameRef = useRef<number | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
@@ -2706,6 +2779,25 @@ export function AuthoringEditor({
     ? item.source === "photo" && item.kind === "photo"
     : item.source === "raindrop" && item.kind === "bookmark");
 
+  const handleMaterialTabKeyDown = useCallback((event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const tabs: Array<MaterialTab> = ["photo", "raindrop"];
+    const current = tabs.indexOf(activeMaterialTab);
+    let next = current;
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") next = (current + 1) % tabs.length;
+    else if (event.key === "ArrowUp" || event.key === "ArrowLeft") next = (current - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    const nextTab = tabs[next];
+    const tabList = event.currentTarget.parentElement;
+    setActiveMaterialTab(nextTab);
+    window.setTimeout(() => {
+      tabList?.querySelector<HTMLButtonElement>(`[role="tab"][data-material-tab="${nextTab}"]`)
+        ?.focus();
+    }, 0);
+  }, [activeMaterialTab]);
+
   const adoptInboxImage = useCallback(async (itemId: string) => {
     if (!editor || loadingInbox) return;
     setLoadingInbox(true);
@@ -2721,6 +2813,7 @@ export function AuthoringEditor({
           : [...item.used_in_pages, { id: draftRef.current.pageId, route: draftRef.current.name || draftRef.current.title }]
       } : item));
       setImageUploadStatus("");
+      setMaterialStatus("写真を本文へ追加しました");
     } catch (error) {
       setImageUploadStatus(error instanceof Error ? error.message : "写真を記事へ追加できませんでした");
     } finally {
@@ -2751,6 +2844,7 @@ export function AuthoringEditor({
         : [...candidate.used_in_pages, { id: draftRef.current.pageId, route: draftRef.current.name || draftRef.current.title }]
     } : candidate));
     setImageUploadStatus("");
+    setMaterialStatus("Raindropを本文へ追加しました");
   }, [adoptInboxImage, editor, inboxItems]);
 
   const setInboxPhotoAsCover = useCallback(async (itemId: string) => {
@@ -2761,6 +2855,7 @@ export function AuthoringEditor({
       consumedInboxItemIdsRef.current = [...consumedInboxItemIdsRef.current, itemId];
       updateCover("explicit", result.public_url, result.public_url);
       setImageUploadStatus("");
+      setMaterialStatus("写真をカバーに設定しました");
     } catch (error) {
       setImageUploadStatus(error instanceof Error ? error.message : "写真をカバーに設定できませんでした");
     } finally {
@@ -2934,6 +3029,9 @@ export function AuthoringEditor({
       <p className="visually-hidden" role="status" aria-live="polite" aria-busy={saving}>
         {status}
       </p>
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {materialStatus}
+      </p>
       <div className={`article-workspace${canEdit ? "" : " article-workspace--reading"}`} ref={workspaceRef}>
         {canEdit && (
           <div
@@ -2946,14 +3044,40 @@ export function AuthoringEditor({
             {draft.resolvedCoverImageUrl
               ? <img src={draft.resolvedCoverImageUrl} alt="" />
               : <span className="article-editing-cover__prompt">画像をドロップしてカバーに設定</span>}
-            <div className="article-editing-cover__actions">
-              <button type="button" onClick={() => updateCover("auto", null, autoCoverImageUrl(draft.body))}>
+            <fieldset className="article-editing-cover__actions" role="radiogroup" aria-label="カバーモード">
+              <legend className="visually-hidden">カバーモード</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="cover-mode"
+                  value="auto"
+                  checked={draft.coverMode === "auto"}
+                  onChange={() => updateCover("auto", null, autoCoverImageUrl(draft.body))}
+                />
                 自動
-              </button>
-              <button type="button" onClick={() => updateCover("none", null, null)}>
-                カバーなし
-              </button>
-            </div>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="cover-mode"
+                  value="explicit"
+                  checked={draft.coverMode === "explicit"}
+                  disabled={!draft.coverImageUrl}
+                  onChange={() => updateCover("explicit", draft.coverImageUrl, draft.coverImageUrl)}
+                />
+                指定画像
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="cover-mode"
+                  value="none"
+                  checked={draft.coverMode === "none"}
+                  onChange={() => updateCover("none", null, null)}
+                />
+                なし
+              </label>
+            </fieldset>
           </div>
         )}
         {!canEdit && (
@@ -3022,11 +3146,34 @@ export function AuthoringEditor({
             )}
           </section>
         </div>
-        {editor?.isEditable && (
-          <aside className="content-inbox-drawer" aria-label="素材">
+        {editor?.isEditable && materialSheetViewport && !materialSheetOpen && (
+          <button
+            ref={materialSheetButtonRef}
+            className="content-inbox__open"
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => setMaterialSheetOpen(true)}
+          >
+            素材
+          </button>
+        )}
+        {editor?.isEditable && materialSheetViewport && materialSheetOpen && (
+          <div className="content-inbox__backdrop" onPointerDown={closeMaterialSheet} />
+        )}
+        {editor?.isEditable && (!materialSheetViewport || materialSheetOpen) && (
+          <aside
+            ref={materialDrawerRef}
+            className={`content-inbox-drawer${materialSheetViewport ? " content-inbox-drawer--sheet" : ""}`}
+            aria-label="素材"
+            role={materialSheetViewport ? "dialog" : undefined}
+            aria-modal={materialSheetViewport ? "true" : undefined}
+          >
             <section id="content-inbox-panel" className="content-inbox">
               <div className="content-inbox__toolbar">
                 <strong>{activeMaterialTab === "photo" ? "写真" : "Raindrop"}</strong>
+                {materialSheetViewport && (
+                  <button type="button" className="content-inbox__close" onClick={closeMaterialSheet}>閉じる</button>
+                )}
                 <button
                   type="button"
                   className="content-inbox__sync"
@@ -3057,7 +3204,8 @@ export function AuthoringEditor({
                             event.dataTransfer.setData(INBOX_ITEM_DRAG_TYPE, item.id);
                             event.dataTransfer.effectAllowed = "copy";
                           }}
-                          onClick={() => photoUrl && void adoptInboxImage(item.id)}
+                          aria-label={`${inboxItemName(item)}を本文へ追加`}
+                          onClick={() => insertInboxItem(item.id)}
                         >
                           {photoUrl && <img src={photoUrl} alt="" loading="lazy" />}
                           {activeMaterialTab === "raindrop" && <span className="content-inbox__kind">{inboxItemLabel(item)}</span>}
@@ -3070,6 +3218,17 @@ export function AuthoringEditor({
                             </time>
                           )}
                         </button>
+                        {photoUrl && (
+                          <button
+                            type="button"
+                            className="content-inbox__cover-action"
+                            aria-label={`${inboxItemName(item)}をカバーに設定`}
+                            disabled={loadingInbox}
+                            onClick={() => void setInboxPhotoAsCover(item.id)}
+                          >
+                            カバー
+                          </button>
+                        )}
                       </li>
                     );
                   })}
@@ -3080,22 +3239,28 @@ export function AuthoringEditor({
               <button
                 type="button"
                 role="tab"
+                data-material-tab="photo"
+                tabIndex={activeMaterialTab === "photo" ? 0 : -1}
                 aria-selected={activeMaterialTab === "photo"}
                 aria-controls="content-inbox-panel"
                 aria-label="写真"
                 title="写真"
                 onClick={() => setActiveMaterialTab("photo")}
+                onKeyDown={handleMaterialTabKeyDown}
               >
                 <PhotoMaterialIcon />
               </button>
               <button
                 type="button"
                 role="tab"
+                data-material-tab="raindrop"
+                tabIndex={activeMaterialTab === "raindrop" ? 0 : -1}
                 aria-selected={activeMaterialTab === "raindrop"}
                 aria-controls="content-inbox-panel"
                 aria-label="Raindrop"
                 title="Raindrop"
                 onClick={() => setActiveMaterialTab("raindrop")}
+                onKeyDown={handleMaterialTabKeyDown}
               >
                 <span className="content-inbox__raindrop-icon" aria-hidden="true" />
               </button>

@@ -370,6 +370,14 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
     assert.match(String(savedPayloads[0].body), /\/assets\/uploads\/2026\/08\/item-1\.webp/);
     assert.notEqual(container.querySelector(".content-inbox__item"), null);
     assert.equal(container.querySelector(".content-inbox__usage")?.textContent, "currentで使用済み");
+    const coverSave = waitForSave();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label$="をカバーに設定"]')!.click();
+      await coverSave;
+    });
+    assert.equal(savedPayloads.at(-1)?.cover_mode, "explicit");
+    assert.equal(savedPayloads.at(-1)?.cover_image_url, "/assets/uploads/2026/08/item-1.webp");
+    assert.equal(container.querySelector('[role="radiogroup"] input:checked')?.getAttribute("value"), "explicit");
   } finally {
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;
@@ -427,27 +435,12 @@ test("inserts a Raindrop URL and marks it as used by the current page", async ()
       await Promise.resolve();
     });
 
-    const transferData = new Map<string, string>();
-    const dataTransfer = {
-      files: [], items: [], types: [] as Array<string>, effectAllowed: "none", dropEffect: "none",
-      setData(type: string, value: string) {
-        transferData.set(type, value);
-        if (!this.types.includes(type)) this.types.push(type);
-      },
-      getData(type: string) { return transferData.get(type) || ""; }
-    };
     const item = container.querySelector<HTMLButtonElement>(".content-inbox__item")!;
-    const dragStart = new window.Event("dragstart", { bubbles: true, cancelable: true });
-    Object.defineProperty(dragStart, "dataTransfer", { value: dataTransfer });
-    item.dispatchEvent(dragStart);
+    assert.equal(item.getAttribute("aria-label"), "Articleを本文へ追加");
 
     const saved = new Promise<void>((resolve) => { resolveSave = resolve; });
     await act(async () => {
-      const drop = new window.Event("drop", { bubbles: true, cancelable: true });
-      Object.defineProperties(drop, {
-        dataTransfer: { value: dataTransfer }, clientX: { value: 0 }, clientY: { value: 0 }
-      });
-      container.querySelector<HTMLElement>(".ProseMirror")!.dispatchEvent(drop);
+      item.click();
       await Promise.race([saved, new Promise((resolve) => setTimeout(resolve, 1_000))]);
     });
 
@@ -527,6 +520,12 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
       container.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Raindrop"]')!.click();
     });
     assert.equal(container.querySelector(".content-inbox__kind")?.textContent, "Raindrop");
+    const raindropTab = container.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Raindrop"]')!;
+    await act(async () => {
+      raindropTab.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+    });
+    assert.equal(container.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("aria-label"), "写真");
+    assert.equal(document.activeElement?.getAttribute("aria-label"), "写真");
   } finally {
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;
@@ -967,15 +966,15 @@ test("edits a selected image as Markdown and renders it again after leaving", ()
   const editor = new Editor({
     element: document.createElement("div"),
     extensions: EDITOR_EXTENSIONS,
-    content: "title\n\n![](/assets/uploads/2026/08/image.webp)\n\nbody",
+    content: "title\n\n![犬](/assets/uploads/2026/08/image.webp)\n\nbody",
     contentType: "markdown"
   });
   const imagePosition = editor.state.doc.firstChild!.nodeSize;
 
   editor.commands.setTextSelection(imagePosition - 1);
   editor.commands.setNodeSelection(imagePosition);
-  assert.match(editor.getText(), /!\[\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
-  assert.match(markdownForSource(editor.getMarkdown()), /!\[\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
+  assert.match(editor.getText(), /!\[犬\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
+  assert.match(markdownForSource(editor.getMarkdown()), /!\[犬\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/);
   assert.equal(editor.state.selection.empty, true);
   assert.equal(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.from + 1), "!");
 
@@ -988,6 +987,7 @@ test("edits a selected image as Markdown and renders it again after leaving", ()
   editor.commands.setTextSelection(editor.state.doc.content.size - 1);
   assert.ok(editor.state.doc.child(1).type.name === "image");
   assert.equal(editor.state.doc.child(1).attrs.src, "/assets/uploads/2026/08/image.webp");
+  assert.equal(editor.state.doc.child(1).attrs.alt, "犬");
   editor.destroy();
 });
 

@@ -102,10 +102,12 @@ function replaceLocalLinks(line: string): string {
       }
     }
 
-    if (codeMarker === null && line.startsWith("!\\[\\](", cursor)) {
-      const imageEnd = line.indexOf(")", cursor + 6);
-      if (imageEnd !== -1) {
-        result += `![](${line.slice(cursor + 6, imageEnd)})`;
+    if (codeMarker === null && line.startsWith("!\\[", cursor)) {
+      const labelEnd = line.indexOf("\\](", cursor + 3);
+      const imageEnd = labelEnd === -1 ? -1 : line.indexOf(")", labelEnd + 3);
+      if (labelEnd !== -1 && imageEnd !== -1) {
+        const alt = line.slice(cursor + 3, labelEnd);
+        result += `![${alt}](${line.slice(labelEnd + 3, imageEnd)})`;
         cursor = imageEnd + 1;
         continue;
       }
