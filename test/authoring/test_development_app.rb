@@ -368,19 +368,43 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "application/json; charset=utf-8", cache_write.fetch(:content_type)
   end
 
-  def test_root_shows_new_page_button_and_creates_the_development_database
-    status, _headers, body = request("GET", "/")
+  def test_root_redirects_to_the_vite_frontend
+    status, headers, body = request("GET", "/")
 
-    assert_equal 200, status
-    assert_includes body, 'data-environment="development"'
-    assert_includes body, "<title>[dev] weblog.ason.as</title>"
-    assert_includes body, '"mode":"home"'
-    refute_includes body, 'href="/editor/new"'
-    assert_includes body, 'href="/?new=1"'
-    assert_includes body, 'href="/?new=daily"'
-    assert_includes body, 'href="/feed.xml"'
-    refute_includes body, 'id="theme-toggle"'
+    assert_equal 307, status
+    assert_equal "http://127.0.0.1:5173/", headers.fetch("location")
+    assert_empty body
     assert database_path.file?
+  end
+
+  def test_root_redirect_does_not_depend_on_the_oauth_callback_url
+    oauth_app = WeblogAuthoring::DevelopmentApp.application(
+      root:,
+      clock: -> { FIXED_TIME },
+      oauth_client: Object.new,
+      github_redirect_uri: "https://oauth.example/api/auth/github/callback"
+    )
+
+    status, headers, _body = request_with(oauth_app, "GET", "/")
+
+    assert_equal 307, status
+    assert_equal "http://127.0.0.1:5173/", headers.fetch("location")
+  end
+
+  def test_backend_does_not_serve_frontend_routes_or_bundled_assets
+    frontend_paths = [
+      "/editor/new",
+      "/design-system",
+      "/example-page",
+      "/static/authoring/app.js",
+      "/static/authoring/assets/imageUpload.worker.js"
+    ]
+
+    frontend_paths.each do |path|
+      status, _headers, _body = request("GET", path)
+
+      assert_equal 404, status, path
+    end
   end
 
   def test_daily_button_opens_the_japanese_daily_template
@@ -392,11 +416,6 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal "[[金曜日]] [[202608]] [[0821]] [[日記]]", editor.fetch("body")
     assert_empty editor.fetch("page_id")
 
-    status, _headers, body = request("GET", "/?new=daily")
-
-    assert_equal 200, status
-    assert_includes body, '"title":"2026-08-21"'
-    assert_includes body, '[[金曜日]] [[202608]] [[0821]] [[日記]]'
   end
 
   def test_assets_are_read_from_the_development_bucket
@@ -509,14 +528,6 @@ class TestDevelopmentApp < Minitest::Test
   end
 
   def test_new_editor_saves_and_reads_a_page_from_the_database
-    status, _headers, body = request("GET", "/editor/new")
-
-    assert_equal 200, status
-    assert_includes body, '"mode":"editor"'
-    assert_includes body, '"page_id":""'
-    assert_includes body, '"page_type":"named"'
-    refute_includes body, "プレビュー"
-
     status, _headers, body = json_request(
       "POST",
       "/api/authoring/pages",
@@ -543,10 +554,10 @@ class TestDevelopmentApp < Minitest::Test
     assert_includes body, "最初の記事"
 
     restarted_app = WeblogAuthoring::DevelopmentApp.application(root:, clock: -> { FIXED_TIME })
-    status, _headers, body = request_with(restarted_app, "GET", "/editor/#{page.fetch("id")}")
+    status, _headers, body = request_with(restarted_app, "GET", "/api/pages/#{page.fetch("id")}")
 
     assert_equal 200, status
-    assert_includes body, "更新した本文"
+    assert_equal "更新した本文", JSON.parse(body).fetch("body")
   end
 
   def test_get_api_bootstraps_home_and_editor_for_vite
@@ -730,10 +741,6 @@ class TestDevelopmentApp < Minitest::Test
     assert_empty editor.fetch("page_id")
     assert_nil app_database.find_route("foobar")
 
-    status, _headers, body = request("GET", "/foobar")
-
-    assert_equal 200, status
-    assert_includes body, '"title":"foobar"'
   end
 
   def test_editor_returns_cards_for_existing_wiki_link_targets

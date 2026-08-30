@@ -7,21 +7,22 @@ Scrapbox移行ツールと記事作成画面を管理するリポジトリです
 ```sh
 mise install
 mise run setup
-mise exec -- npm run typecheck
-mise exec -- npm run build
 ```
 
 ## 開発
 
 ```sh
-# ターミナル1
-mairu exec --no-login auto -- mise exec -- bin/authoring
-
-# ターミナル2
-mise exec -- npm run dev
+mise run dev
 ```
 
 ブラウザで`http://127.0.0.1:5173/`を開きます。
+Frontendとbackendを個別に起動する場合は、`mise run dev:web`と`mise run dev:api`を使います。Webは`127.0.0.1:5173`、APIは`127.0.0.1:8000`を使用し、portが使用中の場合は起動に失敗します。
+
+production用のsite artifactは次のcommandで`dist/site/`へ生成します。
+
+```sh
+mise run build
+```
 
 ### Scrapboxの行更新日時を取り込む
 

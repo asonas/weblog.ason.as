@@ -3,7 +3,6 @@
 require "cgi"
 require "date"
 require "digest"
-require "erb"
 require "fileutils"
 require "json"
 require "pathname"
@@ -79,13 +78,7 @@ module WeblogAuthoring
 
   class DevelopmentApp < Sinatra::Base
     ROOT = Pathname(__dir__).join("../..").expand_path.freeze
-    TEMPLATE_DIR = ROOT.join("templates/authoring").freeze
-    STATIC_DIR = ROOT.join("static/authoring").freeze
     LOOPBACK_HOSTS = %w[127.0.0.1 localhost ::1].freeze
-    STATIC_FILES = {
-      "app.css" => ["text/css", "app.css"],
-      "app.js" => ["application/javascript", "app.js"]
-    }.freeze
     ALLOWED_PAGE_TYPES = %w[date named].freeze
     JAPANESE_WEEKDAYS = %w[日曜日 月曜日 火曜日 水曜日 木曜日 金曜日 土曜日].freeze
     DIARY_DATE_TAG = /\A(?:\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])|\d{4}(?:0[1-9]|1[0-2])|(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))\z/
@@ -95,12 +88,12 @@ module WeblogAuthoring
     DEVELOPMENT_ASSET_BUCKET = "weblog-asonas-assets-dev-282782318939"
     DEVELOPMENT_ASSET_REGION = "ap-northeast-1"
     ASSET_FILENAME = /\Aasset_[0-9a-f]{16}\.(?:avif|gif|jpe?g|png|webp)\z/i
-    AUTHORING_ASSET_FILENAME = /\A(?:imageUpload\.worker|webp_enc(?:_simd)?-[A-Za-z0-9_-]+)\.js\z/
     EMBED_CACHE_TTL = 7 * 24 * 60 * 60
     EMBED_FALLBACK_CACHE_TTL = 5 * 60
     INBOX_METADATA_PREFIX = "assets/inbox/.metadata/"
     DEFAULT_ALLOWED_GITHUB_USER_ID = 630_181
     DEFAULT_GITHUB_REDIRECT_URI = "http://127.0.0.1:5173/api/auth/github/callback"
+    FRONTEND_ORIGIN = "http://127.0.0.1:5173"
 
     set :environment, :development
     set :show_exceptions, false
@@ -163,36 +156,7 @@ module WeblogAuthoring
     end
 
     get "/" do
-      initial_state = case params["new"]
-                      when "1" then new_editor_state
-                      when "daily" then daily_editor_state
-                      else home_state
-                      end
-      render_shell(
-        title: "weblog.ason.as",
-        initial_state:
-      )
-    end
-
-    get "/editor/new" do
-      render_shell(title: "編集", initial_state: new_editor_state)
-    end
-
-    get "/editor/:id" do
-      page = settings.database.find(params.fetch("id"))
-      halt 404, "ページが見つかりません" if page.nil?
-
-      render_editor(
-        page_id: page.id,
-        page_type: page.page_type,
-        date: page.page_date&.iso8601.to_s,
-        name: page.name.to_s,
-        title: page.page_type == "named" ? page.name.to_s : page.title.to_s,
-        body: page.body,
-        expected_updated_at: page.updated_at.iso8601(9),
-        save_message: "保存済み・最終更新 #{format_time(page.updated_at)}",
-        line_updated_at: line_updated_at(page.id)
-      )
+      redirect frontend_url("/"), 307
     end
 
     get "/api/pages" do
@@ -314,20 +278,6 @@ module WeblogAuthoring
       object.body.read
     rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
       halt 404
-    end
-
-    get "/static/authoring/:asset" do
-      content_type, filename = STATIC_FILES.fetch(params.fetch("asset")) { halt 404 }
-      content_type content_type
-      send_file STATIC_DIR.join(filename).to_s
-    end
-
-    get "/static/authoring/assets/:asset" do
-      asset = params.fetch("asset")
-      halt 404 unless AUTHORING_ASSET_FILENAME.match?(asset)
-
-      content_type "application/javascript"
-      send_file STATIC_DIR.join("assets", asset).to_s
     end
 
     post "/api/authoring/pages" do
@@ -464,13 +414,6 @@ module WeblogAuthoring
         )
         page_json(page)
       end
-    end
-
-    get "/:route" do
-      route = valid_page_route(params.fetch("route"))
-      halt 404, "ページが見つかりません" if route.nil?
-
-      render_shell(title: route, initial_state: editor_state_for_route(route))
     end
 
     error DevelopmentInputError do
@@ -671,7 +614,7 @@ module WeblogAuthoring
     end
 
     def frontend_url(path)
-      frontend = URI(settings.github_redirect_uri)
+      frontend = URI(FRONTEND_ORIGIN)
       destination = URI(safe_return_to(path))
       frontend.path = destination.path
       frontend.query = destination.query
@@ -743,24 +686,6 @@ module WeblogAuthoring
         content_type: "application/json; charset=utf-8"
       )
       metadata
-    end
-
-    def render_editor(page_id:, page_type:, date:, name:, title:, body:, expected_updated_at:, save_message:,
-                      line_updated_at: [])
-      render_shell(
-        title: "編集",
-        initial_state: editor_json(
-          page_id:,
-          page_type:,
-          date:,
-          name:,
-          title:,
-          body:,
-          expected_updated_at:,
-          save_message:,
-          line_updated_at:
-        )
-      )
     end
 
     def new_editor_state
@@ -905,17 +830,6 @@ module WeblogAuthoring
         "pages" => related.slice(offset, RELATED_PAGE_LIMIT) || [],
         "has_more" => offset + RELATED_PAGE_LIMIT < related.length
       }
-    end
-
-    def render_shell(title:, initial_state:)
-      template = ERB.new(TEMPLATE_DIR.join("app.html").read(encoding: "UTF-8"))
-      body = template.result_with_hash(
-        title:,
-        initial_state: safe_json(initial_state),
-        auth: auth_state
-      )
-      content_type "text/html; charset=utf-8"
-      body
     end
 
     def api_response(status = 200)
@@ -1075,10 +989,6 @@ module WeblogAuthoring
       }
     end
 
-    def home_state(timings: {})
-      page_window({}, timings:).merge("mode" => "home")
-    end
-
     def page_window(query, timings: {})
       kind = query["kind"]
       halt 422, "kindが不正です" unless kind.nil? || %w[diary article].include?(kind)
@@ -1200,10 +1110,6 @@ module WeblogAuthoring
 
     def format_time(value)
       value.getlocal(DevelopmentDatabase::TOKYO_OFFSET).strftime("%Y-%m-%d %H:%M")
-    end
-
-    def safe_json(value)
-      JSON.generate(value).gsub("<", "\\u003c").gsub(">", "\\u003e").gsub("&", "\\u0026")
     end
 
     def json_error(status, message, field: nil)

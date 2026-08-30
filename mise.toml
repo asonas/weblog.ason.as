@@ -12,3 +12,19 @@ run = [
   "bundle install",
   "npm ci",
 ]
+
+[tasks.dev]
+description = "Run the authoring frontend and backend"
+run = [{ tasks = ["dev:api", "dev:web"] }]
+
+[tasks."dev:api"]
+description = "Run the authoring backend on http://127.0.0.1:8000"
+run = "mairu exec --no-login --server asonas-aws 282782318939/weblog-authoring-development -- bin/authoring"
+
+[tasks."dev:web"]
+description = "Run the Vite frontend on http://127.0.0.1:5173"
+run = "npm run dev"
+
+[tasks.build]
+description = "Build the production site artifact"
+run = "npm run build"

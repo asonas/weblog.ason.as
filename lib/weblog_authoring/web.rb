@@ -31,18 +31,12 @@ module WeblogAuthoring
 
   class WebApp
     TEMPLATE_DIR = Pathname(__dir__).join("../../templates/authoring").expand_path.freeze
-    STATIC_DIR = Pathname(__dir__).join("../../static/authoring").expand_path.freeze
     LOOPBACK_HOSTS = %w[127.0.0.1 localhost ::1].freeze
-    STATIC_FILES = {
-      "/static/authoring/app.css" => ["app.css", "text/css"],
-      "/static/authoring/app.js" => ["app.js", "application/javascript"]
-    }.freeze
     ALLOWED_PAGE_TYPES = %w[date named].freeze
 
-    def initialize(service, template_dir: TEMPLATE_DIR, static_dir: STATIC_DIR)
+    def initialize(service, template_dir: TEMPLATE_DIR)
       @service = service
       @template_dir = Pathname(template_dir)
-      @static_dir = Pathname(static_dir)
     end
 
     def call(env)
@@ -66,11 +60,6 @@ module WeblogAuthoring
     def dispatch(request)
       path = request.path_info.to_s
 
-      if path.start_with?("/static/authoring/")
-        return method_not_allowed_response unless request.get?
-
-        return static_response(path)
-      end
       return api_response(request, path) if path.start_with?("/api/")
       return method_not_allowed_response if path == "/api" && !request.get?
       return method_not_allowed_response unless request.get?
@@ -449,13 +438,6 @@ module WeblogAuthoring
     def render_template(filename, values)
       template = ERB.new(@template_dir.join(filename).read(encoding: "UTF-8"))
       template.result_with_hash(values)
-    end
-
-    def static_response(path)
-      filename, content_type = STATIC_FILES.fetch(path) do
-        return text_response(404, "ファイルが見つかりません")
-      end
-      response(200, "#{content_type}; charset=utf-8", @static_dir.join(filename).read(encoding: "UTF-8"))
     end
 
     def format_time(value)

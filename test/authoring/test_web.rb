@@ -35,24 +35,6 @@ class TestWeb < Minitest::Test
     assert_includes body, "問題はありません"
   end
 
-  def test_static_assets_are_allowlisted_and_keep_accessibility_behaviors
-    status, headers, css = request("GET", "/static/authoring/app.css")
-    assert_equal 200, status
-    assert_equal "text/css; charset=utf-8", headers.fetch("content-type")
-    assert_includes css, ":focus-visible"
-    assert_includes css, ".wysiwyg-editor"
-    refute_includes css, ".preview-panel"
-
-    status, headers, javascript = request("GET", "/static/authoring/app.js")
-    assert_equal 200, status
-    assert_equal "application/javascript; charset=utf-8", headers.fetch("content-type")
-    assert_includes javascript, "/api/pages"
-    assert_includes javascript, "aria-multiline"
-    assert_includes javascript, "beforeunload"
-
-    assert_equal 404, request("GET", "/static/authoring/secret.txt").first
-  end
-
   def test_home_opens_unsaved_today_then_saved_today_editor
     status, headers, body = request("GET", "/")
 

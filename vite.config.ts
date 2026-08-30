@@ -9,7 +9,7 @@ const isLinkedWorktree = projectRoot.includes(`${sep}.worktrees${sep}`);
 const nestedWorktrees = `${resolve(projectRoot, ".worktrees")}${sep}`;
 
 export default defineConfig(({ mode }) => ({
-  base: mode === "production" ? "/static/authoring/" : "/",
+  base: "/",
   plugins: [
     {
       name: "reject-unsafe-page-routes",
@@ -69,28 +69,10 @@ export default defineConfig(({ mode }) => ({
       }
     }
   },
-  worker: {
-    format: "es",
-    rollupOptions: {
-      output: {
-        entryFileNames: "assets/[name].js"
-      }
-    }
-  },
   build: {
-    lib: {
-      entry: resolve(projectRoot, "frontend/authoring/main.tsx"),
-      formats: ["iife"],
-      name: "WeblogAuthoring",
-      fileName: () => "app.js",
-      cssFileName: "app"
-    },
-    outDir: resolve(projectRoot, "static/authoring"),
+    outDir: resolve(projectRoot, "dist/site"),
+    assetsDir: "static/authoring/assets",
+    chunkSizeWarningLimit: 800,
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        assetFileNames: "app.css"
-      }
-    }
   }
 }));
