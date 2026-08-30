@@ -7,6 +7,7 @@ require "openssl"
 require "pathname"
 require "securerandom"
 require "time"
+require "uri"
 
 ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
 
@@ -16,6 +17,7 @@ require_relative "cover_image"
 require_relative "links"
 require_relative "models"
 require_relative "names"
+require_relative "webmention_targets"
 
 module WeblogAuthoring
   class DsqlDatabase
@@ -45,10 +47,12 @@ module WeblogAuthoring
       %w[c4p track] => { "guid" => String, "permalink" => String, "title" => String, "audio_url" => String, "duration_seconds" => Integer },
     }.freeze
 
-    def initialize(host:, content_dir:, clock: -> { Time.now.getlocal(TOKYO_OFFSET) }, # steep:ignore ArgumentTypeMismatch
+    def initialize(host:, content_dir:, site_url: "https://weblog.ason.as", clock: -> { Time.now.getlocal(TOKYO_OFFSET) }, # steep:ignore ArgumentTypeMismatch
                    pool: nil, monotonic_clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) })
       @content_dir = Pathname(content_dir)
       @clock = clock
+      @site_url = site_url
+      @webmention_targets = WebmentionTargets.new(site_url:)
       @monotonic_clock = monotonic_clock
       @pool = pool || AuroraDsql::Pg.create_pool(
         host:,
@@ -185,6 +189,7 @@ module WeblogAuthoring
           current.nil? ? insert_page(connection, document) : update_page(connection, document)
           replace_line_metadata_after_save(connection, document, current, current_line_metadata || [])
           replace_links(connection, document)
+          enqueue_webmention_outbox(connection, current, document)
           request.consumed_inbox_item_ids.each do |item_id|
             record_inbox_item_usage_with_connection(connection, item_id, document.id)
           end
@@ -198,6 +203,426 @@ module WeblogAuthoring
 
     def close
       @pool.shutdown
+    end
+
+    def record_verified_webmention(job:, response:, title:, site_name:, content_hash:)
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          relation = find_or_create_webmention_relation(connection, job, timestamp)
+          relation_id = relation.fetch("id")
+          moderation_status = relation.fetch("moderation_status")
+          if relation.fetch("verification_status") == "deleted"
+            moderation_status = "pending"
+            connection.exec_params(
+              "UPDATE #{SCHEMA}.webmention_relations SET moderation_status = 'pending' WHERE id = $1", [relation_id]
+            )
+          end
+          connection.exec_params(
+            <<~SQL,
+              UPDATE #{SCHEMA}.webmention_relations SET
+                verification_status = 'verified',
+                first_verified_at = COALESCE(first_verified_at, $2),
+                last_notified_at = $3,
+                last_verified_at = $2,
+                deleted_at = NULL,
+                deletion_reason = NULL,
+                updated_at = $2
+              WHERE id = $1
+            SQL
+            [relation_id, timestamp, Time.iso8601(job.fetch("received_at"))]
+          )
+          upsert_webmention_snapshot(
+            connection, relation_id:, source_url: job.fetch("source"), title:, site_name:,
+            content_hash:, timestamp:
+          ) unless moderation_status == "rejected"
+          record_webmention_attempt(
+            connection, job:, relation_id:, result: "verified", response:, content_hash:, timestamp:
+          )
+        end
+      end
+    end
+
+    def record_webmention_deletion(job:, response:, reason:)
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          relation = connection.exec_params(
+            "SELECT id FROM #{SCHEMA}.webmention_relations WHERE source_url = $1 AND target_url = $2 LIMIT 1 FOR UPDATE",
+            [job.fetch("source"), job.fetch("target")]
+          )
+          relation_id = relation.ntuples.zero? ? nil : relation[0].fetch("id")
+          if relation_id
+            connection.exec_params(
+              <<~SQL,
+                UPDATE #{SCHEMA}.webmention_relations SET
+                  verification_status = 'deleted', last_notified_at = $2,
+                  last_verified_at = $3, deleted_at = $3, deletion_reason = $4, updated_at = $3
+                WHERE id = $1
+              SQL
+              [relation_id, Time.iso8601(job.fetch("received_at")), timestamp, reason]
+            )
+            connection.exec_params(
+              "DELETE FROM #{SCHEMA}.webmention_snapshots WHERE relation_id = $1",
+              [relation_id]
+            )
+          end
+          record_webmention_attempt(connection, job:, relation_id:, result: reason, response:, timestamp:)
+        end
+      end
+    end
+
+    def record_webmention_failure(job:, result:, message:)
+      _message = message
+      timestamp = now
+      with_connection do |connection|
+        relation = connection.exec_params(
+          "SELECT id FROM #{SCHEMA}.webmention_relations WHERE source_url = $1 AND target_url = $2 LIMIT 1",
+          [job.fetch("source"), job.fetch("target")]
+        )
+        relation_id = relation.ntuples.zero? ? nil : relation[0].fetch("id")
+        record_webmention_attempt(connection, job:, relation_id:, result:, timestamp:)
+      end
+    end
+
+    def list_webmentions(moderation_status: nil, verification_status: nil)
+      with_connection do |connection|
+        conditions = [] # @type var conditions: Array[String]
+        values = [] # @type var values: Array[untyped]
+        if moderation_status
+          values << moderation_status
+          conditions << "relations.moderation_status = $#{values.length}"
+        end
+        if verification_status
+          values << verification_status
+          conditions << "relations.verification_status = $#{values.length}"
+        end
+        where = conditions.empty? ? "" : "WHERE #{conditions.join(' AND ')}"
+        sql = <<~SQL
+          SELECT relations.id, relations.source_url, relations.target_url,
+                 relations.target_page_id, relations.verification_status,
+                 relations.moderation_status, relations.first_verified_at,
+                 relations.last_notified_at, relations.last_verified_at,
+                 candidate.title AS candidate_title, candidate.site_name AS candidate_site_name,
+                 candidate.content_hash AS candidate_content_hash,
+                 approved.title AS approved_title, approved.site_name AS approved_site_name,
+                 approved.content_hash AS approved_content_hash
+          FROM #{SCHEMA}.webmention_relations relations
+          LEFT JOIN #{SCHEMA}.webmention_snapshots candidate
+            ON candidate.relation_id = relations.id
+           AND candidate.snapshot_kind = 'candidate' AND candidate.is_current = TRUE
+          LEFT JOIN #{SCHEMA}.webmention_snapshots approved
+            ON approved.relation_id = relations.id
+           AND approved.snapshot_kind = 'approved' AND approved.is_current = TRUE
+          #{where}
+          ORDER BY relations.last_notified_at DESC, relations.id DESC
+        SQL
+        result = values.empty? ? connection.exec(sql) : connection.exec_params(sql, values)
+        result.map { |row| webmention_from_dsql_row(row) }
+      end
+    end
+
+    def list_webmention_failures
+      with_connection do |connection|
+        result = connection.exec_params(
+          <<~SQL,
+            SELECT id, job_id, source_url, target_url, target_page_id, result,
+                   http_status, redirect_count, fetched_bytes, duration_ms, attempted_at
+            FROM #{SCHEMA}.webmention_attempts
+            WHERE result NOT IN ('verified', 'link_missing', 'source_gone') AND expires_at > $1
+            ORDER BY attempted_at DESC, id DESC
+          SQL
+          [now]
+        )
+        failures = {} # @type var failures: Hash[Array[String], Hash[String, untyped]]
+        result.each_with_object(failures) do |row, grouped|
+          key = [row.fetch("source_url"), row.fetch("target_url")]
+          grouped[key] ||= webmention_failure_from_dsql_row(row)
+        end.values
+      end
+    end
+
+    def webmention_reverification(id)
+      mention = list_webmentions.find { |candidate| candidate.fetch("id") == id }
+      if mention
+        return {
+          "source" => mention.fetch("source_url"), "target" => mention.fetch("target_url"),
+          "target_page_id" => mention.fetch("target_page_id"),
+        }
+      end
+
+      failure = list_webmention_failures.find { |candidate| candidate.fetch("id") == id }
+      return nil unless failure
+
+      {
+        "source" => failure.fetch("source_url"), "target" => failure.fetch("target_url"),
+        "target_page_id" => failure.fetch("target_page_id"),
+      }
+    end
+
+    def stale_approved_webmentions(before:, limit:)
+      with_connection do |connection|
+        connection.exec_params(
+          <<~SQL,
+            SELECT source_url, target_url, target_page_id
+            FROM #{SCHEMA}.webmention_relations
+            WHERE verification_status = 'verified' AND moderation_status = 'approved'
+              AND last_verified_at <= $1
+            ORDER BY last_verified_at, id LIMIT $2
+          SQL
+          [before, limit]
+        ).map do |row|
+          {
+            "source" => row.fetch("source_url"), "target" => row.fetch("target_url"),
+            "target_page_id" => row.fetch("target_page_id"),
+          }
+        end
+      end
+    end
+
+    def webmention_outbox(id)
+      with_connection do |connection|
+        result = connection.exec_params(
+          <<~SQL,
+            SELECT id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
+            FROM #{SCHEMA}.webmention_outbox WHERE id = $1 LIMIT 1
+          SQL
+          [id]
+        )
+        result.ntuples.zero? ? nil : webmention_outbox_from_dsql_row(result[0])
+      end
+    end
+
+    def pending_webmention_outbox(limit: 100)
+      with_connection do |connection|
+        connection.exec_params(
+          <<~SQL,
+            SELECT id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
+            FROM #{SCHEMA}.webmention_outbox
+            WHERE status = 'pending' ORDER BY created_at, id LIMIT $1
+          SQL
+          [limit]
+        ).map { |row| webmention_outbox_from_dsql_row(row) }
+      end
+    end
+
+    def pending_webmention_outbox_for_page(page_id)
+      with_connection do |connection|
+        result = connection.exec_params(
+          <<~SQL,
+            SELECT id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
+            FROM #{SCHEMA}.webmention_outbox
+            WHERE page_id = $1 AND status = 'pending' ORDER BY created_at DESC, id DESC LIMIT 1
+          SQL
+          [page_id]
+        )
+        result.ntuples.zero? ? nil : webmention_outbox_from_dsql_row(result[0])
+      end
+    end
+
+    def webmention_page_targets(page_id)
+      with_connection do |connection|
+        connection.exec_params(
+          <<~SQL,
+            SELECT target_url, active, first_seen_at, last_seen_at
+            FROM #{SCHEMA}.webmention_page_targets WHERE page_id = $1 ORDER BY target_url
+          SQL
+          [page_id]
+        ).map do |row|
+          {
+            "target_url" => row.fetch("target_url"), "active" => row.fetch("active") == "t",
+            "first_seen_at" => row.fetch("first_seen_at"), "last_seen_at" => row.fetch("last_seen_at"),
+          }
+        end
+      end
+    end
+
+    def mark_webmention_outbox_notified(id)
+      with_connection do |connection|
+        connection.exec_params(
+          "UPDATE #{SCHEMA}.webmention_outbox SET notified_at = $2 WHERE id = $1 AND status = 'pending'",
+          [id, now]
+        )
+      end
+    end
+
+    def complete_webmention_outbox(id)
+      with_connection do |connection|
+        connection.exec_params(
+          <<~SQL,
+            UPDATE #{SCHEMA}.webmention_outbox
+            SET status = 'completed', attempt_count = attempt_count + 1, completed_at = $2
+            WHERE id = $1
+          SQL
+          [id, now]
+        )
+      end
+    end
+
+    def fail_webmention_outbox(id)
+      with_connection do |connection|
+        connection.exec_params(
+          "UPDATE #{SCHEMA}.webmention_outbox SET attempt_count = attempt_count + 1 WHERE id = $1",
+          [id]
+        )
+      end
+    end
+
+    def record_webmention_delivery(job:, status:, http_status: nil, error: nil)
+      timestamp = now
+      completed = %w[succeeded not_supported].include?(status) ? timestamp : nil
+      expires = completed && (timestamp + (30 * 24 * 60 * 60))
+      with_connection do |connection|
+        connection.exec_params(
+          <<~SQL,
+            INSERT INTO #{SCHEMA}.webmention_deliveries (
+              id, page_id, source_url, target_url, status, attempt_count, last_http_status,
+              last_error, created_at, updated_at, completed_at, expires_at
+            ) VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $8, $9, $10)
+            ON CONFLICT (id) DO UPDATE SET
+              status = EXCLUDED.status,
+              attempt_count = #{SCHEMA}.webmention_deliveries.attempt_count + 1,
+              last_http_status = EXCLUDED.last_http_status,
+              last_error = EXCLUDED.last_error,
+              updated_at = EXCLUDED.updated_at,
+              completed_at = EXCLUDED.completed_at,
+              expires_at = EXCLUDED.expires_at
+          SQL
+          [
+            job.fetch("delivery_id"), job.fetch("page_id"), job.fetch("source"), job.fetch("target"),
+            status, http_status, error&.slice(0, 500), timestamp, completed, expires,
+          ]
+        )
+      end
+    end
+
+    def list_webmention_delivery_failures
+      with_connection do |connection|
+        connection.exec(<<~SQL).map do |row|
+          SELECT id, page_id, source_url, target_url, status, attempt_count,
+                 last_http_status, last_error, updated_at
+          FROM #{SCHEMA}.webmention_deliveries
+          WHERE status NOT IN ('succeeded', 'not_supported')
+          ORDER BY updated_at DESC, id DESC
+        SQL
+          {
+            "id" => row.fetch("id"), "page_id" => row.fetch("page_id"),
+            "source_url" => row.fetch("source_url"), "target_url" => row.fetch("target_url"),
+            "status" => row.fetch("status"), "attempt_count" => row.fetch("attempt_count").to_i,
+            "http_status" => row["last_http_status"]&.to_i, "error" => row["last_error"],
+            "updated_at" => row.fetch("updated_at"),
+          }
+        end
+      end
+    end
+
+    def webmention_delivery_retry(id)
+      with_connection do |connection|
+        result = connection.exec_params(
+          <<~SQL,
+            SELECT id, page_id, source_url, target_url
+            FROM #{SCHEMA}.webmention_deliveries
+            WHERE id = $1 AND status NOT IN ('succeeded', 'not_supported') LIMIT 1
+          SQL
+          [id]
+        )
+        next nil if result.ntuples.zero?
+
+        row = result[0]
+        {
+          "delivery_id" => row.fetch("id"), "page_id" => row.fetch("page_id"),
+          "source" => row.fetch("source_url"), "target" => row.fetch("target_url"),
+        }
+      end
+    end
+
+    def delete_webmention(id:)
+      with_connection do |connection|
+        connection.transaction do
+          relation = connection.exec_params(
+            "SELECT 1 FROM #{SCHEMA}.webmention_relations WHERE id = $1 LIMIT 1 FOR UPDATE", [id]
+          )
+          raise KeyError, "Webmention not found" if relation.ntuples.zero?
+
+          connection.exec_params("DELETE FROM #{SCHEMA}.webmention_attempts WHERE relation_id = $1", [id])
+          connection.exec_params("DELETE FROM #{SCHEMA}.webmention_snapshots WHERE relation_id = $1", [id])
+          connection.exec_params("DELETE FROM #{SCHEMA}.webmention_relations WHERE id = $1", [id])
+        end
+      end
+    end
+
+    WEBMENTION_CLEANUP_QUERIES = {
+      "attempts" => ["webmention_attempts", "expires_at <= $1", "expires_at"],
+      "snapshots" => ["webmention_snapshots", "expires_at IS NOT NULL AND expires_at <= $1", "expires_at"],
+      "deliveries" => ["webmention_deliveries", "expires_at IS NOT NULL AND expires_at <= $1", "expires_at"],
+      "outboxes" => [
+        "webmention_outbox",
+        "status = 'completed' AND completed_at IS NOT NULL AND completed_at <= $1 - INTERVAL '30 days'",
+        "completed_at",
+      ],
+      "tombstones" => [
+        "webmention_relations",
+        "verification_status = 'deleted' AND deleted_at IS NOT NULL AND deleted_at <= $1 - INTERVAL '1 year'",
+        "deleted_at",
+      ],
+    }.freeze
+
+    def cleanup_expired_webmentions(kind:, limit:, dry_run:)
+      table, condition, expiry_column = WEBMENTION_CLEANUP_QUERIES.fetch(kind)
+      timestamp = now
+      with_connection do |connection|
+        rows = connection.exec_params(
+          "SELECT id FROM #{SCHEMA}.#{table} WHERE #{condition} ORDER BY id LIMIT $2", [timestamp, limit]
+        )
+        ids = rows.map { |row| row.fetch("id") }
+        unless dry_run || ids.empty?
+          connection.transaction do
+            ids.each do |id|
+              if kind == "tombstones"
+                connection.exec_params("DELETE FROM #{SCHEMA}.webmention_attempts WHERE relation_id = $1", [id])
+                connection.exec_params("DELETE FROM #{SCHEMA}.webmention_snapshots WHERE relation_id = $1", [id])
+              end
+              connection.exec_params("DELETE FROM #{SCHEMA}.#{table} WHERE id = $1", [id])
+            end
+          end
+        end
+        summary = connection.exec_params(
+          "SELECT COUNT(*) AS count, MIN(#{expiry_column}) AS oldest FROM #{SCHEMA}.#{table} WHERE #{condition}",
+          [timestamp]
+        )[0]
+        {
+          "kind" => kind, "matched" => ids.length, "deleted" => dry_run ? 0 : ids.length,
+          "remaining" => summary.fetch("count").to_i, "oldest_expired_at" => summary["oldest"],
+        }
+      end
+    end
+
+    def approved_webmentions_for_page(page_id)
+      list_webmentions(moderation_status: "approved", verification_status: "verified").select do |mention|
+        mention.fetch("target_page_id") == page_id && mention.fetch("approved")
+      end.map { |mention| public_webmention(mention) }
+    end
+
+    def moderate_webmention(id:, decision:)
+      raise ArgumentError, "invalid Webmention decision" unless %w[approved rejected pending].include?(decision)
+
+      timestamp = now
+      with_connection do |connection|
+        connection.transaction do
+          relation = connection.exec_params(
+            "SELECT id FROM #{SCHEMA}.webmention_relations WHERE id = $1 AND verification_status = 'verified' LIMIT 1 FOR UPDATE",
+            [id]
+          )
+          raise KeyError, "Webmention not found" if relation.ntuples.zero?
+
+          case decision
+          when "approved" then approve_webmention(connection, id, timestamp)
+          when "rejected" then reject_webmention(connection, id, timestamp)
+          when "pending" then reset_webmention_decision(connection, id, timestamp)
+          end
+        end
+      end
+      list_webmentions.find { |mention| mention.fetch("id") == id }
     end
 
     def create_mobile_pairing(code_digest:, expires_at:)
@@ -856,6 +1281,298 @@ module WeblogAuthoring
     end
 
     private
+
+    def find_or_create_webmention_relation(connection, job, timestamp)
+      relation = connection.exec_params(
+        <<~SQL,
+          SELECT id, moderation_status, verification_status FROM #{SCHEMA}.webmention_relations
+          WHERE source_url = $1 AND target_url = $2 LIMIT 1 FOR UPDATE
+        SQL
+        [job.fetch("source"), job.fetch("target")]
+      )
+      return relation[0] unless relation.ntuples.zero?
+
+      id = SecureRandom.uuid.delete("-")
+      connection.exec_params(
+        <<~SQL,
+          INSERT INTO #{SCHEMA}.webmention_relations (
+            id, source_url, target_url, target_page_id, verification_status, moderation_status,
+            first_verified_at, last_notified_at, last_verified_at, deleted_at, deletion_reason,
+            created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, 'pending', 'pending', NULL, $5, NULL, NULL, NULL, $6, $6)
+        SQL
+        [
+          id, job.fetch("source"), job.fetch("target"), job.fetch("target_page_id"),
+          Time.iso8601(job.fetch("received_at")), timestamp,
+        ]
+      )
+      { "id" => id, "moderation_status" => "pending", "verification_status" => "pending" }
+    end
+
+    def upsert_webmention_snapshot(connection, relation_id:, source_url:, title:, site_name:, content_hash:, timestamp:)
+      current = connection.exec_params(
+        <<~SQL,
+          SELECT content_hash FROM #{SCHEMA}.webmention_snapshots
+          WHERE relation_id = $1 AND is_current = TRUE
+          ORDER BY CASE snapshot_kind WHEN 'candidate' THEN 0 ELSE 1 END LIMIT 1
+        SQL
+        [relation_id]
+      )
+      return if current.ntuples.positive? && current[0].fetch("content_hash") == content_hash
+
+      connection.exec_params(
+        <<~SQL,
+          UPDATE #{SCHEMA}.webmention_snapshots
+          SET is_current = FALSE, expires_at = $2
+          WHERE relation_id = $1 AND snapshot_kind = 'candidate' AND is_current = TRUE
+        SQL
+        [relation_id, timestamp + (30 * 24 * 60 * 60)]
+      )
+      connection.exec_params(
+        <<~SQL,
+          INSERT INTO #{SCHEMA}.webmention_snapshots (
+            id, relation_id, snapshot_kind, source_url, title, site_name,
+            content_hash, is_current, created_at, expires_at
+          ) VALUES ($1, $2, 'candidate', $3, $4, $5, $6, TRUE, $7, NULL)
+        SQL
+        [SecureRandom.uuid.delete("-"), relation_id, source_url, title, site_name, content_hash, timestamp]
+      )
+    end
+
+    def record_webmention_attempt(connection, job:, relation_id:, result:, timestamp:, response: nil, content_hash: nil)
+      connection.exec_params(
+        <<~SQL,
+          INSERT INTO #{SCHEMA}.webmention_attempts (
+            id, job_id, relation_id, source_url, target_url, target_page_id, result, http_status,
+            redirect_count, fetched_bytes, duration_ms, content_hash, attempted_at, expires_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        SQL
+        [
+          SecureRandom.uuid.delete("-"), job.fetch("job_id"), relation_id,
+          job.fetch("source"), job.fetch("target"), job["target_page_id"], result, response&.status,
+          response&.redirect_count || 0, response&.body&.bytesize || 0,
+          response&.duration_ms || 0, content_hash, timestamp, timestamp + (30 * 24 * 60 * 60),
+        ]
+      )
+    end
+
+    def approve_webmention(connection, relation_id, timestamp)
+      candidate = connection.exec_params(
+        <<~SQL,
+          SELECT id FROM #{SCHEMA}.webmention_snapshots
+          WHERE relation_id = $1 AND snapshot_kind = 'candidate' AND is_current = TRUE LIMIT 1
+        SQL
+        [relation_id]
+      )
+      raise KeyError, "Webmention candidate not found" if candidate.ntuples.zero?
+
+      connection.exec_params(
+        <<~SQL,
+          UPDATE #{SCHEMA}.webmention_snapshots SET is_current = FALSE, expires_at = $2
+          WHERE relation_id = $1 AND snapshot_kind = 'approved' AND is_current = TRUE
+        SQL
+        [relation_id, timestamp + (30 * 24 * 60 * 60)]
+      )
+      connection.exec_params(
+        <<~SQL,
+          UPDATE #{SCHEMA}.webmention_snapshots
+          SET snapshot_kind = 'approved', created_at = $2, expires_at = NULL WHERE id = $1
+        SQL
+        [candidate[0].fetch("id"), timestamp]
+      )
+      connection.exec_params(
+        "UPDATE #{SCHEMA}.webmention_relations SET moderation_status = 'approved', updated_at = $2 WHERE id = $1",
+        [relation_id, timestamp]
+      )
+    end
+
+    def reject_webmention(connection, relation_id, timestamp)
+      approved = connection.exec_params(
+        <<~SQL,
+          SELECT 1 FROM #{SCHEMA}.webmention_snapshots
+          WHERE relation_id = $1 AND snapshot_kind = 'approved' AND is_current = TRUE LIMIT 1
+        SQL
+        [relation_id]
+      )
+      connection.exec_params(
+        <<~SQL,
+          UPDATE #{SCHEMA}.webmention_snapshots SET is_current = FALSE, expires_at = $2
+          WHERE relation_id = $1 AND snapshot_kind = 'candidate' AND is_current = TRUE
+        SQL
+        [relation_id, timestamp + (90 * 24 * 60 * 60)]
+      )
+      status = approved.ntuples.positive? ? "approved" : "rejected"
+      connection.exec_params(
+        "UPDATE #{SCHEMA}.webmention_relations SET moderation_status = $2, updated_at = $3 WHERE id = $1",
+        [relation_id, status, timestamp]
+      )
+    end
+
+    def reset_webmention_decision(connection, relation_id, timestamp)
+      approved = connection.exec_params(
+        <<~SQL,
+          SELECT id FROM #{SCHEMA}.webmention_snapshots
+          WHERE relation_id = $1 AND snapshot_kind = 'approved' AND is_current = TRUE LIMIT 1
+        SQL
+        [relation_id]
+      )
+      if approved.ntuples.positive?
+        connection.exec_params(
+          <<~SQL,
+            UPDATE #{SCHEMA}.webmention_snapshots
+            SET snapshot_kind = 'candidate', created_at = $2, expires_at = NULL WHERE id = $1
+          SQL
+          [approved[0].fetch("id"), timestamp]
+        )
+      else
+        candidate = connection.exec_params(
+          <<~SQL,
+            SELECT id FROM #{SCHEMA}.webmention_snapshots
+            WHERE relation_id = $1 AND snapshot_kind = 'candidate'
+            ORDER BY created_at DESC, id DESC LIMIT 1
+          SQL
+          [relation_id]
+        )
+        unless candidate.ntuples.zero?
+          connection.exec_params(
+            <<~SQL,
+              UPDATE #{SCHEMA}.webmention_snapshots
+              SET is_current = TRUE, created_at = $2, expires_at = NULL WHERE id = $1
+            SQL
+            [candidate[0].fetch("id"), timestamp]
+          )
+        end
+      end
+      connection.exec_params(
+        "UPDATE #{SCHEMA}.webmention_relations SET moderation_status = 'pending', updated_at = $2 WHERE id = $1",
+        [relation_id, timestamp]
+      )
+    end
+
+    def webmention_from_dsql_row(row)
+      source_url = row.fetch("source_url")
+      {
+        "id" => row.fetch("id"), "source_url" => source_url, "target_url" => row.fetch("target_url"),
+        "target_page_id" => row.fetch("target_page_id"),
+        "verification_status" => row.fetch("verification_status"),
+        "moderation_status" => row.fetch("moderation_status"),
+        "first_verified_at" => row["first_verified_at"], "last_notified_at" => row.fetch("last_notified_at"),
+        "last_verified_at" => row["last_verified_at"],
+        "candidate" => webmention_snapshot(
+          source_url, row["candidate_title"], row["candidate_site_name"], row["candidate_content_hash"]
+        ),
+        "approved" => webmention_snapshot(
+          source_url, row["approved_title"], row["approved_site_name"], row["approved_content_hash"]
+        ),
+      }
+    end
+
+    def webmention_snapshot(source_url, title, site_name, content_hash)
+      return nil unless content_hash
+
+      { "source_url" => source_url, "title" => title, "site_name" => site_name, "content_hash" => content_hash }
+    end
+
+    def public_webmention(mention)
+      snapshot = mention.fetch("approved")
+      {
+        "id" => mention.fetch("id"), "source_url" => snapshot.fetch("source_url"),
+        "title" => snapshot["title"], "site_name" => snapshot["site_name"],
+        "first_verified_at" => mention.fetch("first_verified_at"),
+      }
+    end
+
+    def webmention_failure_from_dsql_row(row)
+      {
+        "id" => row.fetch("id"), "job_id" => row.fetch("job_id"),
+        "source_url" => row.fetch("source_url"), "target_url" => row.fetch("target_url"),
+        "target_page_id" => row["target_page_id"], "result" => row.fetch("result"),
+        "http_status" => row["http_status"], "redirect_count" => Integer(row.fetch("redirect_count")),
+        "fetched_bytes" => Integer(row.fetch("fetched_bytes")), "duration_ms" => Integer(row.fetch("duration_ms")),
+        "attempted_at" => row.fetch("attempted_at"),
+      }
+    end
+
+    def enqueue_webmention_outbox(connection, previous, current)
+      unless current.status == "published" && !current.empty?
+        connection.exec_params(
+          "UPDATE #{SCHEMA}.webmention_page_targets SET active = FALSE WHERE page_id = $1", [current.id]
+        )
+        return unless previous
+        return unless previous.status == "published" && !previous.empty?
+
+        previous_source = webmention_source_url(previous.route)
+        current_targets = [] # @type var current_targets: Array[String]
+        payload = {
+          "source_url" => webmention_source_url(current.route),
+          "previous_source_url" => previous_source,
+          "previous_targets" => @webmention_targets.extract(previous.body, source_url: previous_source),
+          "current_targets" => current_targets,
+        }
+        connection.exec_params(
+          <<~SQL,
+            INSERT INTO #{SCHEMA}.webmention_outbox (
+              id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
+            ) VALUES ($1, 'page_unpublished', $2, $3, 'pending', 0, $4, NULL, NULL)
+          SQL
+          [SecureRandom.uuid.delete("-"), current.id, JSON.generate(payload), now]
+        )
+        return
+      end
+
+      current_source = webmention_source_url(current.route)
+      previous_source = previous && webmention_source_url(previous.route)
+      previous_targets = [] # @type var previous_targets: Array[String]
+      previous_targets = @webmention_targets.extract(previous.body, source_url: previous_source) if previous
+      current_targets = @webmention_targets.extract(current.body, source_url: current_source)
+      timestamp = now
+      connection.exec_params(
+        "UPDATE #{SCHEMA}.webmention_page_targets SET active = FALSE WHERE page_id = $1", [current.id]
+      )
+      (previous_targets | current_targets).each do |target|
+        connection.exec_params(
+          <<~SQL,
+            INSERT INTO #{SCHEMA}.webmention_page_targets (
+              page_id, target_url, first_seen_at, last_seen_at, active
+            ) VALUES ($1, $2, $3, $3, $4)
+            ON CONFLICT (page_id, target_url) DO UPDATE SET
+              last_seen_at = EXCLUDED.last_seen_at, active = EXCLUDED.active
+          SQL
+          [current.id, target, timestamp, current_targets.include?(target)]
+        )
+      end
+      payload = {
+        "source_url" => current_source,
+        "previous_source_url" => previous_source,
+        "previous_targets" => previous_targets,
+        "current_targets" => current_targets,
+      }
+      connection.exec_params(
+        <<~SQL,
+          INSERT INTO #{SCHEMA}.webmention_outbox (
+            id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
+          ) VALUES ($1, 'page_saved', $2, $3, 'pending', 0, $4, NULL, NULL)
+        SQL
+        [SecureRandom.uuid.delete("-"), current.id, JSON.generate(payload), timestamp]
+      )
+    end
+
+    def webmention_source_url(route)
+      base = @site_url.end_with?("/") ? @site_url : "#{@site_url}/"
+      URI.join(base, URI::DEFAULT_PARSER.escape(route)).to_s
+    end
+
+    def webmention_outbox_from_dsql_row(row)
+      payload = row.fetch("payload")
+      {
+        "id" => row.fetch("id"), "event_type" => row.fetch("event_type"),
+        "page_id" => row.fetch("page_id"),
+        "payload" => payload.is_a?(String) ? JSON.parse(payload) : payload,
+        "status" => row.fetch("status"), "attempt_count" => Integer(row.fetch("attempt_count")),
+        "created_at" => row.fetch("created_at"), "notified_at" => row["notified_at"],
+        "completed_at" => row["completed_at"],
+      }
+    end
 
     def record_inbox_source_success(connection, run_id:, source:, snapshot:, counts:, completed_at:)
       connection.exec_params(

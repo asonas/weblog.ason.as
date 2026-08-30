@@ -52,7 +52,10 @@ module WeblogAuthoring
                    allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
                    development_asset_bucket: nil, site_bucket: nil, search_queue_url: nil, sqs_client: nil, logger: $stderr,
                    search_index: nil, lambda_client: nil, inbox_sync_function_name: nil,
-                   bluesky_oauth_function_name: nil, clock: Time.method(:now))
+                   bluesky_oauth_function_name: nil, webmention_queue_url: nil,
+                   webmention_publish_queue_url: nil, webmention_dead_letter_arn: nil,
+                   webmention_queue_arn: nil, webmention_publish_dead_letter_arn: nil,
+                   webmention_publish_queue_arn: nil, clock: Time.method(:now))
       @database = database
       @oauth = oauth
       @session_codec = session_codec
@@ -71,6 +74,12 @@ module WeblogAuthoring
       @lambda_client = lambda_client
       @inbox_sync_function_name = inbox_sync_function_name
       @bluesky_oauth_function_name = bluesky_oauth_function_name
+      @webmention_queue_url = webmention_queue_url
+      @webmention_publish_queue_url = webmention_publish_queue_url
+      @webmention_dead_letters = {
+        "verification" => [webmention_dead_letter_arn, webmention_queue_arn],
+        "publishing" => [webmention_publish_dead_letter_arn, webmention_publish_queue_arn],
+      }
       @clock = clock
       @cold_start = true
     end
@@ -119,6 +128,22 @@ module WeblogAuthoring
         return revoke_mobile_device_response(event)
       end
       return inbox_response(event) if method == "GET" && path == "/api/inbox"
+      return webmentions_response(event) if method == "GET" && path == "/api/webmentions"
+      if method == "PATCH" && %r{\A/api/authoring/webmentions/[^/]+\z}.match?(path)
+        return moderate_webmention_response(event)
+      end
+      if method == "DELETE" && %r{\A/api/authoring/webmentions/[^/]+\z}.match?(path)
+        return delete_webmention_response(event)
+      end
+      if method == "POST" && %r{\A/api/authoring/webmentions/[^/]+/reverify\z}.match?(path)
+        return reverify_webmention_response(event)
+      end
+      if method == "POST" && %r{\A/api/authoring/webmention-deliveries/[^/]+/retry\z}.match?(path)
+        return retry_webmention_delivery_response(event)
+      end
+      if method == "POST" && %r{\A/api/authoring/webmention-dead-letters/[^/]+/retry\z}.match?(path)
+        return retry_webmention_dead_letters_response(event)
+      end
       return adopt_inbox_response(event) if method == "POST" && path == "/api/inbox/adopt"
       return start_inbox_sync_response(event) if method == "POST" && path == "/api/inbox/sync"
       return bluesky_oauth_status_response(event) if method == "GET" && path == "/api/inbox/sources/bluesky/status"
@@ -377,6 +402,7 @@ module WeblogAuthoring
 
       page = @database.save(save_request(parse_json(event), page_id:))
       notify_search_index
+      notify_webmention_publisher(page)
       json_response(status, saved_page_json(page))
     end
 
@@ -395,6 +421,26 @@ module WeblogAuthoring
         "event" => "search_index_notification_failed",
         "error" => error.class.name,
         "message" => error.message
+      ))
+    end
+
+    def notify_webmention_publisher(page)
+      return if @webmention_publish_queue_url.nil? || @sqs_client.nil?
+
+      outbox = @database.pending_webmention_outbox_for_page(page.id)
+      return unless outbox
+
+      @sqs_client.send_message(
+        queue_url: @webmention_publish_queue_url,
+        message_body: JSON.generate("outbox_id" => outbox.fetch("id")),
+        message_group_id: page.id,
+        message_deduplication_id: outbox.fetch("id")
+      )
+      @database.mark_webmention_outbox_notified(outbox.fetch("id"))
+    rescue Aws::SQS::Errors::ServiceError => error
+      @logger.puts(JSON.generate(
+        "level" => "warn", "event" => "webmention_publish_notification_failed",
+        "error" => error.class.name, "message" => error.message
       ))
     end
 
@@ -507,6 +553,114 @@ module WeblogAuthoring
       usages = @database.list_inbox_item_usages.group_by(&:item_id)
       empty_usages = [] # @type var empty_usages: Array[InboxItemUsage]
       json_response(200, "items" => items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, empty_usages)) })
+    end
+
+    def webmentions_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to view Webmentions") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+
+      query = event.fetch("queryStringParameters", EMPTY_HASH).to_h # @type var query: Hash[String, untyped]
+      mentions = @database.list_webmentions(
+        moderation_status: optional_query(query, "moderation_status"),
+        verification_status: optional_query(query, "verification_status")
+      )
+      json_response(
+        200, "mentions" => mentions, "failures" => @database.list_webmention_failures,
+        "delivery_failures" => @database.list_webmention_delivery_failures
+      )
+    end
+
+    def moderate_webmention_response(event)
+      session = editable_session(event, action: "moderate Webmentions")
+      return session if session.is_a?(Hash) && session.key?(:statusCode)
+
+      payload = parse_json(event)
+      decision = optional_string(payload, "decision")
+      raise InputError.new("decision is required", field: "decision") if decision.nil?
+
+      id = event.dig("pathParameters", "id").to_s
+      mention = @database.moderate_webmention(id:, decision:)
+      json_response(200, "mention" => mention)
+    rescue KeyError
+      json_response(404, error: "Webmention was not found")
+    end
+
+    def delete_webmention_response(event)
+      session = editable_session(event, action: "delete Webmentions")
+      return session if session.is_a?(Hash) && session.key?(:statusCode)
+
+      id = event.dig("pathParameters", "id").to_s
+      @database.delete_webmention(id:)
+      json_response(200, "deleted" => true)
+    rescue KeyError
+      json_response(404, error: "Webmention was not found")
+    end
+
+    def reverify_webmention_response(event)
+      session = editable_session(event, action: "reverify Webmentions")
+      return session if session.is_a?(Hash) && session.key?(:statusCode)
+
+      id = event.dig("pathParameters", "id").to_s
+      mention = @database.webmention_reverification(id)
+      return json_response(404, error: "Webmention was not found") unless mention
+
+      job_id = SecureRandom.uuid
+      source = mention.fetch("source")
+      target = mention.fetch("target")
+      @sqs_client.send_message(
+        queue_url: @webmention_queue_url,
+        message_body: JSON.generate(
+          "job_id" => job_id, "source" => source, "target" => target,
+          "target_page_id" => mention.fetch("target_page_id"), "received_at" => @clock.call.iso8601
+        ),
+        message_group_id: Digest::SHA256.hexdigest("#{source}\0#{target}"),
+        message_deduplication_id: job_id
+      )
+      json_response(202, "status" => "queued")
+    end
+
+    def retry_webmention_delivery_response(event)
+      session = editable_session(event, action: "retry Webmention deliveries")
+      return session if session.is_a?(Hash) && session.key?(:statusCode)
+
+      id = event.dig("pathParameters", "id").to_s
+      delivery = @database.webmention_delivery_retry(id)
+      return json_response(404, error: "Webmention delivery was not found") unless delivery
+
+      retry_id = SecureRandom.uuid
+      source = delivery.fetch("source")
+      target = delivery.fetch("target")
+      @sqs_client.send_message(
+        queue_url: @webmention_queue_url,
+        message_body: JSON.generate(delivery.merge("type" => "deliver")),
+        message_group_id: Digest::SHA256.hexdigest("#{source}\0#{target}"),
+        message_deduplication_id: retry_id
+      )
+      json_response(202, "status" => "queued")
+    end
+
+    def retry_webmention_dead_letters_response(event)
+      session = editable_session(event, action: "retry Webmention dead letters")
+      return session if session.is_a?(Hash) && session.key?(:statusCode)
+
+      kind = event.dig("pathParameters", "kind").to_s
+      source_arn, destination_arn = @webmention_dead_letters.fetch(kind) do
+        return json_response(404, error: "Webmention dead-letter queue was not found")
+      end
+      return json_response(503, error: "Webmention dead-letter retry is unavailable") unless source_arn && destination_arn
+
+      result = @sqs_client.start_message_move_task(source_arn:, destination_arn:)
+      json_response(202, "status" => "started", "task_handle" => result.task_handle)
+    end
+
+    def editable_session(event, action:)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to #{action}") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+      return json_response(403, error: "CSRF token mismatch") unless secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
+
+      session
     end
 
     def start_inbox_sync_response(event)
@@ -790,7 +944,8 @@ module WeblogAuthoring
       resolved_name = page.nil? || page.name.to_s.empty? ? name.to_s : page.name.to_s
       resolved_title = page ? page.display_title : title.to_s
       resolved_body = page ? page.body : body.to_s
-      {
+      empty_values = [] # @type var empty_values: Array[untyped]
+      result = {
         "mode" => "editor",
         "page_id" => page&.id.to_s,
         "page_type" => page&.page_type || "named",
@@ -801,12 +956,16 @@ module WeblogAuthoring
         "cover_mode" => page&.cover_mode || "auto",
         "cover_image_url" => page&.cover_image_url,
         "resolved_cover_image_url" => page && page_image_url(page),
-        "line_updated_at" => page ? line_updated_at(page) : [],
+        "line_updated_at" => page ? line_updated_at(page) : empty_values,
         "expected_updated_at" => page&.updated_at&.iso8601(9).to_s,
         "save_message" => "",
-        "linked_pages" => [],
+        "linked_pages" => empty_values,
         "linked_pages_has_more" => linked_pages_has_more.nil? ? !page.nil? : linked_pages_has_more,
       }
+      if page && @database.respond_to?(:approved_webmentions_for_page)
+        result["external_mentions"] = @database.approved_webmentions_for_page(page.id)
+      end
+      result
     end
 
     def line_updated_at(page)

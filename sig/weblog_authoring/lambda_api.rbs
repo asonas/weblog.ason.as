@@ -23,7 +23,7 @@ module WeblogAuthoring
     EMBED_CACHE_TTL: Integer
     EMBED_FALLBACK_CACHE_TTL: Integer
 
-    def initialize: (database: DsqlDatabase, ?oauth: GitHubOAuth?, ?session_codec: LambdaSession?, ?redirect_uri: String?, ?frontend_url: String?, ?allowed_github_user_id: String?, ?s3_client: untyped, ?asset_bucket: String?, ?embed_fetcher: untyped, ?development_asset_bucket: String?, ?site_bucket: String?, ?search_queue_url: String?, ?sqs_client: untyped, ?logger: untyped, ?search_index: untyped, ?lambda_client: untyped, ?inbox_sync_function_name: String?, ?bluesky_oauth_function_name: String?, ?clock: ^() -> Time) -> void
+    def initialize: (database: DsqlDatabase, ?oauth: GitHubOAuth?, ?session_codec: LambdaSession?, ?redirect_uri: String?, ?frontend_url: String?, ?allowed_github_user_id: String?, ?s3_client: untyped, ?asset_bucket: String?, ?embed_fetcher: untyped, ?development_asset_bucket: String?, ?site_bucket: String?, ?search_queue_url: String?, ?sqs_client: untyped, ?logger: untyped, ?search_index: untyped, ?lambda_client: untyped, ?inbox_sync_function_name: String?, ?bluesky_oauth_function_name: String?, ?webmention_queue_url: String?, ?webmention_publish_queue_url: String?, ?webmention_dead_letter_arn: String?, ?webmention_queue_arn: String?, ?webmention_publish_dead_letter_arn: String?, ?webmention_publish_queue_arn: String?, ?clock: ^() -> Time) -> void
     def call: (lambda_event) -> lambda_response
 
     private
@@ -51,6 +51,7 @@ module WeblogAuthoring
     def daily_editor_response: (lambda_event) -> lambda_response
     def save_response: (lambda_event, ?page_id: String?, ?status: Integer) -> lambda_response
     def notify_search_index: () -> void
+    def notify_webmention_publisher: (PageDocument) -> void
     def upload_response: (lambda_event) -> lambda_response
     def issue_mobile_pairing_response: (lambda_event) -> lambda_response
     def exchange_mobile_pairing_response: (lambda_event) -> lambda_response
@@ -61,6 +62,13 @@ module WeblogAuthoring
     def revoke_mobile_device_response: (lambda_event) -> lambda_response
     def mobile_devices_response: (lambda_event) -> lambda_response
     def inbox_response: (lambda_event) -> lambda_response
+    def webmentions_response: (lambda_event) -> untyped
+    def moderate_webmention_response: (lambda_event) -> untyped
+    def delete_webmention_response: (lambda_event) -> untyped
+    def reverify_webmention_response: (lambda_event) -> untyped
+    def retry_webmention_delivery_response: (lambda_event) -> untyped
+    def retry_webmention_dead_letters_response: (lambda_event) -> untyped
+    def editable_session: (lambda_event, action: String) -> untyped
     def start_inbox_sync_response: (lambda_event) -> lambda_response
     def inbox_sync_status_response: (lambda_event) -> lambda_response
     def bluesky_oauth_status_response: (lambda_event) -> lambda_response

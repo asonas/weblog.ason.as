@@ -27,7 +27,8 @@ class DsqlDatabaseTest < Minitest::Test
   end
 
   class Connection
-    attr_reader :links, :items, :consumed, :committed_adoptions, :usages
+    attr_reader :links, :items, :consumed, :committed_adoptions, :usages,
+                :webmention_outboxes, :webmention_targets
 
     def initialize
       @pages = {}
@@ -38,13 +39,21 @@ class DsqlDatabaseTest < Minitest::Test
       @usages = []
       @adoptions = {}
       @line_metadata = {}
+      @webmention_outboxes = []
+      @webmention_targets = {}
     end
 
     def transaction
-      snapshot = Marshal.load(Marshal.dump([@pages, @links, @items, @consumed, @committed_adoptions, @usages, @line_metadata]))
+      snapshot = Marshal.load(Marshal.dump(
+        [
+          @pages, @links, @items, @consumed, @committed_adoptions, @usages,
+          @line_metadata, @webmention_outboxes, @webmention_targets,
+        ]
+      ))
       yield
     rescue StandardError
-      @pages, @links, @items, @consumed, @committed_adoptions, @usages, @line_metadata = snapshot
+      @pages, @links, @items, @consumed, @committed_adoptions, @usages,
+        @line_metadata, @webmention_outboxes, @webmention_targets = snapshot
       raise
     end
 
@@ -118,6 +127,19 @@ class DsqlDatabaseTest < Minitest::Test
       when /INSERT INTO weblog_authoring\.links/
         @links << { source_id: params.fetch(0), target_name: params.fetch(2) }
         Result.new
+      when /INSERT INTO weblog_authoring\.webmention_outbox/
+        @webmention_outboxes << {
+          "id" => params.fetch(0), "page_id" => params.fetch(1), "payload" => JSON.parse(params.fetch(2)),
+        }
+        Result.new
+      when /UPDATE weblog_authoring\.webmention_page_targets SET active = FALSE/
+        @webmention_targets.each_value { |target| target["active"] = false if target["page_id"] == params.fetch(0) }
+        Result.new
+      when /INSERT INTO weblog_authoring\.webmention_page_targets/
+        @webmention_targets[[params.fetch(0), params.fetch(1)]] = {
+          "page_id" => params.fetch(0), "target_url" => params.fetch(1), "active" => params.fetch(3),
+        }
+        Result.new
       else
         raise "unexpected SQL: #{statement}"
       end
@@ -182,6 +204,8 @@ class DsqlDatabaseTest < Minitest::Test
     assert_equal [page], database.list_pages
     assert_equal ["リンク先"], page.links.map(&:name)
     assert_equal [{ source_id: page.id, target_name: "リンク先" }], @pool.connection.links
+    assert_equal page.id, @pool.connection.webmention_outboxes.fetch(0).fetch("page_id")
+    assert_empty @pool.connection.webmention_targets
   end
 
   def test_list_pages_reports_non_overlapping_database_timings

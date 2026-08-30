@@ -17,6 +17,7 @@ import {
   type ScrollAnchor,
 } from "./scrollAnchor";
 import { SearchPage, SiteSearch } from "./search";
+import { WebmentionModerationPage } from "./webmentions";
 import "./styles.css";
 
 type AuthState = {
@@ -45,6 +46,10 @@ async function setupAuthentication(): Promise<AuthState> {
     .forEach((action) => {
       action.hidden = !auth.can_edit;
     });
+  const webmentionsAction = document.querySelector<HTMLElement>(
+    "#webmentions-action",
+  );
+  if (webmentionsAction) webmentionsAction.hidden = !auth.can_edit;
   return auth;
 }
 
@@ -317,6 +322,14 @@ function RootApp({
       <>
         <HeaderSearch />
         <SearchPage />
+      </>
+    );
+  }
+  if (window.location.pathname === "/authoring/webmentions") {
+    return (
+      <>
+        <HeaderSearch />
+        <WebmentionModerationPage canEdit={auth.can_edit} />
       </>
     );
   }

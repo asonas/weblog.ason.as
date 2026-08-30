@@ -15,6 +15,7 @@ module WeblogAuthoring
     INBOX_KINDS: Hash[String, Array[String]]
     INBOX_PAYLOAD_KEYS: Hash[Array[String], Array[String]]
     INBOX_PAYLOAD_TYPES: Hash[Array[String], Hash[String, singleton(String) | singleton(Integer)]]
+    WEBMENTION_CLEANUP_QUERIES: Hash[String, Array[String]]
 
     include _PageRepository
 
@@ -48,6 +49,27 @@ module WeblogAuthoring
     def list_pending_inbox_image_finalizations: (?limit: Integer) -> Array[InboxImageAdoption]
     def complete_inbox_image_adoption: (item_id: String) -> untyped
     def cleanup_inbox_items: (?limit: Integer) -> untyped
+    def record_verified_webmention: (job: untyped, response: untyped, title: untyped, site_name: untyped, content_hash: untyped) -> untyped
+    def record_webmention_deletion: (job: untyped, response: untyped, reason: String) -> untyped
+    def record_webmention_failure: (job: untyped, result: String, message: String) -> untyped
+    def list_webmentions: (?moderation_status: String?, ?verification_status: String?) -> Array[Hash[String, untyped]]
+    def list_webmention_failures: () -> Array[Hash[String, untyped]]
+    def webmention_reverification: (String) -> Hash[String, untyped]?
+    def stale_approved_webmentions: (before: Time, limit: Integer) -> Array[Hash[String, untyped]]
+    def webmention_outbox: (String) -> Hash[String, untyped]?
+    def pending_webmention_outbox: (?limit: Integer) -> Array[Hash[String, untyped]]
+    def pending_webmention_outbox_for_page: (String) -> Hash[String, untyped]?
+    def webmention_page_targets: (String) -> Array[Hash[String, untyped]]
+    def mark_webmention_outbox_notified: (String) -> untyped
+    def complete_webmention_outbox: (String) -> untyped
+    def fail_webmention_outbox: (String) -> untyped
+    def record_webmention_delivery: (job: untyped, status: String, ?http_status: Integer?, ?error: String?) -> untyped
+    def list_webmention_delivery_failures: () -> Array[Hash[String, untyped]]
+    def webmention_delivery_retry: (String) -> Hash[String, untyped]?
+    def delete_webmention: (id: String) -> untyped
+    def cleanup_expired_webmentions: (kind: String, limit: Integer, dry_run: bool) -> Hash[String, untyped]
+    def approved_webmentions_for_page: (String) -> Array[Hash[String, untyped]]
+    def moderate_webmention: (id: String, decision: String) -> Hash[String, untyped]?
 
     private
 
@@ -77,5 +99,18 @@ module WeblogAuthoring
     def elapsed_ms: (Float) -> Float
     def record_timing: (Hash[String, Float]?, String, Float?) -> void
     def add_timing: (Hash[String, Float]?, String, Float) -> void
+    def find_or_create_webmention_relation: (untyped, untyped, Time) -> Hash[String, untyped]
+    def upsert_webmention_snapshot: (untyped, relation_id: String, source_url: String, title: untyped, site_name: untyped, content_hash: String, timestamp: Time) -> untyped
+    def record_webmention_attempt: (untyped, job: untyped, relation_id: String?, result: String, timestamp: Time, ?response: untyped, ?content_hash: String?) -> untyped
+    def approve_webmention: (untyped, String, Time) -> untyped
+    def reject_webmention: (untyped, String, Time) -> untyped
+    def reset_webmention_decision: (untyped, String, Time) -> untyped
+    def webmention_from_dsql_row: (untyped) -> Hash[String, untyped]
+    def webmention_snapshot: (String, untyped, untyped, untyped) -> Hash[String, untyped]?
+    def public_webmention: (Hash[String, untyped]) -> Hash[String, untyped]
+    def webmention_failure_from_dsql_row: (untyped) -> Hash[String, untyped]
+    def enqueue_webmention_outbox: (untyped, PageDocument?, PageDocument) -> untyped
+    def webmention_source_url: (String) -> String
+    def webmention_outbox_from_dsql_row: (untyped) -> Hash[String, untyped]
   end
 end

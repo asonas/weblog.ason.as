@@ -9,17 +9,23 @@ resource "aws_lambda_function" "authoring" {
 
   environment {
     variables = {
-      DSQL_HOST                   = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
-      FRONTEND_URL                = "https://weblog.ason.as"
-      GITHUB_ALLOWED_USER_ID      = "630181"
-      GITHUB_REDIRECT_URI         = "https://weblog.ason.as/api/auth/github/callback"
-      OAUTH_SECRET_ID             = aws_secretsmanager_secret.oauth.name
-      ASSET_BUCKET                = aws_s3_bucket.site.id
-      DEVELOPMENT_ASSET_BUCKET    = "weblog-asonas-assets-dev-${data.aws_caller_identity.current.account_id}"
-      SITE_BUCKET                 = aws_s3_bucket.site.id
-      SEARCH_INDEX_QUEUE_URL      = aws_sqs_queue.search_index.url
-      INBOX_SYNC_FUNCTION_NAME    = aws_lambda_function.inbox_sync.function_name
-      BLUESKY_OAUTH_FUNCTION_NAME = aws_lambda_function.bluesky_oauth.function_name
+      DSQL_HOST                          = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
+      FRONTEND_URL                       = "https://weblog.ason.as"
+      GITHUB_ALLOWED_USER_ID             = "630181"
+      GITHUB_REDIRECT_URI                = "https://weblog.ason.as/api/auth/github/callback"
+      OAUTH_SECRET_ID                    = aws_secretsmanager_secret.oauth.name
+      ASSET_BUCKET                       = aws_s3_bucket.site.id
+      DEVELOPMENT_ASSET_BUCKET           = "weblog-asonas-assets-dev-${data.aws_caller_identity.current.account_id}"
+      SITE_BUCKET                        = aws_s3_bucket.site.id
+      SEARCH_INDEX_QUEUE_URL             = aws_sqs_queue.search_index.url
+      INBOX_SYNC_FUNCTION_NAME           = aws_lambda_function.inbox_sync.function_name
+      BLUESKY_OAUTH_FUNCTION_NAME        = aws_lambda_function.bluesky_oauth.function_name
+      WEBMENTION_QUEUE_URL               = aws_sqs_queue.webmention.url
+      WEBMENTION_PUBLISH_QUEUE_URL       = aws_sqs_queue.webmention_publish.url
+      WEBMENTION_DEAD_LETTER_ARN         = aws_sqs_queue.webmention_dead_letter.arn
+      WEBMENTION_QUEUE_ARN               = aws_sqs_queue.webmention.arn
+      WEBMENTION_PUBLISH_DEAD_LETTER_ARN = aws_sqs_queue.webmention_publish_dead_letter.arn
+      WEBMENTION_PUBLISH_QUEUE_ARN       = aws_sqs_queue.webmention_publish.arn
     }
   }
 
@@ -33,6 +39,7 @@ resource "aws_lambda_function" "authoring" {
     aws_iam_role_policy.oauth_secret,
     aws_iam_role_policy.search_index_notify,
     aws_iam_role_policy.search_index_read,
+    aws_iam_role_policy.authoring_webmention_notify,
     aws_iam_role_policy_attachment.lambda_basic_execution,
   ]
 

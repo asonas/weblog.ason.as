@@ -411,6 +411,14 @@ type EmbedMetadata = {
   status: "ready" | "fallback";
 };
 
+type ExternalMention = {
+  id: string;
+  source_url: string;
+  title: string | null;
+  site_name: string | null;
+  first_verified_at: string | null;
+};
+
 export type EditorBootstrap = {
   page_id: string;
   page_type: "date" | "named";
@@ -426,6 +434,7 @@ export type EditorBootstrap = {
   save_message: string;
   linked_pages: Array<LinkedPage>;
   linked_pages_has_more: boolean;
+  external_mentions?: Array<ExternalMention>;
 };
 
 type EditorDraft = {
@@ -4211,6 +4220,30 @@ export function AuthoringEditor({
             </div>
           </aside>
         )}
+        {!editor?.isEditable &&
+          bootstrap.external_mentions &&
+          bootstrap.external_mentions.length > 0 && (
+            <section
+              className="external-mentions"
+              aria-labelledby="external-mentions-heading"
+            >
+              <h2 id="external-mentions-heading">外部からの言及</h2>
+              <ul>
+                {bootstrap.external_mentions.map((mention) => (
+                  <li key={mention.id}>
+                    <a
+                      href={mention.source_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {mention.title || mention.source_url}
+                    </a>
+                    {mention.site_name && <small>{mention.site_name}</small>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         {universeEnabled && universeGroups.length > 0 && (
           <InternalUniverseGraph
             groups={universeGroups}

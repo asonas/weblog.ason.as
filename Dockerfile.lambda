@@ -6,8 +6,8 @@ COPY Gemfile Gemfile.lock ./
 RUN bundle config set without "development test" && bundle install
 
 COPY lib/ ${LAMBDA_TASK_ROOT}/lib/
-COPY lambda/authoring.rb ${LAMBDA_TASK_ROOT}/lambda_function.rb
+COPY lambda/ ${LAMBDA_TASK_ROOT}/
 
 ENV RUBYLIB=${LAMBDA_TASK_ROOT}/lib
 
-CMD ["lambda_function.WeblogAuthoring::LambdaHandler.call"]
+CMD ["authoring.WeblogAuthoring::LambdaHandler.call"]

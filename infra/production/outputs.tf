@@ -23,6 +23,31 @@ output "authoring_lambda_function_name" {
   value       = aws_lambda_function.authoring.function_name
 }
 
+output "webmention_receiver_lambda_function_name" {
+  description = "Name of the production Webmention receiver Lambda function."
+  value       = aws_lambda_function.webmention_receiver.function_name
+}
+
+output "webmention_worker_lambda_function_name" {
+  description = "Name of the production Webmention worker Lambda function."
+  value       = aws_lambda_function.webmention_worker.function_name
+}
+
+output "webmention_publisher_lambda_function_name" {
+  description = "Name of the production Webmention site publisher Lambda function."
+  value       = aws_lambda_function.webmention_publisher.function_name
+}
+
+output "webmention_cleanup_lambda_function_name" {
+  description = "Name of the production Webmention cleanup Lambda function."
+  value       = aws_lambda_function.webmention_cleanup.function_name
+}
+
+output "webmention_queue_url" {
+  description = "URL of the production Webmention verification queue."
+  value       = aws_sqs_queue.webmention.url
+}
+
 output "search_indexer_ecr_repository_url" {
   description = "ECR repository URL for the production search indexer Lambda image."
   value       = aws_ecr_repository.search_indexer.repository_url

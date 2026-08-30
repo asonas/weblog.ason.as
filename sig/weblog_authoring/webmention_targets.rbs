@@ -1,0 +1,6 @@
+module WeblogAuthoring
+  class WebmentionTargets
+    def initialize: (site_url: String) -> void
+    def extract: (String, source_url: String) -> Array[String]
+  end
+end

@@ -1043,6 +1043,193 @@ html[data-view="article-editing"] .page-shell {
   padding: 0;
 }
 
+html[data-view="webmention-moderation"] .page-shell {
+  max-inline-size: 90rem;
+  padding: clamp(1rem, 3vw, 3rem);
+}
+
+.webmention-access {
+  margin: 4rem auto;
+  text-align: center;
+}
+
+.webmention-workbench {
+  display: grid;
+  grid-template-columns: 13rem minmax(20rem, 32rem) minmax(24rem, 1fr);
+  gap: 1.25rem;
+}
+
+.webmention-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.webmention-filters h1,
+.webmention-queue h2,
+.webmention-card h3,
+.webmention-preview h2,
+.webmention-preview h3 {
+  margin-block-start: 0;
+}
+
+.webmention-filters p {
+  color: var(--muted-ink);
+  font-size: var(--text-ui);
+}
+
+.webmention-filters button {
+  display: flex;
+  justify-content: space-between;
+  min-block-size: 2.5rem;
+  border: 0;
+  background: transparent;
+  text-align: start;
+}
+
+.webmention-filters button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.webmention-queue > header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+}
+
+.webmention-queue > header small,
+.webmention-queue > header h2 {
+  grid-column: 1;
+}
+
+.webmention-queue > header button {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+
+.webmention-queue__list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.webmention-card {
+  padding: 1rem;
+  border: 1px solid var(--separator);
+  border-radius: 0.8rem;
+  background: var(--surface);
+}
+
+.webmention-card > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.webmention-card h3 {
+  margin-block: 0.75rem 0.35rem;
+  font-size: 1.05rem;
+}
+
+.webmention-card p {
+  margin-block-end: 0.6rem;
+}
+
+.webmention-card a,
+.webmention-preview a,
+.external-mentions a {
+  color: var(--accent);
+}
+
+.webmention-card__badge {
+  padding: 0.18rem 0.5rem;
+  border-radius: var(--radius-round);
+  background: color-mix(in oklch, var(--accent) 13%, var(--surface));
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.webmention-card[data-state="invalid"] .webmention-card__badge,
+.webmention-card[data-state="removed"] .webmention-card__badge {
+  background: var(--canvas);
+  color: var(--muted-ink);
+}
+
+.webmention-card__detail {
+  color: var(--muted-ink);
+  font-size: var(--text-ui);
+}
+
+.webmention-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.webmention-card__actions .is-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.webmention-preview {
+  align-self: start;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  background: color-mix(in oklch, var(--surface) 90%, white);
+  box-shadow: 0 0.7rem 2.5rem color-mix(in oklch, var(--ink) 10%, transparent);
+}
+
+.webmention-preview section,
+.external-mentions {
+  margin-block-start: 4rem;
+  padding-block-start: 1.2rem;
+  border-block-start: 1px solid var(--separator);
+}
+
+.webmention-preview ul,
+.external-mentions ul {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0;
+  list-style: none;
+}
+
+.webmention-preview li,
+.external-mentions li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.webmention-preview small,
+.external-mentions small {
+  color: var(--muted-ink);
+}
+
+@media (max-width: 70rem) {
+  .webmention-workbench {
+    grid-template-columns: 11rem minmax(20rem, 1fr);
+  }
+
+  .webmention-preview {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 48rem) {
+  .webmention-workbench {
+    display: block;
+  }
+
+  .webmention-filters {
+    margin-block-end: 1.5rem;
+  }
+
+  .webmention-preview {
+    margin-block-start: 2rem;
+  }
+}
+
 .article-editing-cover {
   position: relative;
   inline-size: 100%;

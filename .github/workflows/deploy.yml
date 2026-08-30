@@ -22,6 +22,10 @@ env:
   SEARCH_INDEXER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-search-indexer-production-runtime
   INBOX_SYNC_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-inbox-sync-production-runtime
   BLUESKY_OAUTH_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-bluesky-oauth-production-runtime
+  WEBMENTION_RECEIVER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-webmention-receiver-production-runtime
+  WEBMENTION_WORKER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-webmention-worker-production-runtime
+  WEBMENTION_PUBLISHER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-webmention-publisher-production-runtime
+  WEBMENTION_CLEANUP_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-webmention-cleanup-production-runtime
   ECR_REPOSITORY: weblog-authoring-production
   LAMBDA_FUNCTION: weblog-authoring-production
   SEARCH_INDEXER_ECR_REPOSITORY: weblog-search-indexer-production
@@ -30,6 +34,10 @@ env:
   INBOX_SYNC_LAMBDA_FUNCTION: weblog-inbox-sync-production
   BLUESKY_OAUTH_ECR_REPOSITORY: weblog-bluesky-oauth-production
   BLUESKY_OAUTH_LAMBDA_FUNCTION: weblog-bluesky-oauth-production
+  WEBMENTION_RECEIVER_LAMBDA_FUNCTION: weblog-webmention-receiver-production
+  WEBMENTION_WORKER_LAMBDA_FUNCTION: weblog-webmention-worker-production
+  WEBMENTION_PUBLISHER_LAMBDA_FUNCTION: weblog-webmention-publisher-production
+  WEBMENTION_CLEANUP_LAMBDA_FUNCTION: weblog-webmention-cleanup-production
   SITE_BUCKET: weblog-asonas-site-production-282782318939
   CLOUDFRONT_DISTRIBUTION_ID: E3BCWEKGAG5LSG
   SITE_URL: https://weblog.ason.as
@@ -103,11 +111,15 @@ jobs:
       - name: Detect optional Lambda infrastructure
         id: infra
         run: |
-          for service in search inbox oauth; do
+          for service in search inbox oauth receiver worker publisher cleanup; do
             case "$service" in
               search) repository="$SEARCH_INDEXER_ECR_REPOSITORY"; function="$SEARCH_INDEXER_LAMBDA_FUNCTION" ;;
               inbox) repository="$INBOX_SYNC_ECR_REPOSITORY"; function="$INBOX_SYNC_LAMBDA_FUNCTION" ;;
               oauth) repository="$BLUESKY_OAUTH_ECR_REPOSITORY"; function="$BLUESKY_OAUTH_LAMBDA_FUNCTION" ;;
+              receiver) repository="$ECR_REPOSITORY"; function="$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" ;;
+              worker) repository="$ECR_REPOSITORY"; function="$WEBMENTION_WORKER_LAMBDA_FUNCTION" ;;
+              publisher) repository="$ECR_REPOSITORY"; function="$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" ;;
+              cleanup) repository="$ECR_REPOSITORY"; function="$WEBMENTION_CLEANUP_LAMBDA_FUNCTION" ;;
             esac
             if ! repository_error="$(aws ecr describe-repositories --repository-names "$repository" 2>&1 >/dev/null)"; then
               if [[ "$repository_error" != *RepositoryNotFoundException* ]]; then
@@ -158,6 +170,10 @@ jobs:
           inspect search "$SEARCH_INDEXER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.search }}"
           inspect inbox "$INBOX_SYNC_LAMBDA_FUNCTION" "${{ steps.infra.outputs.inbox }}"
           inspect oauth "$BLUESKY_OAUTH_LAMBDA_FUNCTION" "${{ steps.infra.outputs.oauth }}"
+          inspect receiver "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.receiver }}"
+          inspect worker "$WEBMENTION_WORKER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.worker }}"
+          inspect publisher "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.publisher }}"
+          inspect cleanup "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION" "${{ steps.infra.outputs.cleanup }}"
 
       - name: Recheck current main before deployment
         id: current
@@ -179,6 +195,10 @@ jobs:
           if [[ "${{ steps.infra.outputs.search }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$SEARCH_INDEXER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
           if [[ "${{ steps.infra.outputs.inbox }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$INBOX_SYNC_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
           if [[ "${{ steps.infra.outputs.oauth }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$BLUESKY_OAUTH_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
+          if [[ "${{ steps.infra.outputs.receiver }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$WEBMENTION_RECEIVER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
+          if [[ "${{ steps.infra.outputs.worker }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$WEBMENTION_WORKER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
+          if [[ "${{ steps.infra.outputs.publisher }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$WEBMENTION_PUBLISHER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
+          if [[ "${{ steps.infra.outputs.cleanup }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$WEBMENTION_CLEANUP_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
 
       - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
         if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.authoring == 'true' || steps.lambda.outputs.search == 'true' || steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.oauth == 'true')
@@ -245,6 +265,26 @@ jobs:
           image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}"
           aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" --image-uri "$image_uri"
           aws lambda wait function-updated-v2 --function-name "$LAMBDA_FUNCTION"
+      - name: Deploy Webmention Lambda image
+        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.receiver == 'true' || steps.lambda.outputs.worker == 'true' || steps.lambda.outputs.publisher == 'true' || steps.lambda.outputs.cleanup == 'true')
+        run: |
+          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          if [[ "${{ steps.lambda.outputs.receiver }}" == "true" ]]; then
+            aws lambda update-function-code --function-name "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" --image-uri "$image_uri"
+            aws lambda wait function-updated-v2 --function-name "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION"
+          fi
+          if [[ "${{ steps.lambda.outputs.worker }}" == "true" ]]; then
+            aws lambda update-function-code --function-name "$WEBMENTION_WORKER_LAMBDA_FUNCTION" --image-uri "$image_uri"
+            aws lambda wait function-updated-v2 --function-name "$WEBMENTION_WORKER_LAMBDA_FUNCTION"
+          fi
+          if [[ "${{ steps.lambda.outputs.publisher }}" == "true" ]]; then
+            aws lambda update-function-code --function-name "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" --image-uri "$image_uri"
+            aws lambda wait function-updated-v2 --function-name "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION"
+          fi
+          if [[ "${{ steps.lambda.outputs.cleanup }}" == "true" ]]; then
+            aws lambda update-function-code --function-name "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION" --image-uri "$image_uri"
+            aws lambda wait function-updated-v2 --function-name "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION"
+          fi
       - name: Deploy search indexer Lambda image
         if: steps.current.outputs.current == 'true' && steps.lambda.outputs.search == 'true'
         run: |

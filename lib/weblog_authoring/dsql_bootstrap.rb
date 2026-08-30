@@ -237,6 +237,95 @@ module WeblogAuthoring
           expires_at TIMESTAMPTZ NOT NULL
         )
       SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.webmention_relations (
+          id TEXT PRIMARY KEY,
+          source_url TEXT NOT NULL,
+          target_url TEXT NOT NULL,
+          target_page_id TEXT NOT NULL,
+          verification_status TEXT NOT NULL,
+          moderation_status TEXT NOT NULL,
+          first_verified_at TIMESTAMPTZ,
+          last_notified_at TIMESTAMPTZ NOT NULL,
+          last_verified_at TIMESTAMPTZ,
+          deleted_at TIMESTAMPTZ,
+          deletion_reason TEXT,
+          created_at TIMESTAMPTZ NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL,
+          UNIQUE (source_url, target_url)
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.webmention_snapshots (
+          id TEXT PRIMARY KEY,
+          relation_id TEXT NOT NULL,
+          snapshot_kind TEXT NOT NULL,
+          source_url TEXT NOT NULL,
+          title TEXT,
+          site_name TEXT,
+          content_hash TEXT NOT NULL,
+          is_current BOOLEAN NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL,
+          expires_at TIMESTAMPTZ
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.webmention_attempts (
+          id TEXT PRIMARY KEY,
+          job_id TEXT NOT NULL,
+          relation_id TEXT,
+          source_url TEXT NOT NULL,
+          target_url TEXT NOT NULL,
+          target_page_id TEXT,
+          result TEXT NOT NULL,
+          http_status INTEGER,
+          redirect_count INTEGER NOT NULL,
+          fetched_bytes INTEGER NOT NULL,
+          duration_ms INTEGER NOT NULL,
+          content_hash TEXT,
+          attempted_at TIMESTAMPTZ NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.webmention_page_targets (
+          page_id TEXT NOT NULL,
+          target_url TEXT NOT NULL,
+          first_seen_at TIMESTAMPTZ NOT NULL,
+          last_seen_at TIMESTAMPTZ NOT NULL,
+          active BOOLEAN NOT NULL,
+          PRIMARY KEY (page_id, target_url)
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.webmention_outbox (
+          id TEXT PRIMARY KEY,
+          event_type TEXT NOT NULL,
+          page_id TEXT NOT NULL,
+          payload JSONB NOT NULL,
+          status TEXT NOT NULL,
+          attempt_count INTEGER NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL,
+          notified_at TIMESTAMPTZ,
+          completed_at TIMESTAMPTZ
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.webmention_deliveries (
+          id TEXT PRIMARY KEY,
+          page_id TEXT NOT NULL,
+          source_url TEXT NOT NULL,
+          target_url TEXT NOT NULL,
+          status TEXT NOT NULL,
+          attempt_count INTEGER NOT NULL,
+          last_http_status INTEGER,
+          last_error TEXT,
+          created_at TIMESTAMPTZ NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL,
+          completed_at TIMESTAMPTZ,
+          expires_at TIMESTAMPTZ
+        )
+      SQL
     end
 
     def grant_privileges(connection)

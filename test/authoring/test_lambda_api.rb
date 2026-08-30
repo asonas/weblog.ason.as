@@ -52,6 +52,7 @@ class LambdaApiTest < Minitest::Test
 
   class FakeDatabase
     attr_reader :health_checks, :pages, :saved_requests, :inbox_filters
+    attr_accessor :webmentions, :webmention_delivery_failures
 
     def initialize(pages, inbox_items: [], inbox_item_usages: [])
       @pages = pages
@@ -59,6 +60,8 @@ class LambdaApiTest < Minitest::Test
       @inbox_item_usages = inbox_item_usages
       @health_checks = 0
       @saved_requests = []
+      @webmentions = []
+      @webmention_delivery_failures = []
     end
 
     def healthy?
@@ -139,6 +142,61 @@ class LambdaApiTest < Minitest::Test
     def inbox_sync_run(run_id:)
       @inbox_sync_run if @inbox_sync_run&.fetch("id") == run_id
     end
+
+    def list_webmentions(moderation_status: nil, verification_status: nil)
+      webmentions.select do |mention|
+        (moderation_status.nil? || mention.fetch("moderation_status") == moderation_status) &&
+          (verification_status.nil? || mention.fetch("verification_status") == verification_status)
+      end
+    end
+
+    def list_webmention_failures
+      []
+    end
+
+    def list_webmention_delivery_failures
+      webmention_delivery_failures
+    end
+
+    def webmention_delivery_retry(id)
+      failure = webmention_delivery_failures.find { |item| item.fetch("id") == id }
+      return nil unless failure
+
+      {
+        "delivery_id" => failure.fetch("id"), "page_id" => failure.fetch("page_id"),
+        "source" => failure.fetch("source_url"), "target" => failure.fetch("target_url"),
+      }
+    end
+
+    def webmention_reverification(id)
+      mention = webmentions.find { |item| item.fetch("id") == id }
+      return nil unless mention
+
+      {
+        "source" => mention.fetch("source_url"), "target" => mention.fetch("target_url"),
+        "target_page_id" => mention.fetch("target_page_id"),
+      }
+    end
+
+    def moderate_webmention(id:, decision:)
+      mention = webmentions.find { |item| item.fetch("id") == id }
+      raise KeyError unless mention
+
+      mention.merge("moderation_status" => decision)
+    end
+
+    def delete_webmention(id:)
+      index = webmentions.index { |item| item.fetch("id") == id }
+      raise KeyError unless index
+
+      webmentions.delete_at(index)
+    end
+
+    def approved_webmentions_for_page(page_id)
+      webmentions.select do |mention|
+        mention.fetch("target_page_id") == page_id && mention.fetch("moderation_status") == "approved"
+      end
+    end
   end
 
   class FakeOAuth
@@ -155,17 +213,25 @@ class LambdaApiTest < Minitest::Test
   end
 
   class FakeSqs
-    attr_reader :messages
+    MoveTask = Data.define(:task_handle)
+
+    attr_reader :messages, :move_tasks
 
     def initialize(error: nil)
       @error = error
       @messages = []
+      @move_tasks = []
     end
 
     def send_message(**message)
       raise @error unless @error.nil?
 
       messages << message
+    end
+
+    def start_message_move_task(**request)
+      move_tasks << request
+      MoveTask.new("move-task")
     end
   end
 
@@ -1012,6 +1078,104 @@ class LambdaApiTest < Minitest::Test
     assert_includes response.fetch(:cookies), "weblog_authoring_session=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
   end
 
+  def test_webmention_moderation_requires_authentication_and_csrf
+    @database.webmentions = [webmention]
+    sqs = FakeSqs.new
+    api, token = authenticated_api(sqs:)
+
+    unauthorized = @api.call(event("GET", "/api/webmentions"))
+    listed = api.call(event("GET", "/api/webmentions", cookies: ["weblog_authoring_session=#{token}"]))
+    moderated = api.call(json_event(
+      "PATCH", "/api/authoring/webmentions/mention-id", { "decision" => "approved" },
+      cookies: ["weblog_authoring_session=#{token}"], headers: { "x-csrf-token" => "csrf-token" },
+      path_parameters: { "id" => "mention-id" }
+    ))
+
+    assert_equal 401, unauthorized.fetch(:statusCode)
+    assert_equal "mention-id", JSON.parse(listed.fetch(:body)).fetch("mentions").fetch(0).fetch("id")
+    assert_equal "approved", JSON.parse(moderated.fetch(:body)).fetch("mention").fetch("moderation_status")
+  end
+
+  def test_webmention_complete_deletion_requires_authentication_and_csrf
+    @database.webmentions = [webmention]
+    api, token = authenticated_api(sqs: FakeSqs.new)
+
+    unauthorized = api.call(event("DELETE", "/api/authoring/webmentions/mention-id", { "id" => "mention-id" }))
+    forbidden = api.call(event(
+      "DELETE", "/api/authoring/webmentions/mention-id", { "id" => "mention-id" },
+      cookies: ["weblog_authoring_session=#{token}"]
+    ))
+    deleted = api.call(event(
+      "DELETE", "/api/authoring/webmentions/mention-id", { "id" => "mention-id" },
+      cookies: ["weblog_authoring_session=#{token}"], headers: { "x-csrf-token" => "csrf-token" }
+    ))
+
+    assert_equal 401, unauthorized.fetch(:statusCode)
+    assert_equal 403, forbidden.fetch(:statusCode)
+    assert_equal 200, deleted.fetch(:statusCode)
+    assert_empty @database.webmentions
+  end
+
+  def test_reverification_queues_the_existing_relation
+    @database.webmentions = [webmention]
+    sqs = FakeSqs.new
+    api, token = authenticated_api(sqs:)
+
+    response = api.call(event(
+      "POST", "/api/authoring/webmentions/mention-id/reverify", { "id" => "mention-id" },
+      cookies: ["weblog_authoring_session=#{token}"], headers: { "x-csrf-token" => "csrf-token" }
+    ))
+    payload = JSON.parse(sqs.messages.fetch(0).fetch(:message_body))
+
+    assert_equal 202, response.fetch(:statusCode)
+    assert_equal "https://example.com/post", payload.fetch("source")
+    assert_equal "page-id", payload.fetch("target_page_id")
+  end
+
+  def test_failed_delivery_can_be_requeued_from_the_management_api
+    @database.webmention_delivery_failures = [{
+      "id" => "delivery-id", "page_id" => "page-id",
+      "source_url" => "https://weblog.ason.as/article", "target_url" => "https://example.com/post",
+    }]
+    sqs = FakeSqs.new
+    api, token = authenticated_api(sqs:)
+
+    response = api.call(event(
+      "POST", "/api/authoring/webmention-deliveries/delivery-id/retry", { "id" => "delivery-id" },
+      cookies: ["weblog_authoring_session=#{token}"], headers: { "x-csrf-token" => "csrf-token" }
+    ))
+    message = sqs.messages.fetch(0)
+    payload = JSON.parse(message.fetch(:message_body))
+
+    assert_equal 202, response.fetch(:statusCode)
+    assert_equal "deliver", payload.fetch("type")
+    assert_equal "delivery-id", payload.fetch("delivery_id")
+    assert_equal "https://example.com/post", payload.fetch("target")
+  end
+
+  def test_dead_letters_can_be_redriven_from_the_management_api
+    sqs = FakeSqs.new
+    api, token = authenticated_api(sqs:)
+
+    response = api.call(event(
+      "POST", "/api/authoring/webmention-dead-letters/verification/retry", { "kind" => "verification" },
+      cookies: ["weblog_authoring_session=#{token}"], headers: { "x-csrf-token" => "csrf-token" }
+    ))
+
+    assert_equal 202, response.fetch(:statusCode)
+    assert_equal({ source_arn: "arn:verification-dlq", destination_arn: "arn:verification" }, sqs.move_tasks.fetch(0))
+    assert_equal "move-task", JSON.parse(response.fetch(:body)).fetch("task_handle")
+  end
+
+  def test_public_page_payload_contains_only_approved_webmentions
+    @database.webmentions = [webmention.merge("moderation_status" => "approved")]
+
+    response = @api.call(event("GET", "/api/routes/article", { "route" => "記事名" }))
+    mention = JSON.parse(response.fetch(:body)).fetch("external_mentions").fetch(0)
+
+    assert_equal "mention-id", mention.fetch("id")
+  end
+
   private
 
   def authenticated_api(sqs:, logger: $stderr)
@@ -1027,9 +1191,23 @@ class LambdaApiTest < Minitest::Test
       allowed_github_user_id: 630_181,
       sqs_client: sqs,
       search_queue_url: "https://sqs.example/search.fifo",
+      webmention_queue_url: "https://sqs.example/webmention.fifo",
+      webmention_dead_letter_arn: "arn:verification-dlq",
+      webmention_queue_arn: "arn:verification",
+      webmention_publish_dead_letter_arn: "arn:publishing-dlq",
+      webmention_publish_queue_arn: "arn:publishing",
       logger:
     )
     [api, token]
+  end
+
+  def webmention
+    {
+      "id" => "mention-id", "source_url" => "https://example.com/post",
+      "target_url" => "https://weblog.ason.as/article", "target_page_id" => "page-id",
+      "verification_status" => "verified", "moderation_status" => "pending",
+      "candidate" => { "title" => "Example", "site_name" => "Example Site" }, "approved" => nil,
+    }
   end
 
   def page_document(id:, name:, body:, created_at: Time.iso8601("2026-08-22T10:00:00+09:00"),
