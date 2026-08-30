@@ -553,9 +553,10 @@ function AtlasHome({ initialWindow, tags, archive, archiveRef, auth }: {
   );
 }
 
-function CoverJournalHome({ initialWindow, tags, archive, archiveRef, auth }: Parameters<typeof AtlasHome>[0]) {
+export function CoverJournalHome({ initialWindow, tags, archive, archiveRef, auth }: Parameters<typeof AtlasHome>[0]) {
   const featured = initialWindow.pages.find((page) => page.image_url) || initialWindow.pages[0];
   const [calendarOpen, setCalendarOpen] = useState(() => !window.matchMedia("(max-width: 36rem)").matches);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const heroStyle = featured?.image_url
     ? { backgroundImage: `linear-gradient(180deg, transparent 12%, rgb(5 29 34 / 86%)), url(${featured.image_url})` }
     : undefined;
@@ -587,14 +588,19 @@ function CoverJournalHome({ initialWindow, tags, archive, archiveRef, auth }: Pa
             onToggle={(event) => setCalendarOpen(event.currentTarget.open)}
           >
             <summary>過去の記事</summary>
-            <HomeArchive years={archive} heading="" />
+            <HomeArchive
+              years={archive}
+              heading=""
+              selectedMonth={selectedMonth}
+              onSelectMonth={setSelectedMonth}
+            />
             <GitHubAuthentication auth={auth} />
           </details>
         </aside>
         <section className="cover-journal__stream" aria-label="記事と日記">
           {initialWindow.pages.length === 0
             ? <p className="empty-home">まだ記事がありません</p>
-            : <SplitFeed initialPages={initialWindow.pages} selectedMonth={null} />}
+            : <SplitFeed initialPages={initialWindow.pages} selectedMonth={selectedMonth} />}
         </section>
       </div>
     </div>
