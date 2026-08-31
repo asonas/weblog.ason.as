@@ -66,7 +66,13 @@ class DeployWorkflowTest < Minitest::Test
     assert_includes infrastructure, "exit 1"
     baselines = steps.find { |step| step["name"] == "Inspect Lambda deployment baselines" }.fetch("run")
     %w[authoring search inbox notifier oauth].each { |service| assert_includes baselines, "inspect #{service}" }
+    %w[receiver worker publisher cleanup].each { |service| refute_includes baselines, "inspect #{service}" }
     assert_includes baselines, 'deployed_tag" == "bootstrap"'
+    webmention_deploy = steps.find { |step| step["name"] == "Deploy Webmention Lambda image" }
+    assert_includes webmention_deploy.fetch("if"), "steps.lambda.outputs.authoring == 'true'"
+    %w[receiver worker publisher cleanup].each do |service|
+      assert_includes webmention_deploy.fetch("run"), "steps.infra.outputs.#{service}"
+    end
     recheck = steps.find { |step| step["name"] == "Recheck current main before deployment" }
     schema = steps.find { |step| step["name"] == "Apply database schema" }
     assert_includes recheck.fetch("run"), "git/ref/heads/main"

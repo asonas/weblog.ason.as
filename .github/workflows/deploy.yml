@@ -182,10 +182,6 @@ jobs:
           inspect inbox "$INBOX_SYNC_LAMBDA_FUNCTION" "${{ steps.infra.outputs.inbox }}"
           inspect notifier "$MATRIX_NOTIFIER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.notifier }}"
           inspect oauth "$BLUESKY_OAUTH_LAMBDA_FUNCTION" "${{ steps.infra.outputs.oauth }}"
-          inspect receiver "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.receiver }}"
-          inspect worker "$WEBMENTION_WORKER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.worker }}"
-          inspect publisher "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.publisher }}"
-          inspect cleanup "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION" "${{ steps.infra.outputs.cleanup }}"
 
       - name: Recheck current main before deployment
         id: current
@@ -278,22 +274,22 @@ jobs:
           aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" --image-uri "$image_uri"
           aws lambda wait function-updated-v2 --function-name "$LAMBDA_FUNCTION"
       - name: Deploy Webmention Lambda image
-        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.receiver == 'true' || steps.lambda.outputs.worker == 'true' || steps.lambda.outputs.publisher == 'true' || steps.lambda.outputs.cleanup == 'true')
+        if: steps.current.outputs.current == 'true' && steps.lambda.outputs.authoring == 'true' && (steps.infra.outputs.receiver == 'true' || steps.infra.outputs.worker == 'true' || steps.infra.outputs.publisher == 'true' || steps.infra.outputs.cleanup == 'true')
         run: |
           image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}"
-          if [[ "${{ steps.lambda.outputs.receiver }}" == "true" ]]; then
+          if [[ "${{ steps.infra.outputs.receiver }}" == "true" ]]; then
             aws lambda update-function-code --function-name "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" --image-uri "$image_uri"
             aws lambda wait function-updated-v2 --function-name "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION"
           fi
-          if [[ "${{ steps.lambda.outputs.worker }}" == "true" ]]; then
+          if [[ "${{ steps.infra.outputs.worker }}" == "true" ]]; then
             aws lambda update-function-code --function-name "$WEBMENTION_WORKER_LAMBDA_FUNCTION" --image-uri "$image_uri"
             aws lambda wait function-updated-v2 --function-name "$WEBMENTION_WORKER_LAMBDA_FUNCTION"
           fi
-          if [[ "${{ steps.lambda.outputs.publisher }}" == "true" ]]; then
+          if [[ "${{ steps.infra.outputs.publisher }}" == "true" ]]; then
             aws lambda update-function-code --function-name "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" --image-uri "$image_uri"
             aws lambda wait function-updated-v2 --function-name "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION"
           fi
-          if [[ "${{ steps.lambda.outputs.cleanup }}" == "true" ]]; then
+          if [[ "${{ steps.infra.outputs.cleanup }}" == "true" ]]; then
             aws lambda update-function-code --function-name "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION" --image-uri "$image_uri"
             aws lambda wait function-updated-v2 --function-name "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION"
           fi
