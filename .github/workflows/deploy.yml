@@ -154,6 +154,7 @@ jobs:
             service="$1"
             function="$2"
             ready="$3"
+            shift 3
             if [[ "$ready" != "true" ]]; then
               echo "${service}=false" >> "$GITHUB_OUTPUT"
               return
@@ -171,17 +172,17 @@ jobs:
             baseline_sha="${BASH_REMATCH[1]}"
             git cat-file -e "${baseline_sha}^{commit}"
             git merge-base --is-ancestor "$baseline_sha" "$TARGET_SHA"
-            if git diff --quiet "$baseline_sha" "$TARGET_SHA" -- Dockerfile.lambda Dockerfile.search-indexer Dockerfile.inbox-sync Dockerfile.bluesky-oauth Gemfile Gemfile.lock package.json package-lock.json lib/ lambda/; then
+            if git diff --quiet "$baseline_sha" "$TARGET_SHA" -- "$@"; then
               echo "${service}=false" >> "$GITHUB_OUTPUT"
             else
               echo "${service}=true" >> "$GITHUB_OUTPUT"
             fi
           }
-          inspect authoring "$LAMBDA_FUNCTION" true
-          inspect search "$SEARCH_INDEXER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.search }}"
-          inspect inbox "$INBOX_SYNC_LAMBDA_FUNCTION" "${{ steps.infra.outputs.inbox }}"
-          inspect notifier "$MATRIX_NOTIFIER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.notifier }}"
-          inspect oauth "$BLUESKY_OAUTH_LAMBDA_FUNCTION" "${{ steps.infra.outputs.oauth }}"
+          inspect authoring "$LAMBDA_FUNCTION" true Dockerfile.lambda Gemfile Gemfile.lock lib/ lambda/
+          inspect search "$SEARCH_INDEXER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.search }}" Dockerfile.search-indexer Gemfile Gemfile.lock lib/ lambda/search_indexer.rb
+          inspect inbox "$INBOX_SYNC_LAMBDA_FUNCTION" "${{ steps.infra.outputs.inbox }}" Dockerfile.inbox-sync Gemfile Gemfile.lock lib/ lambda/inbox_sync.rb lambda/matrix_notifier.rb
+          inspect notifier "$MATRIX_NOTIFIER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.notifier }}" Dockerfile.inbox-sync Gemfile Gemfile.lock lib/ lambda/matrix_notifier.rb
+          inspect oauth "$BLUESKY_OAUTH_LAMBDA_FUNCTION" "${{ steps.infra.outputs.oauth }}" Dockerfile.bluesky-oauth package.json package-lock.json tsconfig.bluesky-oauth.json lambda/bluesky_oauth/
 
       - name: Recheck current main before deployment
         id: current

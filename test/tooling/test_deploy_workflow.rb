@@ -68,6 +68,11 @@ class DeployWorkflowTest < Minitest::Test
     %w[authoring search inbox notifier oauth].each { |service| assert_includes baselines, "inspect #{service}" }
     %w[receiver worker publisher cleanup].each { |service| refute_includes baselines, "inspect #{service}" }
     assert_includes baselines, 'deployed_tag" == "bootstrap"'
+    assert_includes baselines, 'git diff --quiet "$baseline_sha" "$TARGET_SHA" -- "$@"'
+    assert_includes baselines, 'inspect search "$SEARCH_INDEXER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.search }}" Dockerfile.search-indexer Gemfile Gemfile.lock lib/ lambda/search_indexer.rb'
+    assert_includes baselines, 'inspect inbox "$INBOX_SYNC_LAMBDA_FUNCTION" "${{ steps.infra.outputs.inbox }}" Dockerfile.inbox-sync Gemfile Gemfile.lock lib/ lambda/inbox_sync.rb lambda/matrix_notifier.rb'
+    assert_includes baselines, 'inspect notifier "$MATRIX_NOTIFIER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.notifier }}" Dockerfile.inbox-sync Gemfile Gemfile.lock lib/ lambda/matrix_notifier.rb'
+    assert_includes baselines, 'inspect oauth "$BLUESKY_OAUTH_LAMBDA_FUNCTION" "${{ steps.infra.outputs.oauth }}" Dockerfile.bluesky-oauth package.json package-lock.json tsconfig.bluesky-oauth.json lambda/bluesky_oauth/'
     webmention_deploy = steps.find { |step| step["name"] == "Deploy Webmention Lambda image" }
     assert_includes webmention_deploy.fetch("if"), "steps.lambda.outputs.authoring == 'true'"
     %w[receiver worker publisher cleanup].each do |service|
