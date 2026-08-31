@@ -41,7 +41,7 @@ module WeblogAuthoring
       form = URI.decode_www_form(body).to_h
       source = parse_source(form["source"])
       target, route = parse_target(form["target"])
-      return error_response(422, "source and target must be different") if comparable_url(source) == comparable_url(target)
+      return error_response(400, "source and target must be different") if comparable_url(source) == comparable_url(target)
 
       page = @database.find_route(route)
       return error_response(400, "target must be a published article") unless publishable?(page)
@@ -63,7 +63,7 @@ module WeblogAuthoring
 
       response(202, "status" => "accepted")
     rescue URI::InvalidURIError, ArgumentError => error
-      error_response(422, error.message)
+      error_response(400, error.message)
     rescue StandardError => error
       @logger.puts(JSON.generate(
         "event" => "webmention_receiver_error", "error_class" => error.class.name

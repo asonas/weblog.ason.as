@@ -65,14 +65,21 @@ class WebmentionReceiverTest < Minitest::Test
   def test_rejects_an_unowned_target_without_queuing
     response = @receiver.call(event(source: "https://example.com/post", target: "https://example.net/article"))
 
-    assert_equal 422, response.fetch(:statusCode)
+    assert_equal 400, response.fetch(:statusCode)
     assert_empty @queue.messages
   end
 
   def test_rejects_private_source_addresses_without_queuing
     response = @receiver.call(event(source: "http://127.0.0.1/post", target: "https://weblog.ason.as/%E8%A8%98%E4%BA%8B"))
 
-    assert_equal 422, response.fetch(:statusCode)
+    assert_equal 400, response.fetch(:statusCode)
+    assert_empty @queue.messages
+  end
+
+  def test_rejects_a_non_url_source_without_queuing
+    response = @receiver.call(event(source: "not-a-url", target: "https://weblog.ason.as/%E8%A8%98%E4%BA%8B"))
+
+    assert_equal 400, response.fetch(:statusCode)
     assert_empty @queue.messages
   end
 
