@@ -1012,6 +1012,28 @@ export function blueskyPostIdentity(
   }
 }
 
+const BLUESKY_EMBED_ORIGIN = "https://embed.bsky.app";
+
+function blueskyEmbedId(identity: { did: string; rkey: string }) {
+  return `${identity.did}-${identity.rkey}`;
+}
+
+function resizeBlueskyEmbed(event: MessageEvent) {
+  if (event.origin !== BLUESKY_EMBED_ORIGIN) return;
+  if (!isJsonObject(event.data)) return;
+
+  const { id, height } = event.data;
+  if (typeof id !== "string" || typeof height !== "number" || height <= 0)
+    return;
+
+  const iframe = Array.from(
+    document.querySelectorAll<HTMLIFrameElement>("iframe[data-bluesky-id]"),
+  ).find((candidate) => candidate.dataset.blueskyId === id);
+  if (iframe) iframe.style.height = `${height}px`;
+}
+
+window.addEventListener("message", resizeBlueskyEmbed);
+
 export function embedImageUrl(
   url: string,
   metadata?: EmbedMetadata,
@@ -2551,8 +2573,9 @@ const BlueskyPlayer = TiptapNode.create({
   renderHTML({ node }) {
     const url = node.attrs.url as string;
     const identity = blueskyPostIdentity(url);
+    const embedId = identity ? blueskyEmbedId(identity) : "";
     const src = identity
-      ? `https://embed.bsky.app/embed/${identity.did}/app.bsky.feed.post/${identity.rkey}`
+      ? `${BLUESKY_EMBED_ORIGIN}/embed/${identity.did}/app.bsky.feed.post/${identity.rkey}?${new URLSearchParams({ id: embedId })}`
       : "";
     return [
       "div",
@@ -2563,6 +2586,8 @@ const BlueskyPlayer = TiptapNode.create({
           src,
           title: "Bluesky投稿",
           loading: "lazy",
+          "data-bluesky-id": embedId,
+          scrolling: "no",
         },
       ],
       [

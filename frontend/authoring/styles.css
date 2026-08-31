@@ -3142,6 +3142,7 @@ h2 {
 
 .ProseMirror .bluesky-player iframe,
 .page-view .bluesky-player iframe {
+  display: block;
   inline-size: 100%;
   min-block-size: 18.75rem;
   border: 0;

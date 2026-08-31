@@ -1122,8 +1122,10 @@ test("renders a standalone YouTube URL in the editor and preserves its Markdown"
 test("renders a standalone Bluesky post URL in the editor and preserves its Markdown", async () => {
   const url =
     "https://bsky.app/profile/did:plc:nzhcpsryikfegc27zbimbwhq/post/3muc4ata4ys2r";
+  const element = document.createElement("div");
+  document.body.append(element);
   const editor = new Editor({
-    element: document.createElement("div"),
+    element,
     extensions: EDITOR_EXTENSIONS,
     content: `title\n\n${url}`,
     contentType: "markdown",
@@ -1135,8 +1137,23 @@ test("renders a standalone Bluesky post URL in the editor and preserves its Mark
     editor.getHTML(),
     /embed\.bsky\.app\/embed\/did:plc:nzhcpsryikfegc27zbimbwhq\/app\.bsky\.feed\.post\/3muc4ata4ys2r/,
   );
+  const iframe = element.querySelector<HTMLIFrameElement>(
+    ".bluesky-player iframe",
+  );
+  assert.ok(iframe);
+  assert.ok(iframe.dataset.blueskyId);
+
+  window.dispatchEvent(
+    new window.MessageEvent("message", {
+      origin: "https://embed.bsky.app",
+      data: { id: iframe.dataset.blueskyId, height: 608 },
+    }),
+  );
+
+  assert.equal(iframe.style.height, "608px");
   assert.match(editor.getMarkdown(), new RegExp(url.replaceAll(".", "\\.")));
   editor.destroy();
+  element.remove();
 });
 
 test("edits a selected YouTube player as its original URL", async () => {
