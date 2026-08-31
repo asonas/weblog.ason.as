@@ -16,8 +16,8 @@ module WeblogAuthoring
     module_function
 
     def call(event:, context:, runner: nil) # rubocop:disable Lint/UnusedMethodArgument
-      trigger, run_id = invocation(event)
-      (runner || sync_runner).call(trigger:, run_id:)
+      trigger, run_id, requested_sources = invocation(event)
+      (runner || sync_runner).call(trigger:, run_id:, requested_sources:)
     end
 
     def sync_runner
@@ -55,10 +55,12 @@ module WeblogAuthoring
 
     def invocation(event)
       if event["source"] == "aws.events" && event["detail-type"] == "Scheduled Event"
-        return ["scheduled", SecureRandom.uuid.delete("-")]
+        return ["scheduled", SecureRandom.uuid.delete("-"), nil]
       end
       if event["type"] == "inbox_sync" && event["trigger"] == "manual" && !event["run_id"].to_s.empty?
-        return ["manual", event.fetch("run_id")]
+        sources = event["sources"]
+        InboxSync.sources(sources) unless sources.nil?
+        return ["manual", event.fetch("run_id"), sources]
       end
 
       raise ArgumentError, "unsupported inbox sync event"

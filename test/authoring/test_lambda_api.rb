@@ -129,12 +129,13 @@ class LambdaApiTest < Minitest::Test
       )
     end
 
-    def queue_inbox_sync_run(run_id:, trigger:, queued_at:)
+    def queue_inbox_sync_run(run_id:, trigger:, queued_at:, sources:)
       return false if @inbox_sync_run && %w[queued running].include?(@inbox_sync_run.fetch("status"))
 
       @inbox_sync_run = {
         "id" => run_id, "trigger" => trigger, "status" => "queued",
-        "started_at" => queued_at.iso8601, "completed_at" => nil, "sources" => [],
+        "started_at" => queued_at.iso8601, "completed_at" => nil,
+        "sources" => sources.map { |source| { "source" => source, "status" => "queued" } },
       }
       true
     end
@@ -984,7 +985,9 @@ class LambdaApiTest < Minitest::Test
     assert_equal 202, started.fetch(:statusCode)
     assert_match(/\A[0-9a-f]{32}\z/, started_body.fetch("run_id"))
     assert_equal "Event", lambda_client.invocations.fetch(0).fetch(:invocation_type)
-    assert_equal "manual", JSON.parse(lambda_client.invocations.fetch(0).fetch(:payload)).fetch("trigger")
+    invocation = JSON.parse(lambda_client.invocations.fetch(0).fetch(:payload))
+    assert_equal "manual", invocation.fetch("trigger")
+    assert_equal %w[bluesky raindrop c4p], invocation.fetch("sources")
     assert_equal 409, duplicate.fetch(:statusCode)
     assert_equal 1, lambda_client.invocations.length
     assert_equal "queued", JSON.parse(status.fetch(:body)).fetch("status")

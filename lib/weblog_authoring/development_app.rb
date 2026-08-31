@@ -363,12 +363,13 @@ module WeblogAuthoring
     end
 
     post "/api/inbox/sync" do
-      api_response(202) do |_payload|
+      api_response(202) do |payload|
+        sources = InboxSync.sources(payload["sources"])
         run_id = SecureRandom.uuid.delete("-")
         queued = settings.database.queue_inbox_sync_run(
-          run_id:, trigger: "manual", queued_at: settings.clock.call
+          run_id:, trigger: "manual", queued_at: settings.clock.call, sources:
         )
-        raise ConflictError, "Inbox sync is already running" unless queued
+        raise ConflictError, "Selected inbox sources are already running" unless queued
 
         InboxSync::Runner.new(
           database: settings.database,
@@ -378,8 +379,8 @@ module WeblogAuthoring
             "c4p" => InboxSync::PendingSource.new,
           },
           clock: settings.clock
-        ).call(trigger: "manual", run_id:)
-        { "run_id" => run_id, "status" => "queued" }
+        ).call(trigger: "manual", run_id:, requested_sources: sources)
+        { "run_id" => run_id, "status" => "queued", "sources" => sources }
       end
     end
 

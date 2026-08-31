@@ -14,6 +14,7 @@ require "aws-sdk-sqs"
 require_relative "embed_metadata"
 require_relative "image_inbox"
 require_relative "image_upload"
+require_relative "inbox_sync"
 require_relative "mobile_upload"
 require_relative "models"
 require_relative "names"
@@ -670,16 +671,17 @@ module WeblogAuthoring
       expected_csrf_token = session.fetch("csrf_token", "")
       return json_response(403, error: "CSRF token mismatch") unless secure_equal?(expected_csrf_token, csrf_token_from(event))
 
+      sources = InboxSync.sources(parse_json(event)["sources"])
       run_id = SecureRandom.uuid.delete("-")
-      queued = @database.queue_inbox_sync_run(run_id:, trigger: "manual", queued_at: @clock.call)
-      return json_response(409, error: "Inbox sync is already running") unless queued
+      queued = @database.queue_inbox_sync_run(run_id:, trigger: "manual", queued_at: @clock.call, sources:)
+      return json_response(409, error: "Selected inbox sources are already running") unless queued
 
       lambda_client.invoke(
         function_name: @inbox_sync_function_name,
         invocation_type: "Event",
-        payload: JSON.generate("type" => "inbox_sync", "trigger" => "manual", "run_id" => run_id)
+        payload: JSON.generate("type" => "inbox_sync", "trigger" => "manual", "run_id" => run_id, "sources" => sources)
       )
-      json_response(202, "run_id" => run_id, "status" => "queued")
+      json_response(202, "run_id" => run_id, "status" => "queued", "sources" => sources)
     end
 
     def inbox_sync_status_response(event)

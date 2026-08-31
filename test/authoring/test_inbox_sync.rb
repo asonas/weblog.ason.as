@@ -2,6 +2,8 @@
 
 require_relative "../test_helper"
 require "fileutils"
+require "json"
+require "stringio"
 require "weblog_authoring/inbox_sync"
 require "weblog_authoring/development_database"
 
@@ -31,8 +33,8 @@ class InboxSyncTest < Minitest::Test
       @events = []
     end
 
-    def start_inbox_sync_run(run_id:, trigger:, started_at:)
-      events << [:run_started, run_id, trigger, started_at]
+    def start_inbox_sync_run(run_id:, trigger:, started_at:, sources: nil)
+      events << [:run_started, run_id, trigger, started_at, sources]
       true
     end
 
@@ -145,6 +147,74 @@ class InboxSyncTest < Minitest::Test
 
     assert_equal "already_running", result.fetch("status")
     assert_empty calls
+  end
+
+  def test_runs_only_the_requested_sources
+    calls = []
+    database = FixtureDatabase.new
+    sources = {
+      "bluesky" => FixtureSource.new(
+        "bluesky", calls:,
+        snapshot: WeblogAuthoring::InboxSync::Snapshot.new(items: [], complete: true, watermark: nil)
+      ),
+      "raindrop" => FixtureSource.new(
+        "raindrop", calls:,
+        snapshot: WeblogAuthoring::InboxSync::Snapshot.new(items: [], complete: true, watermark: nil)
+      ),
+    }
+    runner = WeblogAuthoring::InboxSync::Runner.new(database:, sources:, clock: -> { FIXED_TIME })
+
+    result = runner.call(trigger: "manual", run_id: "run-selected", requested_sources: ["raindrop"])
+
+    assert_equal [["raindrop", nil]], calls
+    assert_equal(["raindrop"], result.fetch("sources").map { |source| source.fetch("source") })
+  end
+
+  def test_logs_classified_results_without_the_exception_message
+    calls = []
+    logger = StringIO.new
+    runner = WeblogAuthoring::InboxSync::Runner.new(
+      database: FixtureDatabase.new,
+      sources: {
+        "raindrop" => FixtureSource.new(
+          "raindrop", calls:,
+          error: RuntimeError.new("Raindrop token secret-value was rejected with 401")
+        ),
+      },
+      clock: -> { FIXED_TIME },
+      logger:
+    )
+
+    runner.call(trigger: "scheduled", run_id: "run-logged")
+
+    records = logger.string.lines.map { |line| JSON.parse(line) }
+    source_result = records.find { |record| record.fetch("event") == "inbox_sync_source_result" }
+    assert_equal "raindrop", source_result.fetch("source")
+    assert_equal "failed", source_result.fetch("status")
+    assert_equal "authentication", source_result.fetch("classification")
+    assert_equal "immediate", source_result.fetch("alert_policy")
+    refute_includes logger.string, "secret-value"
+  end
+
+  def test_queues_disjoint_sources_and_rejects_an_overlapping_source
+    database = WeblogAuthoring::DevelopmentDatabase.new(
+      tmpdir.join("source-lock.sqlite3"), content_dir: tmpdir.join("content"), clock: -> { FIXED_TIME }
+    )
+    database.setup!
+
+    bluesky = database.queue_inbox_sync_run(
+      run_id: "run-bluesky", trigger: "manual", queued_at: FIXED_TIME, sources: ["bluesky"]
+    )
+    raindrop = database.queue_inbox_sync_run(
+      run_id: "run-raindrop", trigger: "manual", queued_at: FIXED_TIME, sources: ["raindrop"]
+    )
+    duplicate = database.queue_inbox_sync_run(
+      run_id: "run-bluesky-duplicate", trigger: "manual", queued_at: FIXED_TIME, sources: ["bluesky"]
+    )
+
+    assert bluesky
+    assert raindrop
+    refute duplicate
   end
 
   def test_complete_snapshot_compares_the_full_source_kind_identity

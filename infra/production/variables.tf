@@ -27,3 +27,15 @@ variable "webmention_sender_enabled" {
   type        = bool
   default     = false
 }
+
+variable "inbox_alerting_enabled" {
+  description = "Send inbox synchronization alarm and recovery notifications."
+  type        = bool
+  default     = false
+}
+
+variable "inbox_alert_email" {
+  description = "Optional email address subscribed to inbox synchronization alerts."
+  type        = string
+  default     = ""
+}

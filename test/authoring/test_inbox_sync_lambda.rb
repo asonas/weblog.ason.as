@@ -11,8 +11,8 @@ class InboxSyncLambdaTest < Minitest::Test
       @calls = []
     end
 
-    def call(trigger:, run_id:)
-      calls << { trigger:, run_id: }
+    def call(trigger:, run_id:, requested_sources: nil)
+      calls << { trigger:, run_id:, requested_sources: }
       { "id" => run_id, "status" => "succeeded" }
     end
   end
@@ -29,7 +29,22 @@ class InboxSyncLambdaTest < Minitest::Test
 
     assert_equal "scheduled", runner.calls.fetch(0).fetch(:trigger)
     assert_match(/\A[0-9a-f]{32}\z/, scheduled.fetch("id"))
-    assert_equal({ trigger: "manual", run_id: "manual-run" }, runner.calls.fetch(1))
+    assert_equal({ trigger: "manual", run_id: "manual-run", requested_sources: nil }, runner.calls.fetch(1))
     assert_equal "succeeded", manual.fetch("status")
+  end
+
+  def test_manual_event_passes_requested_sources_to_the_runner
+    runner = FixtureRunner.new
+
+    WeblogAuthoring::InboxSyncLambdaHandler.call(
+      event: {
+        "type" => "inbox_sync", "trigger" => "manual", "run_id" => "manual-run",
+        "sources" => ["bluesky"],
+      },
+      context: nil,
+      runner:
+    )
+
+    assert_equal ["bluesky"], runner.calls.fetch(0).fetch(:requested_sources)
   end
 end

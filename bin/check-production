@@ -8,6 +8,7 @@ readonly functions=(
   "weblog-authoring-production"
   "weblog-search-indexer-production"
   "weblog-inbox-sync-production"
+  "weblog-matrix-notifier-production"
   "weblog-bluesky-oauth-production"
 )
 
@@ -37,6 +38,12 @@ done
 aws secretsmanager describe-secret \
   --region "${region}" \
   --secret-id "weblog-authoring-production/oauth" \
+  --query ARN \
+  --output text >/dev/null
+
+aws secretsmanager describe-secret \
+  --region "${region}" \
+  --secret-id "weblog-authoring-production/inbox-matrix" \
   --query ARN \
   --output text >/dev/null
 

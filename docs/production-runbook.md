@@ -142,5 +142,5 @@ mise exec -- mairu exec --no-login --server asonas-aws 282782318939/Administrato
   aws lambda wait function-updated-v2 --function-name weblog-authoring-production
 ```
 
-search indexer、inbox sync、Bluesky OAuthも、それぞれのrepositoryとfunctionで同じ確認を行います。
+search indexer、inbox sync、Matrix notifier、Bluesky OAuthも、それぞれのrepositoryとfunctionで同じ確認を行います。
 復旧後は`mise run check:production`を実行し、公開HTMLとAPIもsmoke checkします。

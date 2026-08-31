@@ -45,6 +45,24 @@ class DsqlSyncTest < Minitest::Test
 
     def exec_params(statement, params)
       case statement
+      when /SELECT runs\.id.*JOIN weblog_authoring\.inbox_sync_run_sources/m
+        excluded_run_id = statement.include?("runs.id <>") ? params.fetch(0) : nil
+        sources = excluded_run_id ? params.drop(1) : params
+        active = @source_runs.filter_map do |(run_id, source), _result|
+          run = @runs[run_id]
+          next unless run && %w[queued running].include?(run.fetch("status"))
+          next if run_id == excluded_run_id || !sources.include?(source)
+
+          { "id" => run_id }
+        end
+        Result.new(active.first(1))
+      when /SELECT 1.*JOIN weblog_authoring\.inbox_sync_run_sources/m
+        sources = params
+        active = @source_runs.any? do |(run_id, source), _result|
+          run = @runs[run_id]
+          run && %w[queued running].include?(run.fetch("status")) && sources.include?(source)
+        end
+        Result.new(active ? [{ "?column?" => "1" }] : [])
       when /DELETE FROM weblog_authoring\.inbox_sync_run_sources\s+WHERE run_id IN/m
         expired_ids = @runs.filter_map { |id, run| id if run.fetch("expires_at") <= params.fetch(0) }
         before = @source_runs.length
@@ -97,11 +115,18 @@ class DsqlSyncTest < Minitest::Test
             "created_count" => params.fetch(3), "updated_count" => params.fetch(4),
             "deleted_count" => params.fetch(5), "error" => nil, "completed_at" => params.fetch(6),
           }
-        else
+        elsif statement.include?("'failed'")
           @source_runs[[params.fetch(0), params.fetch(1)]] = {
             "source" => params.fetch(1), "status" => "failed", "fetched_count" => 0,
             "created_count" => 0, "updated_count" => 0, "deleted_count" => 0,
             "error" => params.fetch(2), "completed_at" => params.fetch(3),
+          }
+        else
+          status = statement.include?("'queued'") ? "queued" : "running"
+          @source_runs[[params.fetch(0), params.fetch(1)]] = {
+            "source" => params.fetch(1), "status" => status, "fetched_count" => 0,
+            "created_count" => 0, "updated_count" => 0, "deleted_count" => 0,
+            "error" => nil, "completed_at" => params.fetch(2),
           }
         end
         Result.new

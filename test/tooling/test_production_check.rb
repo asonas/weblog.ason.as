@@ -21,11 +21,11 @@ class ProductionCheckTest < Minitest::Test
         commands.count { |command| command.start_with?("sts get-caller-identity ") }
       )
       assert_equal(
-        4,
+        5,
         commands.count { |command| command.start_with?("lambda get-function-configuration ") }
       )
       assert_equal(
-        1,
+        2,
         commands.count { |command| command.start_with?("secretsmanager describe-secret ") }
       )
       assert(commands.none? { |command| command.match?(/\b(put|update|delete|invoke)\b/) })

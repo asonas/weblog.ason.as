@@ -21,3 +21,8 @@ resource "aws_secretsmanager_secret" "inbox_sources" {
   name                    = "weblog-authoring-production/inbox-sources"
   recovery_window_in_days = 7
 }
+
+resource "aws_secretsmanager_secret" "inbox_matrix" {
+  name                    = "weblog-authoring-production/inbox-matrix"
+  recovery_window_in_days = 7
+}

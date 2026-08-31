@@ -607,7 +607,7 @@ module WeblogAuthoring
       end
     end
 
-    def start_inbox_sync_run(run_id:, trigger:, started_at:)
+    def start_inbox_sync_run(run_id:, trigger:, started_at:, sources:)
       with_connection do |database|
         database.transaction do
           database.execute(
@@ -615,10 +615,21 @@ module WeblogAuthoring
             serialize_time(started_at)
           )
           database.execute("DELETE FROM inbox_sync_runs WHERE expires_at <= ?", serialize_time(started_at))
+          placeholders = Array.new(sources.length, "?").join(", ")
           active_run_id = database.get_first_value(
-            "SELECT id FROM inbox_sync_runs WHERE status IN ('queued', 'running') ORDER BY started_at LIMIT 1"
+            <<~SQL,
+              SELECT runs.id
+              FROM inbox_sync_runs runs
+              JOIN inbox_sync_run_sources run_sources ON run_sources.run_id = runs.id
+              WHERE runs.status IN ('queued', 'running')
+                AND runs.id <> ?
+                AND run_sources.source IN (#{placeholders})
+              ORDER BY runs.started_at
+              LIMIT 1
+            SQL
+            [run_id, *sources]
           )
-          next false if active_run_id && active_run_id != run_id
+          next false if active_run_id
 
           database.execute(
             <<~SQL,
@@ -632,12 +643,27 @@ module WeblogAuthoring
             SQL
             [run_id, trigger, serialize_time(started_at), serialize_time(started_at + 86_400)]
           )
+          sources.each do |source|
+            database.execute(
+              <<~SQL,
+                INSERT INTO inbox_sync_run_sources (
+                  run_id, source, status, fetched_count, created_count, updated_count,
+                  deleted_count, error, completed_at
+                ) VALUES (?, ?, 'running', 0, 0, 0, 0, NULL, ?)
+                ON CONFLICT(run_id, source) DO UPDATE SET
+                  status = 'running',
+                  error = NULL,
+                  completed_at = excluded.completed_at
+              SQL
+              [run_id, source, serialize_time(started_at)]
+            )
+          end
           true
         end
       end
     end
 
-    def queue_inbox_sync_run(run_id:, trigger:, queued_at:)
+    def queue_inbox_sync_run(run_id:, trigger:, queued_at:, sources:)
       with_connection do |database|
         database.transaction do
           timestamp = serialize_time(queued_at)
@@ -646,8 +672,17 @@ module WeblogAuthoring
             timestamp
           )
           database.execute("DELETE FROM inbox_sync_runs WHERE expires_at <= ?", timestamp)
+          placeholders = Array.new(sources.length, "?").join(", ")
           active = database.get_first_value(
-            "SELECT 1 FROM inbox_sync_runs WHERE status IN ('queued', 'running') LIMIT 1"
+            <<~SQL,
+              SELECT 1
+              FROM inbox_sync_runs runs
+              JOIN inbox_sync_run_sources run_sources ON run_sources.run_id = runs.id
+              WHERE runs.status IN ('queued', 'running')
+                AND run_sources.source IN (#{placeholders})
+              LIMIT 1
+            SQL
+            sources
           )
           next false if active
 
@@ -658,6 +693,17 @@ module WeblogAuthoring
             SQL
             [run_id, trigger, timestamp, serialize_time(queued_at + 86_400)]
           )
+          sources.each do |source|
+            database.execute(
+              <<~SQL,
+                INSERT INTO inbox_sync_run_sources (
+                  run_id, source, status, fetched_count, created_count, updated_count,
+                  deleted_count, error, completed_at
+                ) VALUES (?, ?, 'queued', 0, 0, 0, 0, NULL, ?)
+              SQL
+              [run_id, source, timestamp]
+            )
+          end
           true
         end
       end
@@ -777,6 +823,14 @@ module WeblogAuthoring
                 run_id, source, status, fetched_count, created_count, updated_count,
                 deleted_count, error, completed_at
               ) VALUES (?, ?, 'failed', 0, 0, 0, 0, ?, ?)
+              ON CONFLICT(run_id, source) DO UPDATE SET
+                status = 'failed',
+                fetched_count = 0,
+                created_count = 0,
+                updated_count = 0,
+                deleted_count = 0,
+                error = excluded.error,
+                completed_at = excluded.completed_at
             SQL
             [run_id, source, error, serialize_time(completed_at)]
           )
@@ -1747,6 +1801,14 @@ module WeblogAuthoring
             run_id, source, status, fetched_count, created_count, updated_count,
             deleted_count, error, completed_at
           ) VALUES (?, ?, 'succeeded', ?, ?, ?, ?, NULL, ?)
+          ON CONFLICT(run_id, source) DO UPDATE SET
+            status = 'succeeded',
+            fetched_count = excluded.fetched_count,
+            created_count = excluded.created_count,
+            updated_count = excluded.updated_count,
+            deleted_count = excluded.deleted_count,
+            error = NULL,
+            completed_at = excluded.completed_at
         SQL
         [
           run_id, source, snapshot.items.length, counts.fetch(:created_count),

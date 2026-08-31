@@ -910,6 +910,7 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
   const root = createRoot(container);
   const originalFetch = globalThis.fetch;
   const requests: string[] = [];
+  const syncPayloads: Array<unknown> = [];
   let inboxReads = 0;
   const pageResponse = {
     mode: "editor",
@@ -924,7 +925,7 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
     linked_pages: [],
     linked_pages_has_more: false,
   };
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (input, init) => {
     const url = String(input);
     requests.push(url);
     if (url === "/api/inbox") {
@@ -952,6 +953,7 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
       );
     }
     if (url === "/api/inbox/sync") {
+      syncPayloads.push(JSON.parse(String(init?.body)));
       return new Response(
         JSON.stringify({ run_id: "run-1", status: "queued" }),
         {
@@ -999,6 +1001,12 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await act(async () => {
+      const target = container.querySelector<HTMLSelectElement>(
+        ".content-inbox__sync-target",
+      );
+      assert.ok(target);
+      target.value = "bluesky";
+      target.dispatchEvent(new window.Event("change", { bubbles: true }));
       const syncButton = container.querySelector<HTMLButtonElement>(
         ".content-inbox__sync",
       );
@@ -1011,6 +1019,7 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
       requests.filter((url) => url.startsWith("/api/inbox")),
       ["/api/inbox", "/api/inbox/sync", "/api/inbox/sync/run-1", "/api/inbox"],
     );
+    assert.deepEqual(syncPayloads, [{ sources: ["bluesky"] }]);
     await act(async () => {
       const tab = container.querySelector<HTMLButtonElement>(
         '[role="tab"][aria-label="Raindrop"]',

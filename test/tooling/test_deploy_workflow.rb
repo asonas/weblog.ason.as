@@ -65,7 +65,8 @@ class DeployWorkflowTest < Minitest::Test
     assert_includes infrastructure, "ResourceNotFoundException"
     assert_includes infrastructure, "exit 1"
     baselines = steps.find { |step| step["name"] == "Inspect Lambda deployment baselines" }.fetch("run")
-    %w[authoring search inbox oauth].each { |service| assert_includes baselines, "inspect #{service}" }
+    %w[authoring search inbox notifier oauth].each { |service| assert_includes baselines, "inspect #{service}" }
+    assert_includes baselines, 'deployed_tag" == "bootstrap"'
     recheck = steps.find { |step| step["name"] == "Recheck current main before deployment" }
     schema = steps.find { |step| step["name"] == "Apply database schema" }
     assert_includes recheck.fetch("run"), "git/ref/heads/main"

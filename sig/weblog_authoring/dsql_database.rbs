@@ -34,8 +34,8 @@ module WeblogAuthoring
     def complete_mobile_upload: (upload_id: untyped, device_id: untyped) -> untyped
     def cleanup_mobile_uploads: (?limit: Integer) -> untyped
     def upsert_inbox_item: (source: untyped, kind: untyped, source_id: untyped, occurred_at: untyped, payload: untyped) -> InboxItem?
-    def start_inbox_sync_run: (run_id: untyped, trigger: untyped, started_at: untyped) -> bool
-    def queue_inbox_sync_run: (run_id: untyped, trigger: untyped, queued_at: untyped) -> bool
+    def start_inbox_sync_run: (run_id: untyped, trigger: untyped, started_at: untyped, sources: untyped) -> bool
+    def queue_inbox_sync_run: (run_id: untyped, trigger: untyped, queued_at: untyped, sources: untyped) -> bool
     def inbox_sync_run: (run_id: untyped) -> untyped
     def inbox_source_sync_state: (source: String) -> untyped
     def apply_inbox_source_snapshot: (run_id: untyped, source: untyped, snapshot: untyped, completed_at: untyped) -> untyped

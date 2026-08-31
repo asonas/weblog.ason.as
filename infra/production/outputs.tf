@@ -73,6 +73,21 @@ output "inbox_sync_lambda_function_name" {
   value       = aws_lambda_function.inbox_sync.function_name
 }
 
+output "inbox_alerts_topic_arn" {
+  description = "SNS topic for inbox synchronization alarm and recovery notifications."
+  value       = aws_sns_topic.inbox_alerts.arn
+}
+
+output "inbox_matrix_secret_arn" {
+  description = "Secrets Manager secret configured by the Matrix bot operator."
+  value       = aws_secretsmanager_secret.inbox_matrix.arn
+}
+
+output "matrix_notifier_lambda_function_name" {
+  description = "Name of the Lambda that forwards inbox alerts to Matrix."
+  value       = aws_lambda_function.matrix_notifier.function_name
+}
+
 output "bluesky_oauth_runtime_role_arn" {
   description = "IAM role assumed by the production Bluesky OAuth Lambda."
   value       = aws_iam_role.bluesky_oauth_runtime.arn

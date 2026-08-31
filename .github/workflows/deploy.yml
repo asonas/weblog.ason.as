@@ -32,6 +32,7 @@ env:
   SEARCH_INDEXER_LAMBDA_FUNCTION: weblog-search-indexer-production
   INBOX_SYNC_ECR_REPOSITORY: weblog-inbox-sync-production
   INBOX_SYNC_LAMBDA_FUNCTION: weblog-inbox-sync-production
+  MATRIX_NOTIFIER_LAMBDA_FUNCTION: weblog-matrix-notifier-production
   BLUESKY_OAUTH_ECR_REPOSITORY: weblog-bluesky-oauth-production
   BLUESKY_OAUTH_LAMBDA_FUNCTION: weblog-bluesky-oauth-production
   WEBMENTION_RECEIVER_LAMBDA_FUNCTION: weblog-webmention-receiver-production
@@ -111,10 +112,11 @@ jobs:
       - name: Detect optional Lambda infrastructure
         id: infra
         run: |
-          for service in search inbox oauth receiver worker publisher cleanup; do
+          for service in search inbox notifier oauth receiver worker publisher cleanup; do
             case "$service" in
               search) repository="$SEARCH_INDEXER_ECR_REPOSITORY"; function="$SEARCH_INDEXER_LAMBDA_FUNCTION" ;;
               inbox) repository="$INBOX_SYNC_ECR_REPOSITORY"; function="$INBOX_SYNC_LAMBDA_FUNCTION" ;;
+              notifier) repository="$INBOX_SYNC_ECR_REPOSITORY"; function="$MATRIX_NOTIFIER_LAMBDA_FUNCTION" ;;
               oauth) repository="$BLUESKY_OAUTH_ECR_REPOSITORY"; function="$BLUESKY_OAUTH_LAMBDA_FUNCTION" ;;
               receiver) repository="$ECR_REPOSITORY"; function="$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" ;;
               worker) repository="$ECR_REPOSITORY"; function="$WEBMENTION_WORKER_LAMBDA_FUNCTION" ;;
@@ -130,8 +132,8 @@ jobs:
               continue
             fi
             if ! function_error="$(aws lambda get-function --function-name "$function" 2>&1 >/dev/null)"; then
-              if [[ "$service" =~ ^(receiver|worker|publisher|cleanup)$ && "$function_error" == *AccessDeniedException* ]]; then
-                echo "Webmention deploy permission is not provisioned yet; skipping ${service}." >&2
+              if [[ "$service" =~ ^(notifier|receiver|worker|publisher|cleanup)$ && "$function_error" == *AccessDeniedException* ]]; then
+                echo "Deploy permission is not provisioned yet; skipping ${service}." >&2
                 echo "${service}=false" >> "$GITHUB_OUTPUT"
                 continue
               fi
@@ -158,6 +160,10 @@ jobs:
             fi
             image_uri="$(aws lambda get-function --function-name "$function" --query 'Code.ImageUri' --output text)"
             deployed_tag="${image_uri##*:}"
+            if [[ "$deployed_tag" == "bootstrap" ]]; then
+              echo "${service}=true" >> "$GITHUB_OUTPUT"
+              return
+            fi
             if [[ ! "$deployed_tag" =~ ^([0-9a-f]{40})-[1-9][0-9]*$ ]]; then
               echo "Unexpected ${service} Lambda image tag: ${deployed_tag}" >&2
               exit 1
@@ -174,6 +180,7 @@ jobs:
           inspect authoring "$LAMBDA_FUNCTION" true
           inspect search "$SEARCH_INDEXER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.search }}"
           inspect inbox "$INBOX_SYNC_LAMBDA_FUNCTION" "${{ steps.infra.outputs.inbox }}"
+          inspect notifier "$MATRIX_NOTIFIER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.notifier }}"
           inspect oauth "$BLUESKY_OAUTH_LAMBDA_FUNCTION" "${{ steps.infra.outputs.oauth }}"
           inspect receiver "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.receiver }}"
           inspect worker "$WEBMENTION_WORKER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.worker }}"
@@ -206,11 +213,11 @@ jobs:
           if [[ "${{ steps.infra.outputs.cleanup }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$WEBMENTION_CLEANUP_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
 
       - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
-        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.authoring == 'true' || steps.lambda.outputs.search == 'true' || steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.oauth == 'true')
+        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.authoring == 'true' || steps.lambda.outputs.search == 'true' || steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.notifier == 'true' || steps.lambda.outputs.oauth == 'true')
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.authoring == 'true' || steps.lambda.outputs.search == 'true' || steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.oauth == 'true')
+        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.authoring == 'true' || steps.lambda.outputs.search == 'true' || steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.notifier == 'true' || steps.lambda.outputs.oauth == 'true')
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.authoring == 'true' || steps.lambda.outputs.search == 'true' || steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.oauth == 'true')
+        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.authoring == 'true' || steps.lambda.outputs.search == 'true' || steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.notifier == 'true' || steps.lambda.outputs.oauth == 'true')
 
       - name: Build and publish authoring Lambda image
         if: steps.current.outputs.current == 'true' && steps.lambda.outputs.authoring == 'true'
@@ -239,7 +246,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and publish inbox sync Lambda image
-        if: steps.current.outputs.current == 'true' && steps.lambda.outputs.inbox == 'true'
+        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.notifier == 'true')
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -297,11 +304,17 @@ jobs:
           aws lambda update-function-code --function-name "$SEARCH_INDEXER_LAMBDA_FUNCTION" --image-uri "$image_uri"
           aws lambda wait function-updated-v2 --function-name "$SEARCH_INDEXER_LAMBDA_FUNCTION"
       - name: Deploy inbox sync Lambda image
-        if: steps.current.outputs.current == 'true' && steps.lambda.outputs.inbox == 'true'
+        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.notifier == 'true')
         run: |
           image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${INBOX_SYNC_ECR_REPOSITORY}:${IMAGE_TAG}"
-          aws lambda update-function-code --function-name "$INBOX_SYNC_LAMBDA_FUNCTION" --image-uri "$image_uri"
-          aws lambda wait function-updated-v2 --function-name "$INBOX_SYNC_LAMBDA_FUNCTION"
+          if [[ "${{ steps.lambda.outputs.inbox }}" == "true" ]]; then
+            aws lambda update-function-code --function-name "$INBOX_SYNC_LAMBDA_FUNCTION" --image-uri "$image_uri"
+            aws lambda wait function-updated-v2 --function-name "$INBOX_SYNC_LAMBDA_FUNCTION"
+          fi
+          if [[ "${{ steps.lambda.outputs.notifier }}" == "true" ]]; then
+            aws lambda update-function-code --function-name "$MATRIX_NOTIFIER_LAMBDA_FUNCTION" --image-uri "$image_uri"
+            aws lambda wait function-updated-v2 --function-name "$MATRIX_NOTIFIER_LAMBDA_FUNCTION"
+          fi
       - name: Deploy Bluesky OAuth Lambda image
         if: steps.current.outputs.current == 'true' && steps.lambda.outputs.oauth == 'true'
         run: |

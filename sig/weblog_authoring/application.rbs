@@ -19,6 +19,15 @@ module WeblogAuthoring
   end
 
   module InboxSync
+    SOURCES: Array[String]
+
+    def self.sources: (untyped) -> Array[String]
+
+    module ErrorClassifier
+      def call: (Exception, phase: Symbol) -> Array[String]
+      def self.call: (Exception, phase: Symbol) -> Array[String]
+    end
+
     class Item
       attr_reader kind: String
       attr_reader source_id: String
@@ -43,7 +52,7 @@ module WeblogAuthoring
     end
 
     interface _SyncRepository
-      def start_inbox_sync_run: (run_id: String, trigger: String, started_at: Time) -> bool
+      def start_inbox_sync_run: (run_id: String, trigger: String, started_at: Time, sources: Array[String]) -> bool
       def inbox_source_sync_state: (source: String) -> Hash[String, String?]?
       def apply_inbox_source_snapshot: (run_id: String, source: String, snapshot: Snapshot, completed_at: Time) -> { created_count: Integer, updated_count: Integer, deleted_count: Integer }
       def fail_inbox_source_sync: (run_id: String, source: String, error: String, completed_at: Time) -> untyped
@@ -55,12 +64,15 @@ module WeblogAuthoring
     end
 
     class Runner
-      def initialize: (database: _SyncRepository, sources: Array[[String, _Source]], ?clock: ^() -> Time) -> void
-      def call: (trigger: String, run_id: String) -> sync_result
+      def initialize: (database: _SyncRepository, sources: Hash[String, _Source], ?clock: ^() -> Time, ?logger: untyped) -> void
+      def call: (trigger: String, run_id: String, ?requested_sources: Array[String]?) -> sync_result
 
       private
 
+      def select_sources: (Array[String]?) -> Hash[String, _Source]
       def run_source: (String, String, _Source) -> sync_result
+      def failed_source: (String, String, Exception, phase: Symbol) -> sync_result
+      def log: (String, **untyped) -> untyped
     end
   end
 
