@@ -21,7 +21,7 @@ class ProductionCheckTest < Minitest::Test
         commands.count { |command| command.start_with?("sts get-caller-identity ") }
       )
       assert_equal(
-        5,
+        9,
         commands.count { |command| command.start_with?("lambda get-function-configuration ") }
       )
       assert_equal(

@@ -10,6 +10,10 @@ readonly functions=(
   "weblog-inbox-sync-production"
   "weblog-matrix-notifier-production"
   "weblog-bluesky-oauth-production"
+  "weblog-webmention-receiver-production"
+  "weblog-webmention-worker-production"
+  "weblog-webmention-publisher-production"
+  "weblog-webmention-cleanup-production"
 )
 
 account="$(aws sts get-caller-identity --query Account --output text)"
