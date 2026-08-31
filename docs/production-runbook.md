@@ -18,7 +18,7 @@ mainへのpush後、`Validate`が成功すると、同じSHAを対象に`Deploy 
 `Deploy production`では、次の順序で成功を確認します。
 
 1. 各Lambda imageの入力からcontent hashを計算
-2. ECRにないimageだけをnative ARM64 runnerで並列build
+2. ECRにないimageだけをnative ARM64 runnerで並列buildし、サービス別CalVer tagを付与
 3. checkout、site artifact metadata、Lambda image digestの検証
 4. database schema適用
 5. 変更されたLambdaをECR digestで更新
@@ -27,7 +27,7 @@ mainへのpush後、`Validate`が成功すると、同じSHAを対象に`Deploy 
 8. HTML、HTMLが参照する全authoring asset、`GET /api/pages`のsmoke check
 9. `static/authoring/assets/`だけのstale object削除
 
-image準備jobはサービス単位で古いrunをキャンセルできます。production変更を行う`deploy` jobはキャンセルせず、image準備完了からsmoke checkまでの時間と5分SLOの成否をworkflow summaryへ記録します。
+新規imageには`<service-name>.YYYY-MM-DD.N`形式のtagが付きます。日付はUTC、`N`はサービスごとのその日のbuild回数です。content hashが同じ既存imageを再利用した場合はbuild回数を増やしません。image準備jobはサービス単位で古いrunをキャンセルできます。production変更を行う`deploy` jobはキャンセルせず、image準備完了からsmoke checkまでの時間、CalVer tag、5分SLOの成否をworkflow summaryへ記録します。
 
 Actions成功後、productionを読み取り専用checkで確認します。
 
@@ -119,8 +119,8 @@ mise exec -- mairu exec --no-login --server asonas-aws 282782318939/Administrato
 
 ## Lambdaの手動復旧
 
-ECR image tagはimmutableで、`<40文字commit SHA>-<run attempt>`形式です。
-Actionsの直前に成功したdeploymentから、各Lambdaの復旧対象tagを個別に決めます。
+ECR image tagはimmutableです。人がリリースを識別するtagは`<service-name>.YYYY-MM-DD.N`形式で、同じimageにcontent hash tagも付いています。
+Actionsの直前に成功したdeploymentから、各Lambdaの復旧対象CalVer tagを個別に決めます。
 4つのLambdaが同じ時点とは限らないため、1つのtagを全functionへ一括適用しません。
 
 現在値と候補imageを読み取り確認します。

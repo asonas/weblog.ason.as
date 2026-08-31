@@ -84,7 +84,7 @@ class DeployWorkflowTest < Minitest::Test
     assert_includes inspect, 'image_tag="content-${content_hash}"'
     assert_includes inspect, "aws ecr batch-get-image"
     assert_includes inspect, 'git diff --quiet "$baseline_sha" "$TARGET_SHA"'
-    %w[content_hash digest source_commit build_run_id].each do |output|
+    %w[content_hash digest release_tag source_commit build_run_id].each do |output|
       assert @build_workflow.dig("on", "workflow_call", "outputs", output)
     end
 
@@ -103,6 +103,22 @@ class DeployWorkflowTest < Minitest::Test
     schema = steps.find { |step| step["name"] == "Apply database schema" }
     assert_includes recheck.fetch("run"), "git/ref/heads/main"
     assert_equal "steps.current.outputs.current == 'true'", schema.fetch("if")
+  end
+
+  def test_new_images_receive_a_service_calver_tag
+    steps = @build_workflow.dig("jobs", "build", "steps")
+    inspect = steps.find { |step| step["name"] == "Inspect image inputs" }.fetch("run")
+    image = steps.find { |step| step["name"] == "Build and publish image" }
+    summary = steps.find { |step| step["name"] == "Summarize image preparation" }.fetch("run")
+
+    assert_includes inspect, 'release_prefix="${SERVICE}.$(date -u +%F)."'
+    assert_includes inspect, "aws ecr describe-images"
+    assert_includes inspect, 'release_tag="${release_prefix}$((latest_build + 1))"'
+    assert_includes image.dig("with", "tags"), ":${{ steps.inspect.outputs.release_tag }}"
+    assert_includes summary, "Release tag:"
+
+    deploy_policy = File.read(File.join(ROOT, "infra/bootstrap/github_actions.tf"))
+    assert_includes deploy_policy, '"ecr:DescribeImages"'
   end
 
   def test_production_deploy_is_not_cancelled_and_records_the_five_minute_slo
