@@ -9,6 +9,7 @@ class DeployWorkflowTest < Minitest::Test
   def setup
     @workflow = YAML.safe_load_file(File.join(ROOT, ".github/workflows/deploy.yml"))
     @build_workflow = YAML.safe_load_file(File.join(ROOT, ".github/workflows/build-lambda-image.yml"))
+    @rollback_workflow = YAML.safe_load_file(File.join(ROOT, ".github/workflows/rollback-lambda.yml"))
   end
 
   def test_only_current_successful_main_validation_can_deploy
@@ -152,9 +153,30 @@ class DeployWorkflowTest < Minitest::Test
   end
 
   def test_actions_are_pinned
-    actions = [@workflow, @build_workflow].flat_map do |workflow|
+    actions = [@workflow, @build_workflow, @rollback_workflow].flat_map do |workflow|
       workflow.fetch("jobs").values.flat_map { |job| job.fetch("steps", []) }.filter_map { |step| step["uses"] }
     end
     assert(actions.all? { |action| action.match?(/@[0-9a-f]{40}\z/) })
+  end
+
+  def test_lambda_rollback_requires_an_explicit_manifest_and_service
+    trigger = @rollback_workflow.fetch("on").fetch("workflow_dispatch").fetch("inputs")
+    assert_equal %w[deploy_run_id deploy_run_attempt service], trigger.keys
+    assert_equal %w[authoring search-indexer inbox-sync bluesky-oauth], trigger.dig("service", "options")
+
+    rollback = @rollback_workflow.dig("jobs", "rollback")
+    assert_equal "production-deploy", rollback.dig("concurrency", "group")
+    assert_equal false, rollback.dig("concurrency", "cancel-in-progress")
+    steps = rollback.fetch("steps")
+    validate = steps.find { |step| step["name"] == "Validate rollback manifest" }.fetch("run")
+    restore = steps.find { |step| step["name"] == "Restore Lambda image" }.fetch("run")
+    assert_includes validate, 'deployments/${DEPLOY_RUN_ID}-${DEPLOY_RUN_ATTEMPT}.json'
+    assert_includes validate, "aws ecr batch-get-image"
+    assert_includes restore, "@${DIGEST}"
+    assert_includes restore, "Code.ResolvedImageUri"
+
+    deploy_policy = File.read(File.join(ROOT, "infra/bootstrap/github_actions.tf"))
+    assert_includes deploy_policy, 'sid       = "ReadDeploymentManifests"'
+    assert_includes deploy_policy, "/deployments/*"
   end
 end

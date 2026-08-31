@@ -1,0 +1,152 @@
+name: Roll back production Lambda
+
+'on':
+  workflow_dispatch:
+    inputs:
+      deploy_run_id:
+        description: Successful deployment run ID recorded in the manifest
+        required: true
+        type: string
+      deploy_run_attempt:
+        description: Deployment run attempt recorded in the manifest
+        required: true
+        default: "1"
+        type: string
+      service:
+        description: Lambda service to restore
+        required: true
+        type: choice
+        options:
+          - authoring
+          - search-indexer
+          - inbox-sync
+          - bluesky-oauth
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    env:
+      AWS_REGION: ap-northeast-1
+      AWS_ACCOUNT_ID: "282782318939"
+      SITE_BUCKET: weblog-asonas-site-production-282782318939
+      DEPLOY_RUN_ID: ${{ inputs.deploy_run_id }}
+      DEPLOY_RUN_ATTEMPT: ${{ inputs.deploy_run_attempt }}
+      SERVICE: ${{ inputs.service }}
+      ECR_REPOSITORY: weblog-authoring-production
+      LAMBDA_FUNCTION: weblog-authoring-production
+      SEARCH_INDEXER_ECR_REPOSITORY: weblog-search-indexer-production
+      SEARCH_INDEXER_LAMBDA_FUNCTION: weblog-search-indexer-production
+      INBOX_SYNC_ECR_REPOSITORY: weblog-inbox-sync-production
+      INBOX_SYNC_LAMBDA_FUNCTION: weblog-inbox-sync-production
+      MATRIX_NOTIFIER_LAMBDA_FUNCTION: weblog-matrix-notifier-production
+      BLUESKY_OAUTH_ECR_REPOSITORY: weblog-bluesky-oauth-production
+      BLUESKY_OAUTH_LAMBDA_FUNCTION: weblog-bluesky-oauth-production
+      WEBMENTION_RECEIVER_LAMBDA_FUNCTION: weblog-webmention-receiver-production
+      WEBMENTION_WORKER_LAMBDA_FUNCTION: weblog-webmention-worker-production
+      WEBMENTION_PUBLISHER_LAMBDA_FUNCTION: weblog-webmention-publisher-production
+      WEBMENTION_CLEANUP_LAMBDA_FUNCTION: weblog-webmention-cleanup-production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: arn:aws:iam::282782318939:role/WeblogGitHubDeploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validate rollback manifest
+        id: manifest
+        run: |
+          manifest_key="deployments/${DEPLOY_RUN_ID}-${DEPLOY_RUN_ATTEMPT}.json"
+          aws s3 cp "s3://${SITE_BUCKET}/${manifest_key}" rollback-manifest.json --only-show-errors
+          jq --exit-status \
+            --arg run_id "$DEPLOY_RUN_ID" \
+            --arg run_attempt "$DEPLOY_RUN_ATTEMPT" \
+            --arg service "$SERVICE" \
+            '.schema_version == 1 and
+             .deployment.run_id == $run_id and
+             .deployment.run_attempt == $run_attempt and
+             ([.images[] | select(.service == $service)] | length == 1)' \
+            rollback-manifest.json >/dev/null
+          entry="$(jq --compact-output --arg service "$SERVICE" '.images[] | select(.service == $service)' rollback-manifest.json)"
+          repository="$(jq --raw-output .repository <<< "$entry")"
+          digest="$(jq --raw-output .digest <<< "$entry")"
+          release_tag="$(jq --raw-output '.release_tag // "not-versioned"' <<< "$entry")"
+          case "$SERVICE" in
+            authoring) expected_repository="$ECR_REPOSITORY" ;;
+            search-indexer) expected_repository="$SEARCH_INDEXER_ECR_REPOSITORY" ;;
+            inbox-sync) expected_repository="$INBOX_SYNC_ECR_REPOSITORY" ;;
+            bluesky-oauth) expected_repository="$BLUESKY_OAUTH_ECR_REPOSITORY" ;;
+          esac
+          [[ "$repository" == "$expected_repository" ]]
+          [[ "$digest" == sha256:* ]]
+          found_digest="$(aws ecr batch-get-image --repository-name "$repository" \
+            --image-ids imageDigest="$digest" --query 'images[0].imageId.imageDigest' --output text)"
+          [[ "$found_digest" == "$digest" ]]
+          echo "repository=${repository}" >> "$GITHUB_OUTPUT"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+          echo "manifest_key=${manifest_key}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Lambda image
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+          REPOSITORY: ${{ steps.manifest.outputs.repository }}
+        run: |
+          restore_function() {
+            local function_name="$1"
+            local optional="$2"
+            local function_error
+            if ! function_error="$(aws lambda get-function --function-name "$function_name" 2>&1 >/dev/null)"; then
+              if [[ "$optional" == "true" && "$function_error" == *ResourceNotFoundException* ]]; then
+                return
+              fi
+              echo "$function_error" >&2
+              exit 1
+            fi
+            resolved_uri="$(aws lambda get-function --function-name "$function_name" --query 'Code.ResolvedImageUri' --output text)"
+            if [[ "${resolved_uri##*@}" == "$DIGEST" ]]; then
+              echo "${function_name} already uses ${DIGEST}."
+              return
+            fi
+            image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPOSITORY}@${DIGEST}"
+            aws lambda update-function-code --function-name "$function_name" --image-uri "$image_uri"
+            aws lambda wait function-updated-v2 --function-name "$function_name"
+            resolved_uri="$(aws lambda get-function --function-name "$function_name" --query 'Code.ResolvedImageUri' --output text)"
+            [[ "${resolved_uri##*@}" == "$DIGEST" ]]
+          }
+
+          case "$SERVICE" in
+            authoring)
+              restore_function "$LAMBDA_FUNCTION" false
+              restore_function "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" true
+              restore_function "$WEBMENTION_WORKER_LAMBDA_FUNCTION" true
+              restore_function "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" true
+              restore_function "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION" true
+              ;;
+            search-indexer)
+              restore_function "$SEARCH_INDEXER_LAMBDA_FUNCTION" false
+              ;;
+            inbox-sync)
+              restore_function "$INBOX_SYNC_LAMBDA_FUNCTION" false
+              restore_function "$MATRIX_NOTIFIER_LAMBDA_FUNCTION" true
+              ;;
+            bluesky-oauth)
+              restore_function "$BLUESKY_OAUTH_LAMBDA_FUNCTION" false
+              ;;
+          esac
+
+      - name: Summarize rollback
+        run: |
+          {
+            echo "## Production Lambda rollback"
+            echo "Service: \`${SERVICE}\`"
+            echo "Manifest: \`s3://${SITE_BUCKET}/${{ steps.manifest.outputs.manifest_key }}\`"
+            echo "Release tag: \`${{ steps.manifest.outputs.release_tag }}\`"
+            echo "Digest: \`${{ steps.manifest.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

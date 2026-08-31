@@ -145,6 +145,12 @@ ECR image tagはimmutableです。人がリリースを識別するtagは`<servi
 復旧先deploymentのrun ID別manifestから、各Lambdaの復旧対象digestとCalVer tagを個別に決めます。
 4つのLambdaが同じ時点とは限らないため、1つのtagを全functionへ一括適用しません。
 
+通常はGitHub Actionsの`Roll back production Lambda` workflowを使います。成功済みdeploymentのrun ID、run attempt、戻すserviceを明示して起動します。workflowはmanifestのschemaと識別子、serviceとrepositoryの対応、ECR上のdigestを検証し、選択したserviceだけを更新します。通常deploymentと同じconcurrency groupを使うため、実行中のproduction deployとは並行しません。
+
+rollbackは自動起動せず、1回に1サービスだけを対象にします。完了後はworkflow summaryでmanifest、CalVer tag、digestを確認し、`mise run check:production`と対象機能の確認を行います。Web siteの復旧にはこのworkflowを使わず、前節のS3 version復旧を行います。
+
+GitHub Actionsを利用できない場合だけ、以下の手順で同じdigestを手動適用します。
+
 現在値と候補imageを読み取り確認します。
 
 ```sh

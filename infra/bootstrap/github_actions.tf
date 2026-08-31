@@ -121,6 +121,13 @@ data "aws_iam_policy_document" "github_deploy" {
   }
 
   statement {
+    sid       = "ReadDeploymentManifests"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::weblog-asonas-site-production-${data.aws_caller_identity.current.account_id}/deployments/*"]
+  }
+
+  statement {
     sid       = "DeletePublishedSiteAssets"
     effect    = "Allow"
     actions   = ["s3:DeleteObject"]
