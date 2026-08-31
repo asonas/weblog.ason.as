@@ -990,6 +990,27 @@ export function youtubeVideoId(rawUrl: string): string | null {
   }
 }
 
+export function blueskyPostIdentity(
+  rawUrl: string,
+): { did: string; rkey: string } | null {
+  try {
+    const url = new URL(rawUrl);
+    if (
+      url.protocol !== "https:" ||
+      url.hostname !== "bsky.app" ||
+      url.search ||
+      url.hash
+    )
+      return null;
+    const match = url.pathname.match(
+      /^\/profile\/(did:plc:[a-z0-9]+)\/post\/([a-z0-9]+)$/,
+    );
+    return match ? { did: match[1], rkey: match[2] } : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
 export function embedImageUrl(
   url: string,
   metadata?: EmbedMetadata,
@@ -2480,6 +2501,136 @@ function replaceYouTubeParagraphs(state: EditorState, nodeType: NodeType) {
   return transaction;
 }
 
+function replaceBlueskyParagraphs(state: EditorState, nodeType: NodeType) {
+  const replacements: Array<{ from: number; to: number; url: string }> = [];
+  state.doc.forEach((node, offset, index) => {
+    const url = node.textContent.trim();
+    if (
+      index > 0 &&
+      node.type.name === "paragraph" &&
+      blueskyPostIdentity(url)
+    ) {
+      replacements.push({ from: offset, to: offset + node.nodeSize, url });
+    }
+  });
+  if (replacements.length === 0) return null;
+
+  const transaction = state.tr;
+  for (const replacement of replacements.reverse()) {
+    transaction.replaceWith(
+      replacement.from,
+      replacement.to,
+      nodeType.create({ url: replacement.url }),
+    );
+  }
+  return transaction;
+}
+
+const BlueskyPlayer = TiptapNode.create({
+  name: "blueskyPlayer",
+  group: "block",
+  atom: true,
+  selectable: true,
+
+  addAttributes() {
+    return { url: { default: "" } };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "div[data-bluesky-player]",
+        getAttrs: (element) => ({
+          url: (element as HTMLElement).dataset.blueskyPlayer || "",
+        }),
+      },
+    ];
+  },
+
+  renderHTML({ node }) {
+    const url = node.attrs.url as string;
+    const identity = blueskyPostIdentity(url);
+    const src = identity
+      ? `https://embed.bsky.app/embed/${identity.did}/app.bsky.feed.post/${identity.rkey}`
+      : "";
+    return [
+      "div",
+      { class: "bluesky-player", "data-bluesky-player": url },
+      [
+        "iframe",
+        {
+          src,
+          title: "Bluesky投稿",
+          loading: "lazy",
+        },
+      ],
+      [
+        "a",
+        {
+          href: url,
+          target: "_blank",
+          rel: "noreferrer",
+        },
+        url,
+      ],
+    ];
+  },
+
+  renderMarkdown: (node) => node.attrs?.url || "",
+
+  onCreate() {
+    const transaction = replaceBlueskyParagraphs(this.editor.state, this.type);
+    if (transaction) this.editor.view.dispatch(transaction);
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        appendTransaction: (transactions, oldState, state) => {
+          if (
+            transactions.some((transaction) =>
+              transaction.getMeta("blueskyPlayerRawEditing"),
+            )
+          )
+            return null;
+          if (transactions.some((transaction) => transaction.selectionSet)) {
+            const selection = state.selection;
+            const enteredFromBefore =
+              selection instanceof NodeSelection &&
+              oldState.selection.to <= selection.from;
+            if (
+              selection instanceof NodeSelection &&
+              selection.node.type === this.type
+            ) {
+              const url = selection.node.attrs.url;
+              if (typeof url === "string" && url.length > 0) {
+                const paragraph = state.schema.nodes.paragraph.create(
+                  null,
+                  state.schema.text(url),
+                );
+                const transaction = state.tr.replaceWith(
+                  selection.from,
+                  selection.to,
+                  paragraph,
+                );
+                return transaction
+                  .setSelection(
+                    TextSelection.create(
+                      transaction.doc,
+                      selection.from + (enteredFromBefore ? 1 : url.length + 1),
+                    ),
+                  )
+                  .setMeta("blueskyPlayerRawEditing", true);
+              }
+            }
+          }
+          return replaceBlueskyParagraphs(state, this.type);
+        },
+      }),
+    ];
+  },
+});
+
 const YouTubePlayer = TiptapNode.create({
   name: "youtubePlayer",
   group: "block",
@@ -2627,6 +2778,7 @@ export const EDITOR_EXTENSIONS = [
   WikiLinks,
   Image.configure({ allowBase64: false }),
   YouTubePlayer,
+  BlueskyPlayer,
   Markdown.configure({ indentation: { style: "space", size: 2 } }),
 ];
 

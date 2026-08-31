@@ -1088,6 +1088,26 @@ test("renders a standalone YouTube URL in the editor and preserves its Markdown"
   editor.destroy();
 });
 
+test("renders a standalone Bluesky post URL in the editor and preserves its Markdown", async () => {
+  const url =
+    "https://bsky.app/profile/did:plc:nzhcpsryikfegc27zbimbwhq/post/3muc4ata4ys2r";
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: `title\n\n${url}`,
+    contentType: "markdown",
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(editor.state.doc.child(1).type.name, "blueskyPlayer");
+  assert.match(
+    editor.getHTML(),
+    /embed\.bsky\.app\/embed\/did:plc:nzhcpsryikfegc27zbimbwhq\/app\.bsky\.feed\.post\/3muc4ata4ys2r/,
+  );
+  assert.match(editor.getMarkdown(), new RegExp(url.replaceAll(".", "\\.")));
+  editor.destroy();
+});
+
 test("edits a selected YouTube player as its original URL", async () => {
   const editor = new Editor({
     element: document.createElement("div"),
