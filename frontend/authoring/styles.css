@@ -2272,36 +2272,37 @@ html[data-header-scrolled="true"]
 
 .home-about {
   margin-block-end: var(--space-6);
-  padding-block-end: var(--space-4);
-  border-block-end: 1px solid var(--separator);
 }
 
 .home-about a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-block-size: 3.25rem;
-  padding-inline: var(--space-4);
-  border-radius: 0.75rem;
-  background: var(--quiet-fill);
+  min-block-size: 2.75rem;
+  padding-block: 0.75rem;
+  border-block: 1px solid var(--separator);
   color: var(--ink);
   font-size: 0.95rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-decoration: none;
-  transition-property: background-color, color;
+  transition-property: color;
   transition-duration: 120ms;
 }
 
 .home-about a::after {
   content: "\2192";
-  font-size: 1.1rem;
+  color: var(--muted-ink);
+  font-size: 0.9rem;
   font-weight: 400;
 }
 
 .home-about a:hover {
-  background: var(--accent);
-  color: var(--accent-ink);
+  color: var(--accent);
+}
+
+.home-about a:hover::after {
+  color: currentColor;
 }
 
 .cover-journal__index .home-archive {
