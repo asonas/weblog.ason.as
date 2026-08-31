@@ -1377,7 +1377,7 @@ module WeblogAuthoring
       payload = JSON.parse(body)
       return {} unless payload.is_a?(Hash)
 
-      context = {}
+      context = {} # @type var context: Hash[String, untyped]
       client_upload_id = payload["client_upload_id"]
       if client_upload_id.is_a?(String) && MobileUpload::CLIENT_UPLOAD_ID_PATTERN.match?(client_upload_id)
         context["client_upload_id"] = client_upload_id

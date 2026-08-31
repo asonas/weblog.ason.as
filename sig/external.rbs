@@ -40,8 +40,17 @@ module WeblogAuthoring
     end
     class PairingAttemptsExceeded < StandardError
     end
-    class UnsupportedContentType < StandardError
+    class ValidationError < ArgumentError
+      attr_reader code: String
+      attr_reader detail: String
+      attr_reader field: String?
+      attr_reader status: Integer
+      attr_reader title: String
+      def initialize: (code: String, title: String, detail: String, ?field: String?, ?status: Integer) -> void
     end
+    CONTENT_TYPES: Hash[String, String]
+    CAPTURE_SOURCES: Array[String]
+    CLIENT_UPLOAD_ID_PATTERN: Regexp
     def self.new: (**untyped) -> untyped
   end
 

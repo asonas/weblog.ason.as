@@ -4,12 +4,16 @@ module WeblogAuthoring
 
   class LambdaApi
     class InputError < StandardError
+      attr_reader code: String
+      attr_reader detail: String
       attr_reader field: String?
       attr_reader status: Integer
-      def initialize: (String, ?status: Integer, ?field: String?) -> void
+      attr_reader title: String
+      def initialize: (String, ?status: Integer, ?field: String?, ?code: String, ?title: String) -> void
     end
 
     JSON_HEADERS: Hash[String, String]
+    PROBLEM_HEADERS: Hash[String, String]
     EMPTY_HASH: Hash[String, untyped]
     AUTH_COOKIE: String
     OAUTH_COOKIE: String
@@ -128,5 +132,9 @@ module WeblogAuthoring
     def timed_json_response: (lambda_event, Hash[String, Float], untyped, ?status: Integer) -> lambda_response
     def conditional_json_response: (lambda_event, untyped) -> lambda_response
     def json_error: (Integer, String, ?field: String?) -> lambda_response
+    def mobile_upload_problem_response: (lambda_event, InputError | MobileUpload::ValidationError) -> lambda_response
+    def mobile_upload_creation_event?: (lambda_event) -> bool
+    def log_mobile_upload_rejection: (lambda_event, InputError | MobileUpload::ValidationError, String?) -> void
+    def mobile_upload_log_context: (lambda_event) -> Hash[String, untyped]
   end
 end
