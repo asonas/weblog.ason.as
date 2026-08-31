@@ -173,6 +173,15 @@ run "webmention_alerts_use_the_matrix_notification_path" {
   }
 
   assert {
+    condition = (
+      !aws_cloudwatch_metric_alarm.webmention_publish_dead_letters.actions_enabled &&
+      !aws_cloudwatch_metric_alarm.webmention_publish_queue_age_critical.actions_enabled &&
+      !aws_cloudwatch_metric_alarm.webmention_lambda_errors["publisher"].actions_enabled
+    )
+    error_message = "Static publishing alerts must stay stopped with the publisher"
+  }
+
+  assert {
     condition     = aws_cloudwatch_metric_alarm.webmention_lambda_errors["publisher"].dimensions.FunctionName == aws_lambda_function.webmention_publisher.function_name
     error_message = "The Webmention publisher Lambda must have an error alarm"
   }
@@ -180,5 +189,31 @@ run "webmention_alerts_use_the_matrix_notification_path" {
   assert {
     condition     = aws_cloudwatch_metric_alarm.webmention_receiver_throttles.metric_name == "Throttles"
     error_message = "Public receiver throttling must be monitored"
+  }
+}
+
+run "webmention_publisher_alerts_start_with_the_publisher" {
+  command = plan
+
+  variables {
+    webmention_alerting_enabled  = true
+    webmention_publisher_enabled = true
+  }
+
+  plan_options {
+    target = [
+      aws_cloudwatch_metric_alarm.webmention_publish_dead_letters,
+      aws_cloudwatch_metric_alarm.webmention_publish_queue_age_critical,
+      aws_cloudwatch_metric_alarm.webmention_lambda_errors,
+    ]
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.webmention_publish_dead_letters.actions_enabled &&
+      aws_cloudwatch_metric_alarm.webmention_publish_queue_age_critical.actions_enabled &&
+      aws_cloudwatch_metric_alarm.webmention_lambda_errors["publisher"].actions_enabled
+    )
+    error_message = "Static publishing alerts must start with the publisher"
   }
 }

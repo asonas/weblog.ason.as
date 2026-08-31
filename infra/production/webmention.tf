@@ -509,7 +509,7 @@ resource "aws_cloudwatch_metric_alarm" "webmention_dead_letters" {
 resource "aws_cloudwatch_metric_alarm" "webmention_publish_dead_letters" {
   alarm_name          = "weblog-webmention-publish-dead-letters-production"
   alarm_description   = "A static publish job exhausted its retries. Runbook: ${local.webmention_runbook_url}#dead-letters"
-  actions_enabled     = var.webmention_alerting_enabled
+  actions_enabled     = var.webmention_alerting_enabled && var.webmention_publisher_enabled
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ApproximateNumberOfMessagesVisible"
@@ -609,7 +609,7 @@ resource "aws_cloudwatch_metric_alarm" "webmention_queue_depth_critical" {
 resource "aws_cloudwatch_metric_alarm" "webmention_publish_queue_age_critical" {
   alarm_name          = "weblog-webmention-publish-queue-age-critical-production"
   alarm_description   = "A static publish job has waited more than thirty minutes. Runbook: ${local.webmention_runbook_url}#queue-backlog"
-  actions_enabled     = var.webmention_alerting_enabled
+  actions_enabled     = var.webmention_alerting_enabled && var.webmention_publisher_enabled
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ApproximateAgeOfOldestMessage"
@@ -631,7 +631,7 @@ resource "aws_cloudwatch_metric_alarm" "webmention_lambda_errors" {
 
   alarm_name          = "weblog-webmention-${each.key}-errors-production"
   alarm_description   = "The Webmention ${each.key} Lambda failed. Runbook: ${local.webmention_runbook_url}#lambda-errors"
-  actions_enabled     = var.webmention_alerting_enabled
+  actions_enabled     = var.webmention_alerting_enabled && (each.key != "publisher" || var.webmention_publisher_enabled)
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "Errors"
