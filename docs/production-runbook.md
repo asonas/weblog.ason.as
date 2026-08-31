@@ -25,7 +25,8 @@ mainへのpush後、`Validate`が成功すると、同じSHAを対象に`Deploy 
 6. hash付きauthoring assetと`index.html`のupload
 7. CloudFront invalidationの完了
 8. HTML、HTMLが参照する全authoring asset、`GET /api/pages`のsmoke check
-9. `static/authoring/assets/`だけのstale object削除
+9. 成功したdeploymentのrelease manifestをS3へ記録
+10. `static/authoring/assets/`だけのstale object削除
 
 新規imageには`<service-name>.YYYY-MM-DD.N`形式のtagが付きます。日付はUTC、`N`はサービスごとのその日のbuild回数です。content hashが同じ既存imageを再利用した場合はbuild回数を増やしません。image準備jobはサービス単位で古いrunをキャンセルできます。production変更を行う`deploy` jobはキャンセルせず、image準備完了からsmoke checkまでの時間、CalVer tag、5分SLOの成否をworkflow summaryへ記録します。
 
@@ -36,6 +37,26 @@ mise run check:production
 ```
 
 このcheckはAWS account、4つのLambdaのstateとlast update status、OAuth secretのmetadataだけを確認し、secret値を取得しません。
+
+## Release manifest
+
+smoke checkに成功したdeploymentは、`deployments/<GitHub Actions run ID>-<run attempt>.json`へimmutable manifestを保存し、`deployments/latest.json`を同じ内容へ更新します。manifestにはdeploymentとvalidationのrun ID、source commit、実行日時、site artifact commit、各Lambda imageのrepository、digest、CalVer tag、content hash、build run IDが含まれます。
+
+最新manifestを確認します。
+
+```sh
+mise exec -- mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
+  aws s3 cp s3://weblog-asonas-site-production-282782318939/deployments/latest.json -
+```
+
+過去のdeploymentはActionsのrun IDを指定して確認します。
+
+```sh
+read -r DEPLOY_RUN_ID
+read -r DEPLOY_RUN_ATTEMPT
+mise exec -- mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
+  aws s3 cp "s3://weblog-asonas-site-production-282782318939/deployments/${DEPLOY_RUN_ID}-${DEPLOY_RUN_ATTEMPT}.json" -
+```
 
 ## GitHub OAuth credentialの更新
 
@@ -82,6 +103,7 @@ rotationにより既存のlogin sessionは無効になります。
 | Lambda更新 | 一部Lambdaだけが新digestの場合がある | workflowを再実行する。現在のdigestと一致するLambda更新は省略される。 |
 | asset upload | 新hash assetだけが追加された可能性がある | 旧HTMLと旧assetは残る。原因修正後に再実行する。 |
 | HTML upload、invalidation、smoke check | 新HTMLが公開された可能性がある | 下記のS3 version復旧で直前のHTMLと必要なassetを戻し、invalidationとsmoke checkを行う。 |
+| release manifest | deployment smoke checkは成功済みだが、最新manifestが更新されていない | workflowを再実行する。run ID別manifestは上書きせず、新しい成功runを`latest.json`へ記録する。 |
 | stale asset削除 | deployment smoke checkは成功済み | 通常は復旧不要。以前のHTMLへ戻す場合は、そのHTMLが参照するasset versionも一緒に復旧する。 |
 
 実行中のdeploymentはcancelしません。
@@ -120,7 +142,7 @@ mise exec -- mairu exec --no-login --server asonas-aws 282782318939/Administrato
 ## Lambdaの手動復旧
 
 ECR image tagはimmutableです。人がリリースを識別するtagは`<service-name>.YYYY-MM-DD.N`形式で、同じimageにcontent hash tagも付いています。
-Actionsの直前に成功したdeploymentから、各Lambdaの復旧対象CalVer tagを個別に決めます。
+復旧先deploymentのrun ID別manifestから、各Lambdaの復旧対象digestとCalVer tagを個別に決めます。
 4つのLambdaが同じ時点とは限らないため、1つのtagを全functionへ一括適用しません。
 
 現在値と候補imageを読み取り確認します。

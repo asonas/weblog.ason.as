@@ -134,6 +134,23 @@ class DeployWorkflowTest < Minitest::Test
     assert_includes summary, "Site delivery and smoke check"
   end
 
+  def test_successful_deploy_records_an_immutable_release_manifest
+    steps = @workflow.dig("jobs", "deploy", "steps")
+    names = steps.filter_map { |step| step["name"] }
+    manifest = steps.find { |step| step["name"] == "Record deployment manifest" }
+    script = manifest.fetch("run")
+
+    assert_operator names.index("Smoke check production"), :<, names.index("Record deployment manifest")
+    assert_operator names.index("Record deployment manifest"), :<, names.index("Delete stale site assets")
+    assert_includes script, "schema_version: 1"
+    assert_includes script, "AUTHORING_RELEASE_TAG"
+    assert_includes script, "AUTHORING_BUILD_RUN_ID"
+    assert_includes script, 'deployments/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json'
+    assert_includes script, "deployments/latest.json"
+    assert_includes script, "max-age=31536000,immutable"
+    assert_includes script, "max-age=0,must-revalidate"
+  end
+
   def test_actions_are_pinned
     actions = [@workflow, @build_workflow].flat_map do |workflow|
       workflow.fetch("jobs").values.flat_map { |job| job.fetch("steps", []) }.filter_map { |step| step["uses"] }

@@ -127,9 +127,25 @@ jobs:
     env:
       TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
       AUTHORING_DIGEST: ${{ needs.build-authoring.outputs.digest }}
+      AUTHORING_RELEASE_TAG: ${{ needs.build-authoring.outputs.release_tag }}
+      AUTHORING_CONTENT_HASH: ${{ needs.build-authoring.outputs.content_hash }}
+      AUTHORING_SOURCE_COMMIT: ${{ needs.build-authoring.outputs.source_commit }}
+      AUTHORING_BUILD_RUN_ID: ${{ needs.build-authoring.outputs.build_run_id }}
       SEARCH_DIGEST: ${{ needs.build-search.outputs.digest }}
+      SEARCH_RELEASE_TAG: ${{ needs.build-search.outputs.release_tag }}
+      SEARCH_CONTENT_HASH: ${{ needs.build-search.outputs.content_hash }}
+      SEARCH_SOURCE_COMMIT: ${{ needs.build-search.outputs.source_commit }}
+      SEARCH_BUILD_RUN_ID: ${{ needs.build-search.outputs.build_run_id }}
       INBOX_DIGEST: ${{ needs.build-inbox.outputs.digest }}
+      INBOX_RELEASE_TAG: ${{ needs.build-inbox.outputs.release_tag }}
+      INBOX_CONTENT_HASH: ${{ needs.build-inbox.outputs.content_hash }}
+      INBOX_SOURCE_COMMIT: ${{ needs.build-inbox.outputs.source_commit }}
+      INBOX_BUILD_RUN_ID: ${{ needs.build-inbox.outputs.build_run_id }}
       OAUTH_DIGEST: ${{ needs.build-oauth.outputs.digest }}
+      OAUTH_RELEASE_TAG: ${{ needs.build-oauth.outputs.release_tag }}
+      OAUTH_CONTENT_HASH: ${{ needs.build-oauth.outputs.content_hash }}
+      OAUTH_SOURCE_COMMIT: ${{ needs.build-oauth.outputs.source_commit }}
+      OAUTH_BUILD_RUN_ID: ${{ needs.build-oauth.outputs.build_run_id }}
     steps:
       - name: Record production deploy start
         id: timing
@@ -314,6 +330,65 @@ jobs:
       - name: Smoke check production
         if: steps.current.outputs.current == 'true'
         run: bundle exec ruby bin/smoke-production "$SITE_URL"
+      - name: Record deployment manifest
+        if: steps.current.outputs.current == 'true'
+        run: |
+          deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          manifest_key="deployments/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          jq --null-input \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg validation_run_id "${{ github.event.workflow_run.id }}" \
+            --arg source_commit "$TARGET_SHA" \
+            --arg deployed_at "$deployed_at" \
+            --arg site_bucket "$SITE_BUCKET" \
+            --arg authoring_repository "$ECR_REPOSITORY" \
+            --arg authoring_digest "$AUTHORING_DIGEST" \
+            --arg authoring_release_tag "$AUTHORING_RELEASE_TAG" \
+            --arg authoring_content_hash "$AUTHORING_CONTENT_HASH" \
+            --arg authoring_source_commit "$AUTHORING_SOURCE_COMMIT" \
+            --arg authoring_build_run_id "$AUTHORING_BUILD_RUN_ID" \
+            --arg search_repository "$SEARCH_INDEXER_ECR_REPOSITORY" \
+            --arg search_digest "$SEARCH_DIGEST" \
+            --arg search_release_tag "$SEARCH_RELEASE_TAG" \
+            --arg search_content_hash "$SEARCH_CONTENT_HASH" \
+            --arg search_source_commit "$SEARCH_SOURCE_COMMIT" \
+            --arg search_build_run_id "$SEARCH_BUILD_RUN_ID" \
+            --arg inbox_repository "$INBOX_SYNC_ECR_REPOSITORY" \
+            --arg inbox_digest "$INBOX_DIGEST" \
+            --arg inbox_release_tag "$INBOX_RELEASE_TAG" \
+            --arg inbox_content_hash "$INBOX_CONTENT_HASH" \
+            --arg inbox_source_commit "$INBOX_SOURCE_COMMIT" \
+            --arg inbox_build_run_id "$INBOX_BUILD_RUN_ID" \
+            --arg oauth_repository "$BLUESKY_OAUTH_ECR_REPOSITORY" \
+            --arg oauth_digest "$OAUTH_DIGEST" \
+            --arg oauth_release_tag "$OAUTH_RELEASE_TAG" \
+            --arg oauth_content_hash "$OAUTH_CONTENT_HASH" \
+            --arg oauth_source_commit "$OAUTH_SOURCE_COMMIT" \
+            --arg oauth_build_run_id "$OAUTH_BUILD_RUN_ID" \
+            'def nullable: if length == 0 then null else . end;
+            {
+              schema_version: 1,
+              deployment: {
+                run_id: $run_id,
+                run_attempt: $run_attempt,
+                validation_run_id: $validation_run_id,
+                source_commit: $source_commit,
+                deployed_at: $deployed_at
+              },
+              site: {bucket: $site_bucket, artifact_commit: $source_commit},
+              images: [
+                {service: "authoring", repository: $authoring_repository, digest: $authoring_digest, release_tag: ($authoring_release_tag | nullable), content_hash: $authoring_content_hash, source_commit: $authoring_source_commit, build_run_id: $authoring_build_run_id},
+                {service: "search-indexer", repository: $search_repository, digest: $search_digest, release_tag: ($search_release_tag | nullable), content_hash: $search_content_hash, source_commit: $search_source_commit, build_run_id: $search_build_run_id},
+                {service: "inbox-sync", repository: $inbox_repository, digest: $inbox_digest, release_tag: ($inbox_release_tag | nullable), content_hash: $inbox_content_hash, source_commit: $inbox_source_commit, build_run_id: $inbox_build_run_id},
+                {service: "bluesky-oauth", repository: $oauth_repository, digest: $oauth_digest, release_tag: ($oauth_release_tag | nullable), content_hash: $oauth_content_hash, source_commit: $oauth_source_commit, build_run_id: $oauth_build_run_id}
+              ]
+            }' > deployment-manifest.json
+          aws s3 cp deployment-manifest.json "s3://${SITE_BUCKET}/${manifest_key}" --only-show-errors \
+            --content-type application/json --cache-control 'public,max-age=31536000,immutable'
+          aws s3 cp deployment-manifest.json "s3://${SITE_BUCKET}/deployments/latest.json" --only-show-errors \
+            --content-type application/json --cache-control 'public,max-age=0,must-revalidate'
+          echo "Manifest: \`s3://${SITE_BUCKET}/${manifest_key}\`" >> "$GITHUB_STEP_SUMMARY"
       - name: Record smoke check completion
         id: smoke
         if: steps.current.outputs.current == 'true'
