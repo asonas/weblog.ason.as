@@ -2745,17 +2745,6 @@ h2 {
   font-size: var(--text-heading-md);
 }
 
-.content-inbox__sync-target {
-  min-inline-size: 0;
-  max-inline-size: 7.5rem;
-  min-block-size: 2.75rem;
-  padding-inline: var(--space-2);
-  border: 1px solid var(--separator);
-  border-radius: var(--radius-control);
-  background: var(--paper);
-  color: inherit;
-}
-
 .content-inbox__sync {
   display: grid;
   place-items: center;

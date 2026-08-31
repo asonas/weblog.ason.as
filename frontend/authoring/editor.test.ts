@@ -1032,12 +1032,13 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await act(async () => {
-      const target = container.querySelector<HTMLSelectElement>(
-        ".content-inbox__sync-target",
+      const tab = container.querySelector<HTMLButtonElement>(
+        '[role="tab"][aria-label="Bluesky"]',
       );
-      assert.ok(target);
-      target.value = "bluesky";
-      target.dispatchEvent(new window.Event("change", { bubbles: true }));
+      assert.ok(tab);
+      tab.click();
+    });
+    await act(async () => {
       const syncButton = container.querySelector<HTMLButtonElement>(
         ".content-inbox__sync",
       );
@@ -1051,6 +1052,7 @@ test("manually synchronizes the inbox and refreshes it after completion", async 
       ["/api/inbox", "/api/inbox/sync", "/api/inbox/sync/run-1", "/api/inbox"],
     );
     assert.deepEqual(syncPayloads, [{ sources: ["bluesky"] }]);
+    assert.equal(container.querySelector('[aria-label="更新対象"]'), null);
     await act(async () => {
       const tab = container.querySelector<HTMLButtonElement>(
         '[role="tab"][aria-label="Raindrop"]',

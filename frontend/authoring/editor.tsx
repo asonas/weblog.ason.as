@@ -546,8 +546,6 @@ type InboxSyncStatus = {
     | "completed_with_errors"
     | "failed";
 };
-type InboxSyncTarget = "all" | "bluesky" | "raindrop" | "c4p";
-
 type MaterialTab = "photo" | "bluesky" | "raindrop";
 
 type ApiError = Error & {
@@ -3047,8 +3045,6 @@ export function AuthoringEditor({
     useState<MaterialTab>("photo");
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [syncingInbox, setSyncingInbox] = useState(false);
-  const [inboxSyncTarget, setInboxSyncTarget] =
-    useState<InboxSyncTarget>("all");
   const [linkedPages, setLinkedPages] = useState(bootstrap.linked_pages || []);
   const [linkedPagesHasMore, setLinkedPagesHasMore] = useState(
     bootstrap.linked_pages_has_more || false,
@@ -3658,10 +3654,13 @@ export function AuthoringEditor({
 
     setSyncingInbox(true);
     try {
-      const started = await requestJson<InboxSyncResponse>(
-        "/api/inbox/sync",
-        inboxSyncTarget === "all" ? {} : { sources: [inboxSyncTarget] },
-      );
+      if (activeMaterialTab === "photo") {
+        await refreshInbox();
+        return;
+      }
+      const started = await requestJson<InboxSyncResponse>("/api/inbox/sync", {
+        sources: [activeMaterialTab],
+      });
       let run = await fetchJson<InboxSyncStatus>(
         `/api/inbox/sync/${encodeURIComponent(started.run_id)}`,
       );
@@ -3686,7 +3685,7 @@ export function AuthoringEditor({
     } finally {
       setSyncingInbox(false);
     }
-  }, [inboxSyncTarget, refreshInbox, syncingInbox]);
+  }, [activeMaterialTab, refreshInbox, syncingInbox]);
 
   useEffect(() => {
     if (!editor?.isEditable) return;
@@ -4278,22 +4277,6 @@ export function AuthoringEditor({
                       ? "Bluesky"
                       : "Raindrop"}
                 </strong>
-                <select
-                  className="content-inbox__sync-target"
-                  aria-label="更新対象"
-                  value={inboxSyncTarget}
-                  disabled={syncingInbox}
-                  onChange={(event) =>
-                    setInboxSyncTarget(
-                      event.currentTarget.value as InboxSyncTarget,
-                    )
-                  }
-                >
-                  <option value="all">すべて</option>
-                  <option value="bluesky">Bluesky</option>
-                  <option value="raindrop">Raindrop</option>
-                  <option value="c4p">c4p</option>
-                </select>
                 <button
                   type="button"
                   className="content-inbox__sync"
