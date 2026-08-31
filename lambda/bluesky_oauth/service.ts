@@ -8,6 +8,8 @@ type ClientFactory = (
   sessionStore?: StagedSessionStore,
 ) => Promise<NodeOAuthClient>;
 
+type AppViewFetch = typeof fetch;
+
 export type BlueskyPost = {
   uri: string;
   cid: string;
@@ -32,6 +34,7 @@ export class BlueskyOAuthService {
     private readonly repository: OAuthRepository,
     private readonly codec: EncryptedJson,
     private readonly createClient: ClientFactory,
+    private readonly appViewFetch: AppViewFetch = fetch,
   ) {}
 
   async connect(): Promise<string> {
@@ -163,13 +166,8 @@ export class BlueskyOAuthService {
       for (const record of records.slice(offset, offset + 25)) {
         query.append("uris", record.value.subject.uri);
       }
-      const response = await session.fetchHandler(
-        `/xrpc/app.bsky.feed.getPosts?${query.toString()}`,
-        {
-          headers: {
-            "atproto-proxy": "did:web:api.bsky.app#bsky_appview",
-          },
-        },
+      const response = await this.appViewFetch(
+        `https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts?${query.toString()}`,
       );
       if (!response.ok)
         throw new Error(`Bluesky getPosts returned ${response.status}`);

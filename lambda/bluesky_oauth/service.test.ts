@@ -163,7 +163,7 @@ test("lists recent likes with hydrated post identities", async () => {
   const repository = new MemoryOAuthRepository();
   await repository.saveSession(allowedDid, codec.encrypt(savedSession));
   const requests: Array<string> = [];
-  let appViewRequest: RequestInit | undefined;
+  let appViewUrl: string | URL | Request | undefined;
   const service = new BlueskyOAuthService(
     allowedDid,
     repository,
@@ -171,7 +171,7 @@ test("lists recent likes with hydrated post identities", async () => {
     async () =>
       fakeClient({
         restore: async () => ({
-          fetchHandler: async (pathname: string, init?: RequestInit) => {
+          fetchHandler: async (pathname: string) => {
             requests.push(pathname);
             if (pathname.includes("com.atproto.repo.listRecords")) {
               return Response.json({
@@ -195,19 +195,22 @@ test("lists recent likes with hydrated post identities", async () => {
                 ],
               });
             }
-            appViewRequest = init;
-            return Response.json({
-              posts: [
-                {
-                  uri: "at://did:plc:author/app.bsky.feed.post/post-new",
-                  cid: "hydrated-cid-new",
-                  author: { did: "did:plc:author" },
-                },
-              ],
-            });
+            return new Response(null, { status: 403 });
           },
         }),
       }),
+    async (url) => {
+      appViewUrl = url;
+      return Response.json({
+        posts: [
+          {
+            uri: "at://did:plc:author/app.bsky.feed.post/post-new",
+            cid: "hydrated-cid-new",
+            author: { did: "did:plc:author" },
+          },
+        ],
+      });
+    },
   );
 
   const likes = await service.listLikes(new Date("2026-08-23T09:00:00Z"));
@@ -225,13 +228,10 @@ test("lists recent likes with hydrated post identities", async () => {
   ]);
   assert.match(requests[0], /collection=app\.bsky\.feed\.like/);
   assert.doesNotMatch(requests[0], /reverse=/);
+  assert.equal(requests.length, 1);
   assert.match(
-    requests[1],
-    /app\.bsky\.feed\.getPosts\?uris=at%3A%2F%2Fdid%3Aplc%3Aauthor%2Fapp\.bsky\.feed\.post%2Fpost-new/,
-  );
-  assert.equal(
-    new Headers(appViewRequest?.headers).get("atproto-proxy"),
-    "did:web:api.bsky.app#bsky_appview",
+    String(appViewUrl),
+    /^https:\/\/public\.api\.bsky\.app\/xrpc\/app\.bsky\.feed\.getPosts\?uris=at%3A%2F%2Fdid%3Aplc%3Aauthor%2Fapp\.bsky\.feed\.post%2Fpost-new$/,
   );
 });
 
