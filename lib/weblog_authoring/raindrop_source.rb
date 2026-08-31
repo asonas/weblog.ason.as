@@ -93,6 +93,8 @@ module WeblogAuthoring
             "raindrop_id" => raindrop_id,
             "url" => item.fetch("link"),
             "title" => item.fetch("title"),
+            "excerpt" => item["excerpt"],
+            "cover" => item["cover"],
           }
         )
       end

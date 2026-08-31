@@ -13,6 +13,12 @@ class TestDevelopmentApp < Minitest::Test
   FakeS3Object = Data.define(:key)
   FakeS3List = Data.define(:contents)
 
+  StaticInboxSource = Data.define(:snapshot) do
+    def fetch(**)
+      snapshot
+    end
+  end
+
   def test_lists_cacheable_page_names
     status, headers, body = request("GET", "/api/page-names")
     unchanged_status, = request_with(
@@ -456,6 +462,35 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal 200, sync_status
     assert_equal "succeeded", run.fetch("status")
     assert_equal(%w[bluesky raindrop c4p], run.fetch("sources").map { |source| source.fetch("source") })
+  end
+
+  def test_manually_syncs_configured_development_inbox_sources_into_local_storage
+    item = WeblogAuthoring::InboxSync::Item.new(
+      kind: "bookmark",
+      source_id: "42",
+      occurred_at: FIXED_TIME,
+      payload: { "url" => "https://example.com", "title" => "Example" }
+    )
+    empty = WeblogAuthoring::InboxSync::Snapshot.new(items: [], complete: true, watermark: nil)
+    application = WeblogAuthoring::DevelopmentApp.application(
+      root:,
+      clock: -> { FIXED_TIME },
+      s3_client:,
+      inbox_sources: {
+        "bluesky" => StaticInboxSource.new(empty),
+        "raindrop" => StaticInboxSource.new(
+          WeblogAuthoring::InboxSync::Snapshot.new(items: [item], complete: true, watermark: nil)
+        ),
+        "c4p" => StaticInboxSource.new(empty),
+      }
+    )
+
+    status, = request_with(application, "POST", "/api/inbox/sync", payload: { "sources" => ["raindrop"] })
+    list_status, _headers, body = request_with(application, "GET", "/api/inbox?source=raindrop")
+
+    assert_equal 202, status
+    assert_equal 200, list_status
+    assert_equal ["42"], (JSON.parse(body).fetch("items").map { |listed| listed.fetch("source_id") })
   end
 
   def test_uploaded_images_with_generated_hex_names_are_read_from_the_development_bucket

@@ -823,6 +823,35 @@ function inboxItemName(item: InboxItem): string {
   return new Date(item.occurred_at).toLocaleString("ja-JP");
 }
 
+function inboxPayloadString(item: InboxItem, key: string): string | null {
+  const value = item.payload[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function inboxItemThumbnail(item: InboxItem): string | null {
+  if (item.source === "raindrop") return inboxPayloadString(item, "cover");
+  if (item.source === "bluesky")
+    return inboxPayloadString(item, "thumbnail_url");
+  return null;
+}
+
+function inboxItemTitle(item: InboxItem): string | null {
+  if (item.source === "raindrop") return inboxPayloadString(item, "title");
+  if (item.source === "bluesky" && item.kind === "like") {
+    return (
+      inboxPayloadString(item, "author_display_name") ||
+      inboxPayloadString(item, "author_handle")
+    );
+  }
+  return null;
+}
+
+function inboxItemExcerpt(item: InboxItem): string | null {
+  if (item.source === "raindrop") return inboxPayloadString(item, "excerpt");
+  if (item.source === "bluesky") return inboxPayloadString(item, "text");
+  return null;
+}
+
 function PhotoMaterialIcon() {
   return (
     // Adapted from Wikimedia Commons "Photo icon.svg", released under CC0 1.0.
@@ -4286,6 +4315,9 @@ export function AuthoringEditor({
                 >
                   {visibleInboxItems.map((item) => {
                     const photoUrl = inboxPhotoUrl(item);
+                    const thumbnailUrl = inboxItemThumbnail(item);
+                    const title = inboxItemTitle(item);
+                    const excerpt = inboxItemExcerpt(item);
                     return (
                       <li key={item.id}>
                         <button
@@ -4314,8 +4346,30 @@ export function AuthoringEditor({
                             <img src={photoUrl} alt="" loading="lazy" />
                           )}
                           {activeMaterialTab !== "photo" && (
-                            <span className="content-inbox__kind">
-                              {inboxItemLabel(item)}
+                            <span className="content-inbox__card">
+                              {thumbnailUrl && (
+                                <img
+                                  className="content-inbox__thumbnail"
+                                  src={thumbnailUrl}
+                                  alt=""
+                                  loading="lazy"
+                                />
+                              )}
+                              <span className="content-inbox__details">
+                                <span className="content-inbox__kind">
+                                  {inboxItemLabel(item)}
+                                </span>
+                                {title && (
+                                  <span className="content-inbox__title">
+                                    {title}
+                                  </span>
+                                )}
+                                {excerpt && (
+                                  <span className="content-inbox__excerpt">
+                                    {excerpt}
+                                  </span>
+                                )}
+                              </span>
                             </span>
                           )}
                           {item.used_in_pages.map((page) => (

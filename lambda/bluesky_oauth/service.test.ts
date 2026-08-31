@@ -138,6 +138,7 @@ test("lists recent posts across repository pages", async () => {
       createdAt: "2026-08-30T09:00:00Z",
       canonicalUrl: `https://bsky.app/profile/${allowedDid}/post/new`,
       authorDid: allowedDid,
+      text: "new post text",
     },
     {
       uri: `at://${allowedDid}/app.bsky.feed.post/middle`,
@@ -145,6 +146,7 @@ test("lists recent posts across repository pages", async () => {
       createdAt: "2026-08-29T09:00:00Z",
       canonicalUrl: `https://bsky.app/profile/${allowedDid}/post/middle`,
       authorDid: allowedDid,
+      text: "middle post text",
     },
     {
       uri: `at://${allowedDid}/app.bsky.feed.post/boundary`,
@@ -152,6 +154,7 @@ test("lists recent posts across repository pages", async () => {
       createdAt: "2026-08-23T09:00:00Z",
       canonicalUrl: `https://bsky.app/profile/${allowedDid}/post/boundary`,
       authorDid: allowedDid,
+      text: "boundary post text",
     },
   ]);
   assert.match(requests[0], /collection=app\.bsky\.feed\.post/);
@@ -206,7 +209,15 @@ test("lists recent likes with hydrated post identities", async () => {
           {
             uri: "at://did:plc:author/app.bsky.feed.post/post-new",
             cid: "hydrated-cid-new",
-            author: { did: "did:plc:author" },
+            author: {
+              did: "did:plc:author",
+              handle: "author.example",
+              displayName: "Author",
+            },
+            record: { text: "Liked post text" },
+            embed: {
+              images: [{ thumb: "https://cdn.example/thumb.jpg" }],
+            },
           },
         ],
       });
@@ -224,6 +235,10 @@ test("lists recent likes with hydrated post identities", async () => {
       subjectCid: "subject-cid-new",
       canonicalUrl: "https://bsky.app/profile/did:plc:author/post/post-new",
       authorDid: "did:plc:author",
+      text: "Liked post text",
+      authorHandle: "author.example",
+      authorDisplayName: "Author",
+      thumbnailUrl: "https://cdn.example/thumb.jpg",
     },
   ]);
   assert.match(requests[0], /collection=app\.bsky\.feed\.like/);
@@ -239,7 +254,7 @@ function postRecord(rkey: string, cid: string, createdAt: string) {
   return {
     uri: `at://${allowedDid}/app.bsky.feed.post/${rkey}`,
     cid,
-    value: { createdAt },
+    value: { createdAt, text: `${rkey} post text` },
   };
 }
 

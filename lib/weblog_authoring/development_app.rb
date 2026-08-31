@@ -14,6 +14,7 @@ require "sinatra/base"
 require "time"
 require "uri"
 require "aws-sdk-s3"
+require "aws-sdk-secretsmanager"
 require "base64"
 
 require_relative "development_database"
@@ -22,6 +23,8 @@ require_relative "github_oauth"
 require_relative "image_inbox"
 require_relative "image_upload"
 require_relative "inbox_sync"
+require_relative "bluesky_source"
+require_relative "raindrop_source"
 require_relative "mobile_upload"
 require_relative "models"
 require_relative "names"
@@ -373,11 +376,7 @@ module WeblogAuthoring
 
         InboxSync::Runner.new(
           database: settings.database,
-          sources: {
-            "bluesky" => InboxSync::PendingSource.new,
-            "raindrop" => InboxSync::PendingSource.new,
-            "c4p" => InboxSync::PendingSource.new,
-          },
+          sources: settings.inbox_sources,
           clock: settings.clock
         ).call(trigger: "manual", run_id:, requested_sources: sources)
         { "run_id" => run_id, "status" => "queued", "sources" => sources }
@@ -431,7 +430,7 @@ module WeblogAuthoring
                          s3_client: nil, asset_bucket: DEVELOPMENT_ASSET_BUCKET, embed_fetcher: nil,
                          oauth_client: default_oauth_client, allowed_github_user_id: default_allowed_github_user_id,
                          github_redirect_uri: ENV.fetch("GITHUB_REDIRECT_URI", DEFAULT_GITHUB_REDIRECT_URI),
-                         session_secret: nil)
+                         session_secret: nil, inbox_sources: default_inbox_sources)
       root_path = Pathname(root).expand_path
       session_secret ||= development_session_secret(root_path)
       database = DevelopmentDatabase.new(
@@ -453,6 +452,7 @@ module WeblogAuthoring
       app.set :oauth_client, oauth_client
       app.set :allowed_github_user_id, allowed_github_user_id
       app.set :github_redirect_uri, github_redirect_uri
+      app.set :inbox_sources, inbox_sources
       session_app = Rack::Session::Cookie.new(
         app,
         key: "weblog.authoring.development.session",
@@ -566,6 +566,24 @@ module WeblogAuthoring
 
       def default_allowed_github_user_id
         Integer(ENV.fetch("GITHUB_ALLOWED_USER_ID", DEFAULT_ALLOWED_GITHUB_USER_ID.to_s), 10)
+      end
+
+      def default_inbox_sources
+        secret_id = ENV["INBOX_SOURCES_SECRET_ID"]
+        bluesky_origin = ENV["BLUESKY_OAUTH_ORIGIN"]
+        return pending_inbox_sources if secret_id.to_s.empty? || bluesky_origin.to_s.empty?
+
+        response = Aws::SecretsManager::Client.new(region: DEVELOPMENT_ASSET_REGION).get_secret_value(secret_id:)
+        token = JSON.parse(response.secret_string).fetch("raindrop_test_token")
+        {
+          "bluesky" => BlueskySource.new(client: BlueskySource::HttpClient.new(origin: bluesky_origin)),
+          "raindrop" => RaindropSource.new(client: RaindropSource::Client.new(token:)),
+          "c4p" => InboxSync::PendingSource.new,
+        }
+      end
+
+      def pending_inbox_sources
+        InboxSync::SOURCES.to_h { |source| [source, InboxSync::PendingSource.new] }
       end
 
       def asset_image_paths(root_path)

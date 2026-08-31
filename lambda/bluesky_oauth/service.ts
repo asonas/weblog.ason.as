@@ -16,6 +16,7 @@ export type BlueskyPost = {
   createdAt: string;
   canonicalUrl: string;
   authorDid: string;
+  text: string;
 };
 
 export type BlueskyLike = {
@@ -26,6 +27,10 @@ export type BlueskyLike = {
   subjectCid: string;
   canonicalUrl: string;
   authorDid: string;
+  text: string;
+  authorHandle: string;
+  authorDisplayName?: string;
+  thumbnailUrl?: string;
 };
 
 export class BlueskyOAuthService {
@@ -116,6 +121,7 @@ export class BlueskyOAuthService {
           createdAt: record.value.createdAt,
           canonicalUrl: canonicalPostUrl(record.uri, this.allowedDid),
           authorDid: this.allowedDid,
+          text: record.value.text,
         });
       }
       if (
@@ -188,6 +194,10 @@ export class BlueskyOAuthService {
           subjectCid: record.value.subject.cid,
           canonicalUrl: canonicalPostUrl(post.uri, post.author.did),
           authorDid: post.author.did,
+          text: post.record.text,
+          authorHandle: post.author.handle,
+          authorDisplayName: post.author.displayName,
+          thumbnailUrl: post.thumbnailUrl,
         },
       ];
     });
@@ -206,7 +216,11 @@ export class BlueskyOAuthService {
 }
 
 type RecordPage = {
-  records: Array<{ uri: string; cid: string; value: { createdAt: string } }>;
+  records: Array<{
+    uri: string;
+    cid: string;
+    value: { createdAt: string; text: string };
+  }>;
   cursor?: string;
 };
 
@@ -224,7 +238,9 @@ type LikeRecordPage = { records: Array<LikeRecord>; cursor?: string };
 type HydratedPost = {
   uri: string;
   cid: string;
-  author: { did: string };
+  author: { did: string; handle: string; displayName?: string };
+  record: { text: string };
+  thumbnailUrl?: string;
 };
 
 function parseRecordPage(value: unknown): RecordPage {
@@ -241,18 +257,21 @@ function parseRecordPage(value: unknown): RecordPage {
       cid?: unknown;
       value?: unknown;
     };
-    const post = candidate.value as { createdAt?: unknown } | undefined;
+    const post = candidate.value as
+      | { createdAt?: unknown; text?: unknown }
+      | undefined;
     if (
       typeof candidate.uri !== "string" ||
       typeof candidate.cid !== "string" ||
       !post ||
-      typeof post.createdAt !== "string"
+      typeof post.createdAt !== "string" ||
+      typeof post.text !== "string"
     )
       throw new TypeError("Bluesky post record is incomplete");
     return {
       uri: candidate.uri,
       cid: candidate.cid,
-      value: { createdAt: post.createdAt },
+      value: { createdAt: post.createdAt, text: post.text },
     };
   });
   if (page.cursor !== undefined && typeof page.cursor !== "string")
@@ -315,20 +334,47 @@ function parseHydratedPosts(value: unknown): Array<HydratedPost> {
       uri?: unknown;
       cid?: unknown;
       author?: unknown;
+      record?: unknown;
+      embed?: unknown;
     };
-    const author = candidate.author as { did?: unknown } | undefined;
+    const author = candidate.author as
+      | { did?: unknown; handle?: unknown; displayName?: unknown }
+      | undefined;
+    const record = candidate.record as { text?: unknown } | undefined;
     if (
       typeof candidate.uri !== "string" ||
       typeof candidate.cid !== "string" ||
-      typeof author?.did !== "string"
+      typeof author?.did !== "string" ||
+      typeof author.handle !== "string" ||
+      typeof record?.text !== "string"
     )
       throw new TypeError("Bluesky hydrated post is incomplete");
     return {
       uri: candidate.uri,
       cid: candidate.cid,
-      author: { did: author.did },
+      author: {
+        did: author.did,
+        handle: author.handle,
+        displayName:
+          typeof author.displayName === "string"
+            ? author.displayName
+            : undefined,
+      },
+      record: { text: record.text },
+      thumbnailUrl: hydratedPostThumbnail(candidate.embed),
     };
   });
+}
+
+function hydratedPostThumbnail(embed: unknown): string | undefined {
+  if (!embed || typeof embed !== "object") return undefined;
+  const candidate = embed as { images?: unknown; external?: unknown };
+  if (Array.isArray(candidate.images)) {
+    const first = candidate.images[0] as { thumb?: unknown } | undefined;
+    if (typeof first?.thumb === "string") return first.thumb;
+  }
+  const external = candidate.external as { thumb?: unknown } | undefined;
+  return typeof external?.thumb === "string" ? external.thumb : undefined;
 }
 
 function canonicalPostUrl(uri: string, did: string): string {

@@ -2,6 +2,7 @@
 
 require_relative "../test_helper"
 require "stringio"
+require "webrick"
 require "weblog_authoring/bluesky_source"
 
 class BlueskySourceTest < Minitest::Test
@@ -19,6 +20,7 @@ class BlueskySourceTest < Minitest::Test
           "createdAt" => "2026-08-30T09:00:00Z",
           "canonicalUrl" => "https://bsky.app/profile/did:plc:me/post/new",
           "authorDid" => "did:plc:me",
+          "text" => "New post text",
         },
         {
           "uri" => "at://did:plc:me/app.bsky.feed.post/old",
@@ -26,6 +28,7 @@ class BlueskySourceTest < Minitest::Test
           "createdAt" => "2026-08-23T11:59:59Z",
           "canonicalUrl" => "https://bsky.app/profile/did:plc:me/post/old",
           "authorDid" => "did:plc:me",
+          "text" => "Old post text",
         },
       ]
     end
@@ -41,6 +44,10 @@ class BlueskySourceTest < Minitest::Test
           "subjectCid" => "subject-cid-new",
           "canonicalUrl" => "https://bsky.app/profile/did:plc:author/post/post-new",
           "authorDid" => "did:plc:author",
+          "text" => "Liked post text",
+          "authorHandle" => "author.example",
+          "authorDisplayName" => "Author",
+          "thumbnailUrl" => "https://cdn.example/thumb.jpg",
         },
       ]
     end
@@ -84,6 +91,7 @@ class BlueskySourceTest < Minitest::Test
         "record_cid" => "cid-new",
         "canonical_url" => "https://bsky.app/profile/did:plc:me/post/new",
         "author_did" => "did:plc:me",
+        "text" => "New post text",
       },
       post.payload
     )
@@ -99,6 +107,10 @@ class BlueskySourceTest < Minitest::Test
         "subject_cid" => "subject-cid-new",
         "canonical_url" => "https://bsky.app/profile/did:plc:author/post/post-new",
         "author_did" => "did:plc:author",
+        "text" => "Liked post text",
+        "author_handle" => "author.example",
+        "author_display_name" => "Author",
+        "thumbnail_url" => "https://cdn.example/thumb.jpg",
       },
       like.payload
     )
@@ -136,5 +148,25 @@ class BlueskySourceTest < Minitest::Test
       { "action" => "list_likes", "since" => NOW.iso8601 },
       JSON.parse(invocation.fetch(:payload))
     )
+  end
+
+  def test_http_client_reads_posts_and_likes_from_the_loopback_server
+    requests = []
+    server = WEBrick::HTTPServer.new(Port: 0, BindAddress: "127.0.0.1", Logger: WEBrick::Log.new(File::NULL), AccessLog: [])
+    server.mount_proc("/") do |request, response|
+      requests << [request.path, JSON.parse(request.body)]
+      key = request.path == "/posts" ? "posts" : "likes"
+      response["content-type"] = "application/json"
+      response.body = JSON.generate(key => [{ "uri" => key }])
+    end
+    thread = Thread.new { server.start }
+    client = WeblogAuthoring::BlueskySource::HttpClient.new(origin: "http://127.0.0.1:#{server.config.fetch(:Port)}")
+
+    assert_equal [{ "uri" => "posts" }], client.list_posts(since: NOW)
+    assert_equal [{ "uri" => "likes" }], client.list_likes(since: NOW)
+    assert_equal [["/posts", { "since" => NOW.iso8601 }], ["/likes", { "since" => NOW.iso8601 }]], requests
+  ensure
+    server&.shutdown
+    thread&.join
   end
 end

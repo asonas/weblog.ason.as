@@ -670,6 +670,8 @@ test("inserts a Raindrop URL and marks it as used by the current page", async ()
                 raindrop_id: 42,
                 url: "https://example.com/article",
                 title: "Article",
+                excerpt: "An article summary from Raindrop.",
+                cover: "https://cdn.example/article.jpg",
               },
               used_in_pages: [],
             },
@@ -729,6 +731,18 @@ test("inserts a Raindrop URL and marks it as used by the current page", async ()
     );
     assert.ok(item);
     assert.equal(item.getAttribute("aria-label"), "Articleを本文へ追加");
+    assert.equal(
+      item.querySelector(".content-inbox__title")?.textContent,
+      "Article",
+    );
+    assert.equal(
+      item.querySelector(".content-inbox__excerpt")?.textContent,
+      "An article summary from Raindrop.",
+    );
+    assert.equal(
+      item.querySelector<HTMLImageElement>(".content-inbox__thumbnail")?.src,
+      "https://cdn.example/article.jpg",
+    );
 
     const saved = new Promise<void>((resolve) => {
       resolveSave = resolve;
@@ -795,6 +809,10 @@ test("inserts Bluesky post and like URLs and marks them as used", async () => {
               payload: {
                 canonical_url:
                   "https://bsky.app/profile/did:plc:author/post/3mliked",
+                text: "Liked post text",
+                author_handle: "author.example",
+                author_display_name: "Author",
+                thumbnail_url: "https://cdn.example/liked.jpg",
               },
               used_in_pages: [],
             },
@@ -810,6 +828,7 @@ test("inserts Bluesky post and like URLs and marks them as used", async () => {
               payload: {
                 canonical_url:
                   "https://bsky.app/profile/did:plc:nzhcpsryikfegc27zbimbwhq/post/3mexample",
+                text: "My post text",
               },
               used_in_pages: [],
             },
@@ -875,6 +894,18 @@ test("inserts Bluesky post and like URLs and marks them as used", async () => {
     assert.equal(
       items[1].getAttribute("aria-label"),
       "Bluesky 投稿を本文へ追加",
+    );
+    assert.equal(
+      items[0].querySelector(".content-inbox__title")?.textContent,
+      "Author",
+    );
+    assert.equal(
+      items[0].querySelector(".content-inbox__excerpt")?.textContent,
+      "Liked post text",
+    );
+    assert.equal(
+      items[1].querySelector(".content-inbox__excerpt")?.textContent,
+      "My post text",
     );
 
     const saved = new Promise<void>((resolve) => {

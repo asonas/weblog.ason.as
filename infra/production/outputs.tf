@@ -118,6 +118,11 @@ output "authoring_oauth_secret_arn" {
   value       = aws_secretsmanager_secret.oauth.arn
 }
 
+output "development_inbox_sources_secret_arn" {
+  description = "ARN of the development inbox source credentials secret."
+  value       = aws_secretsmanager_secret.inbox_sources_development.arn
+}
+
 output "site_bucket_name" {
   description = "Name of the private production site bucket."
   value       = aws_s3_bucket.site.id

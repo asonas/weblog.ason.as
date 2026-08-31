@@ -67,7 +67,7 @@ class RaindropSourceTest < Minitest::Test
   def test_source_builds_a_complete_recent_snapshot_and_excludes_trash
     client = FixtureClient.new(
       0 => [
-        raindrop(1, created: NOW - 3600, link: "https://example.com/new", title: "New"),
+        raindrop(1, created: NOW - 3600, link: "https://example.com/new", title: "New", excerpt: "Summary", cover: "https://cdn.example/cover.jpg"),
         raindrop(2, created: NOW - (8 * 86_400), link: "https://example.com/old", title: "Old"),
         raindrop(3, created: NOW - 7200, link: "https://example.com/trash", title: "Trash"),
       ],
@@ -83,18 +83,29 @@ class RaindropSourceTest < Minitest::Test
     item = snapshot.items.fetch(0)
     assert_equal "bookmark", item.kind
     assert_equal NOW - 3600, item.occurred_at
-    assert_equal({ "raindrop_id" => 1, "url" => "https://example.com/new", "title" => "New" }, item.payload)
+    assert_equal(
+      {
+        "raindrop_id" => 1,
+        "url" => "https://example.com/new",
+        "title" => "New",
+        "excerpt" => "Summary",
+        "cover" => "https://cdn.example/cover.jpg",
+      },
+      item.payload
+    )
   end
 
   private
 
-  def raindrop(id, created: NOW - 3600, link: "https://example.com/#{id}", title: "Bookmark #{id}")
+  def raindrop(id, created: NOW - 3600, link: "https://example.com/#{id}", title: "Bookmark #{id}", excerpt: nil, cover: nil)
     {
       "_id" => id,
       "created" => created.iso8601,
       "lastUpdate" => created.iso8601,
       "link" => link,
       "title" => title,
+      "excerpt" => excerpt,
+      "cover" => cover,
     }
   end
 end

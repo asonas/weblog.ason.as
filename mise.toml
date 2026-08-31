@@ -17,11 +17,15 @@ run = [
 
 [tasks.dev]
 description = "Run the authoring frontend and backend"
-run = [{ tasks = ["dev:api", "dev:web"] }]
+run = [{ tasks = ["dev:api", "dev:web", "dev:bluesky-oauth"] }]
 
 [tasks."dev:api"]
 description = "Run the authoring backend on http://127.0.0.1:8000"
-run = "mairu exec --no-login --server asonas-aws 282782318939/weblog-authoring-development -- bin/authoring"
+run = "INBOX_SOURCES_SECRET_ID=weblog-authoring-development/inbox-sources BLUESKY_OAUTH_ORIGIN=http://127.0.0.1:8001 mairu exec --no-login auto -- bin/authoring"
+
+[tasks."dev:bluesky-oauth"]
+description = "Run the Bluesky OAuth loopback server on http://127.0.0.1:8001"
+run = "npm run dev:bluesky-oauth"
 
 [tasks."dev:web"]
 description = "Run the Vite frontend on http://127.0.0.1:5173"

@@ -4,6 +4,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite --host 127.0.0.1",
+    "dev:bluesky-oauth": "tsx lambda/bluesky_oauth/development_server.ts",
     "format:authoring": "biome format --write frontend/authoring",
     "lint:authoring": "biome check --error-on-warnings frontend/authoring",
     "typecheck": "tsc --noEmit",
