@@ -30,6 +30,21 @@ module WeblogAuthoring
 
         posts
       end
+
+      def list_likes(since:)
+        response = @lambda_client.invoke(
+          function_name: @function_name,
+          invocation_type: "RequestResponse",
+          payload: JSON.generate("action" => "list_likes", "since" => since.iso8601)
+        )
+        raise "Bluesky OAuth Lambda failed" unless response.function_error.nil?
+
+        body = response.payload.respond_to?(:read) ? response.payload.read : response.payload.to_s
+        likes = JSON.parse(body).fetch("likes")
+        raise TypeError, "Bluesky likes must be an array" unless likes.is_a?(Array)
+
+        likes
+      end
     end
 
     def initialize(client:, clock: Time.method(:now))
@@ -40,7 +55,7 @@ module WeblogAuthoring
     def fetch(watermark:) # rubocop:disable Lint/UnusedMethodArgument
       fetched_at = @clock.call
       cutoff = fetched_at - RECENT_SECONDS
-      items = @client.list_posts(since: cutoff).filter_map do |post|
+      posts = @client.list_posts(since: cutoff).filter_map do |post|
         occurred_at = Time.iso8601(post.fetch("createdAt"))
         next if occurred_at < cutoff
 
@@ -56,6 +71,25 @@ module WeblogAuthoring
           }
         )
       end
+      likes = @client.list_likes(since: cutoff).filter_map do |like|
+        occurred_at = Time.iso8601(like.fetch("createdAt"))
+        next if occurred_at < cutoff
+
+        InboxSync::Item.new(
+          kind: "like",
+          source_id: like.fetch("uri"),
+          occurred_at:,
+          payload: {
+            "like_uri" => like.fetch("uri"),
+            "like_cid" => like.fetch("cid"),
+            "subject_uri" => like.fetch("subjectUri"),
+            "subject_cid" => like.fetch("subjectCid"),
+            "canonical_url" => like.fetch("canonicalUrl"),
+            "author_did" => like.fetch("authorDid"),
+          }
+        )
+      end
+      items = posts + likes
       InboxSync::Snapshot.new(items:, complete: true, watermark: fetched_at.iso8601)
     end
   end

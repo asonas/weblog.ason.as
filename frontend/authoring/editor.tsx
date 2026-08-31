@@ -3645,8 +3645,7 @@ export function AuthoringEditor({
   const visibleInboxItems = inboxItems.filter((item) => {
     if (activeMaterialTab === "photo")
       return item.source === "photo" && item.kind === "photo";
-    if (activeMaterialTab === "bluesky")
-      return item.source === "bluesky" && item.kind === "post";
+    if (activeMaterialTab === "bluesky") return item.source === "bluesky";
     return item.source === "raindrop" && item.kind === "bookmark";
   });
 
@@ -3743,7 +3742,7 @@ export function AuthoringEditor({
       const url =
         item.source === "raindrop" && item.kind === "bookmark"
           ? item.payload.url
-          : item.source === "bluesky" && item.kind === "post"
+          : item.source === "bluesky"
             ? item.payload.canonical_url
             : null;
       if (!editor || typeof url !== "string") return;
@@ -3783,7 +3782,7 @@ export function AuthoringEditor({
       setImageUploadStatus("");
       setMaterialStatus(
         item.source === "bluesky"
-          ? "Bluesky投稿を本文へ追加しました"
+          ? `${inboxItemLabel(item)}を本文へ追加しました`
           : "Raindropを本文へ追加しました",
       );
     },

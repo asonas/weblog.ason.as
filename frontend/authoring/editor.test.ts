@@ -757,7 +757,7 @@ test("inserts a Raindrop URL and marks it as used by the current page", async ()
   }
 });
 
-test("inserts a Bluesky post URL and marks it as used by the current page", async () => {
+test("inserts Bluesky post and like URLs and marks them as used", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -783,6 +783,21 @@ test("inserts a Bluesky post URL and marks it as used by the current page", asyn
       return new Response(
         JSON.stringify({
           items: [
+            {
+              id: "like-1",
+              source: "bluesky",
+              kind: "like",
+              source_id:
+                "at://did:plc:nzhcpsryikfegc27zbimbwhq/app.bsky.feed.like/3mlike",
+              occurred_at: "2026-08-29T11:30:00+09:00",
+              ingested_at: "2026-08-29T12:00:00+09:00",
+              expires_at: "2026-09-05T12:00:00+09:00",
+              payload: {
+                canonical_url:
+                  "https://bsky.app/profile/did:plc:author/post/3mliked",
+              },
+              used_in_pages: [],
+            },
             {
               id: "post-1",
               source: "bluesky",
@@ -849,30 +864,37 @@ test("inserts a Bluesky post URL and marks it as used by the current page", asyn
       await Promise.resolve();
     });
 
-    const item = container.querySelector<HTMLButtonElement>(
+    const items = container.querySelectorAll<HTMLButtonElement>(
       ".content-inbox__item",
     );
-    assert.ok(item);
-    assert.equal(item.getAttribute("aria-label"), "Bluesky 投稿を本文へ追加");
+    assert.equal(items.length, 2);
+    assert.equal(
+      items[0].getAttribute("aria-label"),
+      "Bluesky いいねを本文へ追加",
+    );
+    assert.equal(
+      items[1].getAttribute("aria-label"),
+      "Bluesky 投稿を本文へ追加",
+    );
 
     const saved = new Promise<void>((resolve) => {
       resolveSave = resolve;
     });
     await act(async () => {
-      item.click();
+      items[0].click();
       await Promise.race([
         saved,
         new Promise((resolve) => setTimeout(resolve, 1_000)),
       ]);
     });
 
-    assert.deepEqual(savedPayloads[0].consumed_inbox_item_ids, ["post-1"]);
+    assert.deepEqual(savedPayloads[0].consumed_inbox_item_ids, ["like-1"]);
     assert.match(
       String(savedPayloads[0].body),
-      /https:\/\/bsky\.app\/profile\/did:plc:nzhcpsryikfegc27zbimbwhq\/post\/3mexample/,
+      /https:\/\/bsky\.app\/profile\/did:plc:author\/post\/3mliked/,
     );
     assert.equal(
-      container.querySelector(".content-inbox__usage")?.textContent,
+      items[0].querySelector(".content-inbox__usage")?.textContent,
       "currentで使用済み",
     );
   } finally {

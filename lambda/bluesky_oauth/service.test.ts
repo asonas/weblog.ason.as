@@ -159,11 +159,108 @@ test("lists recent posts across repository pages", async () => {
   assert.match(requests[1], /cursor=next-page/);
 });
 
+test("lists recent likes with hydrated post identities", async () => {
+  const repository = new MemoryOAuthRepository();
+  await repository.saveSession(allowedDid, codec.encrypt(savedSession));
+  const requests: Array<string> = [];
+  let appViewRequest: RequestInit | undefined;
+  const service = new BlueskyOAuthService(
+    allowedDid,
+    repository,
+    codec,
+    async () =>
+      fakeClient({
+        restore: async () => ({
+          fetchHandler: async (pathname: string, init?: RequestInit) => {
+            requests.push(pathname);
+            if (pathname.includes("com.atproto.repo.listRecords")) {
+              return Response.json({
+                records: [
+                  likeRecord(
+                    "like-new",
+                    "like-cid-new",
+                    "2026-08-30T10:00:00Z",
+                    "did:plc:author",
+                    "post-new",
+                    "subject-cid-new",
+                  ),
+                  likeRecord(
+                    "like-old",
+                    "like-cid-old",
+                    "2026-08-22T08:59:59Z",
+                    "did:plc:author",
+                    "post-old",
+                    "subject-cid-old",
+                  ),
+                ],
+              });
+            }
+            appViewRequest = init;
+            return Response.json({
+              posts: [
+                {
+                  uri: "at://did:plc:author/app.bsky.feed.post/post-new",
+                  cid: "hydrated-cid-new",
+                  author: { did: "did:plc:author" },
+                },
+              ],
+            });
+          },
+        }),
+      }),
+  );
+
+  const likes = await service.listLikes(new Date("2026-08-23T09:00:00Z"));
+
+  assert.deepEqual(likes, [
+    {
+      uri: `at://${allowedDid}/app.bsky.feed.like/like-new`,
+      cid: "like-cid-new",
+      createdAt: "2026-08-30T10:00:00Z",
+      subjectUri: "at://did:plc:author/app.bsky.feed.post/post-new",
+      subjectCid: "subject-cid-new",
+      canonicalUrl: "https://bsky.app/profile/did:plc:author/post/post-new",
+      authorDid: "did:plc:author",
+    },
+  ]);
+  assert.match(requests[0], /collection=app\.bsky\.feed\.like/);
+  assert.doesNotMatch(requests[0], /reverse=/);
+  assert.match(
+    requests[1],
+    /app\.bsky\.feed\.getPosts\?uris=at%3A%2F%2Fdid%3Aplc%3Aauthor%2Fapp\.bsky\.feed\.post%2Fpost-new/,
+  );
+  assert.equal(
+    new Headers(appViewRequest?.headers).get("atproto-proxy"),
+    "did:web:api.bsky.app#bsky_appview",
+  );
+});
+
 function postRecord(rkey: string, cid: string, createdAt: string) {
   return {
     uri: `at://${allowedDid}/app.bsky.feed.post/${rkey}`,
     cid,
     value: { createdAt },
+  };
+}
+
+function likeRecord(
+  rkey: string,
+  cid: string,
+  createdAt: string,
+  authorDid: string,
+  postRkey: string,
+  subjectCid: string,
+) {
+  return {
+    uri: `at://${allowedDid}/app.bsky.feed.like/${rkey}`,
+    cid,
+    value: {
+      createdAt,
+      subject: {
+        uri: `at://${authorDid}/app.bsky.feed.post/${postRkey}`,
+        cid: subjectCid,
+      },
+    },
   };
 }
 

@@ -16,6 +16,16 @@ export type BlueskyPost = {
   authorDid: string;
 };
 
+export type BlueskyLike = {
+  uri: string;
+  cid: string;
+  createdAt: string;
+  subjectUri: string;
+  subjectCid: string;
+  canonicalUrl: string;
+  authorDid: string;
+};
+
 export class BlueskyOAuthService {
   constructor(
     private readonly allowedDid: string,
@@ -115,6 +125,76 @@ export class BlueskyOAuthService {
     return posts;
   }
 
+  async listLikes(since: Date): Promise<Array<BlueskyLike>> {
+    const client = await this.createClient();
+    const session = await client.restore(this.allowedDid, "auto");
+    const records: Array<LikeRecord> = [];
+    let cursor: string | undefined;
+
+    do {
+      const query = new URLSearchParams({
+        repo: this.allowedDid,
+        collection: "app.bsky.feed.like",
+        limit: "100",
+      });
+      if (cursor) query.set("cursor", cursor);
+      const response = await session.fetchHandler(
+        `/xrpc/com.atproto.repo.listRecords?${query.toString()}`,
+      );
+      if (!response.ok)
+        throw new Error(`Bluesky listRecords returned ${response.status}`);
+
+      const page = parseLikeRecordPage(await response.json());
+      records.push(
+        ...page.records.filter(
+          (record) => new Date(record.value.createdAt) >= since,
+        ),
+      );
+      if (
+        page.records.some((record) => new Date(record.value.createdAt) < since)
+      )
+        break;
+      cursor = page.cursor;
+    } while (cursor);
+
+    const posts = new Map<string, HydratedPost>();
+    for (let offset = 0; offset < records.length; offset += 25) {
+      const query = new URLSearchParams();
+      for (const record of records.slice(offset, offset + 25)) {
+        query.append("uris", record.value.subject.uri);
+      }
+      const response = await session.fetchHandler(
+        `/xrpc/app.bsky.feed.getPosts?${query.toString()}`,
+        {
+          headers: {
+            "atproto-proxy": "did:web:api.bsky.app#bsky_appview",
+          },
+        },
+      );
+      if (!response.ok)
+        throw new Error(`Bluesky getPosts returned ${response.status}`);
+      for (const post of parseHydratedPosts(await response.json())) {
+        posts.set(post.uri, post);
+      }
+    }
+
+    return records.flatMap((record) => {
+      const post = posts.get(record.value.subject.uri);
+      if (!post) return [];
+      return [
+        {
+          uri: record.uri,
+          cid: record.cid,
+          createdAt: record.value.createdAt,
+          subjectUri: record.value.subject.uri,
+          subjectCid: record.value.subject.cid,
+          canonicalUrl: canonicalPostUrl(post.uri, post.author.did),
+          authorDid: post.author.did,
+        },
+      ];
+    });
+  }
+
   async disconnect(): Promise<void> {
     const existing = await this.repository.getSession(this.allowedDid);
     if (!existing) return;
@@ -130,6 +210,23 @@ export class BlueskyOAuthService {
 type RecordPage = {
   records: Array<{ uri: string; cid: string; value: { createdAt: string } }>;
   cursor?: string;
+};
+
+type LikeRecord = {
+  uri: string;
+  cid: string;
+  value: {
+    createdAt: string;
+    subject: { uri: string; cid: string };
+  };
+};
+
+type LikeRecordPage = { records: Array<LikeRecord>; cursor?: string };
+
+type HydratedPost = {
+  uri: string;
+  cid: string;
+  author: { did: string };
 };
 
 function parseRecordPage(value: unknown): RecordPage {
@@ -163,6 +260,77 @@ function parseRecordPage(value: unknown): RecordPage {
   if (page.cursor !== undefined && typeof page.cursor !== "string")
     throw new TypeError("Bluesky listRecords cursor must be a string");
   return { records, cursor: page.cursor };
+}
+
+function parseLikeRecordPage(value: unknown): LikeRecordPage {
+  if (!value || typeof value !== "object")
+    throw new TypeError("Bluesky listRecords response must be an object");
+  const page = value as { records?: unknown; cursor?: unknown };
+  if (!Array.isArray(page.records))
+    throw new TypeError("Bluesky listRecords records must be an array");
+  const records = page.records.map((record) => {
+    if (!record || typeof record !== "object")
+      throw new TypeError("Bluesky like record must be an object");
+    const candidate = record as {
+      uri?: unknown;
+      cid?: unknown;
+      value?: unknown;
+    };
+    const like = candidate.value as
+      | { createdAt?: unknown; subject?: unknown }
+      | undefined;
+    const subject = like?.subject as
+      | { uri?: unknown; cid?: unknown }
+      | undefined;
+    if (
+      typeof candidate.uri !== "string" ||
+      typeof candidate.cid !== "string" ||
+      typeof like?.createdAt !== "string" ||
+      typeof subject?.uri !== "string" ||
+      typeof subject.cid !== "string"
+    )
+      throw new TypeError("Bluesky like record is incomplete");
+    return {
+      uri: candidate.uri,
+      cid: candidate.cid,
+      value: {
+        createdAt: like.createdAt,
+        subject: { uri: subject.uri, cid: subject.cid },
+      },
+    };
+  });
+  if (page.cursor !== undefined && typeof page.cursor !== "string")
+    throw new TypeError("Bluesky listRecords cursor must be a string");
+  return { records, cursor: page.cursor };
+}
+
+function parseHydratedPosts(value: unknown): Array<HydratedPost> {
+  if (!value || typeof value !== "object")
+    throw new TypeError("Bluesky getPosts response must be an object");
+  const response = value as { posts?: unknown };
+  if (!Array.isArray(response.posts))
+    throw new TypeError("Bluesky getPosts posts must be an array");
+  return response.posts.map((post) => {
+    if (!post || typeof post !== "object")
+      throw new TypeError("Bluesky hydrated post must be an object");
+    const candidate = post as {
+      uri?: unknown;
+      cid?: unknown;
+      author?: unknown;
+    };
+    const author = candidate.author as { did?: unknown } | undefined;
+    if (
+      typeof candidate.uri !== "string" ||
+      typeof candidate.cid !== "string" ||
+      typeof author?.did !== "string"
+    )
+      throw new TypeError("Bluesky hydrated post is incomplete");
+    return {
+      uri: candidate.uri,
+      cid: candidate.cid,
+      author: { did: author.did },
+    };
+  });
 }
 
 function canonicalPostUrl(uri: string, did: string): string {
