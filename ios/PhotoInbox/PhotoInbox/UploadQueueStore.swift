@@ -1,5 +1,56 @@
 import Foundation
 
+struct UploadFailure: Codable, Equatable, Sendable {
+  let code: String?
+  let field: String?
+  let message: String
+  let requestID: String?
+  let automaticallyRetryable: Bool
+
+  init(
+    code: String? = nil,
+    field: String? = nil,
+    message: String,
+    requestID: String? = nil,
+    automaticallyRetryable: Bool
+  ) {
+    self.code = code
+    self.field = field
+    self.message = message
+    self.requestID = requestID
+    self.automaticallyRetryable = automaticallyRetryable
+  }
+
+  init(error: Error) {
+    if let apiError = error as? MobileAPIError {
+      switch apiError {
+      case .invalidResponse:
+        self.init(message: apiError.localizedDescription, automaticallyRetryable: true)
+      case .server(_, let problem):
+        self.init(
+          code: problem?.code,
+          field: problem?.field,
+          message: apiError.localizedDescription,
+          requestID: problem?.requestID,
+          automaticallyRetryable: apiError.automaticallyRetryable
+        )
+      }
+    } else if let uploadError = error as? BackgroundUploadError {
+      let retryable =
+        switch uploadError {
+        case .invalidResponse: true
+        case .status(let status): status == 408 || status == 429 || status >= 500
+        }
+      self.init(message: error.localizedDescription, automaticallyRetryable: retryable)
+    } else {
+      self.init(
+        message: error.localizedDescription,
+        automaticallyRetryable: error is URLError
+      )
+    }
+  }
+}
+
 struct UploadItem: Codable, Equatable, Identifiable, Sendable {
   enum Stage: Codable, Equatable, Sendable {
     case pending
@@ -18,6 +69,11 @@ struct UploadItem: Codable, Equatable, Identifiable, Sendable {
   var contentType: String?
   var size: Int?
   var sha256: String?
+  var failure: UploadFailure?
+
+  var shouldAttemptAutomatically: Bool {
+    failure?.automaticallyRetryable ?? true
+  }
 
   init(
     clientUploadID: UUID = UUID(),
@@ -28,7 +84,8 @@ struct UploadItem: Codable, Equatable, Identifiable, Sendable {
     preparedFilePath: String? = nil,
     contentType: String? = nil,
     size: Int? = nil,
-    sha256: String? = nil
+    sha256: String? = nil,
+    failure: UploadFailure? = nil
   ) {
     self.clientUploadID = clientUploadID
     self.assetLocalIdentifier = assetLocalIdentifier
@@ -39,6 +96,7 @@ struct UploadItem: Codable, Equatable, Identifiable, Sendable {
     self.contentType = contentType
     self.size = size
     self.sha256 = sha256
+    self.failure = failure
   }
 }
 
@@ -76,6 +134,22 @@ actor UploadQueueStore {
     var current = try load()
     guard let index = current.firstIndex(where: { $0.clientUploadID == id }) else { return }
     current[index].stage = stage
+    try save(current)
+  }
+
+  func updateFailure(_ id: UUID, failure: UploadFailure) throws {
+    var current = try load()
+    guard let index = current.firstIndex(where: { $0.clientUploadID == id }) else { return }
+    current[index].stage = .failed(message: failure.message)
+    current[index].failure = failure
+    try save(current)
+  }
+
+  func retry(_ id: UUID) throws {
+    var current = try load()
+    guard let index = current.firstIndex(where: { $0.clientUploadID == id }) else { return }
+    current[index].stage = .pending
+    current[index].failure = nil
     try save(current)
   }
 

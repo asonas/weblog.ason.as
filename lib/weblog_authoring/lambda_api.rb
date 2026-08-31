@@ -25,16 +25,20 @@ require_relative "search_index"
 module WeblogAuthoring
   class LambdaApi
     class InputError < StandardError
-      attr_reader :field, :status
+      attr_reader :code, :detail, :field, :status, :title
 
-      def initialize(message, status: 422, field: nil)
+      def initialize(message, status: 422, field: nil, code: "invalid_request", title: "Invalid request")
         super(message)
         @status = status
         @field = field
+        @code = code
+        @title = title
+        @detail = message
       end
     end
 
     JSON_HEADERS = { "content-type" => "application/json; charset=utf-8" }.freeze
+    PROBLEM_HEADERS = { "content-type" => "application/problem+json; charset=utf-8" }.freeze
     EMPTY_HASH = {}.freeze # steep:ignore UnannotatedEmptyCollection
 
     AUTH_COOKIE = "weblog_authoring_session"
@@ -87,16 +91,21 @@ module WeblogAuthoring
 
     def call(event)
       cache_control_response(event, dispatch(event))
+    rescue MobileUpload::ValidationError => error
+      cache_control_response(event, mobile_upload_problem_response(event, error))
     rescue InputError => error
-      cache_control_response(event, json_error(error.status, error.message, field: error.field))
+      response = if mobile_upload_creation_event?(event)
+                   mobile_upload_problem_response(event, error)
+                 else
+                   json_error(error.status, error.message, field: error.field)
+                 end
+      cache_control_response(event, response)
     rescue ConflictError => error
       cache_control_response(event, json_error(409, error.message))
     rescue MobileUpload::PairingUnavailable
       cache_control_response(event, json_error(410, "Pairing code is expired or already used"))
     rescue MobileUpload::PairingAttemptsExceeded
       cache_control_response(event, json_error(429, "Pairing exchange attempts exceeded"))
-    rescue MobileUpload::UnsupportedContentType => error
-      cache_control_response(event, json_error(415, error.message))
     rescue ArgumentError, TypeError => error
       cache_control_response(event, json_error(422, error.message))
     ensure
@@ -1104,16 +1113,39 @@ module WeblogAuthoring
     def parse_json(event)
       headers = event.fetch("headers", EMPTY_HASH) # @type var headers: Hash[String, untyped]
       media_type = headers.to_h.fetch("content-type", "").split(";", 2).first
-      raise InputError.new("Content-Type: application/json is required", status: 415) unless media_type == "application/json"
+      unless media_type == "application/json"
+        raise InputError.new("Content-Type: application/json is required", status: 415) unless mobile_upload_creation_event?(event)
+
+        raise InputError.new(
+          "The request Content-Type must be application/json.",
+          status: 415,
+          code: "invalid_content_type",
+          title: "Invalid request content type"
+        )
+      end
 
       body = event.fetch("body", "").to_s
       body = Base64.decode64(body) if event["isBase64Encoded"]
       payload = JSON.parse(body)
-      raise InputError, "JSON body must be an object" unless payload.is_a?(Hash)
+      unless payload.is_a?(Hash)
+        raise InputError, "JSON body must be an object" unless mobile_upload_creation_event?(event)
+
+        raise InputError.new(
+          "The request body must be a JSON object.",
+          code: "invalid_json_body",
+          title: "Invalid JSON body"
+        )
+      end
 
       payload
     rescue JSON::ParserError => error
-      raise InputError, "Invalid JSON body: #{error.message}"
+      raise InputError, "Invalid JSON body: #{error.message}" unless mobile_upload_creation_event?(event)
+
+      raise InputError.new(
+        "The request body must be valid JSON.",
+        code: "invalid_json_body",
+        title: "Invalid JSON body"
+      )
     end
 
     def save_request(payload, page_id: nil)
@@ -1299,6 +1331,66 @@ module WeblogAuthoring
 
     def json_error(status, message, field: nil)
       json_response(status, error: message, errors: { field || "form" => [message] })
+    end
+
+    def mobile_upload_problem_response(event, error)
+      request_id = event.dig("requestContext", "requestId").to_s
+      request_id = nil if request_id.empty?
+      payload = {
+        "type" => "https://weblog.ason.as/problems/mobile-upload/#{error.code.tr('_', '-')}",
+        "title" => error.title,
+        "status" => error.status,
+        "detail" => error.detail,
+        "code" => error.code,
+        "field" => error.field,
+        "error" => error.detail,
+        "errors" => { error.field || "form" => [error.detail] },
+      }.compact
+      unless request_id.nil?
+        payload["instance"] = "https://weblog.ason.as/problems/instances/#{URI.encode_www_form_component(request_id)}"
+        payload["request_id"] = request_id
+      end
+      log_mobile_upload_rejection(event, error, request_id)
+      { statusCode: error.status, headers: PROBLEM_HEADERS, body: JSON.generate(payload) }
+    end
+
+    def mobile_upload_creation_event?(event)
+      event.fetch("rawPath", "") == "/api/mobile/uploads" &&
+        event.dig("requestContext", "http", "method").to_s == "POST"
+    end
+
+    def log_mobile_upload_rejection(event, error, request_id)
+      @logger.puts(JSON.generate({
+        "event" => "mobile_upload_rejected",
+        "request_id" => request_id,
+        "route" => event.fetch("rawPath", ""),
+        "status" => error.status,
+        "code" => error.code,
+        "field" => error.field,
+        **mobile_upload_log_context(event),
+      }.compact))
+    end
+
+    def mobile_upload_log_context(event)
+      body = event.fetch("body", "").to_s
+      body = Base64.decode64(body) if event["isBase64Encoded"]
+      payload = JSON.parse(body)
+      return {} unless payload.is_a?(Hash)
+
+      context = {}
+      client_upload_id = payload["client_upload_id"]
+      if client_upload_id.is_a?(String) && MobileUpload::CLIENT_UPLOAD_ID_PATTERN.match?(client_upload_id)
+        context["client_upload_id"] = client_upload_id
+      end
+      content_type = payload["content_type"]
+      context["content_type"] = content_type if MobileUpload::CONTENT_TYPES.key?(content_type)
+      size = payload["size"]
+      context["size"] = size if size.is_a?(Integer)
+      source = payload["captured_at_source"]
+      context["captured_at_source"] = source if MobileUpload::CAPTURE_SOURCES.include?(source)
+      context
+    rescue JSON::ParserError
+      {}
     end
   end
 end

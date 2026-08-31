@@ -12,7 +12,18 @@ module WeblogAuthoring
   class MobileUpload
     class PairingUnavailable < StandardError; end
     class PairingAttemptsExceeded < StandardError; end
-    class UnsupportedContentType < ArgumentError; end
+    class ValidationError < ArgumentError
+      attr_reader :code, :detail, :field, :status, :title
+
+      def initialize(code:, title:, detail:, field: nil, status: 422)
+        super(detail)
+        @code = code
+        @title = title
+        @detail = detail
+        @field = field
+        @status = status
+      end
+    end
 
     PAIRING_TTL = 10 * 60
     SIGNATURE_TTL = 5 * 60
@@ -25,6 +36,7 @@ module WeblogAuthoring
       "image/webp" => "webp",
     }.freeze
     CAPTURE_SOURCES = %w[photos exif uploaded].freeze
+    CLIENT_UPLOAD_ID_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
 
     def initialize(database:, s3_client: nil, bucket: nil, development_bucket: nil, clock: Time.method(:now),
                    random_bytes: SecureRandom.method(:random_bytes), random_uuid: -> { SecureRandom.uuid.delete("-") })
@@ -148,19 +160,55 @@ module WeblogAuthoring
 
     def upload_attributes(payload)
       client_upload_id = payload["client_upload_id"].to_s
-      raise ArgumentError, "client_upload_id is invalid" unless /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.match?(client_upload_id)
+      unless CLIENT_UPLOAD_ID_PATTERN.match?(client_upload_id)
+        raise ValidationError.new(
+          code: "invalid_client_upload_id",
+          title: "Invalid client upload ID",
+          detail: "The client upload ID must be a UUID.",
+          field: "client_upload_id"
+        )
+      end
 
       content_type = payload["content_type"].to_s
-      raise UnsupportedContentType, "unsupported content type" unless CONTENT_TYPES.key?(content_type)
+      unless CONTENT_TYPES.key?(content_type)
+        raise ValidationError.new(
+          code: "unsupported_content_type",
+          title: "Unsupported image content type",
+          detail: "The prepared photo must be GIF, JPEG, PNG, or WebP.",
+          field: "content_type",
+          status: 415
+        )
+      end
 
       size = payload["size"]
-      raise ArgumentError, "size is invalid" unless size.is_a?(Integer) && size.between?(1, MAX_BYTES)
+      unless size.is_a?(Integer) && size.between?(1, MAX_BYTES)
+        raise ValidationError.new(
+          code: "invalid_upload_size",
+          title: "Invalid upload size",
+          detail: "The prepared photo size must be between 1 byte and 25 MiB.",
+          field: "size"
+        )
+      end
 
       sha256 = payload["sha256"].to_s.downcase
-      raise ArgumentError, "sha256 is invalid" unless /\A[0-9a-f]{64}\z/.match?(sha256)
+      unless /\A[0-9a-f]{64}\z/.match?(sha256)
+        raise ValidationError.new(
+          code: "invalid_sha256",
+          title: "Invalid upload checksum",
+          detail: "The prepared photo checksum must be a 64-character SHA-256 digest.",
+          field: "sha256"
+        )
+      end
 
       source = payload["captured_at_source"].to_s
-      raise ArgumentError, "captured_at_source is invalid" unless CAPTURE_SOURCES.include?(source)
+      unless CAPTURE_SOURCES.include?(source)
+        raise ValidationError.new(
+          code: "invalid_captured_at_source",
+          title: "Invalid capture source",
+          detail: "The capture source must be photos, exif, or uploaded.",
+          field: "captured_at_source"
+        )
+      end
 
       captured_at = begin
         Time.iso8601(payload["captured_at"].to_s)

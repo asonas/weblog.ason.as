@@ -49,10 +49,21 @@ final class PhotoSelectionStore {
     persist()
   }
 
+  func exclude(_ assetID: String) {
+    guard !uploadedIDs.contains(assetID) else { return }
+    selectedIDs.remove(assetID)
+    excludedIDs.insert(assetID)
+    persist()
+  }
+
   func status(of assetID: String) -> PhotoSelectionStatus {
     if uploadedIDs.contains(assetID) { return .uploaded }
     if selectedIDs.contains(assetID) { return .selected }
     return .excluded
+  }
+
+  func uploadedCount(in assetIDs: [String]) -> Int {
+    uploadedIDs.intersection(assetIDs).count
   }
 
   private func persist() {

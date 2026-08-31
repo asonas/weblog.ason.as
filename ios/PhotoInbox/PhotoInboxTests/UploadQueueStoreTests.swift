@@ -49,4 +49,48 @@ final class UploadQueueStoreTests: XCTestCase {
     XCTAssertEqual(stored.count, 1)
     XCTAssertEqual(stored[0].clientUploadID, firstID)
   }
+
+  func testRejectedPhotoRestoresDiagnosticAndRequiresExplicitRetry() async throws {
+    let fileURL = FileManager.default.temporaryDirectory
+      .appending(path: UUID().uuidString)
+    let clientID = UUID()
+    let store = UploadQueueStore(fileURL: fileURL)
+    try await store.enqueue([
+      UploadItem(
+        clientUploadID: clientID,
+        assetLocalIdentifier: "asset-1",
+        capturedAt: .now
+      )
+    ])
+    let failure = UploadFailure(
+      code: "invalid_upload_size",
+      field: "size",
+      message: "写真のサイズ情報が不正です。もう一度選び直してください。",
+      requestID: "request-1",
+      automaticallyRetryable: false
+    )
+
+    try await store.updateFailure(clientID, failure: failure)
+
+    let restoredStore = UploadQueueStore(fileURL: fileURL)
+    let restoredItems = try await restoredStore.items()
+    let rejected = try XCTUnwrap(restoredItems.first)
+    XCTAssertEqual(rejected.failure, failure)
+    XCTAssertFalse(rejected.shouldAttemptAutomatically)
+
+    try await restoredStore.retry(clientID)
+
+    let retriedItems = try await restoredStore.items()
+    let retried = try XCTUnwrap(retriedItems.first)
+    XCTAssertEqual(retried.stage, .pending)
+    XCTAssertNil(retried.failure)
+    XCTAssertTrue(retried.shouldAttemptAutomatically)
+  }
+
+  func testTransientBackgroundUploadFailuresRemainAutomaticallyRetryable() {
+    XCTAssertTrue(
+      UploadFailure(error: BackgroundUploadError.invalidResponse).automaticallyRetryable)
+    XCTAssertTrue(UploadFailure(error: BackgroundUploadError.status(503)).automaticallyRetryable)
+    XCTAssertFalse(UploadFailure(error: BackgroundUploadError.status(403)).automaticallyRetryable)
+  }
 }

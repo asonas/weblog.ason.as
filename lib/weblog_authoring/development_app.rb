@@ -531,8 +531,23 @@ module WeblogAuthoring
       json_error(410, "Pairing code is expired or already used")
     rescue MobileUpload::PairingAttemptsExceeded
       json_error(429, "Pairing exchange attempts exceeded")
-    rescue MobileUpload::UnsupportedContentType => error
-      json_error(415, error.message)
+    rescue DevelopmentInputError => error
+      if request.path_info == "/api/mobile/uploads"
+        code = error.status == 415 ? "invalid_content_type" : "invalid_json_body"
+        title = error.status == 415 ? "Invalid request content type" : "Invalid JSON body"
+        detail = if error.status == 415
+                   "The request Content-Type must be application/json."
+                 else
+                   "The request body must be valid JSON object."
+                 end
+        mobile_upload_problem_response(MobileUpload::ValidationError.new(
+          code:, title:, detail:, status: error.status
+        ))
+      else
+        json_error(error.status, error.message, field: error.field)
+      end
+    rescue MobileUpload::ValidationError => error
+      mobile_upload_problem_response(error)
     rescue ConflictError => error
       json_error(409, error.message)
     rescue ArgumentError, TypeError => error
@@ -1139,6 +1154,21 @@ module WeblogAuthoring
       content_type :json
       self.status status
       JSON.generate("error" => message, "errors" => { field || "form" => [message] })
+    end
+
+    def mobile_upload_problem_response(error)
+      content_type "application/problem+json"
+      self.status error.status
+      JSON.generate({
+        "type" => "https://weblog.ason.as/problems/mobile-upload/#{error.code.tr('_', '-')}",
+        "title" => error.title,
+        "status" => error.status,
+        "detail" => error.detail,
+        "code" => error.code,
+        "field" => error.field,
+        "error" => error.detail,
+        "errors" => { error.field || "form" => [error.detail] },
+      }.compact)
     end
   end
 end

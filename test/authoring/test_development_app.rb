@@ -203,6 +203,66 @@ class TestDevelopmentApp < Minitest::Test
     assert_equal 401, ordinary_mutation_status
   end
 
+  def test_mobile_upload_validation_uses_problem_details
+    oauth_client = FakeOAuthClient.new
+    upload_s3 = Aws::S3::Client.new(
+      region: "ap-northeast-1",
+      credentials: Aws::Credentials.new("access-key", "secret-key"),
+      stub_responses: true
+    )
+    application = WeblogAuthoring::DevelopmentApp.application(
+      root:, clock: -> { FIXED_TIME }, s3_client: upload_s3,
+      oauth_client:, allowed_github_user_id: 630_181,
+      session_secret: "test-session-secret-#{'x' * 64}"
+    )
+    cookie = login(application, oauth_client)
+    _status, session_headers, session_body = request_with(
+      application, "GET", "/api/auth/session", headers: { "HTTP_COOKIE" => cookie }
+    )
+    cookie = response_cookie(session_headers, fallback: cookie)
+    csrf_token = JSON.parse(session_body).fetch("csrf_token")
+    _status, _headers, pairing_body = request_with(
+      application, "POST", "/api/mobile/pairings", payload: {},
+      headers: { "HTTP_COOKIE" => cookie, "HTTP_X_CSRF_TOKEN" => csrf_token }
+    )
+    _status, _headers, exchange_body = request_with(
+      application, "POST", "/api/mobile/pairings/exchange",
+      payload: { code: JSON.parse(pairing_body).fetch("code"), device_name: "iPhone" }
+    )
+    token = JSON.parse(exchange_body).fetch("token")
+
+    status, headers, body = request_with(
+      application, "POST", "/api/mobile/uploads", payload: {
+        client_upload_id: "11111111-2222-4333-8444-555555555555",
+        content_type: "image/heic", size: 1024, sha256: "a" * 64,
+        captured_at: FIXED_TIME.iso8601, captured_at_source: "photos",
+      }, headers: { "HTTP_AUTHORIZATION" => "Bearer #{token}" }
+    )
+    problem = JSON.parse(body)
+
+    assert_equal 415, status
+    assert_equal "application/problem+json", headers.fetch("content-type")
+    assert_equal "unsupported_content_type", problem.fetch("code")
+
+    status, headers, body = request_with(
+      application, "POST", "/api/mobile/uploads", payload: {},
+      headers: { "HTTP_AUTHORIZATION" => "Bearer #{token}", "CONTENT_TYPE" => "text/plain" }
+    )
+    assert_equal 415, status
+    assert_equal "application/problem+json", headers.fetch("content-type")
+    assert_equal "invalid_content_type", JSON.parse(body).fetch("code")
+
+    env = Rack::MockRequest.env_for(
+      "/api/mobile/uploads", method: "POST", input: "{",
+      "CONTENT_TYPE" => "application/json", "HTTP_HOST" => "127.0.0.1:8000",
+      "HTTP_AUTHORIZATION" => "Bearer #{token}"
+    )
+    status, headers, response_body = application.call(env)
+    assert_equal 422, status
+    assert_equal "application/problem+json", headers.fetch("content-type")
+    assert_equal "invalid_json_body", JSON.parse(response_body.join).fetch("code")
+  end
+
   def test_inbox_imports_recent_development_s3_manifests_idempotently
     key = "assets/inbox/2026/08/21/photo.jpg"
     s3_client.add_object(

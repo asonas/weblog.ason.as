@@ -12,9 +12,60 @@ struct URLSessionTransport: HTTPTransport {
   }
 }
 
+struct ProblemDetails: Decodable, Equatable, Sendable {
+  let type: URL
+  let title: String
+  let status: Int
+  let detail: String?
+  let instance: URL?
+  let code: String?
+  let field: String?
+  let requestID: String?
+
+  enum CodingKeys: String, CodingKey {
+    case type, title, status, detail, instance, code, field
+    case requestID = "request_id"
+  }
+}
+
 enum MobileAPIError: Error, Equatable {
   case invalidResponse
-  case server(Int)
+  case server(status: Int, problem: ProblemDetails?)
+
+  var automaticallyRetryable: Bool {
+    switch self {
+    case .invalidResponse:
+      true
+    case .server(let status, _):
+      status == 408 || status == 429 || status >= 500
+    }
+  }
+}
+
+extension MobileAPIError: LocalizedError {
+  var errorDescription: String? {
+    switch self {
+    case .invalidResponse:
+      "サーバーからの応答を確認できませんでした。"
+    case .server(_, let problem):
+      switch problem?.code {
+      case "invalid_client_upload_id":
+        "写真の送信情報が不正です。もう一度選び直してください。"
+      case "unsupported_content_type":
+        "この写真形式には対応していません。"
+      case "invalid_upload_size":
+        "写真のサイズ情報が不正です。もう一度選び直してください。"
+      case "invalid_sha256":
+        "写真データの確認に失敗しました。もう一度選び直してください。"
+      case "invalid_captured_at_source":
+        "写真の撮影日時情報が不正です。"
+      case "invalid_json_body", "invalid_content_type":
+        "写真の送信情報を作成できませんでした。"
+      default:
+        "写真を送信できませんでした。"
+      }
+    }
+  }
 }
 
 struct CreateUploadRequest: Encodable, Sendable {
@@ -99,6 +150,9 @@ struct MobileAPIClient: Sendable {
     var request = URLRequest(url: baseURL.appending(path: path))
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue(
+      "application/json, application/problem+json", forHTTPHeaderField: "Accept"
+    )
     if authenticated, let token {
       request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     }
@@ -108,7 +162,8 @@ struct MobileAPIClient: Sendable {
     request.httpBody = try encoder.encode(body)
     let (data, response) = try await transport.data(for: request)
     guard (200...299).contains(response.statusCode) else {
-      throw MobileAPIError.server(response.statusCode)
+      let problem = try? JSONDecoder().decode(ProblemDetails.self, from: data)
+      throw MobileAPIError.server(status: response.statusCode, problem: problem)
     }
     if Response.self == EmptyResponse.self { return EmptyResponse() as! Response }
     let decoder = JSONDecoder()

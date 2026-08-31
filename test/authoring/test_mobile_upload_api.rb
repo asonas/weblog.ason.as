@@ -106,6 +106,137 @@ class MobileUploadApiTest < Minitest::Test
     assert_match(%r{\Aassets/inbox/2026/08/27/[0-9a-f]{32}\.jpg\z}, upload.dig("fields", "key"))
   end
 
+  def test_invalid_upload_size_returns_problem_details_and_a_correlated_log
+    token = paired_device_token
+    log = StringIO.new
+    api = mobile_api(logger: log)
+    response = api.call(json_event(
+      "POST", "/api/mobile/uploads", mobile_upload_payload.merge(size: 0),
+      headers: { "authorization" => "Bearer #{token}" }
+    ))
+    problem = JSON.parse(response.fetch(:body))
+
+    assert_equal 422, response.fetch(:statusCode)
+    assert_equal "application/problem+json; charset=utf-8", response.dig(:headers, "content-type")
+    assert_equal "https://weblog.ason.as/problems/mobile-upload/invalid-upload-size", problem.fetch("type")
+    assert_equal "Invalid upload size", problem.fetch("title")
+    assert_equal 422, problem.fetch("status")
+    assert_equal "The prepared photo size must be between 1 byte and 25 MiB.", problem.fetch("detail")
+    assert_equal "https://weblog.ason.as/problems/instances/request-id", problem.fetch("instance")
+    assert_equal "invalid_upload_size", problem.fetch("code")
+    assert_equal "size", problem.fetch("field")
+    assert_equal "request-id", problem.fetch("request_id")
+
+    entry = JSON.parse(log.string)
+    assert_equal "mobile_upload_rejected", entry.fetch("event")
+    assert_equal "request-id", entry.fetch("request_id")
+    assert_equal "11111111-2222-4333-8444-555555555555", entry.fetch("client_upload_id")
+    assert_equal "invalid_upload_size", entry.fetch("code")
+    assert_equal 0, entry.fetch("size")
+    refute_includes log.string, "authorization"
+    refute_includes log.string, "a" * 64
+  end
+
+  def test_invalid_upload_metadata_has_stable_problem_types
+    token = paired_device_token
+    cases = [
+      [
+        { client_upload_id: "invalid" }, 422,
+        "invalid_client_upload_id", "client_upload_id",
+      ],
+      [
+        { content_type: "image/heic" }, 415,
+        "unsupported_content_type", "content_type",
+      ],
+      [
+        { sha256: "invalid" }, 422,
+        "invalid_sha256", "sha256",
+      ],
+      [
+        { captured_at_source: "camera" }, 422,
+        "invalid_captured_at_source", "captured_at_source",
+      ],
+    ]
+
+    cases.each do |overrides, status, code, field|
+      log = StringIO.new
+      response = mobile_api(logger: log).call(json_event(
+        "POST", "/api/mobile/uploads", mobile_upload_payload.merge(overrides),
+        headers: { "authorization" => "Bearer #{token}" }
+      ))
+      problem = JSON.parse(response.fetch(:body))
+
+      assert_equal status, response.fetch(:statusCode)
+      assert_equal "application/problem+json; charset=utf-8", response.dig(:headers, "content-type")
+      assert_equal status, problem.fetch("status")
+      assert_equal code, problem.fetch("code")
+      assert_equal field, problem.fetch("field")
+      assert_equal "https://weblog.ason.as/problems/mobile-upload/#{code.tr('_', '-')}", problem.fetch("type")
+      entry = JSON.parse(log.string)
+      assert_equal code, entry.fetch("code")
+      assert_equal field, entry.fetch("field")
+      refute_includes log.string, "authorization"
+      refute_includes log.string, "a" * 64
+      assert_equal 0, mobile_upload_count
+    end
+  end
+
+  def test_invalid_mobile_upload_json_returns_problem_details
+    token = paired_device_token
+    log = StringIO.new
+    event = json_event(
+      "POST", "/api/mobile/uploads", {}, headers: { "authorization" => "Bearer #{token}" }
+    ).merge("body" => "{")
+
+    response = mobile_api(logger: log).call(event)
+    problem = JSON.parse(response.fetch(:body))
+
+    assert_equal 422, response.fetch(:statusCode)
+    assert_equal "application/problem+json; charset=utf-8", response.dig(:headers, "content-type")
+    assert_equal "invalid_json_body", problem.fetch("code")
+    assert_equal "request-id", problem.fetch("request_id")
+    assert_equal "invalid_json_body", JSON.parse(log.string).fetch("code")
+    assert_equal 0, mobile_upload_count
+  end
+
+  def test_invalid_mobile_upload_content_type_returns_problem_details
+    token = paired_device_token
+    log = StringIO.new
+    response = mobile_api(logger: log).call(json_event(
+      "POST", "/api/mobile/uploads", mobile_upload_payload,
+      headers: {
+        "authorization" => "Bearer #{token}",
+        "content-type" => "text/plain",
+      }
+    ))
+    problem = JSON.parse(response.fetch(:body))
+
+    assert_equal 415, response.fetch(:statusCode)
+    assert_equal "application/problem+json; charset=utf-8", response.dig(:headers, "content-type")
+    assert_equal "invalid_content_type", problem.fetch("code")
+    assert_equal 415, problem.fetch("status")
+    assert_equal "invalid_content_type", JSON.parse(log.string).fetch("code")
+    assert_equal 0, mobile_upload_count
+  end
+
+  def test_problem_details_omit_occurrence_fields_without_a_request_id
+    token = paired_device_token
+    log = StringIO.new
+    event = json_event(
+      "POST", "/api/mobile/uploads", mobile_upload_payload.merge(size: 0),
+      headers: { "authorization" => "Bearer #{token}" }
+    )
+    event.fetch("requestContext").delete("requestId")
+
+    response = mobile_api(logger: log).call(event)
+    problem = JSON.parse(response.fetch(:body))
+
+    assert_equal 422, response.fetch(:statusCode)
+    refute problem.key?("instance")
+    refute problem.key?("request_id")
+    refute JSON.parse(log.string).key?("request_id")
+  end
+
   def test_upload_creation_is_idempotent_for_each_device_client_id
     token = paired_device_token
     api = mobile_api
@@ -397,14 +528,14 @@ class MobileUploadApiTest < Minitest::Test
     JSON.parse(exchanged.fetch(:body))
   end
 
-  def mobile_api
+  def mobile_api(logger: $stderr)
     s3 = Aws::S3::Client.new(
       region: "ap-northeast-1",
       credentials: Aws::Credentials.new("access-key", "secret-key"),
       stub_responses: true
     )
     WeblogAuthoring::LambdaApi.new(
-      database: @database, s3_client: s3, asset_bucket: "production-assets", clock: -> { @now }
+      database: @database, s3_client: s3, asset_bucket: "production-assets", logger:, clock: -> { @now }
     )
   end
 
@@ -419,6 +550,13 @@ class MobileUploadApiTest < Minitest::Test
     }
   end
 
+  def mobile_upload_count
+    database = SQLite3::Database.new(@database.path.to_s)
+    database.get_first_value("SELECT COUNT(*) FROM mobile_uploads")
+  ensure
+    database&.close
+  end
+
   def json_event(method, path, payload, cookies: nil, headers: nil, path_parameters: nil)
     {
       "rawPath" => path,
@@ -427,7 +565,7 @@ class MobileUploadApiTest < Minitest::Test
       "cookies" => cookies,
       "headers" => { "content-type" => "application/json", **headers.to_h },
       "body" => JSON.generate(payload),
-      "requestContext" => { "http" => { "method" => method } },
+      "requestContext" => { "requestId" => "request-id", "http" => { "method" => method } },
     }
   end
 end

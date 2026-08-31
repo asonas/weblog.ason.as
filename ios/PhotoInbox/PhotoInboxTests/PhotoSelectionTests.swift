@@ -37,5 +37,7 @@ final class PhotoSelectionTests: XCTestCase {
     XCTAssertEqual(nextLaunch.status(of: "second"), .excluded)
     XCTAssertEqual(nextLaunch.status(of: "third"), .uploaded)
     XCTAssertEqual(nextLaunch.selectedIDs, Set(["first"]))
+    XCTAssertEqual(nextLaunch.uploadedCount(in: ["first", "third"]), 1)
+    XCTAssertEqual(nextLaunch.uploadedCount(in: ["first", "second"]), 0)
   }
 }

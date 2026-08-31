@@ -9,6 +9,7 @@ final class UploadCoordinator {
   private(set) var pendingCount = 0
   private(set) var isSending = false
   private(set) var lastError: String?
+  private(set) var failuresByAssetID: [String: UploadFailure] = [:]
   private let store: UploadQueueStore
   private let library: PhotoLibrary
   private let selection: PhotoSelectionStore
@@ -26,7 +27,7 @@ final class UploadCoordinator {
   }
 
   func restoreAndRetry() async {
-    await refreshCount()
+    await refreshState()
     guard (try? Credentials.loadToken()) != nil else { return }
     await processQueue()
   }
@@ -41,7 +42,7 @@ final class UploadCoordinator {
             capturedAtSource: $0.capturedAtSource
           )
         })
-      await refreshCount()
+      await refreshState()
       scheduleRetry()
       await processQueue()
     } catch {
@@ -55,18 +56,42 @@ final class UploadCoordinator {
     defer { isSending = false }
     let api = MobileAPIClient(baseURL: URL(string: "https://weblog.ason.as")!, token: token)
     let items = (try? await store.items()) ?? []
-    for item in items {
+    for item in items where item.shouldAttemptAutomatically {
       do {
         try await send(item, api: api)
         try await store.remove(item.clientUploadID)
       } catch {
-        try? await store.updateStage(
-          item.clientUploadID, stage: .failed(message: error.localizedDescription))
-        lastError = error.localizedDescription
-        scheduleRetry()
+        let failure = UploadFailure(error: error)
+        try? await store.updateFailure(item.clientUploadID, failure: failure)
+        lastError = failure.message
+        if failure.automaticallyRetryable { scheduleRetry() }
       }
-      await refreshCount()
+      await refreshState()
     }
+  }
+
+  func retryFailed(assetID: String) async {
+    guard !isSending else { return }
+    guard
+      let item = try? await store.items().first(where: {
+        $0.assetLocalIdentifier == assetID && $0.failure != nil
+      })
+    else { return }
+    try? await store.retry(item.clientUploadID)
+    await refreshState()
+    await processQueue()
+  }
+
+  func excludeFailed(assetID: String) async {
+    guard !isSending else { return }
+    guard
+      let item = try? await store.items().first(where: {
+        $0.assetLocalIdentifier == assetID && $0.failure != nil
+      })
+    else { return }
+    try? await store.remove(item.clientUploadID)
+    selection.exclude(assetID)
+    await refreshState()
   }
 
   private func send(_ original: UploadItem, api: MobileAPIClient) async throws {
@@ -109,8 +134,13 @@ final class UploadCoordinator {
     try? FileManager.default.removeItem(at: prepared.fileURL)
   }
 
-  private func refreshCount() async {
-    pendingCount = (try? await store.items().count) ?? 0
+  private func refreshState() async {
+    let items = (try? await store.items()) ?? []
+    pendingCount = items.count
+    failuresByAssetID = Dictionary(
+      uniqueKeysWithValues: items.compactMap { item in
+        item.failure.map { (item.assetLocalIdentifier, $0) }
+      })
   }
 
   private func scheduleRetry() {
