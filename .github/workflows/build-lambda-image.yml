@@ -1,0 +1,187 @@
+name: Build Lambda image
+
+'on':
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+      target_sha:
+        required: true
+        type: string
+      repository:
+        required: true
+        type: string
+      function_name:
+        required: true
+        type: string
+      dockerfile:
+        required: true
+        type: string
+      build_inputs:
+        required: true
+        type: string
+    outputs:
+      available:
+        value: ${{ jobs.build.outputs.available }}
+      content_hash:
+        value: ${{ jobs.build.outputs.content_hash }}
+      digest:
+        value: ${{ jobs.build.outputs.digest }}
+      deploy:
+        value: ${{ jobs.build.outputs.deploy }}
+      source_commit:
+        value: ${{ jobs.build.outputs.source_commit }}
+      build_run_id:
+        value: ${{ jobs.build.outputs.build_run_id }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    concurrency:
+      group: lambda-image-${{ inputs.service }}
+      cancel-in-progress: true
+    outputs:
+      available: ${{ steps.inspect.outputs.available }}
+      content_hash: ${{ steps.inspect.outputs.content_hash }}
+      digest: ${{ steps.result.outputs.digest }}
+      deploy: ${{ steps.result.outputs.deploy }}
+      source_commit: ${{ inputs.target_sha }}
+      build_run_id: ${{ github.run_id }}
+    env:
+      AWS_REGION: ap-northeast-1
+      AWS_ACCOUNT_ID: "282782318939"
+    steps:
+      - name: Record image preparation start
+        id: timing
+        run: echo "started_at=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          ref: ${{ inputs.target_sha }}
+          fetch-depth: 0
+
+      - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: arn:aws:iam::282782318939:role/WeblogGitHubDeploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Inspect image inputs
+        id: inspect
+        env:
+          BUILD_INPUTS: ${{ inputs.build_inputs }}
+          FUNCTION_NAME: ${{ inputs.function_name }}
+          REPOSITORY: ${{ inputs.repository }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          mapfile -t paths < <(jq --raw-output '.[]' <<< "$BUILD_INPUTS")
+          inputs_hash="$(git ls-tree -r "$TARGET_SHA" -- "${paths[@]}" | sha256sum | cut -d ' ' -f 1)"
+          content_hash="$(printf 'linux/arm64\n%s\n' "$inputs_hash" | sha256sum | cut -d ' ' -f 1)"
+          image_tag="content-${content_hash}"
+          echo "content_hash=${content_hash}" >> "$GITHUB_OUTPUT"
+
+          if ! repository_error="$(aws ecr describe-repositories --repository-names "$REPOSITORY" 2>&1 >/dev/null)"; then
+            if [[ "$repository_error" != *RepositoryNotFoundException* ]]; then
+              echo "$repository_error" >&2
+              exit 1
+            fi
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! function_error="$(aws lambda get-function --function-name "$FUNCTION_NAME" 2>&1 >/dev/null)"; then
+            if [[ "$function_error" != *ResourceNotFoundException* ]]; then
+              echo "$function_error" >&2
+              exit 1
+            fi
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+          digest="$(aws ecr batch-get-image --repository-name "$REPOSITORY" \
+            --image-ids imageTag="$image_tag" --query 'images[0].imageId.imageDigest' --output text)"
+          if [[ "$digest" == sha256:* ]]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          image_uri="$(aws lambda get-function --function-name "$FUNCTION_NAME" --query 'Code.ImageUri' --output text)"
+          deployed_tag="${image_uri##*:}"
+          if [[ "$deployed_tag" =~ ^([0-9a-f]{40})-[1-9][0-9]*$ ]]; then
+            baseline_sha="${BASH_REMATCH[1]}"
+            git cat-file -e "${baseline_sha}^{commit}"
+            git merge-base --is-ancestor "$baseline_sha" "$TARGET_SHA"
+            if git diff --quiet "$baseline_sha" "$TARGET_SHA" -- "${paths[@]}"; then
+              resolved_uri="$(aws lambda get-function --function-name "$FUNCTION_NAME" --query 'Code.ResolvedImageUri' --output text)"
+              echo "build=false" >> "$GITHUB_OUTPUT"
+              echo "digest=${resolved_uri##*@}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+        if: steps.inspect.outputs.build == 'true'
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        if: steps.inspect.outputs.build == 'true'
+
+      - name: Build and publish image
+        id: build
+        if: steps.inspect.outputs.build == 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: ${{ inputs.dockerfile }}
+          platforms: linux/arm64
+          provenance: false
+          push: true
+          tags: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ inputs.repository }}:content-${{ steps.inspect.outputs.content_hash }}
+          cache-from: type=gha,scope=${{ inputs.service }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.service }}
+
+      - name: Record image result
+        id: result
+        env:
+          BUILT_DIGEST: ${{ steps.build.outputs.digest }}
+          CACHED_DIGEST: ${{ steps.inspect.outputs.digest }}
+          FUNCTION_NAME: ${{ inputs.function_name }}
+        run: |
+          if [[ "${{ steps.inspect.outputs.available }}" != "true" ]]; then
+            echo "digest=" >> "$GITHUB_OUTPUT"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          digest="${BUILT_DIGEST:-$CACHED_DIGEST}"
+          [[ "$digest" == sha256:* ]]
+          resolved_uri="$(aws lambda get-function --function-name "$FUNCTION_NAME" --query 'Code.ResolvedImageUri' --output text)"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          if [[ "${resolved_uri##*@}" == "$digest" ]]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summarize image preparation
+        env:
+          DIGEST: ${{ steps.result.outputs.digest }}
+          STARTED_AT: ${{ steps.timing.outputs.started_at }}
+        run: |
+          elapsed="$(($(date +%s) - STARTED_AT))"
+          {
+            echo "## ${{ inputs.service }} Lambda image"
+            printf 'Preparation: `%02dm %02ds`\n' "$((elapsed / 60))" "$((elapsed % 60))"
+            echo "Source commit: \`${{ inputs.target_sha }}\`"
+            echo "Content hash: \`${{ steps.inspect.outputs.content_hash }}\`"
+            echo "Image digest: \`${DIGEST:-not-provisioned}\`"
+            echo "Built: \`${{ steps.inspect.outputs.build }}\`"
+            echo "Deploy required: \`${{ steps.result.outputs.deploy }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

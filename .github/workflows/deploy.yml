@@ -10,10 +10,6 @@ permissions:
   contents: read
   id-token: write
 
-concurrency:
-  group: production-deploy
-  cancel-in-progress: false
-
 env:
   AWS_REGION: ap-northeast-1
   AWS_ACCOUNT_ID: "282782318939"
@@ -66,19 +62,82 @@ jobs:
             echo "Skipping superseded validation for ${TARGET_SHA}; main is ${current_sha}."
           fi
 
-  deploy:
+  build-authoring:
     needs: gate
     if: needs.gate.outputs.current == 'true'
+    uses: ./.github/workflows/build-lambda-image.yml
+    with:
+      service: authoring
+      target_sha: ${{ github.event.workflow_run.head_sha }}
+      repository: weblog-authoring-production
+      function_name: weblog-authoring-production
+      dockerfile: Dockerfile.lambda
+      build_inputs: '[".dockerignore","Dockerfile.lambda","Gemfile","Gemfile.lock","lib","lambda"]'
+
+  build-search:
+    needs: gate
+    if: needs.gate.outputs.current == 'true'
+    uses: ./.github/workflows/build-lambda-image.yml
+    with:
+      service: search-indexer
+      target_sha: ${{ github.event.workflow_run.head_sha }}
+      repository: weblog-search-indexer-production
+      function_name: weblog-search-indexer-production
+      dockerfile: Dockerfile.search-indexer
+      build_inputs: '[".dockerignore","Dockerfile.search-indexer","Gemfile","Gemfile.lock","lib","lambda/search_indexer.rb"]'
+
+  build-inbox:
+    needs: gate
+    if: needs.gate.outputs.current == 'true'
+    uses: ./.github/workflows/build-lambda-image.yml
+    with:
+      service: inbox-sync
+      target_sha: ${{ github.event.workflow_run.head_sha }}
+      repository: weblog-inbox-sync-production
+      function_name: weblog-inbox-sync-production
+      dockerfile: Dockerfile.inbox-sync
+      build_inputs: '[".dockerignore","Dockerfile.inbox-sync","Gemfile","Gemfile.lock","lib","lambda/inbox_sync.rb","lambda/matrix_notifier.rb"]'
+
+  build-oauth:
+    needs: gate
+    if: needs.gate.outputs.current == 'true'
+    uses: ./.github/workflows/build-lambda-image.yml
+    with:
+      service: bluesky-oauth
+      target_sha: ${{ github.event.workflow_run.head_sha }}
+      repository: weblog-bluesky-oauth-production
+      function_name: weblog-bluesky-oauth-production
+      dockerfile: Dockerfile.bluesky-oauth
+      build_inputs: '[".dockerignore","Dockerfile.bluesky-oauth","package.json","package-lock.json","tsconfig.bluesky-oauth.json","lambda/bluesky_oauth"]'
+
+  deploy:
+    needs: [gate, build-authoring, build-search, build-inbox, build-oauth]
+    if: >-
+      always() &&
+      needs.gate.outputs.current == 'true' &&
+      needs.build-authoring.result == 'success' &&
+      needs.build-search.result == 'success' &&
+      needs.build-inbox.result == 'success' &&
+      needs.build-oauth.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     env:
       TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
-      IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}-${{ github.run_attempt }}
+      AUTHORING_DIGEST: ${{ needs.build-authoring.outputs.digest }}
+      SEARCH_DIGEST: ${{ needs.build-search.outputs.digest }}
+      INBOX_DIGEST: ${{ needs.build-inbox.outputs.digest }}
+      OAUTH_DIGEST: ${{ needs.build-oauth.outputs.digest }}
     steps:
+      - name: Record production deploy start
+        id: timing
+        run: echo "started_at=$(date +%s)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
 
       - name: Download validated site artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -95,7 +154,7 @@ jobs:
           artifact_sha="$(jq --raw-output .commit_sha dist/site/artifact-metadata.json)"
           [[ "$checkout_sha" == "$TARGET_SHA" ]]
           [[ "$artifact_sha" == "$TARGET_SHA" ]]
-          [[ "$IMAGE_TAG" == "${TARGET_SHA}-${GITHUB_RUN_ATTEMPT}" ]]
+          [[ "$AUTHORING_DIGEST" == sha256:* ]]
           [[ -f dist/site/index.html ]]
           find dist/site/static/authoring/assets -type f -print -quit | grep -q .
 
@@ -147,43 +206,6 @@ jobs:
             echo "${service}=true" >> "$GITHUB_OUTPUT"
           done
 
-      - name: Inspect Lambda deployment baselines
-        id: lambda
-        run: |
-          inspect() {
-            service="$1"
-            function="$2"
-            ready="$3"
-            shift 3
-            if [[ "$ready" != "true" ]]; then
-              echo "${service}=false" >> "$GITHUB_OUTPUT"
-              return
-            fi
-            image_uri="$(aws lambda get-function --function-name "$function" --query 'Code.ImageUri' --output text)"
-            deployed_tag="${image_uri##*:}"
-            if [[ "$deployed_tag" == "bootstrap" ]]; then
-              echo "${service}=true" >> "$GITHUB_OUTPUT"
-              return
-            fi
-            if [[ ! "$deployed_tag" =~ ^([0-9a-f]{40})-[1-9][0-9]*$ ]]; then
-              echo "Unexpected ${service} Lambda image tag: ${deployed_tag}" >&2
-              exit 1
-            fi
-            baseline_sha="${BASH_REMATCH[1]}"
-            git cat-file -e "${baseline_sha}^{commit}"
-            git merge-base --is-ancestor "$baseline_sha" "$TARGET_SHA"
-            if git diff --quiet "$baseline_sha" "$TARGET_SHA" -- "$@"; then
-              echo "${service}=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "${service}=true" >> "$GITHUB_OUTPUT"
-            fi
-          }
-          inspect authoring "$LAMBDA_FUNCTION" true Dockerfile.lambda Gemfile Gemfile.lock lib/ lambda/
-          inspect search "$SEARCH_INDEXER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.search }}" Dockerfile.search-indexer Gemfile Gemfile.lock lib/ lambda/search_indexer.rb
-          inspect inbox "$INBOX_SYNC_LAMBDA_FUNCTION" "${{ steps.infra.outputs.inbox }}" Dockerfile.inbox-sync Gemfile Gemfile.lock lib/ lambda/inbox_sync.rb lambda/matrix_notifier.rb
-          inspect notifier "$MATRIX_NOTIFIER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.notifier }}" Dockerfile.inbox-sync Gemfile Gemfile.lock lib/ lambda/matrix_notifier.rb
-          inspect oauth "$BLUESKY_OAUTH_LAMBDA_FUNCTION" "${{ steps.infra.outputs.oauth }}" Dockerfile.bluesky-oauth package.json package-lock.json tsconfig.bluesky-oauth.json lambda/bluesky_oauth/
-
       - name: Recheck current main before deployment
         id: current
         env:
@@ -209,75 +231,22 @@ jobs:
           if [[ "${{ steps.infra.outputs.publisher }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$WEBMENTION_PUBLISHER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
           if [[ "${{ steps.infra.outputs.cleanup }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$WEBMENTION_CLEANUP_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
 
-      - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
-        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.authoring == 'true' || steps.lambda.outputs.search == 'true' || steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.notifier == 'true' || steps.lambda.outputs.oauth == 'true')
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.authoring == 'true' || steps.lambda.outputs.search == 'true' || steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.notifier == 'true' || steps.lambda.outputs.oauth == 'true')
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.authoring == 'true' || steps.lambda.outputs.search == 'true' || steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.notifier == 'true' || steps.lambda.outputs.oauth == 'true')
-
-      - name: Build and publish authoring Lambda image
-        if: steps.current.outputs.current == 'true' && steps.lambda.outputs.authoring == 'true'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          file: Dockerfile.lambda
-          platforms: linux/arm64
-          provenance: false
-          push: true
-          tags: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and publish search indexer Lambda image
-        if: steps.current.outputs.current == 'true' && steps.lambda.outputs.search == 'true'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          file: Dockerfile.search-indexer
-          platforms: linux/arm64
-          provenance: false
-          push: true
-          tags: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.SEARCH_INDEXER_ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and publish inbox sync Lambda image
-        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.notifier == 'true')
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          file: Dockerfile.inbox-sync
-          platforms: linux/arm64
-          provenance: false
-          push: true
-          tags: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.INBOX_SYNC_ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and publish Bluesky OAuth Lambda image
-        if: steps.current.outputs.current == 'true' && steps.lambda.outputs.oauth == 'true'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          file: Dockerfile.bluesky-oauth
-          platforms: linux/arm64
-          provenance: false
-          push: true
-          tags: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.BLUESKY_OAUTH_ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Record schema completion
+        id: schema
+        if: steps.current.outputs.current == 'true'
+        run: echo "completed_at=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Deploy authoring Lambda image
-        if: steps.current.outputs.current == 'true' && steps.lambda.outputs.authoring == 'true'
+        if: steps.current.outputs.current == 'true' && needs.build-authoring.outputs.deploy == 'true'
         run: |
-          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}@${AUTHORING_DIGEST}"
           aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" --image-uri "$image_uri"
           aws lambda wait function-updated-v2 --function-name "$LAMBDA_FUNCTION"
+
       - name: Deploy Webmention Lambda image
-        if: steps.current.outputs.current == 'true' && steps.lambda.outputs.authoring == 'true' && (steps.infra.outputs.receiver == 'true' || steps.infra.outputs.worker == 'true' || steps.infra.outputs.publisher == 'true' || steps.infra.outputs.cleanup == 'true')
+        if: steps.current.outputs.current == 'true' && needs.build-authoring.outputs.deploy == 'true' && (steps.infra.outputs.receiver == 'true' || steps.infra.outputs.worker == 'true' || steps.infra.outputs.publisher == 'true' || steps.infra.outputs.cleanup == 'true')
         run: |
-          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}@${AUTHORING_DIGEST}"
           if [[ "${{ steps.infra.outputs.receiver }}" == "true" ]]; then
             aws lambda update-function-code --function-name "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" --image-uri "$image_uri"
             aws lambda wait function-updated-v2 --function-name "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION"
@@ -294,30 +263,38 @@ jobs:
             aws lambda update-function-code --function-name "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION" --image-uri "$image_uri"
             aws lambda wait function-updated-v2 --function-name "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION"
           fi
+
       - name: Deploy search indexer Lambda image
-        if: steps.current.outputs.current == 'true' && steps.lambda.outputs.search == 'true'
+        if: steps.current.outputs.current == 'true' && needs.build-search.outputs.deploy == 'true'
         run: |
-          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${SEARCH_INDEXER_ECR_REPOSITORY}:${IMAGE_TAG}"
+          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${SEARCH_INDEXER_ECR_REPOSITORY}@${SEARCH_DIGEST}"
           aws lambda update-function-code --function-name "$SEARCH_INDEXER_LAMBDA_FUNCTION" --image-uri "$image_uri"
           aws lambda wait function-updated-v2 --function-name "$SEARCH_INDEXER_LAMBDA_FUNCTION"
+
       - name: Deploy inbox sync Lambda image
-        if: steps.current.outputs.current == 'true' && (steps.lambda.outputs.inbox == 'true' || steps.lambda.outputs.notifier == 'true')
+        if: steps.current.outputs.current == 'true' && needs.build-inbox.outputs.deploy == 'true'
         run: |
-          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${INBOX_SYNC_ECR_REPOSITORY}:${IMAGE_TAG}"
-          if [[ "${{ steps.lambda.outputs.inbox }}" == "true" ]]; then
+          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${INBOX_SYNC_ECR_REPOSITORY}@${INBOX_DIGEST}"
+          if [[ "${{ steps.infra.outputs.inbox }}" == "true" ]]; then
             aws lambda update-function-code --function-name "$INBOX_SYNC_LAMBDA_FUNCTION" --image-uri "$image_uri"
             aws lambda wait function-updated-v2 --function-name "$INBOX_SYNC_LAMBDA_FUNCTION"
           fi
-          if [[ "${{ steps.lambda.outputs.notifier }}" == "true" ]]; then
+          if [[ "${{ steps.infra.outputs.notifier }}" == "true" ]]; then
             aws lambda update-function-code --function-name "$MATRIX_NOTIFIER_LAMBDA_FUNCTION" --image-uri "$image_uri"
             aws lambda wait function-updated-v2 --function-name "$MATRIX_NOTIFIER_LAMBDA_FUNCTION"
           fi
+
       - name: Deploy Bluesky OAuth Lambda image
-        if: steps.current.outputs.current == 'true' && steps.lambda.outputs.oauth == 'true'
+        if: steps.current.outputs.current == 'true' && needs.build-oauth.outputs.deploy == 'true'
         run: |
-          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${BLUESKY_OAUTH_ECR_REPOSITORY}:${IMAGE_TAG}"
+          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${BLUESKY_OAUTH_ECR_REPOSITORY}@${OAUTH_DIGEST}"
           aws lambda update-function-code --function-name "$BLUESKY_OAUTH_LAMBDA_FUNCTION" --image-uri "$image_uri"
           aws lambda wait function-updated-v2 --function-name "$BLUESKY_OAUTH_LAMBDA_FUNCTION"
+
+      - name: Record Lambda deployment completion
+        id: lambda
+        if: steps.current.outputs.current == 'true'
+        run: echo "completed_at=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Publish immutable site assets
         if: steps.current.outputs.current == 'true'
@@ -337,8 +314,44 @@ jobs:
       - name: Smoke check production
         if: steps.current.outputs.current == 'true'
         run: bundle exec ruby bin/smoke-production "$SITE_URL"
+      - name: Record smoke check completion
+        id: smoke
+        if: steps.current.outputs.current == 'true'
+        run: echo "completed_at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - name: Delete stale site assets
         if: steps.current.outputs.current == 'true'
         run: >-
           aws s3 sync dist/site/static/authoring/assets/ "s3://${SITE_BUCKET}/static/authoring/assets/"
           --delete --only-show-errors --cache-control 'public,max-age=31536000,immutable'
+
+      - name: Summarize production deploy
+        if: always() && steps.current.outputs.current == 'true'
+        env:
+          STARTED_AT: ${{ steps.timing.outputs.started_at }}
+          SCHEMA_COMPLETED_AT: ${{ steps.schema.outputs.completed_at }}
+          LAMBDA_COMPLETED_AT: ${{ steps.lambda.outputs.completed_at }}
+          COMPLETED_AT: ${{ steps.smoke.outputs.completed_at }}
+        run: |
+          completed_at="${COMPLETED_AT:-$(date +%s)}"
+          schema_completed_at="${SCHEMA_COMPLETED_AT:-$STARTED_AT}"
+          lambda_completed_at="${LAMBDA_COMPLETED_AT:-$schema_completed_at}"
+          elapsed="$((completed_at - STARTED_AT))"
+          setup_and_schema="$((schema_completed_at - STARTED_AT))"
+          lambda_deploy="$((lambda_completed_at - schema_completed_at))"
+          site_and_smoke="$((completed_at - lambda_completed_at))"
+          minutes="$((elapsed / 60))"
+          seconds="$((elapsed % 60))"
+          if (( elapsed <= 300 )) && [[ -n "$COMPLETED_AT" ]]; then slo="PASS"; else slo="FAIL"; fi
+          {
+            echo "## Production deploy"
+            printf 'Duration: `%02dm %02ds`\n' "$minutes" "$seconds"
+            printf 'Setup and schema: `%02dm %02ds`\n' "$((setup_and_schema / 60))" "$((setup_and_schema % 60))"
+            printf 'Lambda deployment: `%02dm %02ds`\n' "$((lambda_deploy / 60))" "$((lambda_deploy % 60))"
+            printf 'Site delivery and smoke check: `%02dm %02ds`\n' "$((site_and_smoke / 60))" "$((site_and_smoke % 60))"
+            echo "SLO: \`${slo}\` (under \`05m 00s\`)"
+            echo "Source commit: \`${TARGET_SHA}\`"
+            echo "Authoring digest: \`${AUTHORING_DIGEST}\`"
+            echo "Search digest: \`${SEARCH_DIGEST:-not-provisioned}\`"
+            echo "Inbox digest: \`${INBOX_DIGEST:-not-provisioned}\`"
+            echo "OAuth digest: \`${OAUTH_DIGEST:-not-provisioned}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

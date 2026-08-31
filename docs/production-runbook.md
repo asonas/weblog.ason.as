@@ -17,14 +17,17 @@ mainへのpush後、`Validate`が成功すると、同じSHAを対象に`Deploy 
 まずActionsで両workflowのhead SHAが一致していることを確認します。
 `Deploy production`では、次の順序で成功を確認します。
 
-1. checkout、site artifact metadata、Lambda image tagのSHA検証
-2. database schema適用
-3. 必要なLambda imageのbuildと更新
-4. hash付きauthoring assetのupload
-5. `index.html`のupload
-6. CloudFront invalidationの完了
-7. HTML、HTMLが参照する全authoring asset、`GET /api/pages`のsmoke check
-8. `static/authoring/assets/`だけのstale object削除
+1. 各Lambda imageの入力からcontent hashを計算
+2. ECRにないimageだけをnative ARM64 runnerで並列build
+3. checkout、site artifact metadata、Lambda image digestの検証
+4. database schema適用
+5. 変更されたLambdaをECR digestで更新
+6. hash付きauthoring assetと`index.html`のupload
+7. CloudFront invalidationの完了
+8. HTML、HTMLが参照する全authoring asset、`GET /api/pages`のsmoke check
+9. `static/authoring/assets/`だけのstale object削除
+
+image準備jobはサービス単位で古いrunをキャンセルできます。production変更を行う`deploy` jobはキャンセルせず、image準備完了からsmoke checkまでの時間と5分SLOの成否をworkflow summaryへ記録します。
 
 Actions成功後、productionを読み取り専用checkで確認します。
 
@@ -73,9 +76,10 @@ rotationにより既存のlogin sessionは無効になります。
 | Failure point | Production state | 対応 |
 | --- | --- | --- |
 | Validate | 未変更 | failureを修正してmainへpushする。Deployは起動しない。 |
-| SHA・artifact・Lambda baseline検証 | 未変更 | mismatchの原因を確認する。artifactの差し替えやtagの上書きはしない。 |
+| SHA・artifact・Lambda image検証 | 未変更 | mismatchの原因を確認する。artifactの差し替えやtagの上書きはしない。 |
 | database schema | schemaだけが一部適用された可能性がある | `bin/bootstrap-dsql`は冪等なので、原因修正後に同じmain SHAから再実行する。schemaを手作業で戻さない。 |
-| Lambda buildまたは更新 | 一部Lambdaだけが対象SHAの場合がある | workflowを再実行する。各Lambdaは自身の稼働SHAから差分判定され、未完了のLambdaだけが更新される。 |
+| Lambda image準備 | 未変更 | workflowを再実行する。ECRへpush済みのcontent hashは再利用され、未完了のimageだけがbuildされる。 |
+| Lambda更新 | 一部Lambdaだけが新digestの場合がある | workflowを再実行する。現在のdigestと一致するLambda更新は省略される。 |
 | asset upload | 新hash assetだけが追加された可能性がある | 旧HTMLと旧assetは残る。原因修正後に再実行する。 |
 | HTML upload、invalidation、smoke check | 新HTMLが公開された可能性がある | 下記のS3 version復旧で直前のHTMLと必要なassetを戻し、invalidationとsmoke checkを行う。 |
 | stale asset削除 | deployment smoke checkは成功済み | 通常は復旧不要。以前のHTMLへ戻す場合は、そのHTMLが参照するasset versionも一緒に復旧する。 |

@@ -8,13 +8,13 @@ class DeployWorkflowTest < Minitest::Test
 
   def setup
     @workflow = YAML.safe_load_file(File.join(ROOT, ".github/workflows/deploy.yml"))
+    @build_workflow = YAML.safe_load_file(File.join(ROOT, ".github/workflows/build-lambda-image.yml"))
   end
 
   def test_only_current_successful_main_validation_can_deploy
     trigger = @workflow.fetch("on").fetch("workflow_run")
     assert_equal ["Validate"], trigger.fetch("workflows")
     assert_equal ["completed"], trigger.fetch("types")
-    assert_equal false, @workflow.dig("concurrency", "cancel-in-progress")
     gate = @workflow.dig("jobs", "gate")
     assert_includes gate.fetch("if"), "conclusion == 'success'"
     assert_includes gate.fetch("if"), "head_branch == 'main'"
@@ -58,23 +58,44 @@ class DeployWorkflowTest < Minitest::Test
     assert_includes deploy_policy, '"cloudfront:GetInvalidation"'
   end
 
-  def test_each_lambda_has_an_independent_baseline_and_main_is_rechecked
+  def test_images_are_prepared_in_parallel_on_native_arm64
+    build_jobs = @workflow.fetch("jobs").select { |name, _job| name.start_with?("build-") }
+    assert_equal %w[build-authoring build-inbox build-oauth build-search], build_jobs.keys.sort
+    build_jobs.each_value do |job|
+      assert_equal ["gate"], Array(job.fetch("needs"))
+      assert_equal "./.github/workflows/build-lambda-image.yml", job.fetch("uses")
+    end
+
+    build = @build_workflow.dig("jobs", "build")
+    assert_equal "ubuntu-24.04-arm", build.fetch("runs-on")
+    assert_equal true, build.dig("concurrency", "cancel-in-progress")
+    steps = build.fetch("steps")
+    refute(steps.any? { |step| step["uses"]&.include?("setup-qemu") })
+    image = steps.find { |step| step["name"] == "Build and publish image" }
+    assert_equal "linux/arm64", image.dig("with", "platforms")
+    assert_equal "type=gha,scope=${{ inputs.service }}", image.dig("with", "cache-from")
+    assert_equal "type=gha,mode=max,scope=${{ inputs.service }}", image.dig("with", "cache-to")
+  end
+
+  def test_images_are_reused_by_content_hash_and_deployed_by_digest
+    steps = @build_workflow.dig("jobs", "build", "steps")
+    inspect = steps.find { |step| step["name"] == "Inspect image inputs" }.fetch("run")
+    assert_includes inspect, 'git ls-tree -r "$TARGET_SHA"'
+    assert_includes inspect, 'image_tag="content-${content_hash}"'
+    assert_includes inspect, "aws ecr batch-get-image"
+    assert_includes inspect, 'git diff --quiet "$baseline_sha" "$TARGET_SHA"'
+    %w[content_hash digest source_commit build_run_id].each do |output|
+      assert @build_workflow.dig("on", "workflow_call", "outputs", output)
+    end
+
     steps = @workflow.dig("jobs", "deploy", "steps")
     infrastructure = steps.find { |step| step["name"] == "Detect optional Lambda infrastructure" }.fetch("run")
     assert_includes infrastructure, "RepositoryNotFoundException"
     assert_includes infrastructure, "ResourceNotFoundException"
     assert_includes infrastructure, "exit 1"
-    baselines = steps.find { |step| step["name"] == "Inspect Lambda deployment baselines" }.fetch("run")
-    %w[authoring search inbox notifier oauth].each { |service| assert_includes baselines, "inspect #{service}" }
-    %w[receiver worker publisher cleanup].each { |service| refute_includes baselines, "inspect #{service}" }
-    assert_includes baselines, 'deployed_tag" == "bootstrap"'
-    assert_includes baselines, 'git diff --quiet "$baseline_sha" "$TARGET_SHA" -- "$@"'
-    assert_includes baselines, 'inspect search "$SEARCH_INDEXER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.search }}" Dockerfile.search-indexer Gemfile Gemfile.lock lib/ lambda/search_indexer.rb'
-    assert_includes baselines, 'inspect inbox "$INBOX_SYNC_LAMBDA_FUNCTION" "${{ steps.infra.outputs.inbox }}" Dockerfile.inbox-sync Gemfile Gemfile.lock lib/ lambda/inbox_sync.rb lambda/matrix_notifier.rb'
-    assert_includes baselines, 'inspect notifier "$MATRIX_NOTIFIER_LAMBDA_FUNCTION" "${{ steps.infra.outputs.notifier }}" Dockerfile.inbox-sync Gemfile Gemfile.lock lib/ lambda/matrix_notifier.rb'
-    assert_includes baselines, 'inspect oauth "$BLUESKY_OAUTH_LAMBDA_FUNCTION" "${{ steps.infra.outputs.oauth }}" Dockerfile.bluesky-oauth package.json package-lock.json tsconfig.bluesky-oauth.json lambda/bluesky_oauth/'
     webmention_deploy = steps.find { |step| step["name"] == "Deploy Webmention Lambda image" }
-    assert_includes webmention_deploy.fetch("if"), "steps.lambda.outputs.authoring == 'true'"
+    assert_includes webmention_deploy.fetch("if"), "needs.build-authoring.outputs.deploy == 'true'"
+    assert_includes webmention_deploy.fetch("run"), "@${AUTHORING_DIGEST}"
     %w[receiver worker publisher cleanup].each do |service|
       assert_includes webmention_deploy.fetch("run"), "steps.infra.outputs.#{service}"
     end
@@ -84,8 +105,23 @@ class DeployWorkflowTest < Minitest::Test
     assert_equal "steps.current.outputs.current == 'true'", schema.fetch("if")
   end
 
+  def test_production_deploy_is_not_cancelled_and_records_the_five_minute_slo
+    deploy = @workflow.dig("jobs", "deploy")
+    assert_equal false, deploy.dig("concurrency", "cancel-in-progress")
+    assert_equal 10, deploy.fetch("timeout-minutes")
+    assert_equal %w[gate build-authoring build-search build-inbox build-oauth], deploy.fetch("needs")
+    summary = deploy.fetch("steps").find { |step| step["name"] == "Summarize production deploy" }.fetch("run")
+    assert_includes summary, "elapsed <= 300"
+    assert_includes summary, "05m 00s"
+    assert_includes summary, "Setup and schema"
+    assert_includes summary, "Lambda deployment"
+    assert_includes summary, "Site delivery and smoke check"
+  end
+
   def test_actions_are_pinned
-    actions = @workflow.fetch("jobs").values.flat_map { |job| job.fetch("steps") }.filter_map { |step| step["uses"] }
+    actions = [@workflow, @build_workflow].flat_map do |workflow|
+      workflow.fetch("jobs").values.flat_map { |job| job.fetch("steps", []) }.filter_map { |step| step["uses"] }
+    end
     assert(actions.all? { |action| action.match?(/@[0-9a-f]{40}\z/) })
   end
 end
