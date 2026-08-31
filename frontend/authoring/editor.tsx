@@ -2637,6 +2637,7 @@ const BlueskyPlayer = TiptapNode.create({
   },
 
   addProseMirrorPlugins() {
+    const editor = this.editor;
     return [
       new Plugin({
         appendTransaction: (transactions, oldState, state) => {
@@ -2646,7 +2647,10 @@ const BlueskyPlayer = TiptapNode.create({
             )
           )
             return null;
-          if (transactions.some((transaction) => transaction.selectionSet)) {
+          if (
+            editor.isEditable &&
+            transactions.some((transaction) => transaction.selectionSet)
+          ) {
             const selection = state.selection;
             const enteredFromBefore =
               selection instanceof NodeSelection &&
@@ -2767,6 +2771,7 @@ const YouTubePlayer = TiptapNode.create({
   },
 
   addProseMirrorPlugins() {
+    const editor = this.editor;
     return [
       new Plugin({
         appendTransaction: (transactions, oldState, state) => {
@@ -2776,7 +2781,10 @@ const YouTubePlayer = TiptapNode.create({
             )
           )
             return null;
-          if (transactions.some((transaction) => transaction.selectionSet)) {
+          if (
+            editor.isEditable &&
+            transactions.some((transaction) => transaction.selectionSet)
+          ) {
             const selection = state.selection;
             const enteredFromBefore =
               selection instanceof NodeSelection &&

@@ -1189,6 +1189,28 @@ test("renders a standalone Bluesky post URL in the editor and preserves its Mark
   element.remove();
 });
 
+test("keeps embedded players rendered when selected in read-only mode", async () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content:
+      "title\n\nhttps://bsky.app/profile/did:plc:example/post/3mexample\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    contentType: "markdown",
+    editable: false,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const title = editor.state.doc.firstChild;
+  assert.ok(title);
+  editor.commands.setNodeSelection(title.nodeSize);
+  assert.equal(editor.state.doc.child(1).type.name, "blueskyPlayer");
+
+  const blueskyPlayer = editor.state.doc.child(1);
+  editor.commands.setNodeSelection(title.nodeSize + blueskyPlayer.nodeSize);
+  assert.equal(editor.state.doc.child(2).type.name, "youtubePlayer");
+  editor.destroy();
+});
+
 test("edits a selected YouTube player as its original URL", async () => {
   const editor = new Editor({
     element: document.createElement("div"),
