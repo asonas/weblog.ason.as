@@ -1,6 +1,12 @@
 mock_provider "aws" {
   override_during = plan
 
+  mock_resource "aws_sns_topic" {
+    defaults = {
+      arn = "arn:aws:sns:ap-northeast-1:123456789012:weblog-alerts-test"
+    }
+  }
+
   override_data {
     target = data.aws_iam_policy_document.lambda_assume_role
     values = {
@@ -131,5 +137,48 @@ run "webmention_rollout_starts_stopped_and_keeps_sender_independent" {
   assert {
     condition     = aws_lambda_function.webmention_publisher.environment[0].variables.WEBMENTION_SENDER_ENABLED == "false"
     error_message = "Outbound delivery must remain stopped when static publishing is enabled first"
+  }
+}
+
+run "webmention_alerts_use_the_matrix_notification_path" {
+  command = plan
+
+  variables {
+    webmention_alerting_enabled = true
+  }
+
+  plan_options {
+    target = [
+      aws_cloudwatch_metric_alarm.webmention_dead_letters,
+      aws_cloudwatch_metric_alarm.webmention_publish_dead_letters,
+      aws_cloudwatch_metric_alarm.webmention_publish_queue_age_critical,
+      aws_cloudwatch_metric_alarm.webmention_lambda_errors,
+      aws_cloudwatch_metric_alarm.webmention_receiver_throttles,
+    ]
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.webmention_dead_letters.actions_enabled
+    error_message = "Webmention alerts must be independently enabled"
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.webmention_dead_letters.alarm_actions) == 1 && contains(aws_cloudwatch_metric_alarm.webmention_dead_letters.alarm_actions, aws_sns_topic.inbox_alerts.arn)
+    error_message = "Webmention alerts must use the existing Matrix notification topic"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.webmention_publish_dead_letters.dimensions.QueueName == aws_sqs_queue.webmention_publish_dead_letter.name
+    error_message = "Static publish dead letters must be monitored"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.webmention_lambda_errors["publisher"].dimensions.FunctionName == aws_lambda_function.webmention_publisher.function_name
+    error_message = "The Webmention publisher Lambda must have an error alarm"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.webmention_receiver_throttles.metric_name == "Throttles"
+    error_message = "Public receiver throttling must be monitored"
   }
 }

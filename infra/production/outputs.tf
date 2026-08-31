@@ -74,7 +74,7 @@ output "inbox_sync_lambda_function_name" {
 }
 
 output "inbox_alerts_topic_arn" {
-  description = "SNS topic for inbox synchronization alarm and recovery notifications."
+  description = "Shared SNS topic for inbox and Webmention alarm and recovery notifications."
   value       = aws_sns_topic.inbox_alerts.arn
 }
 
@@ -84,7 +84,7 @@ output "inbox_matrix_secret_arn" {
 }
 
 output "matrix_notifier_lambda_function_name" {
-  description = "Name of the Lambda that forwards inbox alerts to Matrix."
+  description = "Name of the Lambda that forwards operational alerts to Matrix."
   value       = aws_lambda_function.matrix_notifier.function_name
 }
 

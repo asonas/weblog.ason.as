@@ -1,3 +1,13 @@
+locals {
+  webmention_runbook_url = "https://github.com/asonas/weblog.ason.as/blob/main/docs/runbooks/webmention.md"
+  webmention_lambda_functions = {
+    receiver  = aws_lambda_function.webmention_receiver.function_name
+    worker    = aws_lambda_function.webmention_worker.function_name
+    publisher = aws_lambda_function.webmention_publisher.function_name
+    cleanup   = aws_lambda_function.webmention_cleanup.function_name
+  }
+}
+
 resource "aws_sqs_queue" "webmention_dead_letter" {
   name                      = "weblog-webmention-dead-letter-production.fifo"
   fifo_queue                = true
@@ -478,7 +488,8 @@ resource "aws_lambda_permission" "webmention_cleanup" {
 
 resource "aws_cloudwatch_metric_alarm" "webmention_dead_letters" {
   alarm_name          = "weblog-webmention-dead-letters-production"
-  alarm_description   = "A Webmention exhausted its verification retries"
+  alarm_description   = "A Webmention exhausted its verification or delivery retries. Runbook: ${local.webmention_runbook_url}#dead-letters"
+  actions_enabled     = var.webmention_alerting_enabled
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ApproximateNumberOfMessagesVisible"
@@ -491,11 +502,34 @@ resource "aws_cloudwatch_metric_alarm" "webmention_dead_letters" {
   dimensions = {
     QueueName = aws_sqs_queue.webmention_dead_letter.name
   }
+  alarm_actions = [aws_sns_topic.inbox_alerts.arn]
+  ok_actions    = [aws_sns_topic.inbox_alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "webmention_publish_dead_letters" {
+  alarm_name          = "weblog-webmention-publish-dead-letters-production"
+  alarm_description   = "A static publish job exhausted its retries. Runbook: ${local.webmention_runbook_url}#dead-letters"
+  actions_enabled     = var.webmention_alerting_enabled
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.webmention_publish_dead_letter.name
+  }
+  alarm_actions = [aws_sns_topic.inbox_alerts.arn]
+  ok_actions    = [aws_sns_topic.inbox_alerts.arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "webmention_queue_age_warning" {
   alarm_name          = "weblog-webmention-queue-age-warning-production"
-  alarm_description   = "A Webmention has waited more than five minutes"
+  alarm_description   = "A Webmention has waited more than five minutes. Runbook: ${local.webmention_runbook_url}#queue-backlog"
+  actions_enabled     = var.webmention_alerting_enabled
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ApproximateAgeOfOldestMessage"
@@ -508,11 +542,14 @@ resource "aws_cloudwatch_metric_alarm" "webmention_queue_age_warning" {
   dimensions = {
     QueueName = aws_sqs_queue.webmention.name
   }
+  alarm_actions = [aws_sns_topic.inbox_alerts.arn]
+  ok_actions    = [aws_sns_topic.inbox_alerts.arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "webmention_queue_age_critical" {
   alarm_name          = "weblog-webmention-queue-age-critical-production"
-  alarm_description   = "A Webmention has waited more than thirty minutes"
+  alarm_description   = "A Webmention has waited more than thirty minutes. Runbook: ${local.webmention_runbook_url}#queue-backlog"
+  actions_enabled     = var.webmention_alerting_enabled
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ApproximateAgeOfOldestMessage"
@@ -525,11 +562,14 @@ resource "aws_cloudwatch_metric_alarm" "webmention_queue_age_critical" {
   dimensions = {
     QueueName = aws_sqs_queue.webmention.name
   }
+  alarm_actions = [aws_sns_topic.inbox_alerts.arn]
+  ok_actions    = [aws_sns_topic.inbox_alerts.arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "webmention_queue_depth_warning" {
   alarm_name          = "weblog-webmention-queue-depth-warning-production"
-  alarm_description   = "More than one hundred Webmentions are waiting"
+  alarm_description   = "More than one hundred Webmentions are waiting. Runbook: ${local.webmention_runbook_url}#queue-backlog"
+  actions_enabled     = var.webmention_alerting_enabled
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ApproximateNumberOfMessagesVisible"
@@ -542,11 +582,14 @@ resource "aws_cloudwatch_metric_alarm" "webmention_queue_depth_warning" {
   dimensions = {
     QueueName = aws_sqs_queue.webmention.name
   }
+  alarm_actions = [aws_sns_topic.inbox_alerts.arn]
+  ok_actions    = [aws_sns_topic.inbox_alerts.arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "webmention_queue_depth_critical" {
   alarm_name          = "weblog-webmention-queue-depth-critical-production"
-  alarm_description   = "More than one thousand Webmentions are waiting"
+  alarm_description   = "More than one thousand Webmentions are waiting. Runbook: ${local.webmention_runbook_url}#queue-backlog"
+  actions_enabled     = var.webmention_alerting_enabled
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ApproximateNumberOfMessagesVisible"
@@ -559,4 +602,68 @@ resource "aws_cloudwatch_metric_alarm" "webmention_queue_depth_critical" {
   dimensions = {
     QueueName = aws_sqs_queue.webmention.name
   }
+  alarm_actions = [aws_sns_topic.inbox_alerts.arn]
+  ok_actions    = [aws_sns_topic.inbox_alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "webmention_publish_queue_age_critical" {
+  alarm_name          = "weblog-webmention-publish-queue-age-critical-production"
+  alarm_description   = "A static publish job has waited more than thirty minutes. Runbook: ${local.webmention_runbook_url}#queue-backlog"
+  actions_enabled     = var.webmention_alerting_enabled
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 1800
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.webmention_publish.name
+  }
+  alarm_actions = [aws_sns_topic.inbox_alerts.arn]
+  ok_actions    = [aws_sns_topic.inbox_alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "webmention_lambda_errors" {
+  for_each = local.webmention_lambda_functions
+
+  alarm_name          = "weblog-webmention-${each.key}-errors-production"
+  alarm_description   = "The Webmention ${each.key} Lambda failed. Runbook: ${local.webmention_runbook_url}#lambda-errors"
+  actions_enabled     = var.webmention_alerting_enabled
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = each.value
+  }
+  alarm_actions = [aws_sns_topic.inbox_alerts.arn]
+  ok_actions    = [aws_sns_topic.inbox_alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "webmention_receiver_throttles" {
+  alarm_name          = "weblog-webmention-receiver-throttles-production"
+  alarm_description   = "The public Webmention receiver was throttled. Runbook: ${local.webmention_runbook_url}#receiver-throttles"
+  actions_enabled     = var.webmention_alerting_enabled
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.webmention_receiver.function_name
+  }
+  alarm_actions = [aws_sns_topic.inbox_alerts.arn]
+  ok_actions    = [aws_sns_topic.inbox_alerts.arn]
 }

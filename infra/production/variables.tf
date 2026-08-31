@@ -28,6 +28,12 @@ variable "webmention_sender_enabled" {
   default     = false
 }
 
+variable "webmention_alerting_enabled" {
+  description = "Send Webmention alarm and recovery notifications through the operations Matrix notifier."
+  type        = bool
+  default     = false
+}
+
 variable "inbox_alerting_enabled" {
   description = "Send inbox synchronization alarm and recovery notifications."
   type        = bool
