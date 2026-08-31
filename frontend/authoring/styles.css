@@ -2270,6 +2270,27 @@ html[data-header-scrolled="true"]
   margin-inline: 0;
 }
 
+.home-about {
+  display: flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  margin-block-end: var(--space-6);
+  padding-block-end: var(--space-4);
+  border-block-end: 1px solid var(--separator);
+}
+
+.home-about a {
+  color: var(--ink);
+  font-size: 0.9rem;
+  text-decoration-color: var(--separator);
+  text-underline-offset: 0.24em;
+}
+
+.home-about a:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+
 .cover-journal__index .home-archive {
   margin-block-start: var(--space-12);
 }

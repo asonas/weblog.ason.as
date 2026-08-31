@@ -167,6 +167,45 @@ test("keeps the shared search field in the header layout", async () => {
   }
 });
 
+test("places the about link above the home tags", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () =>
+      root.render(
+        createElement(CoverJournalHome, {
+          initialWindow: { pages: [] },
+          tags: ["TypeScript"],
+          archive: [],
+          archiveRef: createRef<HTMLDivElement>(),
+          auth: {
+            authenticated: false,
+            authentication_required: false,
+            can_edit: false,
+            login: null,
+            csrf_token: "",
+          },
+        }),
+      ),
+    );
+
+    const index = container.querySelector(".cover-journal__index");
+    const about = index?.querySelector<HTMLAnchorElement>(".home-about a");
+    const tags = index?.querySelector(".home-tags");
+    assert.equal(about?.textContent, "このサイトについて");
+    assert.equal(about?.getAttribute("href"), "/about");
+    const aboutContainer = about?.parentElement;
+    assert.ok(aboutContainer);
+    assert.ok(tags);
+    assert.ok(aboutContainer.compareDocumentPosition(tags) & 4);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
 test("selects a calendar month without navigating to its hub", async () => {
   const container = document.createElement("div");
   document.body.append(container);

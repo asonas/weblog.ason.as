@@ -872,6 +872,9 @@ export function CoverJournalHome({
       </header>
       <div className="cover-journal__body">
         <aside className="cover-journal__index" ref={archiveRef}>
+          <div className="home-about">
+            <a href="/about">このサイトについて</a>
+          </div>
           <HomeTags tags={tags} fitMobileRows />
           <details
             className="cover-journal__archive"
