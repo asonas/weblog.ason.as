@@ -180,7 +180,6 @@ run = [
   "mise run scrapbox:lint",
   "mise run scrapbox:typecheck",
   "mise run scrapbox:test",
-  "mise run terraform:check",
   "mise run frontend:build",
 ]
 
@@ -195,6 +194,7 @@ run = [
 description = "Run all repository checks on macOS"
 run = [
   "mise run check:portable",
+  "mise run terraform:check",
   "mise run check:ios",
 ]
 

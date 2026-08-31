@@ -46,7 +46,7 @@ jobs:
 
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
         with:
-          install_args: ruby node terraform tflint
+          install_args: ruby node
 
       - name: Install locked dependencies
         run: mise run setup
