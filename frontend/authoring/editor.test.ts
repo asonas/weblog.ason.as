@@ -59,6 +59,7 @@ const {
   ensureBodySelection,
   extractEmbeddableUrls,
   internalNodeVisual,
+  insertPastedJapaneseUrl,
   isImageDrag,
   isVisibleLine,
   lineUpdateLabel,
@@ -89,6 +90,40 @@ test("prefixes editor document titles only in development", () => {
     editorDocumentTitle("2026-08-26"),
     "2026-08-26 : weblog.ason.as",
   );
+});
+
+test("inserts a percent-encoded Japanese URL with a decoded label", () => {
+  const editor = new Editor({
+    extensions: EDITOR_EXTENSIONS,
+    content: "本文",
+    contentType: "markdown",
+  });
+  const url =
+    "https://jnbk.app/topics/%E4%BB%BB%E6%84%8F%E3%81%AE%E3%82%B3%E3%83%9E%E3%83%B3%E3%83%89";
+
+  editor.commands.setTextSelection(editor.state.doc.content.size);
+  assert.equal(insertPastedJapaneseUrl(editor, url), true);
+  assert.equal(
+    editor.getMarkdown(),
+    `本文[https://jnbk.app/topics/任意のコマンド](${url})`,
+  );
+  editor.destroy();
+});
+
+test("leaves ordinary pasted text and ASCII URLs to the default handler", () => {
+  const editor = new Editor({
+    extensions: EDITOR_EXTENSIONS,
+    content: "本文",
+    contentType: "markdown",
+  });
+
+  assert.equal(insertPastedJapaneseUrl(editor, "URLを参照"), false);
+  assert.equal(
+    insertPastedJapaneseUrl(editor, "https://example.com/path"),
+    false,
+  );
+  assert.equal(editor.getMarkdown(), "本文");
+  editor.destroy();
 });
 
 test("resolves an automatic cover from the first internal article image", () => {

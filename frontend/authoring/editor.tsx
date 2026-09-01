@@ -2922,6 +2922,35 @@ export function ensureBodySelection(editor: Editor): void {
   editor.view.dispatch(transaction);
 }
 
+export function insertPastedJapaneseUrl(editor: Editor, text: string): boolean {
+  const pastedText = text.trim();
+  if (pastedText !== text || /\s/.test(pastedText)) return false;
+
+  let url: URL;
+  let label: string;
+  try {
+    url = new URL(pastedText);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    label = decodeURI(url.href);
+  } catch (_error) {
+    return false;
+  }
+  const hasNonAsciiCharacter = Array.from(label).some(
+    (character) => (character.codePointAt(0) || 0) > 0x7f,
+  );
+  if (label === url.href || !hasNonAsciiCharacter) return false;
+
+  editor
+    .chain()
+    .insertContent({
+      type: "text",
+      text: label,
+      marks: [{ type: "link", attrs: { href: url.href } }],
+    })
+    .run();
+  return true;
+}
+
 async function requestJson<T>(
   url: string,
   payload: JsonObject,
@@ -3943,9 +3972,14 @@ export function AuthoringEditor({
       const files = Array.from(event.clipboardData?.files || []).filter(
         (file) => file.type.startsWith("image/"),
       );
-      if (files.length === 0) return;
+      if (files.length > 0) {
+        event.preventDefault();
+        void handleImageFiles(files);
+        return;
+      }
+      const text = event.clipboardData?.getData("text/plain") || "";
+      if (!insertPastedJapaneseUrl(editor, text)) return;
       event.preventDefault();
-      void handleImageFiles(files);
     };
     const drop = (event: DragEvent) => {
       imageDragDepthRef.current = 0;
