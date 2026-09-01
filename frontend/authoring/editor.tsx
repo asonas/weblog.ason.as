@@ -176,7 +176,10 @@ const WikiLinks = Extension.create({
             return null;
           if (editor.view.composing) return null;
 
-          if (transactions.some((transaction) => transaction.selectionSet)) {
+          if (
+            editor.isEditable &&
+            transactions.some((transaction) => transaction.selectionSet)
+          ) {
             const selectedByCursor = transactions.some(
               (transaction) =>
                 transaction.selectionSet && !transaction.docChanged,

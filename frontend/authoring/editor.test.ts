@@ -1729,6 +1729,23 @@ test("edits a selected image as Markdown and renders it again after leaving", ()
   editor.destroy();
 });
 
+test("keeps a selected image rendered in read-only mode", () => {
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: EDITOR_EXTENSIONS,
+    content: "title\n\n![犬](/assets/uploads/2026/08/image.webp)\n\nbody",
+    contentType: "markdown",
+    editable: false,
+  });
+  const imagePosition = editor.state.doc.firstChild?.nodeSize;
+  assert.ok(imagePosition);
+
+  editor.commands.setNodeSelection(imagePosition);
+
+  assert.equal(editor.state.doc.child(1).type.name, "image");
+  editor.destroy();
+});
+
 test("keeps an image rendered when the cursor moves to the start of the following line", () => {
   const editor = new Editor({
     element: document.createElement("div"),
