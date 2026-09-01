@@ -431,6 +431,53 @@ function minimalEditorFetch(input: RequestInfo | URL): Promise<Response> {
   return Promise.reject(new Error(`unexpected request: ${url}`));
 }
 
+test("pastes one Japanese URL link through the editor event path", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = minimalEditorFetch;
+  const url =
+    "https://jnbk.app/topics/%E4%BB%BB%E6%84%8F%E3%81%AE%E3%82%B3%E3%83%9E%E3%83%B3%E3%83%89";
+  try {
+    await act(async () => {
+      root.render(
+        createElement(AuthoringEditor, { bootstrap: minimalEditorBootstrap() }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const element = container.querySelector<HTMLElement>(".ProseMirror");
+    assert.ok(element);
+    const mountedEditor = (element as HTMLElement & { editor: Editor }).editor;
+    mountedEditor.commands.setTextSelection(
+      mountedEditor.state.doc.content.size,
+    );
+    const event = new window.Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        getData: (type: string) => (type === "text/plain" ? url : ""),
+      },
+    });
+
+    await act(async () => {
+      element.dispatchEvent(event);
+    });
+
+    assert.equal(
+      mountedEditor.getMarkdown(),
+      `current\n\n本文[https://jnbk.app/topics/任意のコマンド](${url})`,
+    );
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
 test("navigates material tabs with arrows, Home, and End", async () => {
   const container = document.createElement("div");
   document.body.append(container);

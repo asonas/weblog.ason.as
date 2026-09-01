@@ -4011,13 +4011,13 @@ export function AuthoringEditor({
     element.addEventListener("dragenter", dragenter, true);
     element.addEventListener("dragover", dragover, true);
     element.addEventListener("dragleave", dragleave, true);
-    element.addEventListener("paste", paste);
+    element.addEventListener("paste", paste, true);
     element.addEventListener("drop", drop, true);
     return () => {
       element.removeEventListener("dragenter", dragenter, true);
       element.removeEventListener("dragover", dragover, true);
       element.removeEventListener("dragleave", dragleave, true);
-      element.removeEventListener("paste", paste);
+      element.removeEventListener("paste", paste, true);
       element.removeEventListener("drop", drop, true);
     };
   }, [editor, handleImageFiles, insertInboxItem]);
