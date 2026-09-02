@@ -6,11 +6,17 @@ options:
 settings:
   base:
     SWIFT_VERSION: 6.0
+packages:
+  SDWebImageWebPCoder:
+    url: https://github.com/SDWebImage/SDWebImageWebPCoder.git
+    exactVersion: 0.15.0
 targets:
   PhotoInbox:
     type: application
     platform: iOS
     sources: [PhotoInbox]
+    dependencies:
+      - package: SDWebImageWebPCoder
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.asonas.weblog.PhotoInbox
@@ -29,6 +35,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.asonas.weblog.PhotoInboxTests
+        GENERATE_INFOPLIST_FILE: true
 schemes:
   PhotoInbox:
     build:

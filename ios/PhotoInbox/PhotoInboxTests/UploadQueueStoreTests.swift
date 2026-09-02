@@ -53,13 +53,20 @@ final class UploadQueueStoreTests: XCTestCase {
   func testRejectedPhotoRestoresDiagnosticAndRequiresExplicitRetry() async throws {
     let fileURL = FileManager.default.temporaryDirectory
       .appending(path: UUID().uuidString)
+    let preparedFileURL = FileManager.default.temporaryDirectory
+      .appending(path: "\(UUID().uuidString).png")
+    try Data("oversized png".utf8).write(to: preparedFileURL)
     let clientID = UUID()
     let store = UploadQueueStore(fileURL: fileURL)
     try await store.enqueue([
       UploadItem(
         clientUploadID: clientID,
         assetLocalIdentifier: "asset-1",
-        capturedAt: .now
+        capturedAt: .now,
+        preparedFilePath: preparedFileURL.path,
+        contentType: "image/png",
+        size: 27_516_528,
+        sha256: String(repeating: "a", count: 64)
       )
     ])
     let failure = UploadFailure(
@@ -84,7 +91,50 @@ final class UploadQueueStoreTests: XCTestCase {
     let retried = try XCTUnwrap(retriedItems.first)
     XCTAssertEqual(retried.stage, .pending)
     XCTAssertNil(retried.failure)
+    XCTAssertNil(retried.preparedFilePath)
+    XCTAssertNil(retried.contentType)
+    XCTAssertNil(retried.size)
+    XCTAssertNil(retried.sha256)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: preparedFileURL.path))
     XCTAssertTrue(retried.shouldAttemptAutomatically)
+  }
+
+  func testRetryKeepsPreparedWebPAfterTransientFailure() async throws {
+    let fileURL = FileManager.default.temporaryDirectory
+      .appending(path: UUID().uuidString)
+    let preparedFileURL = FileManager.default.temporaryDirectory
+      .appending(path: "\(UUID().uuidString).webp")
+    try Data("prepared webp".utf8).write(to: preparedFileURL)
+    let clientID = UUID()
+    let store = UploadQueueStore(fileURL: fileURL)
+    try await store.enqueue([
+      UploadItem(
+        clientUploadID: clientID,
+        assetLocalIdentifier: "asset-1",
+        capturedAt: .now,
+        preparedFilePath: preparedFileURL.path,
+        contentType: "image/webp",
+        size: 13,
+        sha256: String(repeating: "b", count: 64)
+      )
+    ])
+    try await store.updateFailure(
+      clientID,
+      failure: UploadFailure(
+        message: "一時的に送信できませんでした。",
+        automaticallyRetryable: true
+      )
+    )
+
+    try await store.retry(clientID)
+
+    let items = try await store.items()
+    let retried = try XCTUnwrap(items.first)
+    XCTAssertEqual(retried.preparedFilePath, preparedFileURL.path)
+    XCTAssertEqual(retried.contentType, "image/webp")
+    XCTAssertEqual(retried.size, 13)
+    XCTAssertEqual(retried.sha256, String(repeating: "b", count: 64))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: preparedFileURL.path))
   }
 
   func testTransientBackgroundUploadFailuresRemainAutomaticallyRetryable() {

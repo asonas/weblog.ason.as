@@ -7,6 +7,11 @@ struct UploadFailure: Codable, Equatable, Sendable {
   let requestID: String?
   let automaticallyRetryable: Bool
 
+  var requiresRepreparation: Bool {
+    code == "invalid_upload_size" || code == "unsupported_content_type"
+      || (code == nil && !automaticallyRetryable)
+  }
+
   init(
     code: String? = nil,
     field: String? = nil,
@@ -148,6 +153,17 @@ actor UploadQueueStore {
   func retry(_ id: UUID) throws {
     var current = try load()
     guard let index = current.firstIndex(where: { $0.clientUploadID == id }) else { return }
+    if current[index].failure?.requiresRepreparation == true {
+      if let path = current[index].preparedFilePath,
+        FileManager.default.fileExists(atPath: path)
+      {
+        try FileManager.default.removeItem(atPath: path)
+      }
+      current[index].preparedFilePath = nil
+      current[index].contentType = nil
+      current[index].size = nil
+      current[index].sha256 = nil
+    }
     current[index].stage = .pending
     current[index].failure = nil
     try save(current)
