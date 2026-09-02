@@ -28,7 +28,7 @@ class DsqlDatabaseTest < Minitest::Test
 
   class Connection
     attr_reader :links, :items, :consumed, :committed_adoptions, :usages,
-                :webmention_outboxes, :webmention_targets
+                :webmention_outboxes, :webmention_targets, :webmention_publications
 
     def initialize
       @pages = {}
@@ -41,19 +41,20 @@ class DsqlDatabaseTest < Minitest::Test
       @line_metadata = {}
       @webmention_outboxes = []
       @webmention_targets = {}
+      @webmention_publications = {}
     end
 
     def transaction
       snapshot = Marshal.load(Marshal.dump(
         [
           @pages, @links, @items, @consumed, @committed_adoptions, @usages,
-          @line_metadata, @webmention_outboxes, @webmention_targets,
+          @line_metadata, @webmention_outboxes, @webmention_targets, @webmention_publications,
         ]
       ))
       yield
     rescue StandardError
       @pages, @links, @items, @consumed, @committed_adoptions, @usages,
-        @line_metadata, @webmention_outboxes, @webmention_targets = snapshot
+        @line_metadata, @webmention_outboxes, @webmention_targets, @webmention_publications = snapshot
       raise
     end
 
@@ -127,9 +128,20 @@ class DsqlDatabaseTest < Minitest::Test
       when /INSERT INTO weblog_authoring\.links/
         @links << { source_id: params.fetch(0), target_name: params.fetch(2) }
         Result.new
+      when /SELECT target_url FROM weblog_authoring\.webmention_page_targets/
+        Result.new(@webmention_targets.values.filter_map do |target|
+          { "target_url" => target.fetch("target_url") } if target.fetch("page_id") == params.fetch(0) && target.fetch("active")
+        end)
+      when /SELECT source_url FROM weblog_authoring\.webmention_page_publications/
+        source_url = @webmention_publications[params.fetch(0)]
+        Result.new(source_url ? [{ "source_url" => source_url }] : [])
+      when /INSERT INTO weblog_authoring\.webmention_page_publications/
+        @webmention_publications[params.fetch(0)] = params.fetch(1)
+        Result.new
       when /INSERT INTO weblog_authoring\.webmention_outbox/
+        @webmention_outboxes.reject! { |outbox| outbox.fetch("id") == params.fetch(0) }
         @webmention_outboxes << {
-          "id" => params.fetch(0), "page_id" => params.fetch(1), "payload" => JSON.parse(params.fetch(2)),
+          "id" => params.fetch(0), "page_id" => params.fetch(2), "payload" => JSON.parse(params.fetch(3)),
         }
         Result.new
       when /UPDATE weblog_authoring\.webmention_page_targets SET active = FALSE/

@@ -412,7 +412,6 @@ module WeblogAuthoring
 
       page = @database.save(save_request(parse_json(event), page_id:))
       notify_search_index
-      notify_webmention_publisher(page)
       json_response(status, saved_page_json(page))
     end
 
@@ -431,26 +430,6 @@ module WeblogAuthoring
         "event" => "search_index_notification_failed",
         "error" => error.class.name,
         "message" => error.message
-      ))
-    end
-
-    def notify_webmention_publisher(page)
-      return if @webmention_publish_queue_url.nil? || @sqs_client.nil?
-
-      outbox = @database.pending_webmention_outbox_for_page(page.id)
-      return unless outbox
-
-      @sqs_client.send_message(
-        queue_url: @webmention_publish_queue_url,
-        message_body: JSON.generate("outbox_id" => outbox.fetch("id")),
-        message_group_id: page.id,
-        message_deduplication_id: outbox.fetch("id")
-      )
-      @database.mark_webmention_outbox_notified(outbox.fetch("id"))
-    rescue Aws::SQS::Errors::ServiceError => error
-      @logger.puts(JSON.generate(
-        "level" => "warn", "event" => "webmention_publish_notification_failed",
-        "error" => error.class.name, "message" => error.message
       ))
     end
 

@@ -66,6 +66,7 @@ class DsqlBootstrapTest < Minitest::Test
     assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.webmention_snapshots") })
     assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.webmention_attempts") })
     assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.webmention_page_targets") })
+    assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.webmention_page_publications") })
     assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.webmention_outbox") })
     assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.webmention_deliveries") })
     assert_equal :closed, connection.statements.last

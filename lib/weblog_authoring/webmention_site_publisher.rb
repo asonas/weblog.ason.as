@@ -37,13 +37,17 @@ module WeblogAuthoring
     def publish(outbox)
       page = @database.find(outbox.fetch("page_id"))
       raise KeyError, "Webmention outbox page not found" unless page
+      desired_updated_at = outbox.dig("payload", "desired_updated_at")
+      return if desired_updated_at && page.updated_at.iso8601(9) != desired_updated_at
 
       old_route = previous_route(outbox.fetch("payload"), current_route: page.route)
       unless page.status == "published" && !page.empty?
         routes = [page.route, old_route].compact.uniq
         routes.each { |route| @s3_client.delete_object(bucket: @site_bucket, key: route) }
         invalidate(routes, outbox.fetch("id"))
-        @database.complete_webmention_outbox(outbox.fetch("id"))
+        @database.complete_webmention_outbox(
+          outbox.fetch("id"), revision: outbox.dig("payload", "revision")
+        )
         return
       end
 
@@ -58,8 +62,10 @@ module WeblogAuthoring
       )
       @s3_client.delete_object(bucket: @site_bucket, key: old_route) if old_route
       invalidate([page.route, old_route].compact.uniq, outbox.fetch("id"))
-      enqueue_deliveries(outbox) if @sender_enabled
-      @database.complete_webmention_outbox(outbox.fetch("id"))
+      completed = @database.complete_webmention_outbox(
+        outbox.fetch("id"), revision: outbox.dig("payload", "revision")
+      )
+      enqueue_deliveries(outbox) if completed && @sender_enabled
     rescue StandardError
       @database.fail_webmention_outbox(outbox.fetch("id"))
       raise
@@ -126,6 +132,9 @@ module WeblogAuthoring
       payload = outbox.fetch("payload")
       current_source = payload.fetch("source_url")
       previous_source = payload["previous_source_url"] || current_source
+      return if previous_source == current_source &&
+                payload.fetch("previous_targets").sort == payload.fetch("current_targets").sort
+
       deliveries = payload.fetch("previous_targets").map { |target| [previous_source, target] }
       deliveries.concat(payload.fetch("current_targets").map { |target| [current_source, target] })
       deliveries.uniq.each do |source, target|

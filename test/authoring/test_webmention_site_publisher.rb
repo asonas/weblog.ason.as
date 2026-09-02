@@ -8,7 +8,7 @@ class WebmentionSitePublisherTest < Minitest::Test
   Body = Data.define(:body)
 
   class Database
-    attr_reader :completed, :failed
+    attr_reader :completed, :completed_revision, :failed
 
     def initialize(page:, outbox:)
       @page = page
@@ -34,8 +34,10 @@ class WebmentionSitePublisherTest < Minitest::Test
       @outbox if id == @outbox.fetch("id")
     end
 
-    def complete_webmention_outbox(id)
+    def complete_webmention_outbox(id, revision: nil)
       @completed = id
+      @completed_revision = revision
+      true
     end
 
     def fail_webmention_outbox(id)
@@ -175,6 +177,34 @@ class WebmentionSitePublisherTest < Minitest::Test
     publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
 
     assert_equal 1, services.puts.length
+    assert_empty services.messages
+    assert_equal "outbox-id", database.completed
+  end
+
+  def test_body_only_refresh_with_the_same_targets_does_not_queue_deliveries
+    page = WeblogAuthoring::PageDocument.new(
+      id: "page-id", page_type: "named", name: "記事", page_date: nil, title: nil,
+      status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
+      path: Pathname("content/pages/article.md"), body: "本文", links: []
+    )
+    outbox = {
+      "id" => "outbox-id", "page_id" => page.id,
+      "payload" => {
+        "source_url" => "https://weblog.ason.as/%E8%A8%98%E4%BA%8B",
+        "previous_source_url" => "https://weblog.ason.as/%E8%A8%98%E4%BA%8B",
+        "previous_targets" => ["https://target.example/post"],
+        "current_targets" => ["https://target.example/post"],
+      },
+    }
+    database = Database.new(page:, outbox:)
+    services = Services.new
+    publisher = WeblogAuthoring::WebmentionSitePublisher.new(
+      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
+      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+    )
+
+    publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
+
     assert_empty services.messages
     assert_equal "outbox-id", database.completed
   end

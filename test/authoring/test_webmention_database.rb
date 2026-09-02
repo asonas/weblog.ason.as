@@ -83,6 +83,27 @@ class WebmentionDatabaseTest < Minitest::Test
     assert_equal "First title", pending.fetch("candidate").fetch("title")
   end
 
+  def test_moderation_decision_requests_a_publication_refresh_for_the_target_page
+    page = @database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "Webmention", body: "本文"
+    ))
+    initial = @database.pending_webmention_outbox.fetch(0)
+    @database.complete_webmention_outbox(
+      initial.fetch("id"), revision: initial.dig("payload", "revision")
+    )
+    @job = @job.merge(
+      "target" => "https://weblog.ason.as/Webmention", "target_page_id" => page.id
+    )
+    verify(title: "First title", hash: "first-hash")
+    relation = @database.list_webmentions.fetch(0)
+
+    @database.moderate_webmention(id: relation.fetch("id"), decision: "approved")
+
+    refresh = @database.pending_webmention_outbox.fetch(0)
+    assert_equal page.id, refresh.fetch("page_id")
+    refute_equal initial.dig("payload", "revision"), refresh.dig("payload", "revision")
+  end
+
   def test_confirmed_link_removal_immediately_removes_the_public_snapshot
     verify(title: "First title", hash: "first-hash")
     relation = @database.list_webmentions.fetch(0)
@@ -122,35 +143,124 @@ class WebmentionDatabaseTest < Minitest::Test
     assert_equal "page-id", retry_job.fetch("target_page_id")
   end
 
-  def test_page_save_records_a_transactional_publish_and_delivery_outbox
+  def test_many_page_saves_leave_one_effective_publication_refresh
     page = @database.save(WeblogAuthoring::SaveRequest.new(
       page_type: "named", name: "Webmention", body: "[First](https://example.net/first)"
     ))
-    @database.save(WeblogAuthoring::SaveRequest.new(
+    page = @database.save(WeblogAuthoring::SaveRequest.new(
       page_id: page.id, page_type: "named", name: "Webmention",
       body: "[Second](https://example.net/second)", expected_updated_at: page.updated_at
     ))
+    @database.save(WeblogAuthoring::SaveRequest.new(
+      page_id: page.id, page_type: "named", name: "Webmention",
+      body: "[Latest](https://example.net/latest)", expected_updated_at: page.updated_at
+    ))
 
-    outbox = @database.pending_webmention_outbox.find do |item|
-      item.dig("payload", "current_targets") == ["https://example.net/second"]
-    end
+    pending = @database.pending_webmention_outbox
+    outbox = pending.fetch(0)
 
+    assert_equal 1, pending.length
     assert_equal "page_saved", outbox.fetch("event_type")
-    assert_equal ["https://example.net/first"], outbox.dig("payload", "previous_targets")
-    assert_equal ["https://example.net/second"], outbox.dig("payload", "current_targets")
-    targets = @database.webmention_page_targets(page.id)
-    assert_equal(
-      ["https://example.net/first", "https://example.net/second"],
-      targets.map { |target| target.fetch("target_url") }
+    assert_empty outbox.dig("payload", "previous_targets")
+    assert_equal ["https://example.net/latest"], outbox.dig("payload", "current_targets")
+    assert_empty @database.webmention_page_targets(page.id)
+  end
+
+  def test_save_racing_with_completion_remains_pending
+    page = @database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "Webmention", body: "[First](https://example.net/first)"
+    ))
+    publishing = @database.pending_webmention_outbox.fetch(0)
+    @database.save(WeblogAuthoring::SaveRequest.new(
+      page_id: page.id, page_type: "named", name: "Webmention",
+      body: "[Latest](https://example.net/latest)", expected_updated_at: page.updated_at
+    ))
+
+    completed = @database.complete_webmention_outbox(
+      publishing.fetch("id"), revision: publishing.dig("payload", "revision")
     )
-    refute targets.fetch(0).fetch("active")
-    assert targets.fetch(1).fetch("active")
+
+    refute completed
+    pending = @database.pending_webmention_outbox.fetch(0)
+    assert_equal ["https://example.net/latest"], pending.dig("payload", "current_targets")
+    assert_empty @database.webmention_page_targets(page.id)
+  end
+
+  def test_failure_after_completion_restores_the_refresh_for_retry
+    @database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "Webmention", body: "本文"
+    ))
+    refresh = @database.pending_webmention_outbox.fetch(0)
+    @database.complete_webmention_outbox(
+      refresh.fetch("id"), revision: refresh.dig("payload", "revision")
+    )
+
+    @database.fail_webmention_outbox(refresh.fetch("id"))
+
+    retried = @database.pending_webmention_outbox.fetch(0)
+    assert_equal refresh.fetch("id"), retried.fetch("id")
+    assert_equal 2, retried.fetch("attempt_count")
+  end
+
+  def test_route_transition_uses_the_last_published_route
+    page = @database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "old-route", body: "本文"
+    ))
+    published = @database.pending_webmention_outbox.fetch(0)
+    @database.complete_webmention_outbox(
+      published.fetch("id"), revision: published.dig("payload", "revision")
+    )
+    sqlite = SQLite3::Database.new(File.join(@tmpdir, "database.sqlite3"))
+    sqlite.execute(
+      "UPDATE pages SET name = ?, updated_at = ? WHERE id = ?",
+      ["new-route", (NOW + 1).iso8601(9), page.id]
+    )
+    sqlite.close
+
+    refresh = @database.request_publication_refresh(page.id)
+
+    assert_equal "https://weblog.ason.as/old-route", refresh.dig("payload", "previous_source_url")
+    assert_equal "https://weblog.ason.as/new-route", refresh.dig("payload", "source_url")
+  end
+
+  def test_backlog_compaction_retains_one_refresh_and_keeps_old_rows_recoverable
+    page = @database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "Webmention", body: "本文"
+    ))
+    sqlite = SQLite3::Database.new(File.join(@tmpdir, "database.sqlite3"))
+    payload = JSON.generate(
+      "source_url" => "https://weblog.ason.as/Webmention",
+      "previous_source_url" => nil, "previous_targets" => [], "current_targets" => []
+    )
+    %w[legacy-one legacy-two].each do |id|
+      sqlite.execute(
+        <<~SQL,
+          INSERT INTO webmention_outbox (
+            id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
+          ) VALUES (?, 'page_saved', ?, ?, 'pending', 0, ?, NULL, NULL)
+        SQL
+        [id, page.id, payload, NOW.iso8601(9)]
+      )
+    end
+    sqlite.close
+
+    assert_equal({ "pages" => 1, "superseded" => 0, "retained" => 1 },
+                 @database.compact_webmention_outbox)
+    summary = @database.compact_webmention_outbox(dry_run: false)
+
+    assert_equal({ "pages" => 1, "superseded" => 2, "retained" => 1 }, summary)
+    assert_equal 1, @database.pending_webmention_outbox.length
+    assert_nil @database.webmention_outbox("legacy-one")
   end
 
   def test_emptying_a_published_page_records_an_unpublish_outbox_and_deactivates_targets
     page = @database.save(WeblogAuthoring::SaveRequest.new(
       page_type: "named", name: "Webmention", body: "[First](https://example.net/first)"
     ))
+    published = @database.pending_webmention_outbox.fetch(0)
+    @database.complete_webmention_outbox(
+      published.fetch("id"), revision: published.dig("payload", "revision")
+    )
     @database.save(WeblogAuthoring::SaveRequest.new(
       page_id: page.id, page_type: "named", name: "Webmention", body: "",
       expected_updated_at: page.updated_at
@@ -162,7 +272,7 @@ class WebmentionDatabaseTest < Minitest::Test
 
     assert_equal ["https://example.net/first"], outbox.dig("payload", "previous_targets")
     assert_empty outbox.dig("payload", "current_targets")
-    refute @database.webmention_page_targets(page.id).fetch(0).fetch("active")
+    assert @database.webmention_page_targets(page.id).fetch(0).fetch("active")
   end
 
   def test_complete_deletion_removes_the_relation_snapshots_and_attempt_history

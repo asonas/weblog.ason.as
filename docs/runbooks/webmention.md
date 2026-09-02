@@ -61,6 +61,35 @@ mise exec -- mairu exec --no-login --server asonas-aws 282782318939/Administrato
 `queue-age` または `queue-depth` Alarmでは、通常queue、DLQ、event source mapping、workerまたはpublisherのLambda Errorsを確認する。
 event sourceを手動で作り直さず、Terraform stateとの差分とLambdaの直近エラーを修正する。
 
+### Publisher初回有効化前のoutbox集約
+
+publisherを停止したまま、DSQLのpending outboxを記事単位に監査する。
+この操作はSQSメッセージを受信せず、DBも変更しない。
+
+```sh
+mise exec -- mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
+  bundle exec bin/compact-webmention-outbox \
+  --host zjuauvwetzvab4i3bdfd47e3yu.dsql.ap-northeast-1.on.aws
+```
+
+dry-runの`pages`が想定した記事数、`retained`が`pages`と同数であることを確認する。
+適用時は同じmain SHAから`--apply`を付けて実行する。
+
+```sh
+mise exec -- mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
+  bundle exec bin/compact-webmention-outbox \
+  --host zjuauvwetzvab4i3bdfd47e3yu.dsql.ap-northeast-1.on.aws \
+  --apply
+```
+
+適用後にdry-runを再実行し、pendingが記事ごとに1件であることを確認する。
+旧outboxは削除せず`superseded`として保持するため、監査と再構成が可能である。
+旧SQSメッセージは`pending`ではないoutboxを参照するため、publisher有効化後は公開処理を行わずに完了する。
+SQS queueのpurgeは回復不能であり、この手順では実行しない。
+
+publisherを有効にするときもsenderは無効のままにする。
+EventBridgeによる最初の実行後、pending件数、S3更新、CloudFront invalidation、Lambda Errorsを確認する。
+
 ## Lambda errors
 
 Alarm名の `receiver`、`worker`、`publisher`、`cleanup` から対象Lambdaを特定する。

@@ -17,7 +17,7 @@ require_relative "webmention_targets"
 
 module WeblogAuthoring
   class DevelopmentDatabase
-    SCHEMA_VERSION = 9
+    SCHEMA_VERSION = 10
     INBOX_RETENTION_SECONDS = 7 * 24 * 60 * 60
     ADOPTION_RETENTION_SECONDS = 14 * 24 * 60 * 60
     TOKYO_OFFSET = "+09:00"
@@ -341,11 +341,52 @@ module WeblogAuthoring
         row = database.get_first_row(
           <<~SQL,
             SELECT id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
-            FROM webmention_outbox WHERE id = ?
+            FROM webmention_outbox WHERE id = ? AND status = 'pending'
           SQL
           id
         )
         row && webmention_outbox_from_row(row)
+      end
+    end
+
+    def request_publication_refresh(page_id)
+      page = find(page_id)
+      raise KeyError, "Page not found" unless page
+
+      with_connection do |database|
+        database.transaction { enqueue_webmention_outbox(database, nil, page) }
+      end
+      pending_webmention_outbox_for_page(page_id)
+    end
+
+    def compact_webmention_outbox(dry_run: true)
+      with_connection do |database|
+        page_ids = database.execute(
+          "SELECT DISTINCT page_id FROM webmention_outbox WHERE status = 'pending' ORDER BY page_id"
+        ).flatten
+        summary = { "pages" => page_ids.length, "superseded" => 0, "retained" => page_ids.length }
+        next summary if dry_run
+
+        database.transaction do
+          page_ids.each do |page_id|
+            page_row = database.get_first_row(select_sql("id"), page_id)
+            next unless page_row
+
+            page = page_from_row(page_row)
+            enqueue_webmention_outbox(database, nil, page)
+            retained_id = Digest::SHA256.hexdigest("publication-refresh\0#{page_id}")
+            database.execute(
+              <<~SQL,
+                UPDATE webmention_outbox
+                SET status = 'superseded', completed_at = ?
+                WHERE page_id = ? AND status = 'pending' AND id <> ?
+              SQL
+              [serialize_time(now), page_id, retained_id]
+            )
+            summary["superseded"] += database.changes
+          end
+        end
+        summary
       end
     end
 
@@ -401,21 +442,62 @@ module WeblogAuthoring
       end
     end
 
-    def complete_webmention_outbox(id)
+    def complete_webmention_outbox(id, revision: nil)
       with_connection do |database|
-        database.execute(
-          <<~SQL,
-            UPDATE webmention_outbox
-            SET status = 'completed', attempt_count = attempt_count + 1, completed_at = ? WHERE id = ?
-          SQL
-          [serialize_time(now), id]
-        )
+        database.transaction do
+          row = database.get_first_row(
+            "SELECT page_id, payload FROM webmention_outbox WHERE id = ? AND status = 'pending'", id
+          )
+          next false unless row
+
+          payload = JSON.parse(row.fetch(1))
+          next false if revision && payload["revision"] != revision
+
+          timestamp = serialize_time(now)
+          database.execute(
+            <<~SQL,
+              INSERT INTO webmention_page_publications (page_id, source_url, published_at)
+              VALUES (?, ?, ?)
+              ON CONFLICT(page_id) DO UPDATE SET
+                source_url = excluded.source_url, published_at = excluded.published_at
+            SQL
+            [row.fetch(0), payload.fetch("source_url"), timestamp]
+          )
+          database.execute("UPDATE webmention_page_targets SET active = 0 WHERE page_id = ?", row.fetch(0))
+          payload.fetch("current_targets").each do |target|
+            database.execute(
+              <<~SQL,
+                INSERT INTO webmention_page_targets (page_id, target_url, first_seen_at, last_seen_at, active)
+                VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT(page_id, target_url) DO UPDATE SET
+                  last_seen_at = excluded.last_seen_at, active = 1
+              SQL
+              [row.fetch(0), target, timestamp, timestamp]
+            )
+          end
+          database.execute(
+            <<~SQL,
+              UPDATE webmention_outbox
+              SET status = 'completed', attempt_count = attempt_count + 1, completed_at = ?
+              WHERE id = ? AND status = 'pending'
+            SQL
+            [timestamp, id]
+          )
+          true
+        end
       end
     end
 
     def fail_webmention_outbox(id)
       with_connection do |database|
-        database.execute("UPDATE webmention_outbox SET attempt_count = attempt_count + 1 WHERE id = ?", id)
+        database.execute(
+          <<~SQL,
+            UPDATE webmention_outbox
+            SET status = 'pending', attempt_count = attempt_count + 1, completed_at = NULL
+            WHERE id = ?
+          SQL
+          id
+        )
       end
     end
 
@@ -558,7 +640,7 @@ module WeblogAuthoring
       with_connection do |database|
         database.transaction do
           relation = database.get_first_row(
-            "SELECT id FROM webmention_relations WHERE id = ? AND verification_status = 'verified'",
+            "SELECT id, target_page_id FROM webmention_relations WHERE id = ? AND verification_status = 'verified'",
             id
           )
           raise KeyError, "Webmention not found" unless relation
@@ -571,6 +653,8 @@ module WeblogAuthoring
           when "pending"
             reset_webmention_decision(database, id, timestamp)
           end
+          page_row = database.get_first_row(select_sql("id"), relation.fetch(1))
+          enqueue_webmention_outbox(database, nil, page_from_row(page_row)) if page_row
         end
       end
       list_webmentions.find { |mention| mention.fetch("id") == id }
@@ -1384,60 +1468,46 @@ module WeblogAuthoring
       }
     end
 
-    def enqueue_webmention_outbox(database, previous, current)
-      unless current.status == "published" && !current.empty?
-        database.execute("UPDATE webmention_page_targets SET active = 0 WHERE page_id = ?", current.id)
-        return unless previous
-        return unless previous.status == "published" && !previous.empty?
-
-        previous_source = webmention_source_url(previous.route)
-        payload = {
-          "source_url" => webmention_source_url(current.route),
-          "previous_source_url" => previous_source,
-          "previous_targets" => @webmention_targets.extract(previous.body, source_url: previous_source),
-          "current_targets" => [],
-        }
-        database.execute(
-          <<~SQL,
-            INSERT INTO webmention_outbox (
-              id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
-            ) VALUES (?, 'page_unpublished', ?, ?, 'pending', 0, ?, NULL, NULL)
-          SQL
-          [new_id, current.id, JSON.generate(payload), serialize_time(now)]
-        )
-        return
-      end
-
+    def enqueue_webmention_outbox(database, _previous, current)
       current_source = webmention_source_url(current.route)
-      previous_source = previous && webmention_source_url(previous.route)
-      previous_targets = previous ? @webmention_targets.extract(previous.body, source_url: previous_source) : []
-      current_targets = @webmention_targets.extract(current.body, source_url: current_source)
+      previous_source = database.get_first_value(
+        "SELECT source_url FROM webmention_page_publications WHERE page_id = ?", current.id
+      )
+      previous_targets = database.execute(
+        "SELECT target_url FROM webmention_page_targets WHERE page_id = ? AND active = 1 ORDER BY target_url",
+        current.id
+      ).flatten
+      current_targets = if current.status == "published" && !current.empty?
+                          @webmention_targets.extract(current.body, source_url: current_source)
+                        else
+                          []
+                        end
       timestamp = serialize_time(now)
-      database.execute("UPDATE webmention_page_targets SET active = 0 WHERE page_id = ?", current.id)
-      (previous_targets | current_targets).each do |target|
-        database.execute(
-          <<~SQL,
-            INSERT INTO webmention_page_targets (page_id, target_url, first_seen_at, last_seen_at, active)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(page_id, target_url) DO UPDATE SET
-              last_seen_at = excluded.last_seen_at, active = excluded.active
-          SQL
-          [current.id, target, timestamp, timestamp, current_targets.include?(target) ? 1 : 0]
-        )
-      end
       payload = {
+        "revision" => new_id,
+        "desired_updated_at" => current.updated_at.iso8601(9),
         "source_url" => current_source,
         "previous_source_url" => previous_source,
         "previous_targets" => previous_targets,
         "current_targets" => current_targets,
       }
+      event_type = current_targets.empty? && previous_source ? "page_unpublished" : "page_saved"
+      outbox_id = Digest::SHA256.hexdigest("publication-refresh\0#{current.id}")
       database.execute(
         <<~SQL,
           INSERT INTO webmention_outbox (
             id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
-          ) VALUES (?, 'page_saved', ?, ?, 'pending', 0, ?, NULL, NULL)
+          ) VALUES (?, ?, ?, ?, 'pending', 0, ?, NULL, NULL)
+          ON CONFLICT(id) DO UPDATE SET
+            event_type = excluded.event_type,
+            payload = excluded.payload,
+            status = 'pending',
+            attempt_count = 0,
+            created_at = excluded.created_at,
+            notified_at = NULL,
+            completed_at = NULL
         SQL
-        [new_id, current.id, JSON.generate(payload), timestamp]
+        [outbox_id, event_type, current.id, JSON.generate(payload), timestamp]
       )
     end
 
@@ -1519,6 +1589,11 @@ module WeblogAuthoring
         return
       end
       if version == 8 && table_exists?(database, "pages")
+        create_webmention_schema(database)
+        database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
+        return
+      end
+      if version == 9 && table_exists?(database, "pages")
         create_webmention_schema(database)
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
@@ -1764,6 +1839,11 @@ module WeblogAuthoring
             last_seen_at TEXT NOT NULL,
             active INTEGER NOT NULL,
             PRIMARY KEY(page_id, target_url)
+          );
+          CREATE TABLE IF NOT EXISTS webmention_page_publications (
+            page_id TEXT PRIMARY KEY,
+            source_url TEXT NOT NULL,
+            published_at TEXT NOT NULL
           );
           CREATE TABLE IF NOT EXISTS webmention_outbox (
             id TEXT PRIMARY KEY,

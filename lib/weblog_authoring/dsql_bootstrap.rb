@@ -298,6 +298,13 @@ module WeblogAuthoring
         )
       SQL
       connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.webmention_page_publications (
+          page_id TEXT PRIMARY KEY,
+          source_url TEXT NOT NULL,
+          published_at TIMESTAMPTZ NOT NULL
+        )
+      SQL
+      connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.webmention_outbox (
           id TEXT PRIMARY KEY,
           event_type TEXT NOT NULL,

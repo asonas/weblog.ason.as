@@ -385,11 +385,51 @@ module WeblogAuthoring
         result = connection.exec_params(
           <<~SQL,
             SELECT id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
-            FROM #{SCHEMA}.webmention_outbox WHERE id = $1 LIMIT 1
+            FROM #{SCHEMA}.webmention_outbox WHERE id = $1 AND status = 'pending' LIMIT 1
           SQL
           [id]
         )
         result.ntuples.zero? ? nil : webmention_outbox_from_dsql_row(result[0])
+      end
+    end
+
+    def request_publication_refresh(page_id)
+      page = find(page_id)
+      raise KeyError, "Page not found" unless page
+
+      with_connection do |connection|
+        connection.transaction { enqueue_webmention_outbox(connection, nil, page) }
+      end
+      pending_webmention_outbox_for_page(page_id)
+    end
+
+    def compact_webmention_outbox(dry_run: true)
+      with_connection do |connection|
+        page_ids = connection.exec(
+          "SELECT DISTINCT page_id FROM #{SCHEMA}.webmention_outbox WHERE status = 'pending' ORDER BY page_id"
+        ).map { |row| row.fetch("page_id") }
+        summary = { "pages" => page_ids.length, "superseded" => 0, "retained" => page_ids.length }
+        next summary if dry_run
+
+        connection.transaction do
+          page_ids.each do |page_id|
+            page_result = connection.exec_params("#{select_sql("id")} LIMIT 1", [page_id])
+            next if page_result.ntuples.zero?
+
+            enqueue_webmention_outbox(connection, nil, page_from_row(page_result[0]))
+            retained_id = Digest::SHA256.hexdigest("publication-refresh\0#{page_id}")
+            result = connection.exec_params(
+              <<~SQL,
+                UPDATE #{SCHEMA}.webmention_outbox
+                SET status = 'superseded', completed_at = $3
+                WHERE page_id = $1 AND status = 'pending' AND id <> $2
+              SQL
+              [page_id, retained_id, now]
+            )
+            summary["superseded"] += result.cmd_tuples
+          end
+        end
+        summary
       end
     end
 
@@ -446,23 +486,66 @@ module WeblogAuthoring
       end
     end
 
-    def complete_webmention_outbox(id)
+    def complete_webmention_outbox(id, revision: nil)
       with_connection do |connection|
-        connection.exec_params(
-          <<~SQL,
-            UPDATE #{SCHEMA}.webmention_outbox
-            SET status = 'completed', attempt_count = attempt_count + 1, completed_at = $2
-            WHERE id = $1
-          SQL
-          [id, now]
-        )
+        connection.transaction do
+          result = connection.exec_params(
+            "SELECT page_id, payload FROM #{SCHEMA}.webmention_outbox WHERE id = $1 AND status = 'pending' LIMIT 1 FOR UPDATE",
+            [id]
+          )
+          next false if result.ntuples.zero?
+
+          row = result[0]
+          payload = row.fetch("payload")
+          payload = JSON.parse(payload) if payload.is_a?(String)
+          next false if revision && payload["revision"] != revision
+
+          timestamp = now
+          connection.exec_params(
+            <<~SQL,
+              INSERT INTO #{SCHEMA}.webmention_page_publications (page_id, source_url, published_at)
+              VALUES ($1, $2, $3)
+              ON CONFLICT (page_id) DO UPDATE SET
+                source_url = EXCLUDED.source_url, published_at = EXCLUDED.published_at
+            SQL
+            [row.fetch("page_id"), payload.fetch("source_url"), timestamp]
+          )
+          connection.exec_params(
+            "UPDATE #{SCHEMA}.webmention_page_targets SET active = FALSE WHERE page_id = $1", [row.fetch("page_id")]
+          )
+          payload.fetch("current_targets").each do |target|
+            connection.exec_params(
+              <<~SQL,
+                INSERT INTO #{SCHEMA}.webmention_page_targets (
+                  page_id, target_url, first_seen_at, last_seen_at, active
+                ) VALUES ($1, $2, $3, $3, TRUE)
+                ON CONFLICT (page_id, target_url) DO UPDATE SET
+                  last_seen_at = EXCLUDED.last_seen_at, active = TRUE
+              SQL
+              [row.fetch("page_id"), target, timestamp]
+            )
+          end
+          connection.exec_params(
+            <<~SQL,
+              UPDATE #{SCHEMA}.webmention_outbox
+              SET status = 'completed', attempt_count = attempt_count + 1, completed_at = $2
+              WHERE id = $1 AND status = 'pending'
+            SQL
+            [id, timestamp]
+          )
+          true
+        end
       end
     end
 
     def fail_webmention_outbox(id)
       with_connection do |connection|
         connection.exec_params(
-          "UPDATE #{SCHEMA}.webmention_outbox SET attempt_count = attempt_count + 1 WHERE id = $1",
+          <<~SQL,
+            UPDATE #{SCHEMA}.webmention_outbox
+            SET status = 'pending', attempt_count = attempt_count + 1, completed_at = NULL
+            WHERE id = $1
+          SQL
           [id]
         )
       end
@@ -610,7 +693,7 @@ module WeblogAuthoring
       with_connection do |connection|
         connection.transaction do
           relation = connection.exec_params(
-            "SELECT id FROM #{SCHEMA}.webmention_relations WHERE id = $1 AND verification_status = 'verified' LIMIT 1 FOR UPDATE",
+            "SELECT id, target_page_id FROM #{SCHEMA}.webmention_relations WHERE id = $1 AND verification_status = 'verified' LIMIT 1 FOR UPDATE",
             [id]
           )
           raise KeyError, "Webmention not found" if relation.ntuples.zero?
@@ -620,6 +703,8 @@ module WeblogAuthoring
           when "rejected" then reject_webmention(connection, id, timestamp)
           when "pending" then reset_webmention_decision(connection, id, timestamp)
           end
+          page_result = connection.exec_params("#{select_sql("id")} LIMIT 1", [relation[0].fetch("target_page_id")])
+          enqueue_webmention_outbox(connection, nil, page_from_row(page_result[0])) if page_result.ntuples.positive?
         end
       end
       list_webmentions.find { |mention| mention.fetch("id") == id }
@@ -1547,67 +1632,47 @@ module WeblogAuthoring
       }
     end
 
-    def enqueue_webmention_outbox(connection, previous, current)
-      unless current.status == "published" && !current.empty?
-        connection.exec_params(
-          "UPDATE #{SCHEMA}.webmention_page_targets SET active = FALSE WHERE page_id = $1", [current.id]
-        )
-        return unless previous
-        return unless previous.status == "published" && !previous.empty?
-
-        previous_source = webmention_source_url(previous.route)
-        current_targets = [] # @type var current_targets: Array[String]
-        payload = {
-          "source_url" => webmention_source_url(current.route),
-          "previous_source_url" => previous_source,
-          "previous_targets" => @webmention_targets.extract(previous.body, source_url: previous_source),
-          "current_targets" => current_targets,
-        }
-        connection.exec_params(
-          <<~SQL,
-            INSERT INTO #{SCHEMA}.webmention_outbox (
-              id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
-            ) VALUES ($1, 'page_unpublished', $2, $3, 'pending', 0, $4, NULL, NULL)
-          SQL
-          [SecureRandom.uuid.delete("-"), current.id, JSON.generate(payload), now]
-        )
-        return
-      end
-
+    def enqueue_webmention_outbox(connection, _previous, current)
       current_source = webmention_source_url(current.route)
-      previous_source = previous && webmention_source_url(previous.route)
-      previous_targets = [] # @type var previous_targets: Array[String]
-      previous_targets = @webmention_targets.extract(previous.body, source_url: previous_source) if previous
-      current_targets = @webmention_targets.extract(current.body, source_url: current_source)
-      timestamp = now
-      connection.exec_params(
-        "UPDATE #{SCHEMA}.webmention_page_targets SET active = FALSE WHERE page_id = $1", [current.id]
+      publication = connection.exec_params(
+        "SELECT source_url FROM #{SCHEMA}.webmention_page_publications WHERE page_id = $1 LIMIT 1",
+        [current.id]
       )
-      (previous_targets | current_targets).each do |target|
-        connection.exec_params(
-          <<~SQL,
-            INSERT INTO #{SCHEMA}.webmention_page_targets (
-              page_id, target_url, first_seen_at, last_seen_at, active
-            ) VALUES ($1, $2, $3, $3, $4)
-            ON CONFLICT (page_id, target_url) DO UPDATE SET
-              last_seen_at = EXCLUDED.last_seen_at, active = EXCLUDED.active
-          SQL
-          [current.id, target, timestamp, current_targets.include?(target)]
-        )
+      previous_source = publication.ntuples.positive? ? publication[0].fetch("source_url") : nil
+      previous_targets = connection.exec_params(
+        "SELECT target_url FROM #{SCHEMA}.webmention_page_targets WHERE page_id = $1 AND active = TRUE ORDER BY target_url",
+        [current.id]
+      ).map { |row| row.fetch("target_url") }
+      current_targets = [] # @type var current_targets: Array[String]
+      if current.status == "published" && !current.empty?
+        current_targets = @webmention_targets.extract(current.body, source_url: current_source)
       end
+      timestamp = now
       payload = {
+        "revision" => SecureRandom.uuid.delete("-"),
+        "desired_updated_at" => current.updated_at.iso8601(9),
         "source_url" => current_source,
         "previous_source_url" => previous_source,
         "previous_targets" => previous_targets,
         "current_targets" => current_targets,
       }
+      event_type = current_targets.empty? && previous_source ? "page_unpublished" : "page_saved"
+      outbox_id = Digest::SHA256.hexdigest("publication-refresh\0#{current.id}")
       connection.exec_params(
         <<~SQL,
           INSERT INTO #{SCHEMA}.webmention_outbox (
             id, event_type, page_id, payload, status, attempt_count, created_at, notified_at, completed_at
-          ) VALUES ($1, 'page_saved', $2, $3, 'pending', 0, $4, NULL, NULL)
+          ) VALUES ($1, $2, $3, $4, 'pending', 0, $5, NULL, NULL)
+          ON CONFLICT (id) DO UPDATE SET
+            event_type = EXCLUDED.event_type,
+            payload = EXCLUDED.payload,
+            status = 'pending',
+            attempt_count = 0,
+            created_at = EXCLUDED.created_at,
+            notified_at = NULL,
+            completed_at = NULL
         SQL
-        [SecureRandom.uuid.delete("-"), current.id, JSON.generate(payload), timestamp]
+        [outbox_id, event_type, current.id, JSON.generate(payload), timestamp]
       )
     end
 

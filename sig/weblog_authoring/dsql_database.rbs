@@ -59,9 +59,11 @@ module WeblogAuthoring
     def webmention_outbox: (String) -> Hash[String, untyped]?
     def pending_webmention_outbox: (?limit: Integer) -> Array[Hash[String, untyped]]
     def pending_webmention_outbox_for_page: (String) -> Hash[String, untyped]?
+    def request_publication_refresh: (String) -> Hash[String, untyped]?
+    def compact_webmention_outbox: (?dry_run: bool) -> Hash[String, Integer]
     def webmention_page_targets: (String) -> Array[Hash[String, untyped]]
     def mark_webmention_outbox_notified: (String) -> untyped
-    def complete_webmention_outbox: (String) -> untyped
+    def complete_webmention_outbox: (String, ?revision: String?) -> bool
     def fail_webmention_outbox: (String) -> untyped
     def record_webmention_delivery: (job: untyped, status: String, ?http_status: Integer?, ?error: String?) -> untyped
     def list_webmention_delivery_failures: () -> Array[Hash[String, untyped]]
