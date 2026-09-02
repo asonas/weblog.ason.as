@@ -13,6 +13,7 @@ require "aws-sdk-sqs"
 
 require_relative "embed_metadata"
 require_relative "image_inbox"
+require_relative "inbox_thumbnail"
 require_relative "image_upload"
 require_relative "inbox_sync"
 require_relative "mobile_upload"
@@ -60,7 +61,7 @@ module WeblogAuthoring
                    bluesky_oauth_function_name: nil, webmention_queue_url: nil,
                    webmention_publish_queue_url: nil, webmention_dead_letter_arn: nil,
                    webmention_queue_arn: nil, webmention_publish_dead_letter_arn: nil,
-                   webmention_publish_queue_arn: nil, clock: Time.method(:now))
+                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, clock: Time.method(:now))
       @database = database
       @oauth = oauth
       @session_codec = session_codec
@@ -86,6 +87,7 @@ module WeblogAuthoring
         "publishing" => [webmention_publish_dead_letter_arn, webmention_publish_queue_arn],
       }
       @clock = clock
+      @inbox_thumbnail = inbox_thumbnail
       @cold_start = true
     end
 
@@ -479,6 +481,7 @@ module WeblogAuthoring
         s3_client:,
         bucket: @asset_bucket,
         development_bucket: @development_asset_bucket,
+        thumbnailer: @inbox_thumbnail || InboxThumbnail.new(s3_client:, bucket: @asset_bucket),
         clock: @clock
       )
     end

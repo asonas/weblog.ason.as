@@ -1069,7 +1069,7 @@ module WeblogAuthoring
       end
     end
 
-    def complete_mobile_upload(upload_id:, device_id:)
+    def complete_mobile_upload(upload_id:, device_id:, thumbnail_url:)
       timestamp = now
       with_connection do |database|
         database.transaction do
@@ -1086,7 +1086,7 @@ module WeblogAuthoring
           item_id = new_id
           payload = {
             "inbox_key" => upload.fetch("s3_key"),
-            "preview_url" => "/#{upload.fetch("s3_key")}",
+            "preview_url" => thumbnail_url,
             "captured_at_source" => upload.fetch("captured_at_source"),
           }
           occurred_at = upload.fetch("captured_at") || serialize_time(timestamp)

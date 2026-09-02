@@ -38,12 +38,13 @@ module WeblogAuthoring
     CAPTURE_SOURCES = %w[photos exif uploaded].freeze
     CLIENT_UPLOAD_ID_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
 
-    def initialize(database:, s3_client: nil, bucket: nil, development_bucket: nil, clock: Time.method(:now),
+    def initialize(database:, s3_client: nil, bucket: nil, development_bucket: nil, thumbnailer: nil, clock: Time.method(:now),
                    random_bytes: SecureRandom.method(:random_bytes), random_uuid: -> { SecureRandom.uuid.delete("-") })
       @database = database
       @s3_client = s3_client
       @bucket = bucket
       @development_bucket = development_bucket
+      @thumbnailer = thumbnailer
       @clock = clock
       @random_bytes = random_bytes
       @random_uuid = random_uuid
@@ -111,7 +112,10 @@ module WeblogAuthoring
                 object.metadata.fetch("sha256", nil) == upload.fetch("sha256")
       raise ConflictError, "s3_upload_incomplete" unless matches
 
-      item, created = @database.complete_mobile_upload(upload_id:, device_id: device.fetch("id"))
+      thumbnail_key = @thumbnailer.create(key: upload.fetch("s3_key"))
+      item, created = @database.complete_mobile_upload(
+        upload_id:, device_id: device.fetch("id"), thumbnail_url: "/#{thumbnail_key}"
+      )
       mirror_to_development(upload:, item:)
       [item, created]
     rescue Aws::S3::Errors::NotFound, Aws::S3::Errors::NoSuchKey
@@ -128,6 +132,12 @@ module WeblogAuthoring
         bucket: @development_bucket,
         key:,
         copy_source: "#{@bucket}/#{key}"
+      )
+      thumbnail_key = item.payload.fetch("preview_url").delete_prefix("/")
+      @s3_client.copy_object(
+        bucket: @development_bucket,
+        key: thumbnail_key,
+        copy_source: "#{@bucket}/#{thumbnail_key}"
       )
       @s3_client.put_object(
         bucket: @development_bucket,

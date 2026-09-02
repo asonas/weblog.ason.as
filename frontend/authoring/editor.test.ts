@@ -561,7 +561,10 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
               occurred_at: "2026-08-26T11:00:00+09:00",
               ingested_at: "2026-08-26T11:00:00+09:00",
               expires_at: "2026-09-02T11:00:00+09:00",
-              payload: { preview_url: "/assets/inbox/photo-1.webp" },
+              payload: {
+                inbox_key: "/assets/inbox/photo-1.jpg",
+                preview_url: "/assets/inbox/thumbnails/photo-1.webp",
+              },
               used_in_pages: [],
             },
           ],
@@ -644,6 +647,10 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
       ".content-inbox__item",
     );
     assert.ok(remainingItem);
+    assert.equal(
+      remainingItem.querySelector<HTMLImageElement>("img")?.getAttribute("src"),
+      "/assets/inbox/thumbnails/photo-1.webp",
+    );
     const dragStart = new window.Event("dragstart", {
       bubbles: true,
       cancelable: true,

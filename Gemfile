@@ -18,6 +18,7 @@ gem "aws-sdk-cloudfront"
 gem "aws-sdk-secretsmanager"
 gem "aurora-dsql-ruby-pg"
 gem "dotenv"
+gem "ruby-vips"
 
 group :test do
   gem "minitest"

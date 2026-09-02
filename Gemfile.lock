@@ -144,6 +144,9 @@ GEM
       parser (>= 3.3.7.2)
       prism (~> 1.7)
     ruby-progressbar (1.13.0)
+    ruby-vips (2.3.0)
+      ffi (~> 1.12)
+      logger
     securerandom (0.4.1)
     simplecov (0.22.0)
       docile (~> 1.1)
@@ -230,6 +233,7 @@ DEPENDENCIES
   rbs (~> 3.9)
   rouge
   rubocop (~> 1.89)
+  ruby-vips
   simplecov (~> 0.22.0)
   sinatra (~> 4.2)
   sqlite3

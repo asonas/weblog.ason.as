@@ -10,6 +10,19 @@ require "fileutils"
 class MobileUploadApiTest < Minitest::Test
   NOW = Time.iso8601("2026-08-27T12:00:00+09:00")
 
+  class FakeThumbnailer
+    attr_reader :keys
+
+    def initialize
+      @keys = []
+    end
+
+    def create(key:)
+      keys << key
+      key.sub(%r{\Aassets/inbox/}, "assets/inbox/thumbnails/").sub(/\.[^.]+\z/, ".webp")
+    end
+  end
+
   def setup
     @now = NOW
     @tmpdir = Pathname(Dir.mktmpdir)
@@ -265,8 +278,10 @@ class MobileUploadApiTest < Minitest::Test
       credentials: Aws::Credentials.new("access-key", "secret-key"),
       stub_responses: true
     )
+    thumbnailer = FakeThumbnailer.new
     api = WeblogAuthoring::LambdaApi.new(
-      database: @database, s3_client: s3, asset_bucket: "production-assets", clock: -> { NOW }
+      database: @database, s3_client: s3, asset_bucket: "production-assets",
+      inbox_thumbnail: thumbnailer, clock: -> { NOW }
     )
     headers = { "authorization" => "Bearer #{token}" }
     created = api.call(json_event("POST", "/api/mobile/uploads", mobile_upload_payload, headers:))
@@ -294,8 +309,11 @@ class MobileUploadApiTest < Minitest::Test
     repeated_item = JSON.parse(repeated.fetch(:body)).fetch("item")
     assert_equal first_item.fetch("id"), repeated_item.fetch("id")
     assert_equal key, first_item.dig("payload", "inbox_key")
+    assert_equal "/#{key.sub(%r{\Aassets/inbox/}, "assets/inbox/thumbnails/").sub(/\.[^.]+\z/, ".webp")}",
+                 first_item.dig("payload", "preview_url")
     assert_equal "photos", first_item.dig("payload", "captured_at_source")
     assert_equal "2026-08-27T08:30:00+09:00", first_item.fetch("occurred_at")
+    assert_equal [key], thumbnailer.keys
   end
 
   def test_completion_mirrors_the_photo_and_manifest_to_development_s3
@@ -310,6 +328,7 @@ class MobileUploadApiTest < Minitest::Test
       s3_client: s3,
       asset_bucket: "production-assets",
       development_asset_bucket: "development-assets",
+      inbox_thumbnail: FakeThumbnailer.new,
       clock: -> { NOW }
     )
     headers = { "authorization" => "Bearer #{token}" }
@@ -317,6 +336,7 @@ class MobileUploadApiTest < Minitest::Test
     upload = JSON.parse(created.fetch(:body))
     upload_id = upload.fetch("upload_id")
     key = upload.dig("fields", "key")
+    thumbnail_key = key.sub(%r{\Aassets/inbox/}, "assets/inbox/thumbnails/").sub(/\.[^.]+\z/, ".webp")
     s3.stub_responses(:head_object, {
       content_type: "image/jpeg",
       content_length: 1024,
@@ -353,7 +373,7 @@ class MobileUploadApiTest < Minitest::Test
       "occurred_at" => "2026-08-27T08:30:00+09:00",
       "payload" => {
         "inbox_key" => key,
-        "preview_url" => "/#{key}",
+        "preview_url" => "/#{thumbnail_key}",
         "captured_at_source" => "photos",
       },
     }, JSON.parse(manifest.dig(:params, :body)))
@@ -363,7 +383,7 @@ class MobileUploadApiTest < Minitest::Test
     manifest_keys = s3.api_requests.filter_map do |request|
       request.dig(:params, :key) if request.fetch(:operation_name) == :put_object
     end
-    assert_equal [key], copied_keys.uniq
+    assert_equal [key, thumbnail_key], copied_keys.uniq
     assert_equal ["assets/inbox/.metadata/#{upload_id}.json"], manifest_keys.uniq
   end
 
@@ -375,7 +395,8 @@ class MobileUploadApiTest < Minitest::Test
       stub_responses: true
     )
     api = WeblogAuthoring::LambdaApi.new(
-      database: @database, s3_client: s3, asset_bucket: "production-assets", clock: -> { NOW }
+      database: @database, s3_client: s3, asset_bucket: "production-assets",
+      inbox_thumbnail: FakeThumbnailer.new, clock: -> { NOW }
     )
     headers = { "authorization" => "Bearer #{token}" }
     created = api.call(json_event("POST", "/api/mobile/uploads", mobile_upload_payload, headers:))
@@ -471,7 +492,8 @@ class MobileUploadApiTest < Minitest::Test
       stub_responses: true
     )
     api = WeblogAuthoring::LambdaApi.new(
-      database: @database, s3_client: s3, asset_bucket: "production-assets", clock: -> { @now }
+      database: @database, s3_client: s3, asset_bucket: "production-assets",
+      inbox_thumbnail: FakeThumbnailer.new, clock: -> { @now }
     )
     headers = { "authorization" => "Bearer #{token}" }
 

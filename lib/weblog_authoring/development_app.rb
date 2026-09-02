@@ -21,6 +21,7 @@ require_relative "development_database"
 require_relative "embed_metadata"
 require_relative "github_oauth"
 require_relative "image_inbox"
+require_relative "inbox_thumbnail"
 require_relative "image_upload"
 require_relative "inbox_sync"
 require_relative "bluesky_source"
@@ -258,6 +259,26 @@ module WeblogAuthoring
       )
       content_type object.content_type || "application/octet-stream"
       cache_control :public, max_age: 31_536_000, immutable: true
+      object.body.read
+    rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
+      halt 404
+    end
+
+    get "/assets/inbox/thumbnails/:year/:month/:day/:filename" do
+      year = params.fetch("year")
+      month = params.fetch("month")
+      day = params.fetch("day")
+      filename = params.fetch("filename")
+      halt 404 unless /\A\d{4}\z/.match?(year) && /\A(?:0[1-9]|1[0-2])\z/.match?(month)
+      halt 404 unless /\A(?:0[1-9]|[12]\d|3[01])\z/.match?(day)
+      halt 404 unless /\A(?:[0-9a-f]{32}|[0-9a-f-]{36})\.webp\z/i.match?(filename)
+
+      object = s3_client.get_object(
+        bucket: settings.asset_bucket,
+        key: "assets/inbox/thumbnails/#{year}/#{month}/#{day}/#{filename}"
+      )
+      content_type "image/webp"
+      cache_control :private, max_age: 604_800
       object.body.read
     rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
       halt 404
@@ -510,6 +531,7 @@ module WeblogAuthoring
         database: settings.database,
         s3_client: s3_client,
         bucket: settings.asset_bucket,
+        thumbnailer: InboxThumbnail.new(s3_client:, bucket: settings.asset_bucket),
         clock: settings.clock
       )
     end

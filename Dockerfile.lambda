@@ -1,6 +1,26 @@
+FROM public.ecr.aws/lambda/ruby:4.0 AS libvips-build
+
+RUN dnf install -y \
+      gcc gcc-c++ make meson ninja-build pkgconf-pkg-config tar xz \
+      glib2-devel expat-devel libjpeg-turbo-devel libpng-devel libwebp-devel \
+    && dnf clean all
+
+ADD https://github.com/libvips/libvips/releases/download/v8.18.2/vips-8.18.2.tar.xz /tmp/vips.tar.xz
+RUN echo "a30d4aede16f1c2899c1a2241870f8a7409feafa38484bcdcdac113d6d6f8ff5  /tmp/vips.tar.xz" | sha256sum -c - \
+    && tar -xf /tmp/vips.tar.xz -C /tmp \
+    && meson setup /tmp/vips-8.18.2/build /tmp/vips-8.18.2 \
+      --prefix=/opt/vips --libdir=lib --buildtype=release \
+      -Ddeprecated=false -Dexamples=false -Dcplusplus=false \
+      -Dmodules=disabled -Dintrospection=disabled \
+    && meson compile -C /tmp/vips-8.18.2/build \
+    && meson install -C /tmp/vips-8.18.2/build
+
 FROM public.ecr.aws/lambda/ruby:4.0
 
-RUN dnf install -y gcc make && dnf clean all
+RUN dnf install -y gcc make glib2 expat libjpeg-turbo libpng libwebp && dnf clean all
+
+COPY --from=libvips-build /opt/vips/ /opt/vips/
+ENV LD_LIBRARY_PATH=/opt/vips/lib
 
 COPY Gemfile Gemfile.lock ./
 RUN bundle config set without "development test" && bundle install

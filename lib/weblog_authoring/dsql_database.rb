@@ -865,7 +865,7 @@ module WeblogAuthoring
       end
     end
 
-    def complete_mobile_upload(upload_id:, device_id:)
+    def complete_mobile_upload(upload_id:, device_id:, thumbnail_url:)
       timestamp = now
       with_connection do |connection|
         connection.transaction do
@@ -883,7 +883,7 @@ module WeblogAuthoring
           next [inbox_item_from_row(existing[0]), false] if existing.ntuples.positive?
 
           payload = JSON.generate(
-            "inbox_key" => upload.fetch("s3_key"), "preview_url" => "/#{upload.fetch("s3_key")}",
+            "inbox_key" => upload.fetch("s3_key"), "preview_url" => thumbnail_url,
             "captured_at_source" => upload.fetch("captured_at_source")
           )
           item = connection.exec_params(

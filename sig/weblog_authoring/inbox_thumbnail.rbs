@@ -1,0 +1,13 @@
+module WeblogAuthoring
+  class InboxThumbnail
+    MAX_DIMENSION: Integer
+    CACHE_CONTROL: String
+
+    def initialize: (s3_client: untyped, bucket: String, ?image_class: untyped) -> void
+    def create: (key: String) -> String
+
+    private
+
+    def image_class: () -> untyped
+  end
+end

@@ -511,6 +511,20 @@ class TestDevelopmentApp < Minitest::Test
     }], s3_client.requests
   end
 
+  def test_inbox_thumbnails_are_read_from_the_development_bucket
+    filename = "becf3f799d14482090060d487cb9b952.webp"
+
+    status, headers, body = request("GET", "/assets/inbox/thumbnails/2026/08/28/#{filename}")
+
+    assert_equal 200, status
+    assert_equal "image/webp", headers.fetch("content-type")
+    assert_equal "image-data", body
+    assert_equal [{
+      bucket: "weblog-asonas-assets-dev-282782318939",
+      key: "assets/inbox/thumbnails/2026/08/28/#{filename}",
+    }], s3_client.requests
+  end
+
   def test_manually_runs_the_same_inbox_sync_contract_in_development
     status, _headers, body = request("POST", "/api/inbox/sync", payload: {})
     run_id = JSON.parse(body).fetch("run_id")
