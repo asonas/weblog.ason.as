@@ -1175,6 +1175,26 @@ module WeblogAuthoring
       end
     end
 
+    def update_inbox_item_preview(item_id:, inbox_key:, preview_url:)
+      with_connection do |database|
+        row = database.get_first_row(
+          "SELECT payload FROM inbox_items WHERE id = ? AND source = 'photo' AND kind = 'photo'",
+          item_id
+        )
+        return false if row.nil?
+
+        payload = JSON.parse(row.fetch(0))
+        return false unless payload["inbox_key"] == inbox_key
+
+        payload["preview_url"] = preview_url
+        database.execute(
+          "UPDATE inbox_items SET payload = ?, updated_at = ? WHERE id = ?",
+          [JSON.generate(payload), serialize_time(now), item_id]
+        )
+        database.changes.positive?
+      end
+    end
+
     def prepare_inbox_image_adoption(item_id:, inbox_key:, public_key:)
       timestamp = now
       with_connection do |database|

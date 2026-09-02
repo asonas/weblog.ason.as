@@ -219,6 +219,26 @@ class TestDevelopmentDatabase < Minitest::Test
     end
   end
 
+  def test_updates_only_the_preview_for_the_matching_inbox_image
+    database = development_database
+    item = database.upsert_inbox_item(
+      source: "photo", kind: "photo", source_id: "photo-1", occurred_at: FIXED_TIME,
+      payload: { "inbox_key" => "assets/inbox/photo.webp", "preview_url" => "/assets/inbox/photo.webp", "captured_at_source" => "exif" }
+    )
+
+    updated = database.update_inbox_item_preview(
+      item_id: item.id, inbox_key: "assets/inbox/photo.webp",
+      preview_url: "/assets/inbox/thumbnails/photo.webp"
+    )
+
+    assert_equal true, updated
+    assert_equal "/assets/inbox/thumbnails/photo.webp", database.find_inbox_item(item.id).payload.fetch("preview_url")
+    assert_equal "assets/inbox/photo.webp", database.find_inbox_item(item.id).payload.fetch("inbox_key")
+    assert_equal false, database.update_inbox_item_preview(
+      item_id: item.id, inbox_key: "assets/inbox/other.webp", preview_url: "/wrong.webp"
+    )
+  end
+
   def test_expired_inbox_item_rolls_back_page_save
     original = development_database
     item = original.upsert_inbox_item(

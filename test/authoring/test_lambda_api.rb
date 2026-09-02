@@ -51,7 +51,7 @@ class LambdaApiTest < Minitest::Test
   end
 
   class FakeDatabase
-    attr_reader :health_checks, :pages, :saved_requests, :inbox_filters
+    attr_reader :health_checks, :pages, :saved_requests, :inbox_filters, :preview_updates
     attr_accessor :webmentions, :webmention_delivery_failures
 
     def initialize(pages, inbox_items: [], inbox_item_usages: [])
@@ -60,6 +60,7 @@ class LambdaApiTest < Minitest::Test
       @inbox_item_usages = inbox_item_usages
       @health_checks = 0
       @saved_requests = []
+      @preview_updates = []
       @webmentions = []
       @webmention_delivery_failures = []
     end
@@ -118,6 +119,11 @@ class LambdaApiTest < Minitest::Test
 
     def list_inbox_item_usages
       @inbox_item_usages
+    end
+
+    def update_inbox_item_preview(item_id:, inbox_key:, preview_url:)
+      preview_updates << { item_id:, inbox_key:, preview_url: }
+      true
     end
 
     def prepare_inbox_image_adoption(item_id:, inbox_key:, public_key:)
@@ -249,6 +255,19 @@ class LambdaApiTest < Minitest::Test
     def invoke(**request)
       invocations << request
       Response.new(payload: StringIO.new(JSON.generate(@response)), function_error: nil)
+    end
+  end
+
+  class FakeThumbnail
+    attr_reader :keys
+
+    def initialize
+      @keys = []
+    end
+
+    def create(key:)
+      keys << key
+      "assets/inbox/thumbnails/2026/09/02/#{Pathname(key).basename('.*')}.webp"
     end
   end
 
@@ -918,6 +937,30 @@ class LambdaApiTest < Minitest::Test
     assert_equal "weblog-inbox-adoption=pending", s3.api_requests.fetch(0).fetch(:params).fetch(:tagging)
   end
 
+  def test_backfills_only_photos_that_still_use_the_original_preview
+    original_key = "assets/inbox/2026/09/02/11111111-2222-3333-4444-555555555555.jpg"
+    items = [
+      inbox_item(id: "original", key: original_key, preview_url: "/#{original_key}"),
+      inbox_item(
+        id: "converted", key: "assets/inbox/2026/09/02/22222222-3333-4444-5555-666666666666.jpg",
+        preview_url: "/assets/inbox/thumbnails/2026/09/02/22222222-3333-4444-5555-666666666666.webp"
+      ),
+    ]
+    database = FakeDatabase.new([@page], inbox_items: items)
+    thumbnail = FakeThumbnail.new
+    api = WeblogAuthoring::LambdaApi.new(database:, inbox_thumbnail: thumbnail)
+
+    result = api.backfill_inbox_thumbnails
+
+    assert_equal({ "status" => "completed", "converted" => 1, "remaining" => 0 }, result)
+    assert_equal [original_key], thumbnail.keys
+    assert_equal [{
+      item_id: "original", inbox_key: original_key,
+      preview_url: "/assets/inbox/thumbnails/2026/09/02/11111111-2222-3333-4444-555555555555.webp",
+    }], database.preview_updates
+    assert_equal({ source: "photo", kind: "photo" }, database.inbox_filters)
+  end
+
   def test_lists_common_inbox_items_with_kind_filter
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
     token = codec.issue(
@@ -1180,6 +1223,16 @@ class LambdaApiTest < Minitest::Test
   end
 
   private
+
+  def inbox_item(id:, key:, preview_url:)
+    timestamp = Time.iso8601("2026-09-02T12:00:00Z")
+    WeblogAuthoring::InboxItem.new(
+      id:, source: "photo", kind: "photo", source_id: id,
+      occurred_at: timestamp, ingested_at: timestamp, expires_at: timestamp + 86_400,
+      payload: { "inbox_key" => key, "preview_url" => preview_url, "captured_at_source" => "exif" },
+      created_at: timestamp, updated_at: timestamp
+    )
+  end
 
   def authenticated_api(sqs:, logger: $stderr)
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)

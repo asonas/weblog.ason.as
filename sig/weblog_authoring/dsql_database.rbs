@@ -43,6 +43,7 @@ module WeblogAuthoring
     def finish_inbox_sync_run: (run_id: untyped, status: untyped, completed_at: untyped) -> untyped
     def list_inbox_items: (?source: untyped, ?kind: untyped) -> Array[InboxItem]
     def list_inbox_item_usages: () -> Array[InboxItemUsage]
+    def update_inbox_item_preview: (item_id: String, inbox_key: String, preview_url: String) -> bool
     def find_inbox_item: (String) -> InboxItem?
     def prepare_inbox_image_adoption: (item_id: untyped, inbox_key: untyped, public_key: untyped) -> untyped
     def consume_inbox_item: (String) -> untyped

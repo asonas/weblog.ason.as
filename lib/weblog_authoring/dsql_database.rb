@@ -1332,6 +1332,21 @@ module WeblogAuthoring
       end
     end
 
+    def update_inbox_item_preview(item_id:, inbox_key:, preview_url:)
+      with_connection do |connection|
+        result = connection.exec_params(
+          <<~SQL,
+            UPDATE #{SCHEMA}.inbox_items
+            SET payload = jsonb_set(payload, '{preview_url}', to_jsonb($3::text)), updated_at = $4
+            WHERE id = $1 AND source = 'photo' AND kind = 'photo'
+              AND payload->>'inbox_key' = $2
+          SQL
+          [item_id, inbox_key, preview_url, now]
+        )
+        result.cmd_tuples.positive?
+      end
+    end
+
     def prepare_inbox_image_adoption(item_id:, inbox_key:, public_key:)
       timestamp = now
       with_connection do |connection|

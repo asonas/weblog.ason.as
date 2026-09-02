@@ -6,6 +6,23 @@ require_relative "../../lambda/authoring"
 class AuthoringLambdaTest < Minitest::Test
   SecretResponse = Data.define(:secret_string)
 
+  def test_routes_thumbnail_backfill_events_outside_the_http_api
+    api = Object.new
+    api.define_singleton_method(:backfill_inbox_thumbnails) do |limit:|
+      { "status" => "completed", "converted" => limit, "remaining" => 0 }
+    end
+    WeblogAuthoring::LambdaHandler.instance_variable_set(:@api, api)
+    context = Data.define(:aws_request_id).new("request-id")
+
+    result = WeblogAuthoring::LambdaHandler.call(
+      event: { "action" => "backfill_inbox_thumbnails", "limit" => 2 }, context:
+    )
+
+    assert_equal({ "status" => "completed", "converted" => 2, "remaining" => 0 }, result)
+  ensure
+    WeblogAuthoring::LambdaHandler.remove_instance_variable(:@api) if WeblogAuthoring::LambdaHandler.instance_variable_defined?(:@api)
+  end
+
   def test_logs_cold_api_construction_timings
     secret_client = Object.new
     secret_client.define_singleton_method(:get_secret_value) do |secret_id:|

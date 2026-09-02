@@ -9,8 +9,11 @@ class DsqlDatabaseTest < Minitest::Test
   class Result
     include Enumerable
 
-    def initialize(rows = [])
+    attr_reader :cmd_tuples
+
+    def initialize(rows = [], cmd_tuples: 0)
       @rows = rows
+      @cmd_tuples = cmd_tuples
     end
 
     def each(&)
@@ -94,6 +97,13 @@ class DsqlDatabaseTest < Minitest::Test
       when /INSERT INTO weblog_authoring\.inbox_item_usages/
         @usages << params.first(2)
         Result.new
+      when /UPDATE weblog_authoring\.inbox_items\s+SET payload = jsonb_set/m
+        item = @items[params.fetch(0)]
+        return Result.new unless item && item.fetch("payload").fetch("inbox_key") == params.fetch(1)
+
+        item["payload"] = item.fetch("payload").merge("preview_url" => params.fetch(2))
+        item["updated_at"] = params.fetch(3)
+        Result.new(cmd_tuples: 1)
       when /FROM weblog_authoring\.inbox_item_usages usage/
         Result.new(@usages.map do |item_id, page_id|
           page = @pages.fetch(page_id)
@@ -312,6 +322,29 @@ class DsqlDatabaseTest < Minitest::Test
     assert_equal ["item-1"], @pool.connection.committed_adoptions
     assert_equal([["item-1", page.id, "インボックス採用"]],
                  database.list_inbox_item_usages.map { |usage| [usage.item_id, usage.page_id, usage.page_route] })
+  end
+
+  def test_updates_only_the_preview_for_the_matching_inbox_image
+    database = dsql_database
+    row = inbox_row("item-1", expires_at: FIXED_TIME + 3600)
+    row["payload"] = {
+      "inbox_key" => "assets/inbox/photo.jpg",
+      "preview_url" => "/assets/inbox/photo.jpg",
+      "captured_at_source" => "exif",
+    }
+    @pool.connection.add_inbox_item(row)
+
+    updated = database.update_inbox_item_preview(
+      item_id: "item-1", inbox_key: "assets/inbox/photo.jpg",
+      preview_url: "/assets/inbox/thumbnails/photo.webp"
+    )
+
+    assert_equal true, updated
+    assert_equal "/assets/inbox/thumbnails/photo.webp", @pool.connection.items.fetch("item-1").fetch("payload").fetch("preview_url")
+    assert_equal "assets/inbox/photo.jpg", @pool.connection.items.fetch("item-1").fetch("payload").fetch("inbox_key")
+    assert_equal false, database.update_inbox_item_preview(
+      item_id: "item-1", inbox_key: "assets/inbox/other.jpg", preview_url: "/wrong.webp"
+    )
   end
 
   def test_expired_inbox_item_rejects_page_save

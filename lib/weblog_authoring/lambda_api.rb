@@ -114,6 +114,21 @@ module WeblogAuthoring
       @cold_start = false
     end
 
+    def backfill_inbox_thumbnails(limit: 100)
+      limit = Integer(limit)
+      raise ArgumentError, "limit must be between 1 and 100" unless (1..100).cover?(limit)
+
+      candidates = @database.list_inbox_items(source: "photo", kind: "photo").reject do |item|
+        item.payload.fetch("preview_url", "").start_with?("/assets/inbox/thumbnails/")
+      end
+      converted = candidates.first(limit).count do |item|
+        inbox_key = item.payload.fetch("inbox_key")
+        thumbnail_url = "/#{inbox_thumbnail.create(key: inbox_key)}"
+        @database.update_inbox_item_preview(item_id: item.id, inbox_key:, preview_url: thumbnail_url)
+      end
+      { "status" => "completed", "converted" => converted, "remaining" => candidates.length - converted }
+    end
+
     private
 
     def dispatch(event)
@@ -481,7 +496,7 @@ module WeblogAuthoring
         s3_client:,
         bucket: @asset_bucket,
         development_bucket: @development_asset_bucket,
-        thumbnailer: @inbox_thumbnail || InboxThumbnail.new(s3_client:, bucket: @asset_bucket),
+        thumbnailer: inbox_thumbnail,
         clock: @clock
       )
     end
@@ -896,6 +911,10 @@ module WeblogAuthoring
 
     def s3_client
       @s3_client = resolve_dependency(@s3_client)
+    end
+
+    def inbox_thumbnail
+      @inbox_thumbnail ||= InboxThumbnail.new(s3_client:, bucket: @asset_bucket)
     end
 
     def lambda_client

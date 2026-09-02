@@ -18,7 +18,10 @@ module WeblogAuthoring
     module_function
 
     def call(event:, context:)
-      api(request_id: context.aws_request_id, route: event.fetch("rawPath", "")).call(event)
+      instance = api(request_id: context.aws_request_id, route: event.fetch("rawPath", ""))
+      return instance.backfill_inbox_thumbnails(limit: event.fetch("limit", 100)) if event["action"] == "backfill_inbox_thumbnails"
+
+      instance.call(event)
     end
 
     def api(request_id: nil, route: nil)

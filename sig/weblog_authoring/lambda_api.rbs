@@ -29,6 +29,7 @@ module WeblogAuthoring
 
     def initialize: (database: DsqlDatabase, ?oauth: GitHubOAuth?, ?session_codec: LambdaSession?, ?redirect_uri: String?, ?frontend_url: String?, ?allowed_github_user_id: String?, ?s3_client: untyped, ?asset_bucket: String?, ?embed_fetcher: untyped, ?development_asset_bucket: String?, ?site_bucket: String?, ?search_queue_url: String?, ?sqs_client: untyped, ?logger: untyped, ?search_index: untyped, ?lambda_client: untyped, ?inbox_sync_function_name: String?, ?bluesky_oauth_function_name: String?, ?webmention_queue_url: String?, ?webmention_publish_queue_url: String?, ?webmention_dead_letter_arn: String?, ?webmention_queue_arn: String?, ?webmention_publish_dead_letter_arn: String?, ?webmention_publish_queue_arn: String?, ?inbox_thumbnail: untyped, ?clock: ^() -> Time) -> void
     def call: (lambda_event) -> lambda_response
+    def backfill_inbox_thumbnails: (?limit: Integer | String) -> Hash[String, String | Integer]
 
     private
 
@@ -60,6 +61,7 @@ module WeblogAuthoring
     def issue_mobile_pairing_response: (lambda_event) -> lambda_response
     def exchange_mobile_pairing_response: (lambda_event) -> lambda_response
     def mobile_upload: () -> untyped
+    def inbox_thumbnail: () -> untyped
     def create_mobile_upload_response: (lambda_event) -> lambda_response
     def bearer_token: (lambda_event) -> String?
     def complete_mobile_upload_response: (lambda_event) -> lambda_response
