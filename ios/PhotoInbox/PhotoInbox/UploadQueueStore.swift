@@ -8,8 +8,7 @@ struct UploadFailure: Codable, Equatable, Sendable {
   let automaticallyRetryable: Bool
 
   var requiresRepreparation: Bool {
-    code == "invalid_upload_size" || code == "unsupported_content_type"
-      || (code == nil && !automaticallyRetryable)
+    code == "invalid_upload_size" || code == "invalid_sha256"
   }
 
   init(
@@ -65,7 +64,7 @@ struct UploadItem: Codable, Equatable, Identifiable, Sendable {
   }
 
   var id: UUID { clientUploadID }
-  let clientUploadID: UUID
+  var clientUploadID: UUID
   let assetLocalIdentifier: String
   let capturedAt: Date
   let capturedAtSource: String
@@ -163,6 +162,7 @@ actor UploadQueueStore {
       current[index].contentType = nil
       current[index].size = nil
       current[index].sha256 = nil
+      current[index].clientUploadID = UUID()
     }
     current[index].stage = .pending
     current[index].failure = nil
