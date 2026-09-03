@@ -9,7 +9,14 @@ dist/
 coverage/
 tmp/
 xcuserdata/
-ios/PhotoInbox/PhotoInbox.xcodeproj/
+ios/PhotoInbox/PhotoInbox.xcodeproj/*
+!ios/PhotoInbox/PhotoInbox.xcodeproj/project.xcworkspace/
+ios/PhotoInbox/PhotoInbox.xcodeproj/project.xcworkspace/*
+!ios/PhotoInbox/PhotoInbox.xcodeproj/project.xcworkspace/xcshareddata/
+ios/PhotoInbox/PhotoInbox.xcodeproj/project.xcworkspace/xcshareddata/*
+!ios/PhotoInbox/PhotoInbox.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+ios/PhotoInbox/PhotoInbox.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/*
+!ios/PhotoInbox/PhotoInbox.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 data/raw/
 data/normalized/
 data/index/
