@@ -60,4 +60,40 @@ class WebmentionDocumentTest < Minitest::Test
     )
     assert_equal "https://example.com/html-endpoint", document.webmention_endpoint
   end
+
+  def test_ignores_endpoints_in_comments_and_escaped_html
+    commented = WeblogAuthoring::WebmentionDocument.new(
+      '<!-- <link rel="webmention" href="/wrong"> --><link rel="webmention" href="/correct">',
+      base_url: "https://example.com/post"
+    )
+    escaped = WeblogAuthoring::WebmentionDocument.new(
+      '&lt;a rel="webmention" href="/wrong"&gt;wrong&lt;/a&gt;<a rel="webmention" href="/correct">',
+      base_url: "https://example.com/post"
+    )
+
+    assert_equal "https://example.com/correct", commented.webmention_endpoint
+    assert_equal "https://example.com/correct", escaped.webmention_endpoint
+  end
+
+  def test_resolves_an_empty_endpoint_to_the_target_page
+    document = WeblogAuthoring::WebmentionDocument.new(
+      '<link rel="webmention" href="">', base_url: "https://example.com/post"
+    )
+
+    assert_equal "https://example.com/post", document.webmention_endpoint
+  end
+
+  def test_uses_the_first_html_endpoint_in_document_order
+    anchor_first = WeblogAuthoring::WebmentionDocument.new(
+      '<a rel="webmention" href="/anchor"></a><link rel="webmention" href="/link">',
+      base_url: "https://example.com/post"
+    )
+    link_first = WeblogAuthoring::WebmentionDocument.new(
+      '<link rel="webmention" href="/link"><a rel="webmention" href="/anchor"></a>',
+      base_url: "https://example.com/post"
+    )
+
+    assert_equal "https://example.com/anchor", anchor_first.webmention_endpoint
+    assert_equal "https://example.com/link", link_first.webmention_endpoint
+  end
 end

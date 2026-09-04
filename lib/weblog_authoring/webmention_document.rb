@@ -27,12 +27,12 @@ module WeblogAuthoring
     end
 
     def title
-      text = @html[/<title\b[^>]*>(.*?)<\/title\s*>/im, 1]
+      text = markup[/<title\b[^>]*>(.*?)<\/title\s*>/im, 1]
       normalize_text(text)
     end
 
     def site_name
-      @html.scan(/<meta\b[^>]*>/im).each do |tag|
+      markup.scan(/<meta\b[^>]*>/im).each do |tag|
         attributes = attributes(tag)
         next unless attributes.fetch("property", "").casecmp("og:site_name").zero?
 
@@ -49,14 +49,12 @@ module WeblogAuthoring
       header_endpoint = endpoint_from_link_header(link_header)
       return header_endpoint if header_endpoint
 
-      %w[link a].each do |element|
-        @html.scan(/<#{element}\b[^>]*>/im).each do |tag|
-          values = attributes(tag)
-          next unless values.fetch("rel", "").split.any? { |rel| rel.casecmp("webmention").zero? }
+      markup.scan(/<(?:link|a)\b[^>]*>/im).each do |tag|
+        values = attributes(tag)
+        next unless values.fetch("rel", "").split.any? { |rel| rel.casecmp("webmention").zero? }
 
-          endpoint = resolve_url(values["href"])
-          return endpoint if endpoint
-        end
+        endpoint = resolve_url(values["href"])
+        return endpoint if endpoint
       end
       nil
     end
@@ -64,11 +62,11 @@ module WeblogAuthoring
     private
 
     def links
-      @html.scan(/<a\b[^>]*>/im).filter_map { |tag| attributes(tag)["href"] }
+      markup.scan(/<a\b[^>]*>/im).filter_map { |tag| attributes(tag)["href"] }
     end
 
     def document_base_url
-      tag = @html[/<base\b[^>]*>/im]
+      tag = markup[/<base\b[^>]*>/im]
       href = tag && attributes(tag)["href"]
       href ? URI.join(@base_url, href) : @base_url
     rescue URI::InvalidURIError
@@ -91,7 +89,7 @@ module WeblogAuthoring
     end
 
     def resolve_url(value)
-      return nil if value.to_s.empty?
+      return nil if value.nil?
 
       URI.join(document_base_url, value).to_s
     rescue URI::InvalidURIError
@@ -107,6 +105,10 @@ module WeblogAuthoring
     def normalize_text(value)
       text = CGI.unescapeHTML(value.to_s.gsub(/<[^>]*>/, " ")).split.join(" ")
       text.empty? ? nil : text
+    end
+
+    def markup
+      @markup ||= @html.gsub(/<!--.*?-->/m, "")
     end
 
     def comparable_url(uri)
