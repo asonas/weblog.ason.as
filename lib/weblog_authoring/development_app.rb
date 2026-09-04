@@ -30,6 +30,7 @@ require_relative "mobile_upload"
 require_relative "models"
 require_relative "names"
 require_relative "atom_feed"
+require_relative "performance_telemetry"
 
 module WeblogAuthoring
   class DevelopmentRequestLog
@@ -309,6 +310,19 @@ module WeblogAuthoring
         request = save_request(payload)
         page = settings.database.save(request)
         page_json(page)
+      end
+    end
+
+    post "/api/authoring/telemetry" do
+      halt 413, json_error(413, "Telemetry payload is too large") if request.content_length.to_i > PerformanceTelemetry::MAX_BODY_BYTES
+      api_response(202) do |payload|
+        PerformanceTelemetry.validate_payload!(payload)
+        warn(JSON.generate(
+          "event" => "authoring_performance_telemetry",
+          "received_at" => Time.now.iso8601(6),
+          "payload" => payload,
+        ))
+        { "status" => "accepted" }
       end
     end
 

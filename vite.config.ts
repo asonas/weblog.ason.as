@@ -44,7 +44,9 @@ export default defineConfig(({ mode }) => ({
     react()
   ],
   define: {
-    "process.env.NODE_ENV": JSON.stringify(mode === "production" ? "production" : "development")
+    "process.env.NODE_ENV": JSON.stringify(mode === "production" ? "production" : "development"),
+    __BUILD_SHA__: JSON.stringify(process.env.GITHUB_SHA || "development"),
+    __DEPLOYMENT_ENVIRONMENT__: JSON.stringify(mode)
   },
   optimizeDeps: {
     exclude: ["@jsquash/webp", "@jsquash/webp/encode"]

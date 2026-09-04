@@ -24,6 +24,7 @@ env:
   WEBMENTION_CLEANUP_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-webmention-cleanup-production-runtime
   ECR_REPOSITORY: weblog-authoring-production
   LAMBDA_FUNCTION: weblog-authoring-production
+  AUTHORING_PERFORMANCE_LAMBDA_FUNCTION: weblog-authoring-performance-production
   SEARCH_INDEXER_ECR_REPOSITORY: weblog-search-indexer-production
   SEARCH_INDEXER_LAMBDA_FUNCTION: weblog-search-indexer-production
   INBOX_SYNC_ECR_REPOSITORY: weblog-inbox-sync-production
@@ -258,6 +259,10 @@ jobs:
           image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}@${AUTHORING_DIGEST}"
           aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" --image-uri "$image_uri"
           aws lambda wait function-updated-v2 --function-name "$LAMBDA_FUNCTION"
+          if aws lambda get-function --function-name "$AUTHORING_PERFORMANCE_LAMBDA_FUNCTION" >/dev/null 2>&1; then
+            aws lambda update-function-code --function-name "$AUTHORING_PERFORMANCE_LAMBDA_FUNCTION" --image-uri "$image_uri"
+            aws lambda wait function-updated-v2 --function-name "$AUTHORING_PERFORMANCE_LAMBDA_FUNCTION"
+          fi
 
       - name: Deploy Webmention Lambda image
         if: steps.current.outputs.current == 'true' && needs.build-authoring.outputs.deploy == 'true' && (steps.infra.outputs.receiver == 'true' || steps.infra.outputs.worker == 'true' || steps.infra.outputs.publisher == 'true' || steps.infra.outputs.cleanup == 'true')

@@ -36,6 +36,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { markdownForEditor, markdownForSource } from "./markdown";
+import { AUTHORING_TELEMETRY_FLUSH_EVENT } from "./performanceTelemetry";
 
 declare global {
   interface Window {
@@ -3181,6 +3182,7 @@ export function AuthoringEditor({
     const snapshot = { ...draftRef.current };
     const consumedInboxItemIds = [...consumedInboxItemIdsRef.current];
     const savedVersion = editVersionRef.current;
+    const saveStartedAt = performance.now();
     savingRef.current = true;
     setSaving(true);
     setStatus("保存中…");
@@ -3247,6 +3249,14 @@ export function AuthoringEditor({
       setStatus(apiError.message);
       setDirtyState(true);
     } finally {
+      window.dispatchEvent(
+        new window.CustomEvent(AUTHORING_TELEMETRY_FLUSH_EVENT, {
+          detail: {
+            body: snapshot.body,
+            saveDurationMs: performance.now() - saveStartedAt,
+          },
+        }),
+      );
       savingRef.current = false;
       setSaving(false);
       if (pendingSaveRef.current) {

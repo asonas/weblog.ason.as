@@ -42,6 +42,7 @@ jobs:
       SERVICE: ${{ inputs.service }}
       ECR_REPOSITORY: weblog-authoring-production
       LAMBDA_FUNCTION: weblog-authoring-production
+      AUTHORING_PERFORMANCE_LAMBDA_FUNCTION: weblog-authoring-performance-production
       SEARCH_INDEXER_ECR_REPOSITORY: weblog-search-indexer-production
       SEARCH_INDEXER_LAMBDA_FUNCTION: weblog-search-indexer-production
       INBOX_SYNC_ECR_REPOSITORY: weblog-inbox-sync-production
@@ -124,6 +125,7 @@ jobs:
           case "$SERVICE" in
             authoring)
               restore_function "$LAMBDA_FUNCTION" false
+              restore_function "$AUTHORING_PERFORMANCE_LAMBDA_FUNCTION" true
               restore_function "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" true
               restore_function "$WEBMENTION_WORKER_LAMBDA_FUNCTION" true
               restore_function "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" true

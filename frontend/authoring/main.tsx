@@ -11,6 +11,7 @@ import { createRoot } from "react-dom/client";
 import { DesignSystemPage } from "./designSystem";
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
 import { FeedLoadQueue } from "./feedLoadQueue";
+import { startAuthoringPerformanceTelemetry } from "./performanceTelemetry";
 import {
   captureScrollAnchor,
   restoreScrollAnchor,
@@ -101,6 +102,27 @@ export function HeaderSearch() {
 type AppBootstrap = (EditorBootstrap & { mode: "editor" }) | HomeBootstrap;
 
 type EditorViewMode = "editing" | "reading";
+
+declare const __BUILD_SHA__: string;
+declare const __DEPLOYMENT_ENVIRONMENT__: string;
+
+function AuthoringTelemetry({ auth, body }: { auth: AuthState; body: string }) {
+  useEffect(() => {
+    if (!auth.can_edit || !auth.csrf_token) return;
+    if (
+      __DEPLOYMENT_ENVIRONMENT__ !== "production" &&
+      new URLSearchParams(window.location.search).get("telemetry") === "off"
+    )
+      return;
+    return startAuthoringPerformanceTelemetry({
+      body,
+      csrfToken: auth.csrf_token,
+      environment: __DEPLOYMENT_ENVIRONMENT__,
+      serviceVersion: __BUILD_SHA__,
+    });
+  }, [auth.can_edit, auth.csrf_token, body]);
+  return null;
+}
 
 function tokyoDate(now: Date): string {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -281,6 +303,9 @@ function App({
   return (
     <>
       <HeaderSearch />
+      {viewMode === "editing" && (
+        <AuthoringTelemetry auth={auth} body={bootstrap.body} />
+      )}
       <AuthoringEditor
         key={viewMode}
         bootstrap={bootstrap}
