@@ -118,7 +118,7 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_nil database.failed
   end
 
-  def test_unpublished_page_removes_static_routes_without_queuing_deliveries
+  def test_unpublished_page_removes_static_routes_and_queues_removal_deliveries
     page = WeblogAuthoring::PageDocument.new(
       id: "page-id", page_type: "named", name: "記事", page_date: nil, title: nil,
       status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
@@ -145,7 +145,12 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_equal(
       [{ bucket: "site", key: "記事" }, { bucket: "site", key: "old-route" }], services.deletes
     )
-    assert_empty services.messages
+    jobs = services.messages.map { |message| JSON.parse(message.fetch(:message_body)) }
+    assert_equal [{
+      "type" => "deliver", "delivery_id" => jobs.fetch(0).fetch("delivery_id"),
+      "page_id" => "page-id", "source" => "https://weblog.ason.as/old-route",
+      "target" => "https://old.example/post",
+    }], jobs
     invalidated = services.invalidations.fetch(0).dig(:invalidation_batch, :paths, :items)
     assert_equal ["/%E8%A8%98%E4%BA%8B", "/old-route"], invalidated
     assert_equal "outbox-id", database.completed

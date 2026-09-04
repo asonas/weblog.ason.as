@@ -45,9 +45,10 @@ module WeblogAuthoring
         routes = [page.route, old_route].compact.uniq
         routes.each { |route| @s3_client.delete_object(bucket: @site_bucket, key: route) }
         invalidate(routes, outbox.fetch("id"))
-        @database.complete_webmention_outbox(
+        completed = @database.complete_webmention_outbox(
           outbox.fetch("id"), revision: outbox.dig("payload", "revision")
         )
+        enqueue_deliveries(outbox) if completed && @sender_enabled
         return
       end
 
