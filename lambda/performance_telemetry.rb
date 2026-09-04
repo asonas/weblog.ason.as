@@ -9,7 +9,7 @@ module WeblogAuthoring
   module PerformanceTelemetryLambdaHandler
     module_function
 
-    def call(event:, context:)
+    def call(event:, context:) # rubocop:disable Lint/UnusedMethodArgument
       api.call(event)
     end
 
