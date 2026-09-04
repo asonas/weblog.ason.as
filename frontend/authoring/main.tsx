@@ -154,7 +154,11 @@ export function editorViewMode({
   if (pathname === "/editor/new" || pathname.startsWith("/editor/"))
     return "editing";
   if (new URLSearchParams(search).get("view") === "reading") return "reading";
-  if (bootstrap.page_type === "date" && bootstrap.date === tokyoDate(now))
+  const today = tokyoDate(now);
+  if (
+    (bootstrap.page_type === "date" && bootstrap.date === today) ||
+    (bootstrap.page_type === "named" && bootstrap.name === today)
+  )
     return "editing";
   return "reading";
 }

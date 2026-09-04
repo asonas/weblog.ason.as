@@ -150,6 +150,25 @@ test("opens only today's diary in editing mode by default", () => {
   );
 });
 
+test("keeps today's title-routed diary in editing mode after reload", () => {
+  const now = new Date("2026-09-04T15:30:00Z");
+
+  assert.equal(
+    editorViewMode({
+      bootstrap: {
+        ...editorBootstrap,
+        name: "2026-09-05",
+        title: "2026-09-05",
+      },
+      canEdit: true,
+      pathname: "/2026-09-05",
+      search: "",
+      now,
+    }),
+    "editing",
+  );
+});
+
 test("keeps the shared search field in the header layout", async () => {
   const container = document.createElement("div");
   document.body.append(container);
