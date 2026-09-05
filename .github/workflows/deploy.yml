@@ -173,6 +173,8 @@ jobs:
           [[ "$artifact_sha" == "$TARGET_SHA" ]]
           [[ "$AUTHORING_DIGEST" == sha256:* ]]
           [[ -f dist/site/index.html ]]
+          [[ -f dist/site/static/authoring/app.js ]]
+          [[ -f dist/site/static/authoring/app.css ]]
           find dist/site/static/authoring/assets -type f -print -quit | grep -q .
 
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # master
@@ -322,6 +324,13 @@ jobs:
         run: >-
           aws s3 sync dist/site/static/authoring/assets/ "s3://${SITE_BUCKET}/static/authoring/assets/"
           --only-show-errors --cache-control 'public,max-age=31536000,immutable'
+      - name: Publish stable site assets
+        if: steps.current.outputs.current == 'true'
+        run: |
+          aws s3 cp dist/site/static/authoring/app.js "s3://${SITE_BUCKET}/static/authoring/app.js" --only-show-errors \
+            --content-type 'text/javascript; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
+          aws s3 cp dist/site/static/authoring/app.css "s3://${SITE_BUCKET}/static/authoring/app.css" --only-show-errors \
+            --content-type 'text/css; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
       - name: Publish site HTML
         if: steps.current.outputs.current == 'true'
         run: >-
@@ -330,7 +339,7 @@ jobs:
       - name: Invalidate CloudFront
         if: steps.current.outputs.current == 'true'
         run: |
-          invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths '/*' --query 'Invalidation.Id' --output text)"
+          invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths '/static/authoring/app.js' '/static/authoring/app.css' '/index.html' --query 'Invalidation.Id' --output text)"
           aws cloudfront wait invalidation-completed --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --id "$invalidation_id"
       - name: Smoke check production
         if: steps.current.outputs.current == 'true'
@@ -398,12 +407,6 @@ jobs:
         id: smoke
         if: steps.current.outputs.current == 'true'
         run: echo "completed_at=$(date +%s)" >> "$GITHUB_OUTPUT"
-      - name: Delete stale site assets
-        if: steps.current.outputs.current == 'true'
-        run: >-
-          aws s3 sync dist/site/static/authoring/assets/ "s3://${SITE_BUCKET}/static/authoring/assets/"
-          --delete --only-show-errors --cache-control 'public,max-age=31536000,immutable'
-
       - name: Summarize production deploy
         if: always() && steps.current.outputs.current == 'true'
         env:

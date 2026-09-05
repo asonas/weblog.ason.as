@@ -77,5 +77,15 @@ export default defineConfig(({ mode }) => ({
     assetsDir: "static/authoring/assets",
     chunkSizeWarningLimit: 800,
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        entryFileNames: "static/authoring/app.js",
+        chunkFileNames: "static/authoring/assets/[name]-[hash].js",
+        assetFileNames: (assetInfo) =>
+          assetInfo.names.some((name) => name.endsWith(".css"))
+            ? "static/authoring/app.css"
+            : "static/authoring/assets/[name]-[hash][extname]",
+      },
+    },
   }
 }));

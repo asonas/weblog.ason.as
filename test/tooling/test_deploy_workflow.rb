@@ -36,22 +36,26 @@ class DeployWorkflowTest < Minitest::Test
     refute(steps.any? { |step| step["run"]&.match?(/npm run build(?:\s|$)/) })
   end
 
-  def test_mutations_are_ordered_and_delete_is_prefix_scoped
+  def test_mutations_publish_stable_entrypoints_before_targeted_invalidation
     steps = @workflow.dig("jobs", "deploy", "steps")
     names = steps.filter_map { |step| step["name"] }
-    ordered = ["Apply database schema", "Deploy authoring Lambda image", "Publish immutable site assets", "Publish site HTML", "Invalidate CloudFront", "Smoke check production", "Delete stale site assets"]
+    ordered = ["Apply database schema", "Deploy authoring Lambda image", "Publish immutable site assets", "Publish stable site assets", "Publish site HTML", "Invalidate CloudFront", "Smoke check production"]
     assert_equal(ordered, names.select { |name| ordered.include?(name) })
     assets = steps.find { |step| step["name"] == "Publish immutable site assets" }.fetch("run")
     assert_includes assets, "static/authoring/assets/"
     refute_includes assets, "--delete"
     assert_includes assets, "max-age=31536000,immutable"
     refute_includes assets, "s3://${SITE_BUCKET}/assets/"
-    cleanup = steps.find { |step| step["name"] == "Delete stale site assets" }.fetch("run")
-    assert_includes cleanup, "static/authoring/assets/"
-    assert_includes cleanup, "--delete"
+    stable = steps.find { |step| step["name"] == "Publish stable site assets" }.fetch("run")
+    assert_includes stable, "static/authoring/app.js"
+    assert_includes stable, "static/authoring/app.css"
+    assert_includes stable, "max-age=0,must-revalidate"
+    refute(steps.any? { |step| step["run"]&.include?("--delete") })
     html = steps.find { |step| step["name"] == "Publish site HTML" }.fetch("run")
     assert_includes html, "max-age=0,must-revalidate"
     invalidation = steps.find { |step| step["name"] == "Invalidate CloudFront" }.fetch("run")
+    assert_includes invalidation, "'/static/authoring/app.js' '/static/authoring/app.css' '/index.html'"
+    refute_includes invalidation, "'/*'"
     assert_includes invalidation, "wait invalidation-completed"
 
     deploy_policy = File.read(File.join(ROOT, "infra/bootstrap/github_actions.tf"))
@@ -142,7 +146,6 @@ class DeployWorkflowTest < Minitest::Test
     script = manifest.fetch("run")
 
     assert_operator names.index("Smoke check production"), :<, names.index("Record deployment manifest")
-    assert_operator names.index("Record deployment manifest"), :<, names.index("Delete stale site assets")
     assert_includes script, "schema_version: 1"
     assert_includes script, "AUTHORING_RELEASE_TAG"
     assert_includes script, "AUTHORING_BUILD_RUN_ID"

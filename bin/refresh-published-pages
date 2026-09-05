@@ -1,0 +1,27 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "optparse"
+
+require_relative "../lib/weblog_authoring/dsql_database"
+require_relative "../lib/weblog_authoring/publication_refresh_backfill"
+
+options = { apply: false }
+OptionParser.new do |parser|
+  parser.banner = "Usage: refresh-published-pages --host HOST [--apply]"
+  parser.on("--host HOST", "Aurora DSQL host") { |value| options[:host] = value }
+  parser.on("--apply", "Request publication refreshes for all published non-empty pages") do
+    options[:apply] = true
+  end
+end.parse!
+
+host = options.fetch(:host) { raise OptionParser::MissingArgument, "--host" }
+pool = AuroraDsql::Pg.create_pool(
+  host:, user: "admin", application_name: "publication-refresh-backfill"
+)
+database = WeblogAuthoring::DsqlDatabase.new(host:, content_dir: ".", pool:)
+summary = WeblogAuthoring::PublicationRefreshBackfill.call(
+  database:, dry_run: !options.fetch(:apply)
+)
+puts JSON.pretty_generate(summary)
