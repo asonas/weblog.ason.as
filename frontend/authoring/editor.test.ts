@@ -362,6 +362,135 @@ test("keeps universe references stable while editing prose", () => {
   );
 });
 
+test("does not refetch unchanged universe URLs after a real editor input", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const originalResizeObserver = globalThis.ResizeObserver;
+  const originalCss = globalThis.CSS;
+  const originalNodeFilter = globalThis.NodeFilter;
+  const originalMatchMedia = window.matchMedia;
+  const rangePrototype = window.Range.prototype as Range & {
+    getBoundingClientRect?: () => DOMRect;
+  };
+  const originalRangeRect = rangePrototype.getBoundingClientRect;
+  const originalUniverse = document.documentElement.dataset.universe;
+  let embedFetchCount = 0;
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  globalThis.CSS = { escape: (value: string) => value } as typeof CSS;
+  globalThis.NodeFilter = window.NodeFilter;
+  window.matchMedia = () =>
+    ({
+      matches: false,
+      addEventListener() {},
+      removeEventListener() {},
+    }) as unknown as MediaQueryList;
+  rangePrototype.getBoundingClientRect = () =>
+    ({
+      bottom: 0,
+      height: 0,
+      left: 0,
+      right: 0,
+      top: 0,
+      width: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+  document.documentElement.dataset.universe = "on";
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.startsWith("/api/embed?")) {
+      embedFetchCount += 1;
+      return new Response(
+        JSON.stringify({
+          url: "https://example.com/article",
+          title: "Example",
+          site_name: "example.com",
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+    }
+    return minimalEditorFetch(input);
+  };
+  const bootstrap = {
+    ...minimalEditorBootstrap(),
+    body: "本文 https://example.com/article",
+  };
+
+  try {
+    await act(async () => {
+      root.render(createElement(AuthoringEditor, { bootstrap }));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    assert.equal(embedFetchCount, 1);
+    const element = container.querySelector<HTMLElement>(".ProseMirror");
+    assert.ok(element);
+    const mountedEditor = (element as HTMLElement & { editor: Editor }).editor;
+
+    await act(async () => {
+      mountedEditor.commands.insertContent("追記");
+      await new Promise((resolve) => setTimeout(resolve, 1050));
+    });
+
+    assert.equal(embedFetchCount, 1);
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    globalThis.ResizeObserver = originalResizeObserver;
+    globalThis.CSS = originalCss;
+    globalThis.NodeFilter = originalNodeFilter;
+    window.matchMedia = originalMatchMedia;
+    rangePrototype.getBoundingClientRect = originalRangeRect;
+    if (originalUniverse === undefined)
+      delete document.documentElement.dataset.universe;
+    else document.documentElement.dataset.universe = originalUniverse;
+    container.remove();
+  }
+});
+
+test("does not fetch embeds while the universe is disabled", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const originalUniverse = document.documentElement.dataset.universe;
+  let embedFetchCount = 0;
+  document.documentElement.dataset.universe = "off";
+  globalThis.fetch = async (input) => {
+    if (String(input).startsWith("/api/embed?")) embedFetchCount += 1;
+    return minimalEditorFetch(input);
+  };
+
+  try {
+    await act(async () => {
+      root.render(
+        createElement(AuthoringEditor, {
+          bootstrap: {
+            ...minimalEditorBootstrap(),
+            body: "本文 https://example.com/article",
+          },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    assert.equal(embedFetchCount, 0);
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    if (originalUniverse === undefined)
+      delete document.documentElement.dataset.universe;
+    else document.documentElement.dataset.universe = originalUniverse;
+    container.remove();
+  }
+});
+
 test("recognizes image files and inbox photos as image drags", () => {
   assert.equal(
     isImageDrag({ items: [{ kind: "file", type: "image/png" }] }),

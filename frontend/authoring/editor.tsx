@@ -951,6 +951,38 @@ export function universeReferences(body: string) {
   };
 }
 
+const EMPTY_UNIVERSE_REFERENCES = {
+  wikiLinkNames: [] as Array<string>,
+  externalUrls: [] as Array<string>,
+  wikiLinkKey: "[]",
+  externalUrlKey: "[]",
+};
+
+function useUniverseReferences(body: string, enabled: boolean) {
+  const [references, setReferences] = useState(() =>
+    enabled ? universeReferences(body) : EMPTY_UNIVERSE_REFERENCES,
+  );
+
+  useEffect(() => {
+    if (!enabled) {
+      setReferences(EMPTY_UNIVERSE_REFERENCES);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const next = universeReferences(body);
+      setReferences((current) =>
+        current.wikiLinkKey === next.wikiLinkKey &&
+        current.externalUrlKey === next.externalUrlKey
+          ? current
+          : next,
+      );
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [body, enabled]);
+
+  return references;
+}
+
 function buildInternalUniverseGroupsFromNames(
   wikiLinkNames: Array<string>,
   route: string,
@@ -1490,6 +1522,16 @@ function InternalUniverseGraph({
   );
   const closeTimerRef = useRef<number | null>(null);
   const graphRef = useRef<HTMLElement | null>(null);
+  const embedCacheRef = useRef(new Map<string, EmbedMetadata | null>());
+  const embedRequestsRef = useRef(
+    new Map<
+      string,
+      {
+        controller: AbortController;
+        promise: Promise<EmbedMetadata | null | undefined>;
+      }
+    >(),
+  );
   const [layout, setLayout] = useState<InternalGraphLayout>(
     EMPTY_INTERNAL_GRAPH_LAYOUT,
   );
@@ -1527,31 +1569,66 @@ function InternalUniverseGraph({
 
   useEffect(() => {
     let active = true;
+    const wantedUrls = new Set(externalUrls);
+    embedRequestsRef.current.forEach(({ controller }, url) => {
+      if (!wantedUrls.has(url)) {
+        controller.abort();
+        embedRequestsRef.current.delete(url);
+      }
+    });
     void Promise.all(
       externalUrls.map(async (url) => {
-        try {
-          return {
-            url,
-            metadata: await fetchJson<EmbedMetadata>(
-              `/api/embed?${new URLSearchParams({ url })}`,
-            ),
-          };
-        } catch (_error) {
-          return { url, metadata: null };
+        if (embedCacheRef.current.has(url)) {
+          return { url, metadata: embedCacheRef.current.get(url) };
         }
+        let request = embedRequestsRef.current.get(url);
+        if (!request) {
+          const controller = new AbortController();
+          const promise = fetchJson<EmbedMetadata>(
+            `/api/embed?${new URLSearchParams({ url })}`,
+            { signal: controller.signal },
+          )
+            .then((metadata) => {
+              embedCacheRef.current.set(url, metadata);
+              return metadata;
+            })
+            .catch(() => {
+              if (controller.signal.aborted) return undefined;
+              embedCacheRef.current.set(url, null);
+              return null;
+            });
+          request = { controller, promise };
+          embedRequestsRef.current.set(url, request);
+          void promise.finally(() => {
+            if (embedRequestsRef.current.get(url)?.promise === promise)
+              embedRequestsRef.current.delete(url);
+          });
+        }
+        return { url, metadata: await request.promise };
       }),
     ).then((results) => {
-      if (active)
-        setEmbeds(
-          Object.fromEntries(
-            results.map(({ url, metadata }) => [url, metadata]),
-          ),
-        );
+      if (active) {
+        const nextEmbeds: Record<string, EmbedMetadata | null> = {};
+        results.forEach(({ url, metadata }) => {
+          if (metadata !== undefined) nextEmbeds[url] = metadata;
+        });
+        setEmbeds(nextEmbeds);
+      }
     });
     return () => {
       active = false;
     };
   }, [externalUrls]);
+
+  useEffect(
+    () => () => {
+      embedRequestsRef.current.forEach(({ controller }) => {
+        controller.abort();
+      });
+      embedRequestsRef.current.clear();
+    },
+    [],
+  );
 
   useLayoutEffect(() => {
     const graph = graphRef.current;
@@ -2991,8 +3068,9 @@ async function requestJson<T>(
   return raw as T;
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+async function fetchJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
+    ...init,
     headers: { Accept: "application/json" },
   });
   let raw: unknown;
@@ -4092,10 +4170,7 @@ export function AuthoringEditor({
     () => groupLinkedPages(linkedPages),
     [linkedPages],
   );
-  const references = useMemo(
-    () => universeReferences(draft.body),
-    [draft.body],
-  );
+  const references = useUniverseReferences(draft.body, universeEnabled);
   const internalUniverseGroups = useMemo(
     () =>
       buildInternalUniverseGroupsFromNames(
