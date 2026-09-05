@@ -118,6 +118,68 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_nil database.failed
   end
 
+  def test_publishes_when_desired_update_matches_at_database_precision
+    updated_at = Time.iso8601("2026-09-05T14:07:20.000000000+00:00")
+    page = WeblogAuthoring::PageDocument.new(
+      id: "page-id", page_type: "named", name: "2026-09-05", page_date: nil, title: nil,
+      status: "published", created_at: updated_at, updated_at:, published_at: updated_at,
+      path: Pathname("content/pages/2026-09-05.md"),
+      body: "[Webmention Rocks](https://webmention.rocks/test/1)", links: []
+    )
+    outbox = {
+      "id" => "outbox-id", "page_id" => page.id,
+      "payload" => {
+        "desired_updated_at" => "2026-09-05T23:07:20.570575534+09:00",
+        "source_url" => "https://weblog.ason.as/2026-09-05",
+        "previous_source_url" => nil, "previous_targets" => [],
+        "current_targets" => ["https://webmention.rocks/test/1"],
+      },
+    }
+    database = Database.new(page:, outbox:)
+    services = Services.new
+    publisher = WeblogAuthoring::WebmentionSitePublisher.new(
+      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
+      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+    )
+
+    publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
+
+    assert_equal 1, services.puts.length
+    assert_equal 1, services.messages.length
+    assert_equal "outbox-id", database.completed
+  end
+
+  def test_skips_an_outbox_for_an_older_page_update
+    updated_at = Time.iso8601("2026-09-05T14:07:21+00:00")
+    page = WeblogAuthoring::PageDocument.new(
+      id: "page-id", page_type: "named", name: "2026-09-05", page_date: nil, title: nil,
+      status: "published", created_at: updated_at, updated_at:, published_at: updated_at,
+      path: Pathname("content/pages/2026-09-05.md"),
+      body: "[Webmention Rocks](https://webmention.rocks/test/1)", links: []
+    )
+    outbox = {
+      "id" => "outbox-id", "page_id" => page.id,
+      "payload" => {
+        "desired_updated_at" => "2026-09-05T23:07:20.570575534+09:00",
+        "source_url" => "https://weblog.ason.as/2026-09-05",
+        "previous_source_url" => nil, "previous_targets" => [],
+        "current_targets" => ["https://webmention.rocks/test/1"],
+      },
+    }
+    database = Database.new(page:, outbox:)
+    services = Services.new
+    publisher = WeblogAuthoring::WebmentionSitePublisher.new(
+      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
+      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+    )
+
+    publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
+
+    assert_empty services.puts
+    assert_empty services.messages
+    assert_nil database.completed
+  end
+
   def test_unpublished_page_removes_static_routes_and_queues_removal_deliveries
     page = WeblogAuthoring::PageDocument.new(
       id: "page-id", page_type: "named", name: "記事", page_date: nil, title: nil,

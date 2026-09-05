@@ -4,6 +4,7 @@ require "cgi"
 require "digest"
 require "json"
 require "securerandom"
+require "time"
 require "uri"
 
 require_relative "markdown"
@@ -38,7 +39,7 @@ module WeblogAuthoring
       page = @database.find(outbox.fetch("page_id"))
       raise KeyError, "Webmention outbox page not found" unless page
       desired_updated_at = outbox.dig("payload", "desired_updated_at")
-      return if desired_updated_at && page.updated_at.iso8601(9) != desired_updated_at
+      return if desired_updated_at && page.updated_at.to_i != Time.iso8601(desired_updated_at).to_i
 
       old_route = previous_route(outbox.fetch("payload"), current_route: page.route)
       unless page.status == "published" && !page.empty?
