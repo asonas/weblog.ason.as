@@ -9,19 +9,26 @@ require_relative "../lib/weblog_authoring/publication_refresh_backfill"
 
 options = { apply: false }
 OptionParser.new do |parser|
-  parser.banner = "Usage: refresh-published-pages --host HOST [--apply]"
+  parser.banner = "Usage: refresh-published-pages --host HOST --site-bucket BUCKET [--apply]"
   parser.on("--host HOST", "Aurora DSQL host") { |value| options[:host] = value }
-  parser.on("--apply", "Request publication refreshes for all published non-empty pages") do
+  parser.on("--site-bucket BUCKET", "S3 bucket containing published pages") do |value|
+    options[:site_bucket] = value
+  end
+  parser.on("--apply", "Request publication refreshes for pages with legacy asset references") do
     options[:apply] = true
   end
 end.parse!
 
 host = options.fetch(:host) { raise OptionParser::MissingArgument, "--host" }
+site_bucket = options.fetch(:site_bucket) { raise OptionParser::MissingArgument, "--site-bucket" }
 pool = AuroraDsql::Pg.create_pool(
   host:, user: "admin", application_name: "publication-refresh-backfill"
 )
 database = WeblogAuthoring::DsqlDatabase.new(host:, content_dir: ".", pool:)
 summary = WeblogAuthoring::PublicationRefreshBackfill.call(
-  database:, dry_run: !options.fetch(:apply)
+  database:,
+  s3_client: Aws::S3::Client.new(region: "ap-northeast-1"),
+  site_bucket:,
+  dry_run: !options.fetch(:apply)
 )
 puts JSON.pretty_generate(summary)
