@@ -54,7 +54,7 @@ module WeblogAuthoring
       end
 
       shell = site_shell
-      body = render_page(page)
+      body = render_page(page, source_url: outbox.fetch("payload").fetch("source_url"))
       html = shell.sub('<div id="authoring-root"></div>', %(<div id="authoring-root">#{body}</div>))
       raise "site shell does not contain authoring-root" if html == shell
 
@@ -100,13 +100,21 @@ module WeblogAuthoring
       )
     end
 
-    def render_page(page)
+    def render_page(page, source_url:)
       rendered = MarkdownRenderer.new(pages: @database.list_pages).render(page.body, mode: "public")
       mentions = @database.approved_webmentions_for_page(page.id)
+      escaped_source_url = CGI.escapeHTML(source_url)
+      author_url = CGI.escapeHTML(URI.join(source_url, "/").to_s)
       <<~HTML
-        <article class="page-view webmention-static-page">
-          <header class="page-header"><h1>#{CGI.escapeHTML(page.display_title.to_s)}</h1></header>
-          #{rendered.html.chomp}
+        <article class="page-view webmention-static-page h-entry">
+          <header class="page-header">
+            <h1 class="p-name">#{CGI.escapeHTML(page.display_title.to_s)}</h1>
+            <a class="u-url" href="#{escaped_source_url}" hidden="">記事のパーマリンク</a>
+            <span class="p-author h-card" hidden=""><a class="p-name u-url" href="#{author_url}">asonas</a></span>
+          </header>
+          <div class="e-content">
+            #{rendered.html.chomp}
+          </div>
           #{render_mentions(mentions)}
         </article>
       HTML

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../test_helper"
+require "rexml/document"
 require "weblog_authoring/models"
 require "weblog_authoring/webmention_site_publisher"
 
@@ -78,6 +79,16 @@ class WebmentionSitePublisherTest < Minitest::Test
     end
   end
 
+  def microformat_element(root, class_name)
+    REXML::XPath.each(root, ".//*[@class]").find do |element|
+      element.attributes.fetch("class").value.split.include?(class_name)
+    end
+  end
+
+  def microformat_text(element)
+    REXML::XPath.match(element, ".//text()").map(&:value).join
+  end
+
   def test_publishes_verifiable_html_before_queuing_the_target_union
     page = WeblogAuthoring::PageDocument.new(
       id: "page-id", page_type: "named", name: "記事", page_date: nil, title: nil,
@@ -102,9 +113,18 @@ class WebmentionSitePublisherTest < Minitest::Test
 
     publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
     html = services.puts.fetch(0).fetch(:body)
+    article = REXML::Document.new(html[/<article\b.*<\/article>/m]).root
     jobs = services.messages.map { |message| JSON.parse(message.fetch(:message_body)) }
     targets = jobs.map { |job| job.fetch("target") }
 
+    assert_includes article.attributes.fetch("class").value.split, "h-entry"
+    assert_equal "記事", microformat_element(article, "p-name").text
+    assert_includes microformat_text(microformat_element(article, "e-content")), "Target"
+    assert_equal "https://weblog.ason.as/%E8%A8%98%E4%BA%8B",
+                 microformat_element(article, "u-url").attributes.fetch("href").value
+    author = microformat_element(article, "p-author")
+    assert_includes author.attributes.fetch("class").value.split, "h-card"
+    assert_equal "asonas", microformat_element(author, "p-name").text
     assert_includes html, '<a href="https://target.example/post">Target</a>'
     assert_includes html, '<link rel="webmention" href="/api/webmentions">'
     assert_includes html, "外部からの言及"
