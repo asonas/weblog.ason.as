@@ -56,20 +56,29 @@ module WeblogAuthoring
   def page_name_entries(pages)
     entries = []
     names = {}
+    activity_by_name = {}
+    order_by_name = {}
 
     pages.each do |page|
       name = page.route
       next if names.key?(name)
 
       names[name] = true
+      activity_by_name[name] = page.updated_at
+      order_by_name[name] = order_by_name.length
       entries << { "id" => page.id, "name" => name, "materialized" => true }
     end
 
     pages.each do |page|
       page.links.each do |link|
+        current_activity = activity_by_name[link.name]
+        if page.updated_at && (current_activity.nil? || page.updated_at > current_activity)
+          activity_by_name[link.name] = page.updated_at
+        end
         next if names.key?(link.name)
 
         names[link.name] = true
+        order_by_name[link.name] = order_by_name.length
         entries << {
           "id" => "hub-#{Digest::SHA256.hexdigest(link.name)[0, 32]}",
           "name" => link.name,
@@ -78,7 +87,22 @@ module WeblogAuthoring
       end
     end
 
-    entries.freeze
+    entries.sort do |left, right|
+      left_name = left.fetch("name")
+      right_name = right.fetch("name")
+      left_activity = activity_by_name[left_name]
+      right_activity = activity_by_name[right_name]
+      activity_order = if left_activity && right_activity
+                         right_activity <=> left_activity
+                       elsif left_activity
+                         -1
+                       elsif right_activity
+                         1
+                       else
+                         0
+                       end
+      activity_order.zero? ? order_by_name.fetch(left_name) <=> order_by_name.fetch(right_name) : activity_order
+    end.freeze
   end
 
   def each_segment(body)

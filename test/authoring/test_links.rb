@@ -73,4 +73,31 @@ class TestLinks < Minitest::Test
     assert_match(/\Ahub-[0-9a-f]{32}\z/, entries.fetch(1).fetch("id"))
     refute entries.fetch(1).fetch("materialized")
   end
+
+  def test_page_name_entries_rank_pages_and_hubs_by_recent_activity
+    target = page(name: "target", updated_at: "2026-09-01T00:00:00+09:00")
+    recent = page(name: "recent", updated_at: "2026-09-03T00:00:00+09:00")
+    linker = page(
+      name: "linker",
+      body: "[[target]] [[virtual-hub]]",
+      updated_at: "2026-09-04T00:00:00+09:00"
+    )
+
+    entries = WeblogAuthoring.page_name_entries([target, recent, linker])
+
+    assert_equal(%w[target linker virtual-hub recent], entries.map { |entry| entry.fetch("name") })
+  end
+
+  private
+
+  def page(name:, updated_at:, body: "")
+    WeblogAuthoring::PageDocument.new(
+      id: "#{name}-id",
+      page_type: "named",
+      name:,
+      body:,
+      updated_at: Time.iso8601(updated_at),
+      links: WeblogAuthoring.extract_wiki_links(body)
+    )
+  end
 end
