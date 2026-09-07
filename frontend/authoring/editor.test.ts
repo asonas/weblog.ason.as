@@ -6,7 +6,7 @@ import test from "node:test";
 import { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { JSDOM } from "jsdom";
-import { act, createElement } from "react";
+import { act, createElement, Profiler } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { EditorBootstrap } from "./editor";
@@ -564,6 +564,67 @@ function minimalEditorFetch(input: RequestInfo | URL): Promise<Response> {
   }
   return Promise.reject(new Error(`unexpected request: ${url}`));
 }
+
+test("keeps the authoring React tree out of each editor input", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const rangePrototype = window.Range.prototype as Range & {
+    getBoundingClientRect?: () => DOMRect;
+  };
+  const originalRangeRect = rangePrototype.getBoundingClientRect;
+  globalThis.fetch = minimalEditorFetch;
+  let lineMeasurementCount = 0;
+  let renderCount = 0;
+  rangePrototype.getBoundingClientRect = () => {
+    lineMeasurementCount += 1;
+    return document.body.getBoundingClientRect();
+  };
+
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          Profiler,
+          {
+            id: "authoring-editor",
+            onRender: () => {
+              renderCount += 1;
+            },
+          },
+          createElement(AuthoringEditor, {
+            bootstrap: minimalEditorBootstrap(),
+          }),
+        ),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    const element = container.querySelector<HTMLElement>(".ProseMirror");
+    assert.ok(element);
+    const mountedEditor = (element as HTMLElement & { editor: Editor }).editor;
+    act(() =>
+      mountedEditor.commands.setTextSelection(
+        mountedEditor.state.doc.content.size - 1,
+      ),
+    );
+    lineMeasurementCount = 0;
+    renderCount = 0;
+
+    await act(async () => {
+      mountedEditor.commands.insertContent("追記");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    assert.equal(lineMeasurementCount, 0);
+    assert.equal(renderCount, 0);
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    rangePrototype.getBoundingClientRect = originalRangeRect;
+    container.remove();
+  }
+});
 
 test("pastes one Japanese URL link through the editor event path", async () => {
   const container = document.createElement("div");

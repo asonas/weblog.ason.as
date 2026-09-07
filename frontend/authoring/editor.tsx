@@ -3269,6 +3269,8 @@ export function AuthoringEditor({
     const consumedInboxItemIds = [...consumedInboxItemIdsRef.current];
     const savedVersion = editVersionRef.current;
     const saveStartedAt = performance.now();
+    setDraft(snapshot);
+    setErrors({});
     savingRef.current = true;
     setSaving(true);
     setStatus("保存中…");
@@ -3388,9 +3390,9 @@ export function AuthoringEditor({
   const handleDocumentChange = useCallback(
     (markdown: string, hasBodyBlock: boolean) => {
       if (!canEdit) return;
-      const next = updateDraft(splitEditorDocument(markdown));
+      const next = { ...draftRef.current, ...splitEditorDocument(markdown) };
+      draftRef.current = next;
       editVersionRef.current += 1;
-      setErrors({});
       setDirtyState(true);
       const isRenaming =
         next.pageId &&
@@ -3400,7 +3402,7 @@ export function AuthoringEditor({
       if (!isRenaming && (next.pageId || (next.title && hasBodyBlock)))
         scheduleSave();
     },
-    [canEdit, scheduleSave, setDirtyState, updateDraft],
+    [canEdit, scheduleSave, setDirtyState],
   );
 
   const handleEditorBlur = useCallback(
@@ -3447,6 +3449,8 @@ export function AuthoringEditor({
         saveTimerRef.current = null;
       }
       const savedVersion = editVersionRef.current;
+      setDraft(current);
+      setErrors({});
       savingRef.current = true;
       setSaving(true);
       setStatus("変更中…");
@@ -3547,6 +3551,7 @@ export function AuthoringEditor({
     content: editorDocument(bootstrap.title, bootstrap.body),
     contentType: "markdown",
     editable: canEdit,
+    shouldRerenderOnTransaction: false,
     editorProps: {
       attributes: {
         role: "textbox",
@@ -4212,8 +4217,13 @@ export function AuthoringEditor({
     [universeGroups],
   );
   const visibleLineUpdates = useMemo(
-    () => pendingLineUpdates(savedBodyRef.current, draft.body, lineUpdatedAt),
-    [draft.body, lineUpdatedAt],
+    () =>
+      pendingLineUpdates(
+        savedBodyRef.current,
+        savedBodyRef.current,
+        lineUpdatedAt,
+      ),
+    [lineUpdatedAt],
   );
   const headerActions = document.querySelector<HTMLElement>(
     ".site-header .header-actions",
@@ -4285,7 +4295,11 @@ export function AuthoringEditor({
                   value="auto"
                   checked={draft.coverMode === "auto"}
                   onChange={() =>
-                    updateCover("auto", null, autoCoverImageUrl(draft.body))
+                    updateCover(
+                      "auto",
+                      null,
+                      autoCoverImageUrl(draftRef.current.body),
+                    )
                   }
                 />
                 自動
@@ -4374,7 +4388,7 @@ export function AuthoringEditor({
             }}
           >
             <LineUpdateRail
-              body={draft.body}
+              body={savedBodyRef.current}
               editor={editor}
               updates={visibleLineUpdates}
             />
