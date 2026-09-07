@@ -477,9 +477,17 @@ export function wikiLinkQuery(editor: Editor): WikiLinkQuery | null {
   const match = /\[\[([^[\]\n]*)$/.exec(text);
   if (!match) return null;
 
+  const textAfterCursor = selection.$from.parent.textBetween(
+    selection.$from.parentOffset,
+    selection.$from.parent.content.size,
+    "\n",
+    "\0",
+  );
+  const linkRemainder = /^[^[\]\n]*\]\]/.exec(textAfterCursor)?.[0] || "";
+
   return {
     from: selection.from - match[1].length,
-    to: selection.from,
+    to: selection.from + linkRemainder.length,
     value: match[1],
   };
 }
@@ -488,7 +496,7 @@ export function matchingWikiLinkNames(
   names: Array<string>,
   query: string,
 ): Array<string> {
-  return names.filter((name) => name.startsWith(query)).slice(0, 8);
+  return names.filter((name) => name.startsWith(query)).slice(0, 7);
 }
 
 export function nextWikiLinkSuggestionIndex(

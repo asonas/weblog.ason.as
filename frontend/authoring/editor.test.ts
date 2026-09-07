@@ -44,6 +44,11 @@ function installDom() {
   Object.assign(dom.window.document, {
     elementFromPoint: () => dom.window.document.querySelector(".ProseMirror"),
   });
+  Object.assign(dom.window.Range.prototype, {
+    getClientRects: () => [],
+    getBoundingClientRect: () =>
+      dom.window.document.body.getBoundingClientRect(),
+  });
 }
 
 installDom();
@@ -1492,6 +1497,81 @@ test("finds and filters the unfinished Wiki link at the cursor", () => {
     ["2026-08-23", "2026-08-22"],
   );
   editor.destroy();
+});
+
+test("limits Wiki link suggestions to seven matches", () => {
+  assert.deepEqual(
+    matchingWikiLinkNames(
+      Array.from({ length: 8 }, (_, index) => `topic-${index + 1}`),
+      "topic-",
+    ),
+    [
+      "topic-1",
+      "topic-2",
+      "topic-3",
+      "topic-4",
+      "topic-5",
+      "topic-6",
+      "topic-7",
+    ],
+  );
+});
+
+test("replaces the complete Wiki link through the suggestion event path", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    if (String(input).startsWith("/api/page-names")) {
+      return new Response(JSON.stringify({ names: ["test2"] }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return minimalEditorFetch(input);
+  };
+
+  try {
+    await act(async () => {
+      root.render(
+        createElement(AuthoringEditor, {
+          bootstrap: { ...minimalEditorBootstrap(), body: "[[test]]" },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const element = container.querySelector<HTMLElement>(".ProseMirror");
+    assert.ok(element);
+    const mountedEditor = (element as HTMLElement & { editor: Editor }).editor;
+    let cursor: number | null = null;
+    mountedEditor.state.doc.descendants((node, position) => {
+      const link = node.marks.find(
+        (mark) => mark.type.name === "link" && mark.attrs.href === "/test",
+      );
+      if (node.isText && node.text === "test" && link) cursor = position + 2;
+    });
+    assert.notEqual(cursor, null);
+
+    await act(async () => {
+      mountedEditor.commands.setTextSelection(cursor as number);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const option = container.querySelector<HTMLButtonElement>(
+      ".wiki-link-suggestions__option",
+    );
+    assert.ok(option);
+
+    await act(async () => option.click());
+
+    assert.equal(
+      markdownForSource(mountedEditor.getMarkdown()),
+      "current\n\n[[test2]]",
+    );
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
 });
 
 test("moves Wiki link suggestions forward and backward", () => {
