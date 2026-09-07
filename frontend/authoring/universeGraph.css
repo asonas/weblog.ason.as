@@ -1,0 +1,330 @@
+.ug-root {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+  width: min(1200px, calc(100vw - 48px));
+  margin: 64px 0 100px;
+  margin-left: calc((100% - min(1200px, 100vw - 48px)) / 2);
+  color: var(--ink);
+  scroll-margin-top: 120px;
+}
+.ug-divider {
+  order: -3;
+  height: 1px;
+  background: var(--separator);
+  position: relative;
+}
+.ug-lanes {
+  display: flex;
+  gap: 8px;
+  padding: 22px 0 12px;
+}
+.ug-lanes button {
+  flex: 1;
+  min-height: 44px;
+  font-size: 12px;
+  padding: 6px;
+}
+.ug-lanes button[aria-pressed="true"] {
+  background: var(--ink);
+  color: white;
+}
+.ug-detail-links {
+  display: grid;
+  max-height: 35vh;
+  overflow: auto;
+}
+.ug-detail-links a {
+  padding: 14px 0;
+  border-top: 1px solid var(--separator);
+  min-height: 44px;
+  font-size: 13px;
+}
+.ug-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: hidden;
+  touch-action: pan-y pinch-zoom;
+  cursor: default;
+}
+.ug-canvas[data-hovered-node]:not([data-hovered-node=""]) {
+  cursor: pointer;
+}
+.ug-edge {
+  stroke: #bdccce;
+  stroke-width: 0.9;
+  pointer-events: none;
+}
+.ug-primary {
+  stroke: #839d9f;
+  stroke-width: 1.2;
+}
+.ug-incoming {
+  stroke: #996c90;
+  stroke-dasharray: 4 4;
+}
+.ug-edge.ug-time {
+  stroke: #b2ac94;
+}
+.ug-stem {
+  stroke: #839d9f;
+  stroke-width: 1.3;
+  pointer-events: none;
+}
+.ug-node {
+  pointer-events: none;
+  fill: var(--accent);
+  cursor: pointer;
+  outline: none;
+}
+.ug-node-root {
+  fill: var(--ink);
+}
+.ug-node-related {
+  fill: var(--muted-ink);
+}
+.ug-node-incoming {
+  fill: #996c90;
+  stroke: none;
+}
+.ug-node.ug-time {
+  fill: #a39877;
+}
+.ug-hit {
+  fill: transparent;
+}
+.ug-node:focus-visible > .ug-hit {
+  stroke: var(--focus-ring);
+  stroke-width: 2;
+}
+.ug-node foreignObject {
+  pointer-events: none;
+}
+.ug-label {
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  text-shadow:
+    0 1px 3px var(--canvas),
+    1px 0 3px var(--canvas),
+    -1px 0 3px var(--canvas);
+  pointer-events: none;
+}
+.ug-root button {
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--separator);
+  border-radius: 5px;
+  color: var(--ink);
+  padding: 7px 11px;
+  cursor: pointer;
+}
+.ug-root button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.ug-detail {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 10;
+  max-height: calc(100dvh - 100px);
+  overscroll-behavior: contain;
+  overflow: auto;
+  width: min(360px, calc(100vw - 32px));
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface, #fff);
+  box-shadow:
+    0 0 0 1px oklch(0 0 0 / 0.07),
+    0 4px 8px -4px oklch(0 0 0 / 0.12),
+    0 16px 48px -12px oklch(0 0 0 / 0.18);
+  border: 0;
+  padding: 0;
+  border-radius: 12px;
+}
+.ug-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px;
+  gap: 8px;
+}
+.ug-detail-with-image .ug-detail-header {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  pointer-events: none;
+}
+.ug-detail-header button,
+.ug-detail-header a {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 10px;
+  color: var(--ink);
+  background: var(--surface, #fff);
+  border: 0;
+  border-radius: 50%;
+  box-shadow: 0 1px 6px oklch(0 0 0 / 0.15);
+  pointer-events: auto;
+  cursor: pointer;
+  font: inherit;
+}
+.ug-detail-header svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ug-detail-header a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.ug-detail-header button:hover,
+.ug-detail-header a:hover {
+  background: var(--surface-hover, #edf3f2);
+}
+.ug-detail-header button:active,
+.ug-detail-header a:active {
+  scale: 0.96;
+}
+.ug-detail-body {
+  padding: 18px 20px 20px;
+}
+.ug-detail-body > a {
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.ug-detail-links {
+  padding-inline: 20px;
+}
+.ug-ogp {
+  display: block;
+  color: inherit;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+.ug-ogp img {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0;
+  border-radius: 0;
+  outline: 1px solid oklch(0 0 0 / 0.1);
+  outline-offset: -1px;
+}
+.ug-ogp strong {
+  display: block;
+  line-height: 1.7;
+}
+.ug-ogp .ug-detail-body > span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+  margin-top: 12px;
+}
+.ug-detail small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted-ink);
+  margin-bottom: 12px;
+}
+.ug-detail p {
+  font-size: 12px;
+  line-height: 1.8;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--muted-ink);
+}
+.ug-footer {
+  font-size: 10px;
+  color: var(--muted-ink);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+@media (max-width: 700px) {
+  .ug-root {
+    width: calc(100vw - 24px);
+    margin-left: calc((100% - (100vw - 24px)) / 2);
+  }
+  .ug-canvas {
+    min-height: 0;
+    touch-action: pan-y;
+    cursor: default;
+  }
+  .ug-label {
+    font-size: 13px;
+  }
+  .ug-node-related {
+    pointer-events: none;
+  }
+  .ug-hit {
+    r: 24px;
+  }
+  .ug-detail {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    width: 100%;
+    max-height: 60vh;
+    overflow: auto;
+    border-radius: 14px 14px 0 0;
+    box-sizing: border-box;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+  .ug-footer {
+    line-height: 1.8;
+  }
+}
+
+.ug-detail:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.ug-detail a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -3px;
+}
+.ug-root button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ug-detail-header button:active,
+  .ug-detail-header a:active {
+    scale: 1;
+  }
+}
+@media (forced-colors: active) {
+  .ug-edge,
+  .ug-stem {
+    stroke: CanvasText;
+  }
+  .ug-node {
+    fill: ButtonText;
+  }
+  .ug-node:focus-visible > .ug-hit {
+    stroke: Highlight;
+  }
+}

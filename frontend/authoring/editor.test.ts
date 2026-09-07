@@ -63,7 +63,6 @@ const {
   editorDocumentTitle,
   ensureBodySelection,
   extractEmbeddableUrls,
-  internalNodeVisual,
   insertPastedJapaneseUrl,
   isImageDrag,
   isVisibleLine,
@@ -75,7 +74,6 @@ const {
   replaceEditorContentPreservingSelection,
   wrapSelectionInWikiLink,
   wikiLinkQuery,
-  topicSourceElement,
   universeReferences,
   showYouTubeFallback,
   applyYouTubeThumbnailFallback,
@@ -367,7 +365,7 @@ test("keeps universe references stable while editing prose", () => {
   );
 });
 
-test("does not refetch unchanged universe URLs after a real editor input", async () => {
+test("does not fetch previews until a graph node is selected, even after editor input", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -433,7 +431,7 @@ test("does not refetch unchanged universe URLs after a real editor input", async
       root.render(createElement(AuthoringEditor, { bootstrap }));
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
-    assert.equal(embedFetchCount, 1);
+    assert.equal(embedFetchCount, 0);
     const element = container.querySelector<HTMLElement>(".ProseMirror");
     assert.ok(element);
     const mountedEditor = (element as HTMLElement & { editor: Editor }).editor;
@@ -443,7 +441,7 @@ test("does not refetch unchanged universe URLs after a real editor input", async
       await new Promise((resolve) => setTimeout(resolve, 1050));
     });
 
-    assert.equal(embedFetchCount, 1);
+    assert.equal(embedFetchCount, 0);
   } finally {
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;
@@ -1521,28 +1519,6 @@ test("edits a selected YouTube player as its original URL", async () => {
   editor.destroy();
 });
 
-test("uses an inline YouTube player as the universe line source", async () => {
-  const editor = new Editor({
-    element: document.createElement("div"),
-    extensions: EDITOR_EXTENSIONS,
-    content: "title\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    contentType: "markdown",
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  const source = topicSourceElement(
-    editor.view.dom,
-    "url",
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-  );
-
-  assert.equal(
-    source?.dataset.youtubePlayer,
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-  );
-  editor.destroy();
-});
-
 test("finds and filters the unfinished Wiki link at the cursor", () => {
   const editor = new Editor({
     element: document.createElement("div"),
@@ -1719,18 +1695,6 @@ test("keeps an uploaded image out of the title line", () => {
     /^title\n\n!\[\]\(\/assets\/uploads\/2026\/08\/image\.webp\)/,
   );
   editor.destroy();
-});
-
-test("emphasizes internal nodes with more connections", () => {
-  assert.equal(internalNodeVisual(1, 2, 1, 2).size, 14);
-  assert.equal(internalNodeVisual(10, 2, 1, 2).size, 23);
-  assert.equal(internalNodeVisual(100, 2, 1, 2).size, 26);
-});
-
-test("makes newer internal nodes darker than older nodes", () => {
-  assert.equal(internalNodeVisual(1, 1, 1, 3).opacity, 0.35);
-  assert.equal(internalNodeVisual(1, 2, 1, 3).opacity, 0.675);
-  assert.equal(internalNodeVisual(1, 3, 1, 3).opacity, 1);
 });
 
 test("keeps the current page hub while omitting its self node", () => {

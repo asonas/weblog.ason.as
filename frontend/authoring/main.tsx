@@ -20,6 +20,7 @@ import {
 import { SearchPage, SiteSearch } from "./search";
 import { WebmentionModerationPage } from "./webmentions";
 import "./styles.css";
+import "./universeGraph.css";
 
 type AuthState = {
   authenticated: boolean;
