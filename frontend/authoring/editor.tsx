@@ -36,6 +36,14 @@ import {
 import { createPortal } from "react-dom";
 
 import { markdownForEditor, markdownForSource } from "./markdown";
+import {
+  clearPendingDraftThrough,
+  PENDING_DRAFT_FORMAT_VERSION,
+  PENDING_DRAFT_LIFETIME_MS,
+  type PendingDraft,
+  readPendingDraft,
+  writePendingDraft,
+} from "./pendingDraft";
 import { AUTHORING_TELEMETRY_FLUSH_EVENT } from "./performanceTelemetry";
 
 declare global {
@@ -3153,11 +3161,31 @@ export function AuthoringEditor({
   editingHref?: string;
   readingHref?: string;
 }) {
+  const pendingPageKey = bootstrap.page_id || `new:${window.location.pathname}`;
+  const [restoredPendingDraft] = useState<PendingDraft | null>(() => {
+    try {
+      return readPendingDraft(sessionStorage, pendingPageKey);
+    } catch {
+      return null;
+    }
+  });
+  const canRestorePendingDraft =
+    restoredPendingDraft?.baseUpdatedAt === bootstrap.expected_updated_at;
   const [draft, setDraft] = useState<EditorDraft>(() =>
-    initialDraft(bootstrap),
+    canRestorePendingDraft
+      ? {
+          ...initialDraft(bootstrap),
+          title: restoredPendingDraft.title,
+          body: restoredPendingDraft.body,
+        }
+      : initialDraft(bootstrap),
   );
   const [editorContentReady, setEditorContentReady] = useState(false);
-  const [status, setStatus] = useState(bootstrap.save_message);
+  const [status, setStatus] = useState(
+    canRestorePendingDraft
+      ? "未保存の下書きを復元しました"
+      : bootstrap.save_message,
+  );
   const [lineUpdatedAt, setLineUpdatedAt] = useState(
     bootstrap.line_updated_at || [],
   );
@@ -3186,10 +3214,12 @@ export function AuthoringEditor({
     useState<WikiLinkQuery | null>(null);
   const [activeWikiLinkSuggestion, setActiveWikiLinkSuggestion] = useState(0);
   const draftRef = useRef(draft);
-  const dirtyRef = useRef(false);
+  const dirtyRef = useRef(canRestorePendingDraft);
   const savingRef = useRef(false);
-  const editVersionRef = useRef(0);
+  const editVersionRef = useRef(restoredPendingDraft?.editVersion || 0);
   const saveTimerRef = useRef<number | null>(null);
+  const checkpointTimerRef = useRef<number | null>(null);
+  const checkpointUnavailableRef = useRef(false);
   const pendingSaveRef = useRef(false);
   const savedBodyRef = useRef(bootstrap.body);
   const savedNameRef = useRef(bootstrap.name || bootstrap.title);
@@ -3251,6 +3281,55 @@ export function AuthoringEditor({
   const setDirtyState = useCallback((value: boolean) => {
     dirtyRef.current = value;
   }, []);
+
+  const checkpointPendingDraft = useCallback(
+    (currentEditor: Editor) => {
+      if (!canEdit || checkpointUnavailableRef.current) return;
+      const now = new Date();
+      const selection = currentEditor.state.selection;
+      const scrollRange = Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight,
+      );
+      const pending: PendingDraft = {
+        formatVersion: PENDING_DRAFT_FORMAT_VERSION,
+        pageKey: pendingPageKey,
+        pageId: draftRef.current.pageId || null,
+        baseUpdatedAt: draftRef.current.expectedUpdatedAt,
+        editVersion: editVersionRef.current,
+        title: draftRef.current.title,
+        body: draftRef.current.body,
+        selection: { anchor: selection.anchor, head: selection.head },
+        scroll: {
+          anchorText: selection.$anchor.parent.textContent.slice(0, 120),
+          ratio: scrollRange > 0 ? window.scrollY / scrollRange : 0,
+        },
+        createdAt: now.toISOString(),
+        expiresAt: new Date(
+          now.getTime() + PENDING_DRAFT_LIFETIME_MS,
+        ).toISOString(),
+      };
+      try {
+        writePendingDraft(sessionStorage, pending);
+      } catch {
+        checkpointUnavailableRef.current = true;
+        setStatus("このタブでは未保存変更の復元を利用できません");
+      }
+    },
+    [canEdit, pendingPageKey],
+  );
+
+  const schedulePendingCheckpoint = useCallback(
+    (currentEditor: Editor) => {
+      if (checkpointTimerRef.current !== null)
+        window.clearTimeout(checkpointTimerRef.current);
+      checkpointTimerRef.current = window.setTimeout(() => {
+        checkpointTimerRef.current = null;
+        checkpointPendingDraft(currentEditor);
+      }, 200);
+    },
+    [checkpointPendingDraft],
+  );
 
   const savePage = useCallback(async () => {
     if (!draftRef.current.pageId && !draftRef.current.title.trim()) return;
@@ -3315,6 +3394,11 @@ export function AuthoringEditor({
       setLinkedPagesHasMore(page.linked_pages_has_more || false);
       savedBodyRef.current = snapshot.body;
       setLineUpdatedAt(page.line_updated_at || []);
+      try {
+        clearPendingDraftThrough(sessionStorage, pendingPageKey, savedVersion);
+      } catch {
+        checkpointUnavailableRef.current = true;
+      }
       if (!snapshot.pageId) {
         window.history.pushState(
           null,
@@ -3352,7 +3436,7 @@ export function AuthoringEditor({
         window.setTimeout(() => void savePage(), 0);
       }
     }
-  }, [setDirtyState]);
+  }, [pendingPageKey, setDirtyState]);
 
   const scheduleSave = useCallback(() => {
     if (saveTimerRef.current !== null)
@@ -3388,12 +3472,13 @@ export function AuthoringEditor({
   );
 
   const handleDocumentChange = useCallback(
-    (markdown: string, hasBodyBlock: boolean) => {
+    (currentEditor: Editor, markdown: string, hasBodyBlock: boolean) => {
       if (!canEdit) return;
       const next = { ...draftRef.current, ...splitEditorDocument(markdown) };
       draftRef.current = next;
       editVersionRef.current += 1;
       setDirtyState(true);
+      schedulePendingCheckpoint(currentEditor);
       const isRenaming =
         next.pageId &&
         next.pageType === "named" &&
@@ -3402,7 +3487,7 @@ export function AuthoringEditor({
       if (!isRenaming && (next.pageId || (next.title && hasBodyBlock)))
         scheduleSave();
     },
-    [canEdit, scheduleSave, setDirtyState],
+    [canEdit, schedulePendingCheckpoint, scheduleSave, setDirtyState],
   );
 
   const handleEditorBlur = useCallback(
@@ -3548,7 +3633,7 @@ export function AuthoringEditor({
 
   const editor = useEditor({
     extensions: EDITOR_EXTENSIONS,
-    content: editorDocument(bootstrap.title, bootstrap.body),
+    content: editorDocument(draftRef.current.title, draftRef.current.body),
     contentType: "markdown",
     editable: canEdit,
     shouldRerenderOnTransaction: false,
@@ -3561,6 +3646,7 @@ export function AuthoringEditor({
     },
     onUpdate: ({ editor: currentEditor }) => {
       handleDocumentChange(
+        currentEditor,
         currentEditor.getMarkdown(),
         currentEditor.state.doc.childCount > 1,
       );
@@ -3573,6 +3659,53 @@ export function AuthoringEditor({
       void handleEditorBlur(currentEditor);
     },
   });
+
+  useEffect(() => {
+    if (!editor || !canRestorePendingDraft || !restoredPendingDraft) return;
+    const maxPosition = editor.state.doc.content.size;
+    editor.commands.setTextSelection({
+      from: Math.min(
+        Math.max(restoredPendingDraft.selection.anchor, 1),
+        maxPosition,
+      ),
+      to: Math.min(
+        Math.max(restoredPendingDraft.selection.head, 1),
+        maxPosition,
+      ),
+    });
+    const frame = window.requestAnimationFrame(() => {
+      const scrollRange = Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight,
+      );
+      window.scrollTo({
+        top: scrollRange * restoredPendingDraft.scroll.ratio,
+      });
+    });
+    scheduleSave();
+    return () => window.cancelAnimationFrame(frame);
+  }, [canRestorePendingDraft, editor, restoredPendingDraft, scheduleSave]);
+
+  useEffect(() => {
+    if (!editor || !canEdit) return;
+    const flushCheckpoint = () => {
+      if (!dirtyRef.current) return;
+      if (checkpointTimerRef.current !== null) {
+        window.clearTimeout(checkpointTimerRef.current);
+        checkpointTimerRef.current = null;
+      }
+      checkpointPendingDraft(editor);
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) flushCheckpoint();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", flushCheckpoint);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", flushCheckpoint);
+    };
+  }, [canEdit, checkpointPendingDraft, editor]);
 
   useEffect(() => {
     if (!editor) return;
@@ -4170,6 +4303,8 @@ export function AuthoringEditor({
       window.removeEventListener("beforeunload", handleBeforeUnload);
       if (saveTimerRef.current !== null)
         window.clearTimeout(saveTimerRef.current);
+      if (checkpointTimerRef.current !== null)
+        window.clearTimeout(checkpointTimerRef.current);
     };
   }, [canEdit]);
 
