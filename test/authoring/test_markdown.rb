@@ -105,6 +105,34 @@ class TestMarkdown < Minitest::Test
     assert_includes rendered.problems, "link omitted: javascript:alert(1)"
   end
 
+  def test_public_output_emits_only_local_asset_images
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+
+    rendered = renderer.render(
+      <<~MARKDOWN,
+        ![photo & view](/assets/uploads/2026/09/example.webp)
+
+        ![external](https://example.com/image.jpg)
+
+        ![protocol-relative](//example.com/image.jpg)
+
+        ![relative](../image.jpg)
+
+        ![data](data:image/png;base64,abc)
+      MARKDOWN
+      mode: "public"
+    )
+
+    assert_includes rendered.html,
+                    '<img src="/assets/uploads/2026/09/example.webp" alt="photo &amp; view" />'
+    refute_includes rendered.html, 'src="https://example.com/image.jpg"'
+    assert_includes rendered.html, "[image omitted: external]"
+    assert_includes rendered.problems, "image omitted: https://example.com/image.jpg"
+    assert_includes rendered.problems, "image omitted: //example.com/image.jpg"
+    assert_includes rendered.problems, "image omitted: ../image.jpg"
+    assert_includes rendered.problems, "image omitted: data:image/png;base64,abc"
+  end
+
   def test_attribute_injection_is_stripped_across_block_inline_table_and_code_paths
     renderer = WeblogAuthoring::MarkdownRenderer.new
 

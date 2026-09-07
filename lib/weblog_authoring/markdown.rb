@@ -185,6 +185,7 @@ module WeblogAuthoring
 
     class SafeHtmlConverter < Kramdown::Converter::Html
       ALLOWED_EXTERNAL_URI = /\A(?:https?:\/\/|mailto:)[^\s]+\z/.freeze
+      ALLOWED_PUBLIC_IMAGE_URI = %r{\A/assets/[^\s]+\z}.freeze
       SAFE_INLINE_HTML = %w[del].freeze
       SAFE_INPUT_ATTRIBUTES = {
         "type" => "checkbox",
@@ -254,9 +255,13 @@ module WeblogAuthoring
       end
 
       def convert_img(el, _indent)
-        warning("image omitted: #{el.attr['src']}")
-
+        src = el.attr["src"].to_s
         alt = el.attr["alt"].to_s
+        if self.class.context[:mode] == "public" && src.match?(ALLOWED_PUBLIC_IMAGE_URI)
+          return "<img#{html_attributes('src' => src, 'alt' => alt)} />"
+        end
+
+        warning("image omitted: #{src}")
         CGI.escapeHTML(alt.empty? ? "[image omitted]" : "[image omitted: #{alt}]")
       end
 

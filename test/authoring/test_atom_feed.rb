@@ -32,6 +32,18 @@ class AtomFeedTest < Minitest::Test
     refute_includes feed, "下書き"
   end
 
+  def test_renders_local_asset_images_with_absolute_urls
+    article = page(
+      name: "画像の記事",
+      body: "![photo](/assets/uploads/2026/09/example.webp)"
+    )
+
+    feed = WeblogAuthoring::AtomFeed.new(site_url: "https://weblog.ason.as").render([article])
+
+    assert_includes feed,
+                    '&lt;img src=&quot;https://weblog.ason.as/assets/uploads/2026/09/example.webp&quot; alt=&quot;photo&quot; /&gt;'
+  end
+
   private
 
   def page(name:, body:, updated_at: Time.iso8601("2026-08-21T12:00:00+09:00"),
