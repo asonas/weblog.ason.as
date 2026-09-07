@@ -3629,15 +3629,17 @@ export function AuthoringEditor({
       if (event.key === "Escape") {
         event.preventDefault();
         setWikiLinkQueryState(null);
-      } else if (
-        event.key === "Enter" ||
-        (event.key === "Tab" && !event.shiftKey)
-      ) {
+      } else if (event.key === "Enter") {
         event.preventDefault();
         acceptWikiLinkSuggestion(wikiLinkSuggestions[activeWikiLinkSuggestion]);
-      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      } else if (
+        event.key === "Tab" ||
+        event.key === "ArrowDown" ||
+        event.key === "ArrowUp"
+      ) {
         event.preventDefault();
-        const backwards = event.key === "ArrowUp";
+        const backwards =
+          event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey);
         setActiveWikiLinkSuggestion((current) =>
           nextWikiLinkSuggestionIndex(
             current,

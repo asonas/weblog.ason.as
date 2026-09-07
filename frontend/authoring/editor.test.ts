@@ -1635,69 +1635,6 @@ test("replaces the complete Wiki link through the suggestion event path", async 
   }
 });
 
-test("accepts the active Wiki link suggestion with Tab while composing", async () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input) => {
-    if (String(input).startsWith("/api/page-names")) {
-      return new Response(JSON.stringify({ names: ["ばなな", "ばなな2"] }), {
-        headers: { "content-type": "application/json" },
-      });
-    }
-    return minimalEditorFetch(input);
-  };
-
-  try {
-    await act(async () => {
-      root.render(
-        createElement(AuthoringEditor, {
-          bootstrap: { ...minimalEditorBootstrap(), body: "[[" },
-        }),
-      );
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    const element = container.querySelector<HTMLElement>(".ProseMirror");
-    assert.ok(element);
-    const mountedEditor = (element as HTMLElement & { editor: Editor }).editor;
-
-    await act(async () => {
-      mountedEditor.commands.focus("end");
-      mountedEditor.view.dom.dispatchEvent(
-        new window.CompositionEvent("compositionstart", { bubbles: true }),
-      );
-      mountedEditor.commands.insertContent("ばな");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    assert.equal(mountedEditor.view.composing, true);
-    assert.equal(
-      container.querySelector('[role="option"][aria-selected="true"]')
-        ?.textContent,
-      "ばなな",
-    );
-
-    const event = new window.KeyboardEvent("keydown", {
-      bubbles: true,
-      cancelable: true,
-      key: "Tab",
-    });
-    await act(async () => {
-      mountedEditor.view.dom.dispatchEvent(event);
-    });
-
-    assert.equal(event.defaultPrevented, true);
-    assert.equal(
-      markdownForSource(mountedEditor.getMarkdown()),
-      "current\n\n[[ばなな]]",
-    );
-  } finally {
-    await act(async () => root.unmount());
-    globalThis.fetch = originalFetch;
-    container.remove();
-  }
-});
-
 test("moves Wiki link suggestions forward and backward", () => {
   assert.equal(nextWikiLinkSuggestionIndex(0, 5, false), 1);
   assert.equal(nextWikiLinkSuggestionIndex(4, 5, false), 0);
