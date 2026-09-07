@@ -62,6 +62,40 @@ module WeblogAuthoring
       )
     end
 
+    def list_timeline_pages(limit:, before: nil, after: nil, month: nil)
+      with_connection do |connection|
+        sql = <<~SQL
+          SELECT * FROM (
+            SELECT id, page_type, name, page_date, title, status, created_at, updated_at,
+                   published_at, path, body, cover_mode, cover_image_url,
+                   CASE WHEN EXISTS (SELECT 1 FROM #{SCHEMA}.links WHERE links.source_id = pages.id AND links.target_name = '日記')
+                             AND CASE WHEN page_type = 'date' THEN page_date::text ELSE name END ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                        THEN (CASE WHEN page_type = 'date' THEN page_date::text ELSE name END) || 'T00:00:00'
+                        ELSE to_char(updated_at AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD"T"HH24:MI:SS') END AS timeline_key
+            FROM #{SCHEMA}.pages
+          ) timeline
+        SQL
+        conditions = [] # @type var conditions: Array[String]
+        values = [] # @type var values: Array[untyped]
+        if month
+          values << month
+          conditions << "substr(timeline_key, 1, 7) = $#{values.length}"
+        end
+        cursor = before || after
+        if cursor
+          operator = before ? '<' : '>'
+          values.concat([cursor.fetch(:key), cursor.fetch(:id)])
+          conditions << "(timeline_key #{operator} $#{values.length - 1} OR (timeline_key = $#{values.length - 1} AND id #{operator} $#{values.length}))"
+        end
+        sql += "WHERE #{conditions.join(' AND ')}\n" unless conditions.empty?
+        sql += "ORDER BY timeline_key #{after ? 'ASC' : 'DESC'}, id #{after ? 'ASC' : 'DESC'}\n"
+        values << limit
+        sql += "LIMIT $#{values.length}\n"
+        pages = connection.exec_params(sql, values).map { |row| page_from_row(row) }
+        after ? pages.reverse : pages
+      end
+    end
+
     def list_pages(limit: nil, before: nil, after: nil, kind: nil, timings: nil)
       with_connection(timings:) do |connection|
         order_column = kind == "diary" ? "created_at" : "updated_at"

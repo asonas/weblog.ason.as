@@ -28,6 +28,7 @@ require_relative "bluesky_source"
 require_relative "raindrop_source"
 require_relative "mobile_upload"
 require_relative "models"
+require_relative "home_timeline"
 require_relative "names"
 require_relative "atom_feed"
 require_relative "performance_telemetry"
@@ -1064,6 +1065,15 @@ module WeblogAuthoring
     end
 
     def page_window(query, timings: {})
+      if query["kind"] == "timeline"
+        begin
+          window = measure(timings, "db") { HomeTimeline.new(settings.database).window(query) }
+        rescue ArgumentError => error
+          halt 422, error.message
+        end
+        window["pages"] = measure(timings, "summaries") { window.fetch("pages").map { |page| page_summary(page) } }
+        return window
+      end
       kind = query["kind"]
       halt 422, "kindが不正です" unless kind.nil? || %w[diary article].include?(kind)
       before = decode_page_cursor(query["before"])
@@ -1139,7 +1149,7 @@ module WeblogAuthoring
       return [] if pages.empty?
 
       months_by_year = pages.each_with_object(Hash.new { |hash, year| hash[year] = [] }) do |page, result|
-        date = page.updated_at.getlocal(DevelopmentDatabase::TOKYO_OFFSET)
+        date = Date.iso8601(HomeTimeline.key(page).slice(0, 10))
         result[date.year] << date.month unless result[date.year].include?(date.month)
       end
       newest_year = [today.year, months_by_year.keys.max].max

@@ -27,6 +27,7 @@ Object.assign(globalThis, {
   getComputedStyle: dom.window.getComputedStyle,
   IS_REACT_ACT_ENVIRONMENT: true,
 });
+dom.window.HTMLElement.prototype.scrollIntoView = () => {};
 
 Object.defineProperty(globalThis, "navigator", {
   configurable: true,
@@ -73,6 +74,7 @@ registerHooks({
 const { CoverJournalHome, HeaderSearch, editorViewMode } = await import(
   "./main"
 );
+const { CardHome } = await import("./CardHome");
 
 const editorBootstrap = {
   page_id: "page-id",
@@ -186,10 +188,12 @@ test("keeps the shared search field in the header layout", async () => {
   }
 });
 
-test("places the about link above the home tags", async () => {
+test("keeps the about link in the header and recent tags before the cards", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ pages: [] }));
 
   try {
     await act(async () =>
@@ -210,9 +214,10 @@ test("places the about link above the home tags", async () => {
       ),
     );
 
-    const index = container.querySelector(".cover-journal__index");
-    const about = index?.querySelector<HTMLAnchorElement>(".home-about a");
-    const tags = index?.querySelector(".home-tags");
+    const about = container.querySelector<HTMLAnchorElement>(
+      ".atlas-header a[href='/about']",
+    );
+    const tags = container.querySelector(".card-home__tags");
     assert.equal(about?.textContent, "このサイトについて");
     assert.equal(about?.getAttribute("href"), "/about");
     const aboutContainer = about?.parentElement;
@@ -221,6 +226,7 @@ test("places the about link above the home tags", async () => {
     assert.ok(aboutContainer.compareDocumentPosition(tags) & 4);
   } finally {
     await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
     container.remove();
   }
 });
@@ -281,13 +287,113 @@ test("selects a calendar month without navigating to its hub", async () => {
     await act(async () => august.click());
 
     assert.equal(window.location.pathname, "/");
-    assert.deepEqual(requests.sort(), [
-      "/api/pages?kind=article&month=2026-08",
-      "/api/pages?kind=diary&month=2026-08",
-    ]);
+    assert.deepEqual(requests, ["/api/pages?kind=timeline&month=2026-08"]);
+    assert.equal(window.location.search, "?month=2026-08");
   } finally {
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;
+    window.history.replaceState(null, "", "/");
+    container.remove();
+  }
+});
+
+test("replaces card windows on explicit navigation and ignores an obsolete month response", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const page = (title: string) => ({
+    id: title,
+    title,
+    route: title,
+    created_at: "2026-09-07T00:00:00Z",
+    updated_at: "2026-09-07T00:00:00Z",
+    excerpt: "本文",
+    image_url: null,
+    is_diary: false,
+  });
+  const first = {
+    pages: [page("最新の記事")],
+    has_older: true,
+    older_cursor: "older",
+  };
+  const requests: string[] = [];
+  let resolveMonth: ((response: Response) => void) | undefined;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    requests.push(url);
+    if (url.includes("month="))
+      return new Promise<Response>((resolve) => {
+        resolveMonth = resolve;
+      });
+    return new Response(
+      JSON.stringify(
+        url.includes("before=")
+          ? {
+              pages: [page("古い記事")],
+              has_newer: true,
+              newer_cursor: "newer",
+            }
+          : first,
+      ),
+    );
+  };
+  try {
+    await act(async () =>
+      root.render(
+        createElement(CardHome, {
+          initialPages: [],
+          tags: [],
+          archive: [{ year: 2026, months: [8] }],
+          archiveRef: createRef<HTMLDivElement>(),
+          header: null,
+          authentication: null,
+        }),
+      ),
+    );
+    assert.equal(requests.length, 1);
+    assert.ok(
+      container.querySelector('.cf-card a[aria-label$="カバー画像なし"]'),
+    );
+    const older = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("古い投稿"),
+    );
+    assert.ok(older);
+    await act(async () => older.click());
+    assert.equal(
+      container.querySelector(".cf-card h2")?.textContent,
+      "古い記事",
+    );
+    assert.equal(container.querySelectorAll(".cf-card").length, 1);
+    const august = container.querySelector<HTMLAnchorElement>(
+      '[aria-label="2026年8月の記事"]',
+    );
+    assert.ok(august);
+    await act(async () => august.click());
+    assert.ok(container.querySelector('[aria-busy="true"]'));
+    const latest = container.querySelector<HTMLAnchorElement>(
+      ".card-home__month a",
+    );
+    assert.ok(latest);
+    await act(async () => latest.click());
+    assert.equal(
+      container.querySelector(".cf-card h2")?.textContent,
+      "最新の記事",
+    );
+    await act(async () =>
+      resolveMonth?.(
+        new Response(JSON.stringify({ pages: [page("8月の記事")] })),
+      ),
+    );
+    assert.equal(
+      container.querySelector(".cf-card h2")?.textContent,
+      "最新の記事",
+    );
+    assert.equal(window.location.search, "");
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    window.history.replaceState(null, "", "/");
     container.remove();
   }
 });

@@ -36,6 +36,40 @@ module WeblogAuthoring
       with_connection { |database| create_schema(database) }
     end
 
+    def list_timeline_pages(limit:, before: nil, after: nil, month: nil)
+      with_connection do |connection|
+        sql = <<~SQL
+          SELECT * FROM (
+            SELECT id, page_type, name, page_date, title, status, created_at, updated_at,
+                   published_at, path, body, cover_mode, cover_image_url,
+                   CASE WHEN EXISTS (SELECT 1 FROM links WHERE links.source_id = pages.id AND links.target_name = '日記')
+                             AND CASE WHEN page_type = 'date' THEN page_date ELSE name END GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                        THEN (CASE WHEN page_type = 'date' THEN page_date ELSE name END) || 'T00:00:00'
+                        ELSE strftime('%Y-%m-%dT%H:%M:%S', updated_at, '+9 hours') END AS timeline_key
+            FROM pages
+          ) timeline
+        SQL
+        conditions = []
+        values = []
+        if month
+          values << month
+          conditions << "substr(timeline_key, 1, 7) = ?"
+        end
+        cursor = before || after
+        if cursor
+          operator = before ? '<' : '>'
+          conditions << "(timeline_key #{operator} ? OR (timeline_key = ? AND id #{operator} ?))"
+          values.concat([cursor.fetch(:key), cursor.fetch(:key), cursor.fetch(:id)])
+        end
+        sql += "WHERE #{conditions.join(' AND ')}\n" unless conditions.empty?
+        sql += "ORDER BY timeline_key #{after ? 'ASC' : 'DESC'}, id #{after ? 'ASC' : 'DESC'}\n"
+        values << limit
+        sql += "LIMIT ?\n"
+        pages = connection.execute(sql, values).map { |row| page_from_row(row.first(14)) }
+        after ? pages.reverse : pages
+      end
+    end
+
     def list_pages(limit: nil, before: nil, after: nil, kind: nil)
       with_connection do |database|
         order_column = kind == "diary" ? "created_at" : "updated_at"

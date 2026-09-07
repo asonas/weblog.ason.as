@@ -3,6 +3,7 @@ target :domain do
   library "base64", "cgi", "date", "digest", "json", "net-http", "openssl", "pathname", "securerandom", "time", "uri"
 
   check "lib/weblog_authoring/models.rb"
+  check "lib/weblog_authoring/home_timeline.rb"
   check "lib/weblog_authoring/dsql_database.rb"
   check "lib/weblog_authoring/atom_feed.rb"
   check "lib/weblog_authoring/inbox_sync.rb"

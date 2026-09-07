@@ -18,6 +18,7 @@ require_relative "image_upload"
 require_relative "inbox_sync"
 require_relative "mobile_upload"
 require_relative "models"
+require_relative "home_timeline"
 require_relative "names"
 require_relative "cover_image"
 require_relative "atom_feed"
@@ -317,6 +318,15 @@ module WeblogAuthoring
     end
 
     def page_window(query, timings: {})
+      if query["kind"] == "timeline"
+        begin
+          window = measure(timings, "db") { HomeTimeline.new(@database).window(query) }
+        rescue ArgumentError => error
+          raise InputError, error.message
+        end
+        window["pages"] = measure(timings, "summaries") { window.fetch("pages").map { |page| page_summary(page) } }
+        return window
+      end
       kind = query["kind"]
       raise InputError, "kindが不正です" unless kind.nil? || %w[diary article].include?(kind)
       before = decode_page_cursor(query["before"])
@@ -1065,7 +1075,7 @@ module WeblogAuthoring
       # @type var months_by_year: Hash[Integer, Array[Integer]]
       months_by_year = Hash.new { |hash, year| hash[year] = [] }
       pages.each do |page|
-        date = page.updated_at.getlocal(TOKYO_OFFSET) # steep:ignore ArgumentTypeMismatch
+        date = Date.iso8601(HomeTimeline.key(page).slice(0, 10).to_s)
         months_by_year[date.year] << date.month unless months_by_year[date.year].include?(date.month)
       end
       return [] if months_by_year.empty?
