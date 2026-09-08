@@ -27,6 +27,7 @@ function installDom() {
     HTMLAnchorElement: dom.window.HTMLAnchorElement,
     KeyboardEvent: dom.window.KeyboardEvent,
     MouseEvent: dom.window.MouseEvent,
+    ClipboardEvent: dom.window.Event,
     MutationObserver: dom.window.MutationObserver,
     DOMParser: dom.window.DOMParser,
     getComputedStyle: dom.window.getComputedStyle,
@@ -1432,6 +1433,86 @@ test("renders a standalone YouTube URL in the editor and preserves its Markdown"
     /https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ/,
   );
   editor.destroy();
+});
+
+test("pastes a Speaker Deck URL as a player while preserving Markdown and URL editing", async (t) => {
+  const url = "https://speakerdeck.com/asonas/module-synths-end";
+  const playerUrl =
+    "https://speakerdeck.com/player/01c1db30c790447fafdf79a27979b67e";
+  t.mock.method(globalThis, "fetch", async (input: string) => {
+    assert.equal(input, `/api/embed?${new URLSearchParams({ url })}`);
+    return new Response(
+      JSON.stringify({
+        title: "module Synths; end",
+        speakerdeck: { src: playerUrl, width: 710, height: 399 },
+      }),
+    );
+  });
+  const element = document.createElement("div");
+  document.body.append(element);
+  const editor = new Editor({
+    element,
+    extensions: EDITOR_EXTENSIONS,
+    content: "title\n\n",
+    contentType: "markdown",
+  });
+  try {
+    editor.commands.insertContentAt(editor.state.doc.content.size, {
+      type: "paragraph",
+    });
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    editor.view.pasteText(url);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(editor.state.doc.child(2).type.name, "speakerdeckPlayer");
+    assert.equal(element.querySelector("iframe")?.src, playerUrl);
+    assert.equal(
+      element.querySelector("iframe")?.style.aspectRatio,
+      "710 / 399",
+    );
+    assert.match(
+      editor.getMarkdown(),
+      /https:\/\/speakerdeck.com\/asonas\/module-synths-end/,
+    );
+    const position =
+      editor.state.doc.child(0).nodeSize + editor.state.doc.child(1).nodeSize;
+    editor.setEditable(false);
+    editor.commands.setNodeSelection(position);
+    assert.equal(editor.state.doc.child(2).type.name, "speakerdeckPlayer");
+    editor.setEditable(true);
+    editor.commands.setNodeSelection(position);
+    assert.equal(editor.state.doc.child(2).type.name, "paragraph");
+    assert.equal(editor.state.doc.child(2).textContent, url);
+  } finally {
+    editor.destroy();
+    element.remove();
+  }
+});
+
+test("keeps Speaker Deck links usable when metadata fails or contains an unsafe player", async (t) => {
+  const { loadSpeakerDeck } = await import("./speakerDeck");
+  const url = "https://speakerdeck.com/asonas/module-synths-end";
+  for (const response of [
+    new Response("", { status: 502 }),
+    new Response(
+      JSON.stringify({
+        speakerdeck: {
+          src: "https://example.com/player",
+          width: 710,
+          height: 399,
+        },
+      }),
+    ),
+  ]) {
+    t.mock.method(globalThis, "fetch", async () => response);
+    const element = document.createElement("div");
+    element.dataset.speakerdeckPlayer = url;
+    element.innerHTML = `<a href="${url}">${url}</a>`;
+    const cleanup = loadSpeakerDeck(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(element.querySelector("iframe"), null);
+    assert.equal(element.querySelector("a")?.href, url);
+    cleanup();
+  }
 });
 
 test("renders a standalone Bluesky post URL in the editor and preserves its Markdown", async () => {

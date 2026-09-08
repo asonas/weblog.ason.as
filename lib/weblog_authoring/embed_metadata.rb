@@ -2,6 +2,7 @@
 
 require "cgi"
 require "ipaddr"
+require "json"
 require "net/http"
 require "resolv"
 require "uri"
@@ -14,6 +15,7 @@ module WeblogAuthoring
     MAX_BYTES = 1_048_576
     MAX_REDIRECTS = 5
     TIMEOUT = 5
+    SPEAKER_DECK_URL = %r{\Ahttps://speakerdeck\.com/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/?(?:\?[^\s#]*)?(?:\#[^\s]*)?\z}.freeze
 
     def initialize(resolver: Resolv.method(:getaddresses))
       @resolver = resolver
@@ -26,7 +28,7 @@ module WeblogAuthoring
 
       metadata = Parser.new(response.fetch(:body))
       image_url = resolve_public_url(metadata.image_url, final_url)
-      {
+      result = {
         "url" => raw_url,
         "canonical_url" => resolve_http_url(metadata.canonical_url, final_url) || final_url,
         "title" => metadata.title || URI.parse(final_url).host,
@@ -35,11 +37,32 @@ module WeblogAuthoring
         "site_name" => metadata.site_name || URI.parse(final_url).host,
         "status" => "ready",
       }
+      result["speakerdeck"] = speakerdeck_metadata(raw_url) if SPEAKER_DECK_URL.match?(raw_url)
+      result
     rescue URI::InvalidURIError => error
       raise FetchError, error.message
     end
 
     private
+
+    def speakerdeck_metadata(url)
+      response, = request("https://speakerdeck.com/oembed.json?#{URI.encode_www_form(url:)}")
+      raise FetchError, "oEmbedがJSONではありません" unless response.fetch(:content_type) == "application/json"
+
+      data = JSON.parse(response.fetch(:body))
+      raise FetchError, "無効なoEmbedです" unless data.is_a?(Hash)
+
+      player = data["html"].to_s.match(%r{\bsrc="(https://speakerdeck\.com/player/[a-f0-9]{32})"})
+      width = data["width"]
+      height = data["height"]
+      unless player && width.is_a?(Numeric) && height.is_a?(Numeric) && width.positive? && height.positive?
+        raise FetchError, "無効なSpeaker Deck埋め込みです"
+      end
+
+      { "src" => player[1], "width" => width, "height" => height }
+    rescue JSON::ParserError => error
+      raise FetchError, error.message
+    end
 
     def request(raw_url)
       current_url = raw_url

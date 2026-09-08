@@ -7,6 +7,7 @@ require "rouge"
 require "uri"
 
 require_relative "links"
+require_relative "embed_metadata"
 require_relative "models"
 require_relative "names"
 
@@ -230,6 +231,9 @@ module WeblogAuthoring
           youtube_player_html(youtube_id, standalone_url, indent)
         elsif standalone_url && bluesky_post
           bluesky_player_html(bluesky_post, standalone_url, indent)
+        elsif standalone_url && EmbedMetadataFetcher::SPEAKER_DECK_URL.match?(standalone_url)
+          url = CGI.escapeHTML(standalone_url)
+          %(#{" " * indent}<div class="speakerdeck-player" data-speakerdeck-player="#{url}"><a href="#{url}" target="_blank" rel="noreferrer">#{url}</a></div>\n)
         else
           format_as_block_html("p", el.attr, inner(el, indent), indent)
         end

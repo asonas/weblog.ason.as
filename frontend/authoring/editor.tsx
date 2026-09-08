@@ -24,6 +24,7 @@ import {
 import { createPortal } from "react-dom";
 import { markdownForEditor, markdownForSource } from "./markdown";
 import { AUTHORING_TELEMETRY_FLUSH_EVENT } from "./performanceTelemetry";
+import { SpeakerDeckPlayer } from "./speakerDeck";
 import { UniverseGraph } from "./UniverseGraph";
 
 declare global {
@@ -1432,6 +1433,7 @@ export const EDITOR_EXTENSIONS = [
   Image.configure({ allowBase64: false }),
   YouTubePlayer,
   BlueskyPlayer,
+  SpeakerDeckPlayer,
   Markdown.configure({ indentation: { style: "space", size: 2 } }),
 ];
 

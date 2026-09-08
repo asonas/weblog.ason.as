@@ -68,6 +68,7 @@ module WeblogAuthoring
   end
 
   class EmbedMetadataFetcher
+    SPEAKER_DECK_URL: Regexp
     class UnsafeUrlError < StandardError
     end
     class FetchError < StandardError

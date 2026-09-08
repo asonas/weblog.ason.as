@@ -65,6 +65,22 @@ class TestMarkdown < Minitest::Test
     assert_includes rendered.html, "allowfullscreen"
   end
 
+  def test_standalone_speakerdeck_url_renders_a_player_placeholder_with_its_original_link
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+    url = "https://speakerdeck.com/asonas/module-synths-end"
+
+    %w[local public].each do |mode|
+      rendered = renderer.render("#{url}\n", mode:)
+      assert_includes rendered.html, %(data-speakerdeck-player="#{url}")
+      assert_includes rendered.html, %(href="#{url}")
+      assert_includes rendered.html, %(#{url}</a>)
+    end
+
+    ["See #{url}", "`#{url}`", "https://speakerdeck.com.evil.example/asonas/module-synths-end"].each do |body|
+      refute_includes renderer.render(body, mode: "public").html, "data-speakerdeck-player"
+    end
+  end
+
   def test_standalone_bluesky_post_url_renders_as_an_official_embed
     renderer = WeblogAuthoring::MarkdownRenderer.new
     url = "https://bsky.app/profile/did:plc:nzhcpsryikfegc27zbimbwhq/post/3mexample"

@@ -2574,6 +2574,23 @@ h2 {
   block-size: auto;
 }
 
+.speakerdeck-player iframe {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 0;
+}
+
+.speakerdeck-player {
+  margin-block: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.speakerdeck-player > a {
+  font-size: 0.875rem;
+}
+
 .ProseMirror .youtube-player,
 .page-view .youtube-player {
   inline-size: 100%;

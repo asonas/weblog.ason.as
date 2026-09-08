@@ -745,6 +745,7 @@ module WeblogAuthoring
       object = s3_client.get_object(bucket: settings.asset_bucket, key:)
       metadata = JSON.parse(object.body.read)
       return nil unless metadata["url"] == url
+      return nil if EmbedMetadataFetcher::SPEAKER_DECK_URL.match?(url) && metadata["status"] == "ready" && !metadata.key?("speakerdeck")
 
       fetched_at = Time.iso8601(metadata.fetch("fetched_at"))
       ttl = metadata["status"] == "fallback" ? EMBED_FALLBACK_CACHE_TTL : EMBED_CACHE_TTL

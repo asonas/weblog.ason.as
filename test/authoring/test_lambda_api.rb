@@ -710,6 +710,27 @@ class LambdaApiTest < Minitest::Test
     assert_equal [url], fetcher.requests
   end
 
+  def test_refreshes_speakerdeck_metadata_cached_without_a_player
+    s3 = FakeS3.new
+    fetcher = FakeEmbedFetcher.new
+    now = Time.iso8601("2026-08-22T12:00:00+09:00")
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database, s3_client: s3, asset_bucket: "production-assets",
+      embed_fetcher: fetcher, clock: -> { now }
+    )
+    url = "https://speakerdeck.com/asonas/module-synths-end"
+    key = "assets/embed-cache/#{Digest::SHA256.hexdigest(url)}.json"
+    s3.objects[["production-assets", key]] = JSON.generate(
+      "url" => url, "title" => "Old metadata", "status" => "ready", "fetched_at" => now.iso8601
+    )
+
+    response = api.call(event("GET", "/api/embed", query: { "url" => url }))
+
+    assert_equal 200, response.fetch(:statusCode)
+    assert_equal "Example", JSON.parse(response.fetch(:body)).fetch("title")
+    assert_equal [url], fetcher.requests
+  end
+
   def test_mutations_require_an_allowed_session_and_csrf_token
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
     api = WeblogAuthoring::LambdaApi.new(
