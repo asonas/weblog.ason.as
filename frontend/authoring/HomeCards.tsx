@@ -3,22 +3,11 @@ import type { HomePage } from "./CardHome";
 import { coverPalettes } from "./coverPalettes";
 import "./homeCards.css";
 
-const dayFormat = new Intl.DateTimeFormat("sv-SE", {
-  timeZone: "Asia/Tokyo",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
 export function HomeCards({ entries }: { entries: HomePage[] }) {
   return (
     <section className="cf" aria-label="新しい順の日記と記事">
       <div className="cf-grid">
         {entries.map((page) => {
-          const day = page.is_diary
-            ? page.route
-            : dayFormat.format(new Date(page.updated_at));
-          const layout = page.is_diary ? "postcard" : "glass";
           const seed = [...page.id].reduce(
             (value, char) => value + char.charCodeAt(0),
             0,
@@ -52,10 +41,7 @@ export function HomeCards({ entries }: { entries: HomePage[] }) {
             </span>
           );
           return (
-            <article
-              className={`cf-card cf-${layout} ${page.is_diary ? "cf-diary" : "cf-article"}`}
-              key={page.id}
-            >
+            <article className="cf-card" key={page.id}>
               <a
                 href={`/${encodeURIComponent(page.route)}`}
                 aria-label={`${page.is_diary ? "日記" : "記事"}：${page.title}${page.image_url ? "" : "。カバー画像なし"}`}
@@ -76,22 +62,16 @@ export function HomeCards({ entries }: { entries: HomePage[] }) {
                       data-palette-source="https://randoma11y.com/"
                     />
                   )}
-                  {page.is_diary && missingCoverMarker}
-                  {page.is_diary && (
-                    <h2 className="cf-diary-title">
-                      <time dateTime={day}>{page.title}</time>
-                    </h2>
-                  )}
+                  {missingCoverMarker}
+                  <h2 className="cf-title">
+                    {page.is_diary ? (
+                      <time dateTime={page.route}>{page.title}</time>
+                    ) : (
+                      page.title
+                    )}
+                  </h2>
                 </div>
-                {!page.is_diary && missingCoverMarker}
                 <div className="cf-copy">
-                  {!page.is_diary && (
-                    <time className="cf-updated" dateTime={day}>
-                      {day.replaceAll("-", ".")}
-                      <small>更新</small>
-                    </time>
-                  )}
-                  {!page.is_diary && <h2>{page.title}</h2>}
                   <p>
                     {page.excerpt
                       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
