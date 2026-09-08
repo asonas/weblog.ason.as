@@ -2599,9 +2599,36 @@ h2 {
 .page-view video {
   display: block;
   width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
   max-height: 80vh;
   margin-block: 1rem;
   background: black;
+}
+
+.video-node__actions {
+  margin-block: 0.5rem 1rem;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.video-node__actions button {
+  min-height: 44px;
+  margin: 0.25rem 0.5rem 0.25rem 0;
+}
+
+.video-node__fields label {
+  display: block;
+}
+
+.video-node__fields textarea {
+  box-sizing: border-box;
+  width: 100%;
+  display: block;
+  font-family: monospace;
+  font-size: 1rem;
+  margin-block: 0.5rem;
 }
 
 .video-upload-control {

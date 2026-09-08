@@ -97,12 +97,54 @@ test("preserves uploaded video sources through Markdown save and re-edit", () =>
   });
   assert.equal(editor.getJSON().content?.[0].type, "video");
   assert.equal(editor.getMarkdown().trim(), source);
-  assert.match(editor.getHTML(), /preload="none"/);
+  assert.match(editor.getHTML(), /preload="metadata"/);
   assert.match(editor.getHTML(), /av01/);
   editor.commands.setContent(editor.getMarkdown(), { contentType: "markdown" });
   assert.equal(editor.getJSON().content?.[0].attrs?.avc, avc);
   assert.equal(editor.getJSON().content?.[0].attrs?.av1, av1);
   editor.destroy();
+});
+
+test("edits video Markdown and removes the node with undo, only when editable", () => {
+  const avc =
+    "/assets/uploads/2026/09/11111111-2222-3333-4444-555555555555.mp4";
+  const host = document.createElement("div");
+  document.body.append(host);
+  const editor = new Editor({
+    element: host,
+    extensions: EDITOR_EXTENSIONS,
+    content: `:::video ${avc} :::`,
+    contentType: "markdown",
+  });
+  const click = (label: string) => {
+    const button = Array.from(host.querySelectorAll("button")).find(
+      (button) => button.textContent === label,
+    );
+    assert.ok(button, label);
+    button.click();
+  };
+  click("記法を編集");
+  const field = host.querySelector("textarea");
+  assert.ok(field);
+  field.value = `:::video ${avc} 1080x1920 :::`;
+  click("変更を反映");
+  assert.equal(editor.getMarkdown().trim(), field.value);
+  editor.commands.setContent(editor.getMarkdown(), { contentType: "markdown" });
+  assert.equal(host.querySelector("video")?.getAttribute("width"), "1080");
+  assert.equal(host.querySelector("video")?.getAttribute("height"), "1920");
+  click("本文から削除");
+  assert.equal(host.querySelector("video"), null);
+  editor.commands.undo();
+  assert.ok(host.querySelector("video"));
+  editor.setEditable(false);
+  assert.equal(
+    host.querySelector<HTMLElement>(".video-node__actions")?.hidden,
+    true,
+  );
+  click("本文から削除");
+  assert.ok(host.querySelector("video"));
+  editor.destroy();
+  host.remove();
 });
 
 test("prefixes editor document titles only in development", () => {

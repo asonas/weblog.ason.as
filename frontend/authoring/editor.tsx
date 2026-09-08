@@ -2336,7 +2336,14 @@ export function AuthoringEditor({
           editor
             .chain()
             .focus()
-            .insertContent({ type: "video", attrs: urls })
+            .insertContent({
+              type: "video",
+              attrs: {
+                ...urls,
+                width: prepared.width,
+                height: prepared.height,
+              },
+            })
             .run();
         }
         setImageUploadStatus("動画を追加しました");

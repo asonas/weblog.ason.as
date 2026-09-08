@@ -11,7 +11,12 @@ class TestMarkdown < Minitest::Test
     av1 = "/assets/uploads/2026/09/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.mp4"
     renderer = WeblogAuthoring::MarkdownRenderer.new
     html = renderer.render(":::video #{avc} #{av1} :::", mode: "public").html
-    assert_includes html, '<video controls playsinline preload="none"'
+    assert_includes html, '<video controls playsinline preload="metadata"'
+    assert_includes html, 'style="aspect-ratio: 16 / 9"'
+    assert_includes html, av1 + '#t=0.001'
+    portrait = renderer.render(":::video #{avc} 1080x1920 :::", mode: "public").html
+    assert_includes portrait, 'width="1080" height="1920"'
+    assert_includes portrait, 'style="aspect-ratio: 1080 / 1920"'
     assert_operator html.index(av1), :<, html.index('<source src="' + avc)
     refute_includes html, "autoplay"
     assert_includes renderer.render(":::video #{avc} :::", mode: "public").html, '<source src="' + avc

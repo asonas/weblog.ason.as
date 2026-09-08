@@ -1,11 +1,22 @@
 /// <reference types="vite/client" />
 import workerUrl from "./videoUpload.worker.ts?worker&url";
 
-export type PreparedVideo = { avc: File; av1?: File };
+export type PreparedVideo = {
+  avc: File;
+  av1?: File;
+  width: number;
+  height: number;
+};
 export type VideoWorkerResponse =
   | { kind: "progress"; message: string }
   | { kind: "error"; message: string }
-  | { kind: "result"; avc: ArrayBuffer; av1?: ArrayBuffer };
+  | {
+      kind: "result";
+      avc: ArrayBuffer;
+      av1?: ArrayBuffer;
+      width: number;
+      height: number;
+    };
 
 export async function prepareVideo(
   file: File,
@@ -36,6 +47,8 @@ export async function prepareVideo(
         if (message.kind === "error") reject(new Error(message.message));
         if (message.kind === "result")
           resolve({
+            width: message.width,
+            height: message.height,
             avc: new File([message.avc], "video-h264.mp4", {
               type: "video/mp4",
             }),

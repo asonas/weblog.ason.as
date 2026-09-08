@@ -223,11 +223,12 @@ module WeblogAuthoring
 
       def convert_p(el, indent)
         standalone_url = standalone_url(el)
-        video = /\A:::video (\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4)(?: (\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4))? :::\z/.match(standalone_url.to_s)
+        video = /\A:::video (\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4)(?: (\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4))?(?: ([1-9]\d{0,4})x([1-9]\d{0,4}))? :::\z/.match(standalone_url.to_s)
         if video
-          avc, av1 = video.captures
-          sources = av1 ? %(<source src="#{av1}" type='video/mp4; codecs="av01.0.08M.08"' />) : ""
-          return %(#{" " * indent}<video controls playsinline preload="none" data-avc="#{avc}"#{av1 ? %( data-av1="#{av1}") : ""}>#{sources}<source src="#{avc}" type="video/mp4" /><a href="#{avc}">動画をダウンロード</a></video>\n)
+          avc, av1, width, height = video.captures
+          dimensions = width ? %( width="#{width}" height="#{height}") : ""
+          sources = av1 ? %(<source src="#{av1}#t=0.001" type='video/mp4; codecs="av01.0.08M.08"' />) : ""
+          return %(#{" " * indent}<video controls playsinline preload="metadata"#{dimensions} style="aspect-ratio: #{width || 16} / #{height || 9}" data-avc="#{avc}"#{av1 ? %( data-av1="#{av1}") : ""}>#{sources}<source src="#{avc}#t=0.001" type="video/mp4" /><a href="#{avc}">動画をダウンロード</a></video>\n)
         end
         youtube_id = youtube_video_id(standalone_url) if standalone_url
         bluesky_post = bluesky_post_identity(standalone_url) if standalone_url
