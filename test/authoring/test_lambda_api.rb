@@ -866,7 +866,7 @@ class LambdaApiTest < Minitest::Test
     assert_equal "search_index_notification_failed", JSON.parse(log.string).fetch("event")
   end
 
-  def test_creates_an_authenticated_presigned_image_upload
+  def test_creates_authenticated_presigned_image_and_video_uploads
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
     token = codec.issue(
       kind: "session",
@@ -906,6 +906,17 @@ class LambdaApiTest < Minitest::Test
     assert_equal 200, response.fetch(:statusCode)
     assert_match(%r{\A/assets/uploads/2026/08/[0-9a-f-]+\.webp\z}, body.fetch("public_url"))
     assert_equal "image/webp", body.dig("fields", "Content-Type")
+    video_payload = { content_type: "video/mp4", size: 10_000_000 }
+    assert_equal 401, api.call(json_event("POST", "/api/uploads", video_payload)).fetch(:statusCode)
+    assert_equal 403, api.call(json_event("POST", "/api/uploads", video_payload,
+                                        cookies: ["weblog_authoring_session=#{token}"])).fetch(:statusCode)
+    video_response = api.call(json_event("POST", "/api/uploads", video_payload,
+                                        cookies: ["weblog_authoring_session=#{token}"],
+                                        headers: { "x-csrf-token" => "csrf-token" }))
+    assert_equal 200, video_response.fetch(:statusCode)
+    video_body = JSON.parse(video_response.fetch(:body))
+    assert_equal "video/mp4", video_body.dig("fields", "Content-Type")
+    assert_match(%r{\A/assets/uploads/2026/08/[0-9a-f-]+\.mp4\z}, video_body.fetch("public_url"))
   end
 
   def test_lists_and_adopts_an_inbox_image

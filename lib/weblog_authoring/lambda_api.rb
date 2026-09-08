@@ -15,6 +15,7 @@ require_relative "embed_metadata"
 require_relative "image_inbox"
 require_relative "inbox_thumbnail"
 require_relative "image_upload"
+require_relative "video_upload"
 require_relative "inbox_sync"
 require_relative "mobile_upload"
 require_relative "models"
@@ -468,6 +469,9 @@ module WeblogAuthoring
       return json_response(403, error: "CSRF token mismatch") unless secure_equal?(expected_csrf_token, csrf_token_from(event))
 
       payload = parse_json(event)
+      if payload["content_type"] == "video/mp4" && payload["inbox_date"].nil?
+        return json_response(200, VideoUpload.new(s3_client:, bucket: @asset_bucket, clock: @clock).create(size: payload["size"]))
+      end
       upload = ImageUpload.new(
         s3_client:,
         bucket: @asset_bucket,

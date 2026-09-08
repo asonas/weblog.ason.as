@@ -6,6 +6,19 @@ require_relative "../../lib/weblog_authoring/markdown"
 class TestMarkdown < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-01-01T00:00:00+09:00")
 
+  def test_renders_uploaded_video_with_av1_and_h264_without_autoplay
+    avc = "/assets/uploads/2026/09/11111111-2222-3333-4444-555555555555.mp4"
+    av1 = "/assets/uploads/2026/09/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.mp4"
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+    html = renderer.render(":::video #{avc} #{av1} :::", mode: "public").html
+    assert_includes html, '<video controls playsinline preload="none"'
+    assert_operator html.index(av1), :<, html.index('<source src="' + avc)
+    refute_includes html, "autoplay"
+    assert_includes renderer.render(":::video #{avc} :::", mode: "public").html, '<source src="' + avc
+    refute_includes renderer.render(":::video https://evil.example/a.mp4 :::", mode: "public").html, "<video"
+    refute_includes renderer.render("```\n:::video #{avc} :::\n```", mode: "public").html, "<video"
+  end
+
   def test_local_render_supports_gfm_extensions_and_highlighted_wiki_links
     renderer = WeblogAuthoring::MarkdownRenderer.new(pages: [named_page("page-a")])
     rendered = renderer.render(

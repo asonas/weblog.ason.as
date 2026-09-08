@@ -26,6 +26,7 @@ import { markdownForEditor, markdownForSource } from "./markdown";
 import { AUTHORING_TELEMETRY_FLUSH_EVENT } from "./performanceTelemetry";
 import { SpeakerDeckPlayer } from "./speakerDeck";
 import { UniverseGraph } from "./UniverseGraph";
+import { Video } from "./Video";
 
 declare global {
   interface Window {
@@ -1431,6 +1432,7 @@ export const EDITOR_EXTENSIONS = [
   }),
   WikiLinks,
   Image.configure({ allowBase64: false }),
+  Video,
   YouTubePlayer,
   BlueskyPlayer,
   SpeakerDeckPlayer,
@@ -1668,6 +1670,9 @@ export function AuthoringEditor({
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const videoAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => videoAbortRef.current?.abort(), []);
   const [draggingImages, setDraggingImages] = useState(false);
   const [imageUploadStatus, setImageUploadStatus] = useState("");
   const [materialStatus, setMaterialStatus] = useState("");
@@ -2229,7 +2234,13 @@ export function AuthoringEditor({
 
   const handleImageFiles = useCallback(
     async (files: Array<File>) => {
-      if (!editor || files.length === 0 || uploadingImages) return;
+      if (
+        !editor ||
+        files.length === 0 ||
+        uploadingImages ||
+        videoAbortRef.current
+      )
+        return;
       if (!draftRef.current.title.trim()) {
         const message = "先にタイトルを入力してください";
         setStatus(message);
@@ -2263,6 +2274,80 @@ export function AuthoringEditor({
         setImageUploadStatus(message);
       } finally {
         setUploadingImages(false);
+      }
+    },
+    [editor, uploadingImages],
+  );
+
+  const handleVideoFiles = useCallback(
+    async (files: File[]) => {
+      if (!editor || !files.length || uploadingImages || videoAbortRef.current)
+        return;
+      if (!draftRef.current.title.trim()) {
+        setImageUploadStatus("先にタイトルを入力してください");
+        editor.commands.focus("start");
+        return;
+      }
+      const controller = new AbortController();
+      videoAbortRef.current = controller;
+      setUploadingVideo(true);
+      setImageUploadStatus("動画を確認中…");
+      try {
+        const { prepareVideo } = await import("./videoUpload");
+        for (const file of files) {
+          const prepared = await prepareVideo(
+            file,
+            controller.signal,
+            setImageUploadStatus,
+          );
+          const urls: { avc: string; av1?: string } = { avc: "" };
+          for (const codec of ["avc", "av1"] as const) {
+            const output = prepared[codec];
+            if (!output) continue;
+            controller.signal.throwIfAborted();
+            setImageUploadStatus("動画をアップロード中…");
+            const upload = await requestJson<UploadResponse>("/api/uploads", {
+              content_type: "video/mp4",
+              size: output.size,
+            });
+            controller.signal.throwIfAborted();
+            const form = new FormData();
+            for (const [key, value] of Object.entries(upload.fields))
+              form.append(key, value);
+            form.append("file", output);
+            const response = await fetch(upload.upload_url, {
+              method: "POST",
+              body: form,
+              signal: controller.signal,
+            });
+            if (!response.ok)
+              throw new Error(
+                "動画を送信できませんでした。もう一度試してください",
+              );
+            urls[codec] = upload.public_url;
+          }
+          controller.signal.throwIfAborted();
+          if (editor.isDestroyed) return;
+          ensureBodySelection(editor);
+          editor
+            .chain()
+            .focus()
+            .insertContent({ type: "video", attrs: urls })
+            .run();
+        }
+        setImageUploadStatus("動画を追加しました");
+      } catch (error) {
+        if (!editor.isDestroyed)
+          setImageUploadStatus(
+            controller.signal.aborted
+              ? "動画の追加をキャンセルしました"
+              : error instanceof Error
+                ? error.message
+                : "動画を追加できませんでした",
+          );
+      } finally {
+        videoAbortRef.current = null;
+        setUploadingVideo(false);
       }
     },
     [editor, uploadingImages],
@@ -2537,23 +2622,46 @@ export function AuthoringEditor({
   useEffect(() => {
     if (!editor?.isEditable) return;
     const element = editor.view.dom;
+    const isVideoDrag = (transfer: DataTransfer | null) =>
+      Array.from(transfer?.items || []).some(
+        (item) => item.kind === "file" && item.type.startsWith("video/"),
+      );
     const dragenter = (event: DragEvent) => {
-      if (!isImageDrag(event.dataTransfer)) return;
+      if (!isImageDrag(event.dataTransfer) && !isVideoDrag(event.dataTransfer))
+        return;
       event.preventDefault();
       imageDragDepthRef.current += 1;
       setDraggingImages(true);
     };
     const dragover = (event: DragEvent) => {
-      if (!isImageDrag(event.dataTransfer)) return;
+      if (!isImageDrag(event.dataTransfer) && !isVideoDrag(event.dataTransfer))
+        return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
     };
     const dragleave = (event: DragEvent) => {
-      if (!isImageDrag(event.dataTransfer)) return;
+      if (!isImageDrag(event.dataTransfer) && !isVideoDrag(event.dataTransfer))
+        return;
       imageDragDepthRef.current = Math.max(0, imageDragDepthRef.current - 1);
       if (imageDragDepthRef.current === 0) setDraggingImages(false);
     };
     const paste = (event: ClipboardEvent) => {
+      const videos = Array.from(event.clipboardData?.files || []).filter(
+        (file) => file.type.startsWith("video/"),
+      );
+      if (videos.length) {
+        event.preventDefault();
+        if (
+          Array.from(event.clipboardData?.files || []).some((file) =>
+            file.type.startsWith("image/"),
+          )
+        ) {
+          setImageUploadStatus("画像と動画は分けて追加してください");
+          return;
+        }
+        void handleVideoFiles(videos);
+        return;
+      }
       const files = Array.from(event.clipboardData?.files || []).filter(
         (file) => file.type.startsWith("image/"),
       );
@@ -2581,8 +2689,9 @@ export function AuthoringEditor({
         insertInboxItem(inboxItemId);
         return;
       }
-      const files = Array.from(event.dataTransfer?.files || []).filter((file) =>
-        file.type.startsWith("image/"),
+      const files = Array.from(event.dataTransfer?.files || []).filter(
+        (file) =>
+          file.type.startsWith("image/") || file.type.startsWith("video/"),
       );
       if (files.length === 0) return;
       event.preventDefault();
@@ -2591,7 +2700,13 @@ export function AuthoringEditor({
         top: event.clientY,
       });
       if (position) editor.commands.setTextSelection(position.pos);
-      void handleImageFiles(files);
+      const videos = files.filter((file) => file.type.startsWith("video/"));
+      if (videos.length && videos.length !== files.length) {
+        setImageUploadStatus("画像と動画は分けて追加してください");
+        return;
+      }
+      if (videos.length) void handleVideoFiles(videos);
+      else void handleImageFiles(files);
     };
     element.addEventListener("dragenter", dragenter, true);
     element.addEventListener("dragover", dragover, true);
@@ -2605,7 +2720,7 @@ export function AuthoringEditor({
       element.removeEventListener("paste", paste, true);
       element.removeEventListener("drop", drop, true);
     };
-  }, [editor, handleImageFiles, insertInboxItem]);
+  }, [editor, handleImageFiles, handleVideoFiles, insertInboxItem]);
 
   useEffect(() => {
     if (!editor || initialFocusAppliedRef.current) return;
@@ -2858,7 +2973,9 @@ export function AuthoringEditor({
             onClick={(event) => {
               if (
                 event.target instanceof Element &&
-                event.target.closest(".editor-shell__actions")
+                event.target.closest(
+                  ".editor-shell__actions, .editor-video-upload",
+                )
               )
                 return;
               if (!editor || editor.view.dom.contains(event.target as Node))
@@ -2876,11 +2993,34 @@ export function AuthoringEditor({
                 ここにドロップして記事へ追加
               </div>
             )}
-            {editor?.isEditable && imageUploadStatus && (
-              <div className="editor-shell__actions">
-                <span className="editor-shell__upload-status" role="status">
-                  {imageUploadStatus}
-                </span>
+            {editor?.isEditable && (
+              <div className="editor-video-upload">
+                <label className="video-upload-control">
+                  動画を追加
+                  <input
+                    type="file"
+                    accept="video/*,.mov,.mp4,.webm,.mkv"
+                    disabled={uploadingVideo || uploadingImages}
+                    onChange={(event) => {
+                      const files = Array.from(event.currentTarget.files || []);
+                      event.currentTarget.value = "";
+                      void handleVideoFiles(files);
+                    }}
+                  />
+                </label>
+                {uploadingVideo && (
+                  <button
+                    type="button"
+                    onClick={() => videoAbortRef.current?.abort()}
+                  >
+                    キャンセル
+                  </button>
+                )}
+                {imageUploadStatus && (
+                  <span className="editor-shell__upload-status" role="status">
+                    {imageUploadStatus}
+                  </span>
+                )}
               </div>
             )}
             <div

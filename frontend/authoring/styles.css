@@ -2473,6 +2473,10 @@ h2 {
 }
 
 @media (max-width: 48rem) {
+  html[data-view="article-editing"] .editor-video-upload {
+    padding-block-start: calc(var(--space-16) * 2 + var(--space-4));
+  }
+
   html[data-view="reading"] .site-header .header-nav,
   html[data-view="article-editing"] .site-header .header-nav {
     grid-template-columns: minmax(0, 1fr) auto auto;
@@ -2589,6 +2593,40 @@ h2 {
 
 .speakerdeck-player > a {
   font-size: 0.875rem;
+}
+
+.ProseMirror video,
+.page-view video {
+  display: block;
+  width: 100%;
+  max-height: 80vh;
+  margin-block: 1rem;
+  background: black;
+}
+
+.video-upload-control {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+
+.editor-video-upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.editor-video-upload button {
+  min-height: 44px;
+}
+
+.video-upload-control input {
+  max-width: 100%;
+  min-height: 44px;
 }
 
 .ProseMirror .youtube-player,

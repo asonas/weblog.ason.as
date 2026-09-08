@@ -23,6 +23,7 @@ require_relative "github_oauth"
 require_relative "image_inbox"
 require_relative "inbox_thumbnail"
 require_relative "image_upload"
+require_relative "video_upload"
 require_relative "inbox_sync"
 require_relative "bluesky_source"
 require_relative "raindrop_source"
@@ -329,6 +330,9 @@ module WeblogAuthoring
 
     post "/api/uploads" do
       api_response do |payload|
+        if payload["content_type"] == "video/mp4" && payload["inbox_date"].nil?
+          next VideoUpload.new(s3_client: s3_client, bucket: settings.asset_bucket, clock: settings.clock).create(size: payload["size"])
+        end
         ImageUpload.new(
           s3_client: s3_client,
           bucket: settings.asset_bucket,

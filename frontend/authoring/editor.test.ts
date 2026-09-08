@@ -84,6 +84,27 @@ const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
 const { markdownForSource } = await import("./markdown");
 const { SearchPage, SiteSearch } = await import("./search");
 
+test("preserves uploaded video sources through Markdown save and re-edit", () => {
+  const avc =
+    "/assets/uploads/2026/09/11111111-2222-3333-4444-555555555555.mp4";
+  const av1 =
+    "/assets/uploads/2026/09/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.mp4";
+  const source = `:::video ${avc} ${av1} :::`;
+  const editor = new Editor({
+    extensions: EDITOR_EXTENSIONS,
+    content: source,
+    contentType: "markdown",
+  });
+  assert.equal(editor.getJSON().content?.[0].type, "video");
+  assert.equal(editor.getMarkdown().trim(), source);
+  assert.match(editor.getHTML(), /preload="none"/);
+  assert.match(editor.getHTML(), /av01/);
+  editor.commands.setContent(editor.getMarkdown(), { contentType: "markdown" });
+  assert.equal(editor.getJSON().content?.[0].attrs?.avc, avc);
+  assert.equal(editor.getJSON().content?.[0].attrs?.av1, av1);
+  editor.destroy();
+});
+
 test("prefixes editor document titles only in development", () => {
   assert.equal(editorDocumentTitle("", "development"), "[dev] weblog.ason.as");
   assert.equal(
