@@ -2624,6 +2624,12 @@ h2 {
   min-height: 44px;
 }
 
+.editor-video-upload__file {
+  flex-basis: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .video-upload-control input {
   max-width: 100%;
   min-height: 44px;

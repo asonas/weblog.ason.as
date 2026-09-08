@@ -1671,6 +1671,7 @@ export function AuthoringEditor({
   const [saving, setSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [videoFileName, setVideoFileName] = useState("");
   const videoAbortRef = useRef<AbortController | null>(null);
   useEffect(() => () => videoAbortRef.current?.abort(), []);
   const [draggingImages, setDraggingImages] = useState(false);
@@ -2249,6 +2250,7 @@ export function AuthoringEditor({
         return;
       }
       setUploadingImages(true);
+      setVideoFileName("");
       setImageUploadStatus("画像を処理中…");
       setStatus("画像を処理中…");
       try {
@@ -2290,11 +2292,13 @@ export function AuthoringEditor({
       }
       const controller = new AbortController();
       videoAbortRef.current = controller;
+      setVideoFileName(files[0].name);
       setUploadingVideo(true);
       setImageUploadStatus("動画を確認中…");
       try {
         const { prepareVideo } = await import("./videoUpload");
         for (const file of files) {
+          setVideoFileName(file.name);
           const prepared = await prepareVideo(
             file,
             controller.signal,
@@ -2995,19 +2999,29 @@ export function AuthoringEditor({
             )}
             {editor?.isEditable && (
               <div className="editor-video-upload">
-                <label className="video-upload-control">
-                  動画を追加
-                  <input
-                    type="file"
-                    accept="video/*,.mov,.mp4,.webm,.mkv"
-                    disabled={uploadingVideo || uploadingImages}
-                    onChange={(event) => {
-                      const files = Array.from(event.currentTarget.files || []);
-                      event.currentTarget.value = "";
-                      void handleVideoFiles(files);
-                    }}
-                  />
-                </label>
+                {!uploadingVideo && (
+                  <label className="video-upload-control">
+                    動画を追加
+                    <input
+                      type="file"
+                      accept="video/*,.mov,.mp4,.webm,.mkv"
+                      disabled={uploadingVideo || uploadingImages}
+                      onChange={(event) => {
+                        const files = Array.from(
+                          event.currentTarget.files || [],
+                        );
+                        event.currentTarget.value = "";
+                        void handleVideoFiles(files);
+                      }}
+                    />
+                  </label>
+                )}
+                {videoFileName && (
+                  <p className="editor-video-upload__file" aria-live="polite">
+                    {uploadingVideo ? "追加中の動画" : "選択した動画"}:{" "}
+                    {videoFileName}
+                  </p>
+                )}
                 {uploadingVideo && (
                   <button
                     type="button"
