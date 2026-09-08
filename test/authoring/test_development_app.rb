@@ -581,6 +581,32 @@ class TestDevelopmentApp < Minitest::Test
     }], s3_client.requests
   end
 
+  def test_uploaded_videos_support_full_and_partial_downloads
+    video_s3 = Aws::S3::Client.new(region: "ap-northeast-1", stub_responses: true)
+    video_s3.stub_responses(:get_object, [
+      { content_type: "video/mp4", content_length: 8, body: "mp4-data" },
+      { content_type: "video/mp4", content_length: 4, content_range: "bytes 0-3/8", body: "mp4-" },
+      "InvalidRange",
+    ])
+    application = WeblogAuthoring::DevelopmentApp.application(root:, clock: -> { FIXED_TIME }, s3_client: video_s3)
+    path = "/assets/uploads/2026/09/005e5379-37d0-4c24-a218-bedd8a54a6b6.mp4"
+    status, headers, body = request_with(application, "GET", path)
+    assert_equal 200, status
+    assert_equal "video/mp4", headers.fetch("content-type")
+    assert_equal "bytes", headers.fetch("accept-ranges")
+    assert_equal "mp4-data", body
+
+    status, headers, body = request_with(application, "GET", path, headers: { "HTTP_RANGE" => "bytes=0-3" })
+    assert_equal 206, status
+    assert_equal "bytes 0-3/8", headers.fetch("content-range")
+    assert_equal "4", headers.fetch("content-length")
+    assert_equal "mp4-", body
+    assert_equal "bytes=0-3", video_s3.api_requests.last.fetch(:params).fetch(:range)
+
+    status, = request_with(application, "GET", path, headers: { "HTTP_RANGE" => "bytes=100-" })
+    assert_equal 416, status
+  end
+
   def test_first_downloaded_image_is_used_for_the_page_card
     FileUtils.mkdir_p(root.join("data/normalized"))
     FileUtils.mkdir_p(root.join("data/reports"))

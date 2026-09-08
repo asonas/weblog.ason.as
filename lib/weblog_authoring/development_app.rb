@@ -254,15 +254,28 @@ module WeblogAuthoring
       month = params.fetch("month")
       filename = params.fetch("filename")
       halt 404 unless /\A\d{4}\z/.match?(year) && /\A(?:0[1-9]|1[0-2])\z/.match?(month)
-      halt 404 unless /\A(?:[0-9a-f]{32}|[0-9a-f-]{36})\.(?:gif|jpe?g|png|webp)\z/i.match?(filename)
+      halt 404 unless /\A(?:[0-9a-f]{32}|[0-9a-f-]{36})\.(?:gif|jpe?g|png|webp|mp4)\z/i.match?(filename)
+
+      video = filename.downcase.end_with?(".mp4")
+      range = request.env["HTTP_RANGE"] if video
 
       object = s3_client.get_object(
         bucket: settings.asset_bucket,
-        key: "assets/uploads/#{year}/#{month}/#{filename}"
+        key: "assets/uploads/#{year}/#{month}/#{filename}",
+        **(range ? { range: } : {})
       )
       content_type object.content_type || "application/octet-stream"
       cache_control :public, max_age: 31_536_000, immutable: true
+      if video
+        headers "Accept-Ranges" => "bytes", "Content-Length" => object.content_length.to_s
+        if object.content_range
+          status 206
+          headers "Content-Range" => object.content_range
+        end
+      end
       object.body.read
+    rescue Aws::S3::Errors::InvalidRange
+      halt 416
     rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
       halt 404
     end
