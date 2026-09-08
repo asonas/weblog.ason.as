@@ -1,23 +1,40 @@
 # frozen_string_literal: true
 
-require "pathname"
-require "json"
-
-require "weblog_authoring/dsql_database"
-require "weblog_authoring/embed_metadata"
-require "weblog_authoring/github_oauth"
-require "weblog_authoring/lambda_api"
-require "weblog_authoring/lambda_session"
-require "weblog_authoring/production_secrets"
-require "weblog_authoring/search_index"
-require "aws-sdk-sqs"
-require "aws-sdk-lambda"
-
 module WeblogAuthoring
   module LambdaHandler
+    REQUIRE_TIMING = begin
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      timings = {}
+      %w[
+        pathname json
+        weblog_authoring/dsql_database weblog_authoring/embed_metadata
+        weblog_authoring/github_oauth weblog_authoring/lambda_api
+        weblog_authoring/lambda_session weblog_authoring/production_secrets
+        weblog_authoring/search_index aws-sdk-sqs aws-sdk-lambda
+      ].each do |feature|
+        section_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        require feature
+        timings[feature] = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - section_started_at) * 1000).round(3)
+      end
+      {
+        "timings" => timings.freeze,
+        "require_total_ms" => ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000).round(3),
+      }.freeze
+    end
+
     module_function
 
     def call(event:, context:)
+      # Init has no request ID; emit the captured measurements on the first invocation.
+      unless @require_timings_logged
+        puts(JSON.generate(REQUIRE_TIMING.merge(
+          "event" => "cold_require_timing", "cold" => true,
+          "request_id" => context.aws_request_id,
+          "gateway_request_id" => event.dig("requestContext", "requestId"),
+          "route" => event.fetch("rawPath", "")
+        )))
+        @require_timings_logged = true
+      end
       instance = api(request_id: context.aws_request_id, route: event.fetch("rawPath", ""))
       return instance.backfill_inbox_thumbnails(limit: event.fetch("limit", 100)) if event["action"] == "backfill_inbox_thumbnails"
 

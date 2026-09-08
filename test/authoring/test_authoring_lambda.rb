@@ -2,9 +2,58 @@
 
 require_relative "../test_helper"
 require_relative "../../lambda/authoring"
+require "open3"
 
 class AuthoringLambdaTest < Minitest::Test
   SecretResponse = Data.define(:secret_string)
+
+  def test_fresh_process_logs_require_timings_once_without_changing_session_responses
+    source = <<~'RUBY'
+      require_relative "lambda/authoring"
+      Aws.config[:stub_responses] = true
+      Aws.config[:secretsmanager] = { stub_responses: {
+        get_secret_value: { secret_string: JSON.generate(
+          "github_client_id" => "id", "github_client_secret" => "secret", "session_secret" => "s" * 64
+        ) }
+      } }
+      {
+        "AWS_REGION" => "ap-northeast-1", "OAUTH_SECRET_ID" => "oauth", "DSQL_HOST" => "cluster",
+        "ASSET_BUCKET" => "assets", "SITE_BUCKET" => "site",
+        "GITHUB_REDIRECT_URI" => "https://example.com/callback",
+        "FRONTEND_URL" => "https://example.com", "GITHUB_ALLOWED_USER_ID" => "1"
+      }.each { |key, value| ENV[key] = value }
+      2.times do |index|
+        response = WeblogAuthoring::LambdaHandler.call(
+          event: { "rawPath" => "/api/auth/session", "requestContext" => {
+            "requestId" => "gateway-#{index}", "http" => { "method" => "GET" }
+          } },
+          context: Struct.new(:aws_request_id).new("lambda-#{index}")
+        )
+        puts JSON.generate("response" => response)
+      end
+    RUBY
+    output, stderr, status = Open3.capture3(
+      RbConfig.ruby, "-Ilib", "-e", source, chdir: File.expand_path("../..", __dir__)
+    )
+    assert status.success?, stderr
+    entries = output.lines.map { |line| JSON.parse(line) }
+    require_entries = entries.select { |entry| entry["event"] == "cold_require_timing" }
+    assert_equal 1, require_entries.length
+    entry = require_entries.fetch(0)
+    assert_equal "lambda-0", entry.fetch("request_id")
+    assert_equal "gateway-0", entry.fetch("gateway_request_id")
+    assert_equal "/api/auth/session", entry.fetch("route")
+    assert_operator entry.fetch("require_total_ms"), :>, 0
+    assert_operator entry.fetch("timings").fetch("weblog_authoring/dsql_database"), :>, 0
+    assert(entry.fetch("timings").values.all? { |value| value.is_a?(Numeric) && value >= 0 })
+    assert_operator entry.fetch("require_total_ms") + 0.01, :>=, entry.fetch("timings").values.sum
+    assert_equal(1, entries.count { |item| item["event"] == "cold_api_timing" })
+    responses = entries.filter_map { |item| item["response"] }
+    assert_equal 2, responses.length
+    assert_equal responses.first, responses.last
+    assert_equal 200, responses.first.fetch("statusCode")
+    assert_equal "no-store", responses.first.fetch("headers").fetch("cache-control")
+  end
 
   def test_routes_thumbnail_backfill_events_outside_the_http_api
     api = Object.new
