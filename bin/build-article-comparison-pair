@@ -1,0 +1,87 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "fileutils"
+require "json"
+require "open3"
+require "optparse"
+require "pathname"
+require "tmpdir"
+
+ROOT = Pathname(__dir__).join("..").expand_path
+BUILD_COMMAND = ROOT.join("bin/build-article-comparison-site")
+
+def capture!(*command, chdir: ROOT)
+  stdout, stderr, status = Open3.capture3(*command, chdir: chdir.to_s)
+  raise "#{command.first} failed:\n#{stderr}#{stdout}" unless status.success?
+
+  stdout
+end
+
+def resolve_commit(reference)
+  commit = capture!("git", "rev-parse", "--verify", "#{reference}^{commit}").strip
+  raise ArgumentError, "Cannot resolve commit: #{reference}" if commit.empty?
+
+  commit
+rescue RuntimeError
+  raise ArgumentError, "Cannot resolve commit: #{reference}"
+end
+
+def extract_commit(commit, destination, archive)
+  FileUtils.mkdir_p(destination)
+  capture!("git", "archive", "--format=tar", "--output", archive.to_s, commit)
+  capture!("tar", "-xf", archive.to_s, "-C", destination.to_s)
+end
+
+def prepare_dependencies(source_root, cache)
+  capture!({ "npm_config_cache" => cache.to_s }, "npm", "ci", chdir: source_root)
+end
+
+def build_site(source_root:, fixture:, output:)
+  capture!(
+    BUILD_COMMAND.to_s,
+    "--source-root", source_root.to_s,
+    "--fixture", fixture.to_s,
+    "--output", output.to_s
+  )
+end
+
+options = {}
+OptionParser.new do |parser|
+  parser.on("--baseline REF") { |value| options[:baseline] = value }
+  parser.on("--candidate REF") { |value| options[:candidate] = value }
+  parser.on("--fixture PATH") { |value| options[:fixture] = Pathname(value).expand_path }
+  parser.on("--output PATH") { |value| options[:output] = Pathname(value).expand_path }
+end.parse!
+
+begin
+  baseline_commit = resolve_commit(options.fetch(:baseline))
+  candidate_commit = resolve_commit(options.fetch(:candidate))
+  fixture = options.fetch(:fixture)
+  output = options.fetch(:output)
+  raise ArgumentError, "Fixture not found: #{fixture}" unless fixture.file?
+  raise ArgumentError, "Output already exists: #{output}" if output.exist?
+
+  fixture_data = JSON.parse(fixture.read)
+  Dir.mktmpdir("article-comparison-pair") do |directory|
+    temporary_root = Pathname(directory)
+    cache = temporary_root.join("npm-cache")
+    { "baseline" => baseline_commit, "candidate" => candidate_commit }.each do |name, commit|
+      source_root = temporary_root.join(name)
+      extract_commit(commit, source_root, temporary_root.join("#{name}.tar"))
+      prepare_dependencies(source_root, cache)
+      build_site(source_root:, fixture:, output: output.join(name))
+    end
+  end
+  output.join("manifest.json").write(JSON.pretty_generate(
+    "baseline_commit" => baseline_commit,
+    "candidate_commit" => candidate_commit,
+    "fixture_id" => fixture_data.fetch("fixture_id"),
+    "fixture_captured_at" => fixture_data.fetch("captured_at"),
+    "page_route" => fixture_data.fetch("page").fetch("name")
+  ) << "\n")
+  puts "Built comparison pair at #{output}"
+rescue KeyError, JSON::ParserError, ArgumentError, RuntimeError => error
+  warn error.message
+  exit 1
+end

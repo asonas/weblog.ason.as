@@ -1,0 +1,146 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "fileutils"
+require "json"
+require "optparse"
+require "pathname"
+require "stringio"
+require "time"
+
+module ArticleComparisonFixture
+  Body = Data.define(:body)
+
+  class Database
+    def initialize(page)
+      @page = page
+    end
+
+    def find(id)
+      @page if id == @page.id
+    end
+
+    def list_pages
+      [@page]
+    end
+
+    def approved_webmentions_for_page(_id)
+      []
+    end
+
+    def find_image_dimensions(url)
+      [4096, 3072] if url == "/assets/comparison/rubykaigi-follow-up.webp"
+    end
+
+    def complete_webmention_outbox(_id, **)
+      true
+    end
+
+    def fail_webmention_outbox(_id)
+    end
+  end
+
+  class LocalServices
+    def initialize(shell:, output:)
+      @shell = shell
+      @output = output
+    end
+
+    def get_object(bucket:, key:)
+      raise "Unexpected publication shell request: #{bucket}/#{key}" unless key == "static/authoring/public.html"
+
+      Body.new(StringIO.new(@shell.read))
+    end
+
+    def head_object(**)
+      true
+    end
+
+    def put_object(body:, **)
+      FileUtils.mkdir_p(@output.dirname)
+      @output.write(body)
+    end
+
+    def create_invalidation(**)
+    end
+
+    def delete_object(**)
+    end
+
+    def send_message(**)
+    end
+  end
+
+  module_function
+
+  def page_from(data, fixture_path)
+    page = data.fetch("page")
+    WeblogAuthoring::PageDocument.new(
+      id: page.fetch("id"),
+      page_type: page.fetch("page_type"),
+      name: page.fetch("name"),
+      title: page["title"],
+      status: page.fetch("status"),
+      created_at: Time.iso8601(page.fetch("created_at")),
+      updated_at: Time.iso8601(page.fetch("updated_at")),
+      published_at: Time.iso8601(page.fetch("published_at")),
+      path: fixture_path,
+      body: page.fetch("body"),
+      links: [],
+      cover_mode: page.fetch("cover_mode", "auto"),
+      cover_image_url: page["cover_image_url"]
+    )
+  end
+
+  def run(fixture:, shell:, output:)
+    raise ArgumentError, "Fixture not found: #{fixture}" unless fixture.file?
+    raise ArgumentError, "Public shell not found: #{shell}" unless shell.file?
+
+    data = JSON.parse(fixture.read)
+    page = page_from(data, fixture)
+    services = LocalServices.new(shell:, output:)
+    publisher = WeblogAuthoring::WebmentionSitePublisher.new(
+      database: Database.new(page),
+      s3_client: services,
+      cloudfront_client: services,
+      sqs_client: services,
+      site_bucket: "local-comparison",
+      distribution_id: "local-comparison",
+      delivery_queue_url: "local-comparison",
+      sender_enabled: false
+    )
+    publisher.publish(
+      "id" => "comparison-#{data.fetch('fixture_id')}",
+      "page_id" => page.id,
+      "payload" => { "source_url" => data.fetch("captured_from") }
+    )
+    data.fetch("fixture_id")
+  end
+end
+
+options = {}
+OptionParser.new do |parser|
+  parser.on("--fixture PATH") { |path| options[:fixture] = Pathname(path) }
+  parser.on("--shell PATH") { |path| options[:shell] = Pathname(path) }
+  parser.on("--output PATH") { |path| options[:output] = Pathname(path) }
+  parser.on("--source-root PATH") { |path| options[:source_root] = Pathname(path).expand_path }
+end.parse!
+
+begin
+  source_root = options.fetch(:source_root, Pathname(__dir__).join("..").expand_path)
+  support_root = Pathname(__dir__).join("../test/fixtures/article_comparison/support").expand_path
+  $LOAD_PATH.unshift(support_root.to_s)
+  $LOAD_PATH.unshift(source_root.join("lib").to_s)
+  require "weblog_authoring/models"
+  require "weblog_authoring/webmention_site_publisher"
+
+  fixture_id = ArticleComparisonFixture.run(
+    fixture: options.fetch(:fixture),
+    shell: options.fetch(:shell),
+    output: options.fetch(:output)
+  )
+  puts "Rendered fixture #{fixture_id} to #{options.fetch(:output)}"
+rescue KeyError, JSON::ParserError, ArgumentError => error
+  warn error.message
+  exit 1
+end

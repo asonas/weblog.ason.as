@@ -1,0 +1,22 @@
+{
+  "fixture_id": "rubykaigi-2026-follow-up",
+  "captured_from": "https://weblog.ason.as/%52uby%4Baigi%202026%20follow%20up%E3%81%A7%E7%99%BB%E5%A3%87%E3%81%97%E3%81%A6%E3%81%8D%E3%81%9F",
+  "captured_at": "2026-09-09T06:58:10Z",
+  "resources": [
+    {
+      "source": "assets/rubykaigi-follow-up.webp",
+      "path": "assets/comparison/rubykaigi-follow-up.webp"
+    }
+  ],
+  "page": {
+    "id": "comparison-rubykaigi-2026-follow-up",
+    "page_type": "named",
+    "name": "RubyKaigi 2026 follow upで登壇してきた",
+    "status": "published",
+    "created_at": "2026-09-05T12:52:27Z",
+    "updated_at": "2026-09-09T06:58:10Z",
+    "published_at": "2026-09-05T12:52:27Z",
+    "cover_mode": "auto",
+    "body": "![会場から見た街](/assets/comparison/rubykaigi-follow-up.webp)\n\nRubyKaigi 2026 follow upに参加してきた＆登壇してきた。\n\nこれまで実装してきたソフトウェアの楽器から得られた知見をもとにハードウェアの楽器をやっていますという話だった。\n\n浜松市には浜松市楽器博物館がある。\n\nhttps://www.gakkihaku.jp/"
+  }
+}

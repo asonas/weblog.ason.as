@@ -1,0 +1,179 @@
+#!/usr/bin/env node
+
+import { access, copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import process from "node:process";
+import pixelmatch from "pixelmatch";
+import { PNG } from "pngjs";
+
+function parseOptions(arguments_) {
+  const options = {};
+  for (let index = 0; index < arguments_.length; index += 2) {
+    const name = arguments_[index];
+    const value = arguments_[index + 1];
+    if (!name?.startsWith("--") || value === undefined) throw new Error(`Invalid argument: ${name ?? ""}`);
+    options[name.slice(2)] = resolve(value);
+  }
+  if (!options.capture) throw new Error("Missing --capture");
+  if (!options.output) throw new Error("Missing --output");
+  return options;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+async function requiredFile(path) {
+  try {
+    await access(path);
+  } catch {
+    throw new Error(`Required screenshot not found: ${path}`);
+  }
+}
+
+async function compareScreenshots({ baselinePath, candidatePath, diffPath }) {
+  const baseline = PNG.sync.read(await readFile(baselinePath));
+  const candidate = PNG.sync.read(await readFile(candidatePath));
+  const width = Math.max(baseline.width, candidate.width);
+  const height = Math.max(baseline.height, candidate.height);
+  const pad = (image) => {
+    if (image.width === width && image.height === height) return image;
+    const canvas = new PNG({ width, height });
+    canvas.data.fill(255);
+    PNG.bitblt(image, canvas, 0, 0, image.width, image.height, 0, 0);
+    return canvas;
+  };
+  const paddedBaseline = pad(baseline);
+  const paddedCandidate = pad(candidate);
+  const diff = new PNG({ width, height });
+  const changedPixels = pixelmatch(paddedBaseline.data, paddedCandidate.data, diff.data, width, height, {
+    threshold: 0.1,
+    includeAA: true,
+    diffColor: [190, 24, 93],
+    alpha: 0,
+  });
+  await writeFile(diffPath, PNG.sync.write(diff));
+  return {
+    width,
+    height,
+    baseline_width: baseline.width,
+    baseline_height: baseline.height,
+    candidate_width: candidate.width,
+    candidate_height: candidate.height,
+    dimensions_changed: baseline.width !== candidate.width || baseline.height !== candidate.height,
+    changed_pixels: changedPixels,
+    changed_percent: (changedPixels / (width * height)) * 100,
+  };
+}
+
+function renderReport(manifest, comparisons) {
+  const conditions = [
+    ["基準コミット", manifest.baseline_commit],
+    ["変更版コミット", manifest.candidate_commit],
+    ["固定データ", manifest.fixture_id],
+    ["ブラウザ", `${manifest.browser.name} ${manifest.browser.version}`],
+    ["固定時刻", manifest.fixed_time],
+    ["タイムゾーン", manifest.timezone],
+    ["ロケール", manifest.locale],
+    ["deviceScaleFactor", manifest.device_scale_factor],
+  ];
+  const sections = comparisons.map((comparison) => {
+    const percentage = comparison.changed_percent.toFixed(4);
+    const isSame = comparison.changed_pixels === 0 && !comparison.dimensions_changed;
+    const status = isSame
+      ? "差分なし"
+      : `差分あり: ${comparison.changed_pixels.toLocaleString("ja-JP")} px（${percentage}%）`;
+    return `
+      <section>
+        <header class="comparison-header">
+          <h2>${comparison.viewport.width}px</h2>
+          <p class="status" data-result="${isSame ? "same" : "changed"}">${status}</p>
+          <p>基準 ${comparison.baseline_width}×${comparison.baseline_height}px、変更版 ${comparison.candidate_width}×${comparison.candidate_height}px、viewport ${comparison.viewport.width}×${comparison.viewport.height}px</p>
+        </header>
+        <div class="images">
+          <figure><figcaption>基準</figcaption><img src="images/baseline-${comparison.viewport.width}.png" alt="基準コミットの記事"></figure>
+          <figure><figcaption>変更版</figcaption><img src="images/candidate-${comparison.viewport.width}.png" alt="変更版コミットの記事"></figure>
+          <figure><figcaption>差分</figcaption><img src="images/diff-${comparison.viewport.width}.png" alt="基準と変更版の画像差分"></figure>
+        </div>
+      </section>`;
+  }).join("\n");
+  return `<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>公開記事の比較</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; background: #f4f7f6; color: #172321; }
+    body { margin: 0 auto; max-width: 1800px; padding: 32px; }
+    h1, h2, p { margin-block: 0 12px; }
+    .conditions { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px; padding: 20px; background: white; border: 1px solid #c9d5d2; }
+    .conditions dt { font-weight: 700; }
+    .conditions dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
+    section { margin-top: 40px; }
+    .comparison-header { margin-bottom: 16px; }
+    .status { width: fit-content; padding: 5px 10px; border-radius: 999px; font-weight: 700; background: #dcebe7; }
+    .status[data-result="changed"] { background: #ffe1eb; color: #7d123d; }
+    .images { display: grid; grid-template-columns: repeat(3, minmax(280px, 1fr)); gap: 16px; align-items: start; overflow-x: auto; }
+    figure { margin: 0; min-width: 280px; }
+    figcaption { margin-bottom: 8px; font-weight: 700; }
+    img { display: block; width: 100%; height: auto; border: 1px solid #9aaba7; background: white; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>公開記事の比較</h1>
+    <p>固定した条件で撮影した基準、変更版、画像差分です。</p>
+    <dl class="conditions">${conditions.map(([term, value]) => `<dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl>
+    ${sections}
+  </main>
+</body>
+</html>
+`;
+}
+
+async function main() {
+  const options = parseOptions(process.argv.slice(2));
+  try {
+    await stat(options.output);
+    throw new Error(`Output already exists: ${options.output}`);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const manifest = JSON.parse(await readFile(join(options.capture, "manifest.json"), "utf8"));
+  const inputs = manifest.viewports.flatMap(({ width }) => [
+    join(options.capture, "screenshots", `baseline-${width}.png`),
+    join(options.capture, "screenshots", `candidate-${width}.png`),
+  ]);
+  await Promise.all(inputs.map(requiredFile));
+  await mkdir(join(options.output, "images"), { recursive: true });
+  const comparisons = [];
+  for (const viewport of manifest.viewports) {
+    const baselinePath = join(options.capture, "screenshots", `baseline-${viewport.width}.png`);
+    const candidatePath = join(options.capture, "screenshots", `candidate-${viewport.width}.png`);
+    const baselineOutput = join(options.output, "images", `baseline-${viewport.width}.png`);
+    const candidateOutput = join(options.output, "images", `candidate-${viewport.width}.png`);
+    await copyFile(baselinePath, baselineOutput);
+    await copyFile(candidatePath, candidateOutput);
+    comparisons.push({
+      viewport,
+      ...await compareScreenshots({
+        baselinePath,
+        candidatePath,
+        diffPath: join(options.output, "images", `diff-${viewport.width}.png`),
+      }),
+    });
+  }
+  await writeFile(join(options.output, "manifest.json"), `${JSON.stringify({ ...manifest, comparisons }, null, 2)}\n`);
+  await writeFile(join(options.output, "index.html"), renderReport(manifest, comparisons));
+  console.log(`Generated article comparison report at ${options.output}`);
+}
+
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

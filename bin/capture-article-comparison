@@ -1,0 +1,188 @@
+#!/usr/bin/env node
+
+import { createServer } from "node:http";
+import { readFile, stat, mkdir, writeFile, access } from "node:fs/promises";
+import { extname, join, normalize, resolve } from "node:path";
+import process from "node:process";
+import { chromium } from "playwright-core";
+
+const CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const VIEWPORTS = [
+  { width: 390, height: 844 },
+  { width: 1568, height: 1000 },
+];
+
+function parseOptions(arguments_) {
+  const options = {};
+  for (let index = 0; index < arguments_.length; index += 2) {
+    const name = arguments_[index];
+    const value = arguments_[index + 1];
+    if (!name?.startsWith("--") || value === undefined) throw new Error(`Invalid argument: ${name ?? ""}`);
+    options[name.slice(2)] = resolve(value);
+  }
+  if (!options.pair) throw new Error("Missing --pair");
+  if (!options.output) throw new Error("Missing --output");
+  return options;
+}
+
+function contentType(path) {
+  return {
+    ".css": "text/css; charset=utf-8",
+    ".gif": "image/gif",
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+  }[extname(path)] ?? (extname(path) === "" ? "text/html; charset=utf-8" : "application/octet-stream");
+}
+
+async function startStaticServer(root) {
+  const absoluteRoot = `${resolve(root)}/`;
+  const server = createServer(async (request, response) => {
+    try {
+      const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://127.0.0.1").pathname);
+      const file = normalize(join(absoluteRoot, pathname));
+      if (!file.startsWith(absoluteRoot)) throw new Error("Invalid path");
+      const body = await readFile(file);
+      response.writeHead(200, { "content-type": contentType(file), "cache-control": "no-store" });
+      response.end(body);
+    } catch {
+      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      response.end("Not Found");
+    }
+  });
+  await new Promise((resolveListening, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolveListening);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Static server did not expose a port");
+  return { server, origin: `http://127.0.0.1:${address.port}` };
+}
+
+async function closeServer(server) {
+  await new Promise((resolveClosed) => server.close(resolveClosed));
+}
+
+async function capturePage({ browser, origin, route, revision, viewport, output, fixedTime }) {
+  const context = await browser.newContext({
+    viewport,
+    deviceScaleFactor: 1,
+    timezoneId: "Asia/Tokyo",
+    locale: "ja-JP",
+    colorScheme: "light",
+    reducedMotion: "reduce",
+  });
+  await context.addInitScript((isoTime) => {
+    const NativeDate = Date;
+    const timestamp = NativeDate.parse(isoTime);
+    class FixedDate extends NativeDate {
+      constructor(...arguments_) {
+        super(...(arguments_.length === 0 ? [timestamp] : arguments_));
+      }
+
+      static now() {
+        return timestamp;
+      }
+    }
+    window.Date = FixedDate;
+  }, fixedTime);
+  const page = await context.newPage();
+  try {
+    const url = new URL(`/${route}`, origin).toString();
+    const resourceFailures = [];
+    page.on("response", (resourceResponse) => {
+      const resourceType = resourceResponse.request().resourceType();
+      if (
+        new URL(resourceResponse.url()).origin === origin
+        && ["stylesheet", "script", "font"].includes(resourceType)
+        && !resourceResponse.ok()
+      ) {
+        resourceFailures.push(`${resourceResponse.url()} (${resourceResponse.status()})`);
+      }
+    });
+    page.on("requestfailed", (request) => {
+      if (
+        new URL(request.url()).origin === origin
+        && ["stylesheet", "script", "font"].includes(request.resourceType())
+      ) {
+        resourceFailures.push(`${request.url()} (${request.failure()?.errorText ?? "request failed"})`);
+      }
+    });
+    const response = await page.goto(url, { waitUntil: "networkidle" });
+    if (!response?.ok()) throw new Error(`Article request failed: ${url} (${response?.status() ?? "no response"})`);
+    if (resourceFailures.length > 0) throw new Error(`Required page resource failed: ${resourceFailures.join(", ")}`);
+    await page.locator("[data-public-article]").waitFor();
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      const failed = [...document.querySelectorAll("img, video")].filter((media) => {
+        if (media instanceof HTMLImageElement) return !media.complete || media.naturalWidth === 0;
+        return media.readyState < HTMLMediaElement.HAVE_METADATA;
+      });
+      if (failed.length > 0) throw new Error(`Article media failed to load: ${failed.map((media) => media.currentSrc || media.src).join(", ")}`);
+    });
+    await page.screenshot({
+      path: join(output, "screenshots", `${revision}-${viewport.width}.png`),
+      fullPage: true,
+      animations: "disabled",
+    });
+  } finally {
+    await context.close();
+  }
+}
+
+async function main() {
+  const options = parseOptions(process.argv.slice(2));
+  await access(CHROME_PATH);
+  try {
+    await stat(options.output);
+    throw new Error(`Output already exists: ${options.output}`);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const pairManifest = JSON.parse(await readFile(join(options.pair, "manifest.json"), "utf8"));
+  await mkdir(join(options.output, "screenshots"), { recursive: true });
+  const servers = {};
+  let browser;
+  try {
+    for (const revision of ["baseline", "candidate"]) {
+      servers[revision] = await startStaticServer(join(options.pair, revision));
+    }
+    browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
+    for (const revision of ["baseline", "candidate"]) {
+      for (const viewport of VIEWPORTS) {
+        await capturePage({
+          browser,
+          origin: servers[revision].origin,
+          route: pairManifest.page_route,
+          revision,
+          viewport,
+          output: options.output,
+          fixedTime: pairManifest.fixture_captured_at,
+        });
+      }
+    }
+    await writeFile(join(options.output, "manifest.json"), `${JSON.stringify({
+      ...pairManifest,
+      browser: { name: "Google Chrome", version: browser.version(), executable: CHROME_PATH },
+      viewports: VIEWPORTS,
+      device_scale_factor: 1,
+      timezone: "Asia/Tokyo",
+      locale: "ja-JP",
+      color_scheme: "light",
+      reduced_motion: "reduce",
+      fixed_time: new Date(pairManifest.fixture_captured_at).toISOString(),
+      captured_at: new Date().toISOString(),
+    }, null, 2)}\n`);
+  } finally {
+    await browser?.close();
+    await Promise.all(Object.values(servers).map(({ server }) => closeServer(server)));
+  }
+  console.log(`Captured article comparison at ${options.output}`);
+}
+
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

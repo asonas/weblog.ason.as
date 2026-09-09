@@ -59,6 +59,10 @@ run = "npm run coverage:authoring"
 description = "Build the authoring site artifact"
 run = "npm run build"
 
+[tasks."article-comparison"]
+description = "Compare a public article between two fixed commits"
+run = "bin/compare-public-article"
+
 [tasks."bluesky-oauth:format"]
 description = "Format the Bluesky OAuth TypeScript with Biome"
 run = "npm run format:bluesky-oauth"

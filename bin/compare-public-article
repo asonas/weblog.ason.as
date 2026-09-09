@@ -1,0 +1,80 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "open3"
+require "optparse"
+require "pathname"
+
+ROOT = Pathname(__dir__).join("..").expand_path
+DEFAULT_FIXTURE = ROOT.join("test/fixtures/article_comparison/rubykaigi-follow-up.json")
+
+class ComparisonStageError < StandardError
+  attr_reader :stage
+
+  def initialize(stage, message)
+    @stage = stage
+    super(message)
+  end
+end
+
+def run_stage(stage, *command)
+  stdout, stderr, status = Open3.capture3(*command, chdir: ROOT.to_s)
+  raise ComparisonStageError.new(stage, "#{stderr}#{stdout}".strip) unless status.success?
+
+  puts stdout
+end
+
+options = { fixture: DEFAULT_FIXTURE }
+OptionParser.new do |parser|
+  parser.on("--baseline REF") { |value| options[:baseline] = value }
+  parser.on("--candidate REF") { |value| options[:candidate] = value }
+  parser.on("--fixture PATH") { |value| options[:fixture] = Pathname(value).expand_path }
+  parser.on("--output PATH") { |value| options[:output] = Pathname(value).expand_path }
+end.parse!
+
+begin
+  output = options.fetch(:output)
+  raise ArgumentError, "Output already exists: #{output}" if output.exist?
+
+  output.mkpath
+  pair = output.join("pair")
+  capture = output.join("capture")
+  report = output.join("report")
+  run_stage(
+    "build",
+    ROOT.join("bin/build-article-comparison-pair").to_s,
+    "--baseline", options.fetch(:baseline),
+    "--candidate", options.fetch(:candidate),
+    "--fixture", options.fetch(:fixture).to_s,
+    "--output", pair.to_s
+  )
+  run_stage(
+    "capture",
+    ROOT.join("bin/capture-article-comparison").to_s,
+    "--pair", pair.to_s,
+    "--output", capture.to_s
+  )
+  run_stage(
+    "report",
+    ROOT.join("bin/report-article-comparison").to_s,
+    "--capture", capture.to_s,
+    "--output", report.to_s
+  )
+  output.join("result.json").write(JSON.pretty_generate(
+    "status" => "completed",
+    "report" => report.join("index.html").to_s
+  ) << "\n")
+  puts "Completed public article comparison: #{report.join('index.html')}"
+rescue ComparisonStageError => error
+  output.join("result.json").write(JSON.pretty_generate(
+    "status" => "failed",
+    "stage" => error.stage,
+    "reason" => error.message
+  ) << "\n")
+  warn "Comparison failed during #{error.stage}: #{error.message}"
+  exit 1
+rescue KeyError, ArgumentError => error
+  warn error.message
+  exit 1
+end

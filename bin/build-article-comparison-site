@@ -1,0 +1,75 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "fileutils"
+require "json"
+require "open3"
+require "optparse"
+require "pathname"
+require "tmpdir"
+
+TOOL_ROOT = Pathname(__dir__).join("..").expand_path
+RENDER_COMMAND = TOOL_ROOT.join("bin/render-article-comparison-fixture")
+
+def run!(source_root, *command)
+  stdout, stderr, status = Open3.capture3(*command, chdir: source_root.to_s)
+  raise "#{command.first} failed:\n#{stderr}#{stdout}" unless status.success?
+
+  stdout
+end
+
+def resource_paths(fixture, data)
+  data.fetch("resources").map do |resource|
+    source = fixture.dirname.join(resource.fetch("source")).cleanpath
+    target = Pathname(resource.fetch("path"))
+    raise ArgumentError, "Fixed resource not found: #{source}" unless source.file?
+    raise ArgumentError, "Fixed resource path must be relative: #{target}" if target.absolute? || target.each_filename.include?("..")
+
+    [source, target]
+  end
+end
+
+options = {}
+OptionParser.new do |parser|
+  parser.on("--fixture PATH") { |path| options[:fixture] = Pathname(path).expand_path }
+  parser.on("--output PATH") { |path| options[:output] = Pathname(path).expand_path }
+  parser.on("--source-root PATH") { |path| options[:source_root] = Pathname(path).expand_path }
+end.parse!
+
+begin
+  fixture = options.fetch(:fixture)
+  output = options.fetch(:output)
+  source_root = options.fetch(:source_root, TOOL_ROOT)
+  raise ArgumentError, "Fixture not found: #{fixture}" unless fixture.file?
+  raise ArgumentError, "Source root not found: #{source_root}" unless source_root.directory?
+  raise ArgumentError, "Output already exists: #{output}" if output.exist?
+
+  data = JSON.parse(fixture.read)
+  resources = resource_paths(fixture, data)
+  page_route = data.fetch("page").fetch("name")
+
+  Dir.mktmpdir("article-comparison-build") do |directory|
+    build = Pathname(directory).join("site")
+    run!(source_root, "npm", "run", "build", "--", "--outDir", build.to_s)
+    FileUtils.mkdir_p(output.dirname)
+    FileUtils.cp_r(build, output)
+    resources.each do |source, target|
+      destination = output.join(target)
+      FileUtils.mkdir_p(destination.dirname)
+      FileUtils.copy_file(source, destination)
+    end
+    run!(
+      source_root,
+      RENDER_COMMAND.to_s,
+      "--fixture", fixture.to_s,
+      "--shell", output.join("public.html").to_s,
+      "--output", output.join(page_route).to_s,
+      "--source-root", source_root.to_s
+    )
+  end
+
+  puts "Built comparison site #{data.fetch('fixture_id')} at #{output}"
+rescue KeyError, JSON::ParserError, ArgumentError, RuntimeError => error
+  warn error.message
+  exit 1
+end
