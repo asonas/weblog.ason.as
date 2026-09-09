@@ -1,5 +1,11 @@
 mock_provider "aws" {
   override_during = plan
+
+  mock_resource "aws_cloudfront_function" {
+    defaults = {
+      arn = "arn:aws:cloudfront::123456789012:function/weblog-site-routes-production"
+    }
+  }
 }
 
 mock_provider "aws" {
@@ -83,5 +89,15 @@ run "dynamic_api_caching_disabled" {
   assert {
     condition     = one([for behavior in aws_cloudfront_distribution.weblog.ordered_cache_behavior : behavior if behavior.path_pattern == "/api/*"]).cache_policy_id == data.aws_cloudfront_cache_policy.caching_disabled.id
     error_message = "dynamic API responses must use the managed caching-disabled policy"
+  }
+
+  assert {
+    condition     = alltrue([for response in aws_cloudfront_distribution.weblog.custom_error_response : response.response_code == 404 && response.response_page_path == "/static/authoring/404.html"])
+    error_message = "Missing public objects must return an HTML 404 instead of the app shell"
+  }
+
+  assert {
+    condition     = one(aws_cloudfront_distribution.weblog.default_cache_behavior[0].function_association).function_arn == aws_cloudfront_function.site_routes.arn
+    error_message = "App routes must be rewritten before looking up static objects"
   }
 }

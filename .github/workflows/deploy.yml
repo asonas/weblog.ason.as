@@ -173,6 +173,8 @@ jobs:
           [[ "$artifact_sha" == "$TARGET_SHA" ]]
           [[ "$AUTHORING_DIGEST" == sha256:* ]]
           [[ -f dist/site/index.html ]]
+          [[ -f dist/site/public.html ]]
+          [[ -f dist/site/404.html ]]
           [[ -f dist/site/static/authoring/app.js ]]
           [[ -f dist/site/static/authoring/app.css ]]
           find dist/site/static/authoring/assets -type f -print -quit | grep -q .
@@ -333,13 +335,17 @@ jobs:
             --content-type 'text/css; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
       - name: Publish site HTML
         if: steps.current.outputs.current == 'true'
-        run: >-
-          aws s3 cp dist/site/index.html "s3://${SITE_BUCKET}/index.html" --only-show-errors
-          --content-type 'text/html; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
+        run: |
+          aws s3 cp dist/site/index.html "s3://${SITE_BUCKET}/index.html" --only-show-errors \
+            --content-type 'text/html; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
+          for page in public 404; do
+            aws s3 cp "dist/site/${page}.html" "s3://${SITE_BUCKET}/static/authoring/${page}.html" --only-show-errors \
+              --content-type 'text/html; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
+          done
       - name: Invalidate CloudFront
         if: steps.current.outputs.current == 'true'
         run: |
-          invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths '/static/authoring/app.js' '/static/authoring/app.css' '/index.html' --query 'Invalidation.Id' --output text)"
+          invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths '/static/authoring/app.js' '/static/authoring/app.css' '/index.html' '/static/authoring/public.html' '/static/authoring/404.html' --query 'Invalidation.Id' --output text)"
           aws cloudfront wait invalidation-completed --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --id "$invalidation_id"
       - name: Smoke check production
         if: steps.current.outputs.current == 'true'

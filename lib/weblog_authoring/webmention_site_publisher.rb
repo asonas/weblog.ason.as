@@ -8,6 +8,7 @@ require "time"
 require "uri"
 
 require_relative "markdown"
+require_relative "cover_image"
 
 module WeblogAuthoring
   class WebmentionSitePublisher
@@ -57,6 +58,8 @@ module WeblogAuthoring
       body = render_page(page, source_url: outbox.fetch("payload").fetch("source_url"))
       html = shell.sub('<div id="authoring-root"></div>', %(<div id="authoring-root">#{body}</div>))
       raise "site shell does not contain authoring-root" if html == shell
+      html = html.sub(/<title>.*?<\/title>/m, "")
+        .sub("</head>", "#{page_metadata(page, outbox.fetch('payload').fetch('source_url'))}</head>")
 
       @s3_client.put_object(
         bucket: @site_bucket, key: page.route, body: html,
@@ -76,7 +79,7 @@ module WeblogAuthoring
     private
 
     def site_shell
-      @s3_client.get_object(bucket: @site_bucket, key: "index.html").body.read
+      @s3_client.get_object(bucket: @site_bucket, key: "static/authoring/public.html").body.read
     end
 
     def previous_route(payload, current_route:)
@@ -101,13 +104,16 @@ module WeblogAuthoring
     end
 
     def render_page(page, source_url:)
-      rendered = MarkdownRenderer.new(pages: @database.list_pages).render(page.body, mode: "public")
+      rendered = MarkdownRenderer.new(pages: @database.list_pages).render(page.body, mode: "public", progressive: true)
       mentions = @database.approved_webmentions_for_page(page.id)
       escaped_source_url = CGI.escapeHTML(source_url)
       author_url = CGI.escapeHTML(URI.join(source_url, "/").to_s)
+      cover = CoverImage.resolve(page)
+      cover_html = cover ? %(<img src="#{CGI.escapeHTML(cover)}" alt="" fetchpriority="high" />) : ""
       <<~HTML
-        <article class="page-view webmention-static-page h-entry">
-          <header class="page-header">
+        <article class="page-view webmention-static-page h-entry" data-public-article="1">
+          <header class="page-header#{cover ? ' page-header--covered' : ''}">
+            #{cover_html}
             <h1 class="p-name">#{CGI.escapeHTML(page.display_title.to_s)}</h1>
             <a class="u-url" href="#{escaped_source_url}" hidden="">記事のパーマリンク</a>
             <span class="p-author h-card" hidden=""><a class="p-name u-url" href="#{author_url}">asonas</a></span>
@@ -116,7 +122,29 @@ module WeblogAuthoring
             #{rendered.html.chomp}
           </div>
           #{render_mentions(mentions)}
+          <footer class="article-actions"><a href="/editor/#{WeblogAuthoring.encoded_route(page.id)}">この記事を編集</a></footer>
         </article>
+      HTML
+    end
+
+    def page_metadata(page, source_url)
+      title = CGI.escapeHTML(page.display_title.to_s)
+      rendered = MarkdownRenderer.new.render(page.body, mode: "public")
+      description = CGI.escapeHTML(CGI.unescapeHTML(rendered.html.gsub(/<[^>]*>/, " ")).gsub(/\s+/, " ").strip[0, 160])
+      url = CGI.escapeHTML(source_url)
+      cover = CoverImage.resolve(page)
+      image = cover ? %(<meta property="og:image" content="#{CGI.escapeHTML(URI.join(source_url, cover).to_s)}" />) : ""
+      <<~HTML
+        <title>#{title} | weblog.ason.as</title>
+        <meta name="description" content="#{description}" />
+        <link rel="canonical" href="#{url}" />
+        <meta property="og:type" content="article" />
+        <meta property="og:site_name" content="weblog.ason.as" />
+        <meta property="og:title" content="#{title}" />
+        <meta property="og:description" content="#{description}" />
+        <meta property="og:url" content="#{url}" />
+        #{image}
+        <meta name="twitter:card" content="#{cover ? 'summary_large_image' : 'summary'}" />
       HTML
     end
 

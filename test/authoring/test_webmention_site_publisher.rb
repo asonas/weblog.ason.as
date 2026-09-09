@@ -57,9 +57,9 @@ class WebmentionSitePublisherTest < Minitest::Test
     end
 
     def get_object(bucket:, key:)
-      raise "unexpected shell" unless bucket == "site" && key == "index.html"
+      raise "unexpected shell" unless bucket == "site" && key == "static/authoring/public.html"
 
-      Body.new(StringIO.new('<html><head><link rel="webmention" href="/api/webmentions"></head><body><div id="authoring-root"></div></body></html>'))
+      Body.new(StringIO.new('<html><head><title>weblog.ason.as</title><link rel="webmention" href="/api/webmentions" /></head><body><div id="authoring-root"></div></body></html>'))
     end
 
     def put_object(**request)
@@ -113,6 +113,14 @@ class WebmentionSitePublisherTest < Minitest::Test
 
     publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
     html = services.puts.fetch(0).fetch(:body)
+    head = REXML::Document.new(html[/<head>.*<\/head>/m]).root
+    assert_equal "記事 | weblog.ason.as", head.elements["title"].text
+    assert_equal "記事", head.elements["meta[@property='og:title']"].attributes["content"]
+    assert_equal "Target", head.elements["meta[@name='description']"].attributes["content"]
+    assert_equal "https://weblog.ason.as/%E8%A8%98%E4%BA%8B", head.elements["link[@rel='canonical']"].attributes["href"]
+    assert_nil head.elements["meta[@property='og:image']"]
+    assert_includes html, 'data-public-article="1"'
+    assert_includes html, 'href="/editor/page-id"'
     article = REXML::Document.new(html[/<article\b.*<\/article>/m]).root
     jobs = services.messages.map { |message| JSON.parse(message.fetch(:message_body)) }
     targets = jobs.map { |job| job.fetch("target") }
@@ -126,7 +134,7 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_includes author.attributes.fetch("class").value.split, "h-card"
     assert_equal "asonas", microformat_element(author, "p-name").text
     assert_includes html, '<a href="https://target.example/post">Target</a>'
-    assert_includes html, '<link rel="webmention" href="/api/webmentions">'
+    assert_includes html, '<link rel="webmention" href="/api/webmentions" />'
     assert_includes html, "外部からの言及"
     assert_equal ["https://old.example/post", "https://target.example/post"], targets
     assert_equal "https://weblog.ason.as/old-route", jobs.fetch(0).fetch("source")
@@ -167,6 +175,33 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_equal 1, services.puts.length
     assert_equal 1, services.messages.length
     assert_equal "outbox-id", database.completed
+  end
+
+  def test_public_article_keeps_media_and_escaped_metadata_without_editor_data
+    page = WeblogAuthoring::PageDocument.new(
+      id: "public-media", page_type: "named", name: '画像 & "動画"', title: nil,
+      status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
+      path: Pathname("content/pages/media.md"),
+      body: "読むための本文。\n\n![写真](/assets/photo.webp)\n\n![次の写真](/assets/other.webp)\n\n:::video /assets/uploads/2026/09/abc.mp4 1080x1920 :::\n\nhttps://speakerdeck.com/asonas/example", links: []
+    )
+    outbox = { "id" => "media", "page_id" => page.id, "payload" => { "source_url" => "https://weblog.ason.as/Media" } }
+    services = Services.new
+    WeblogAuthoring::WebmentionSitePublisher.new(
+      database: Database.new(page:, outbox:), s3_client: services, cloudfront_client: services,
+      sqs_client: services, site_bucket: "site", distribution_id: "distribution",
+      delivery_queue_url: "queue", sender_enabled: false
+    ).publish(outbox)
+    html = services.puts.fetch(0).fetch(:body)
+    assert_includes html, '<meta property="og:title" content="画像 &amp; &quot;動画&quot;" />'
+    assert_includes html, '<meta property="og:image" content="https://weblog.ason.as/assets/photo.webp" />'
+    assert_includes html, 'fetchpriority="high"'
+    assert_includes html, 'loading="eager"'
+    assert_includes html, 'loading="lazy"'
+    assert_includes html, 'style="aspect-ratio: 16 / 9"'
+    assert_includes html, 'width="1080" height="1920"'
+    assert_includes html, 'href="https://speakerdeck.com/asonas/example"'
+    assert_includes html, "読むための本文。"
+    refute_includes html, "authoring-data"
   end
 
   def test_skips_an_outbox_for_an_older_page_update

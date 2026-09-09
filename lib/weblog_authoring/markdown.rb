@@ -37,7 +37,7 @@ module WeblogAuthoring
       end
     end
 
-    def render(body, mode:)
+    def render(body, mode:, progressive: false)
       validate_mode!(mode)
 
       source = body.to_s
@@ -51,7 +51,7 @@ module WeblogAuthoring
         smart_quotes: %w[apos apos quot quot]
       )
 
-      html, converter_warnings = SafeHtmlConverter.with_context(mode:, wiki_targets:) do
+      html, converter_warnings = SafeHtmlConverter.with_context(mode:, wiki_targets:, progressive:, image_count: 0) do
         SafeHtmlConverter.convert(document.root, document.options)
       end
 
@@ -228,7 +228,10 @@ module WeblogAuthoring
           avc, av1, width, height = video.captures
           dimensions = width ? %( width="#{width}" height="#{height}") : ""
           sources = av1 ? %(<source src="#{av1}#t=0.001" type='video/mp4; codecs="av01.0.08M.08"' />) : ""
-          return %(#{" " * indent}<video controls playsinline preload="metadata"#{dimensions} style="aspect-ratio: #{width || 16} / #{height || 9}" data-avc="#{avc}"#{av1 ? %( data-av1="#{av1}") : ""}>#{sources}<source src="#{avc}#t=0.001" type="video/mp4" /><a href="#{avc}">動画をダウンロード</a></video>\n)
+          player = %(<video controls playsinline preload="metadata"#{dimensions} style="aspect-ratio: #{width || 16} / #{height || 9}" data-avc="#{avc}"#{av1 ? %( data-av1="#{av1}") : ""}>#{sources}<source src="#{avc}#t=0.001" type="video/mp4" /><a href="#{avc}">動画をダウンロード</a></video>)
+          return %(#{" " * indent}<figure class="article-video">#{player}<figcaption><a href="#{avc}">動画をダウンロード</a></figcaption></figure>\n) if self.class.context[:progressive]
+
+          return %(#{" " * indent}#{player}\n)
         end
         youtube_id = youtube_video_id(standalone_url) if standalone_url
         bluesky_post = bluesky_post_identity(standalone_url) if standalone_url
@@ -269,6 +272,15 @@ module WeblogAuthoring
         src = el.attr["src"].to_s
         alt = el.attr["alt"].to_s
         if self.class.context[:mode] == "public" && src.match?(ALLOWED_PUBLIC_IMAGE_URI)
+          if self.class.context[:progressive]
+            self.class.context[:image_count] += 1
+            loading = self.class.context[:image_count] == 1 ? "eager" : "lazy"
+            width, height = el.attr.values_at("width", "height")
+            dimensions = [width, height].all? { |value| value.to_s.match?(/\A[1-9]\d{0,4}\z/) }
+            ratio = dimensions ? "#{width} / #{height}" : "16 / 9"
+            size = dimensions ? %( width="#{width}" height="#{height}") : ""
+            return %(<span class="article-image" style="aspect-ratio: #{ratio}"><img#{html_attributes('src' => src, 'alt' => alt)}#{size} loading="#{loading}" decoding="async" /></span>)
+          end
           return "<img#{html_attributes('src' => src, 'alt' => alt)} />"
         end
 

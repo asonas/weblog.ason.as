@@ -80,4 +80,17 @@ class PublicationRefreshBackfillTest < Minitest::Test
     assert_equal "apply", summary.fetch("mode")
     assert_equal ["first"], @database.requested_ids
   end
+
+  def test_html_first_migration_includes_missing_and_old_pages_but_skips_current_html
+    client = S3Client.new("a-route" => '<article data-public-article="1">本文</article>', "z-route" => '<script src="/static/authoring/app.js"></script>')
+    preview = WeblogAuthoring::PublicationRefreshBackfill.call(
+      database: @database, s3_client: client, site_bucket: "site", html_first: true
+    )
+    assert_equal %w[missing z-route], (preview.fetch("pages").map { |page| page.fetch("route") })
+    assert_empty @database.requested_ids
+    WeblogAuthoring::PublicationRefreshBackfill.call(
+      database: @database, s3_client: client, site_bucket: "site", html_first: true, dry_run: false
+    )
+    assert_equal %w[missing later], @database.requested_ids
+  end
 end

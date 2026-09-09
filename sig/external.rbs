@@ -24,7 +24,7 @@ module WeblogAuthoring
 
   class MarkdownRenderer
     def initialize: (pages: Array[PageDocument]) -> void
-    def render: (String, mode: String) -> RenderedMarkdown
+    def render: (String, mode: String, ?progressive: bool) -> RenderedMarkdown
   end
 
   class RenderedMarkdown

@@ -145,6 +145,14 @@ resource "aws_cloudfront_origin_access_control" "site" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_cloudfront_function" "site_routes" {
+  name    = "weblog-site-routes-production"
+  runtime = "cloudfront-js-2.0"
+  comment = "Serve the app shell only for authoring and search routes"
+  publish = true
+  code    = file("${path.module}/site_routes.js")
+}
+
 resource "aws_cloudfront_distribution" "weblog" {
   enabled             = true
   is_ipv6_enabled     = true
@@ -178,6 +186,11 @@ resource "aws_cloudfront_distribution" "weblog" {
     cached_methods         = ["GET", "HEAD"]
     compress               = true
     cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.site_routes.arn
+    }
   }
 
   ordered_cache_behavior {
@@ -204,15 +217,15 @@ resource "aws_cloudfront_distribution" "weblog" {
 
   custom_error_response {
     error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
+    response_code         = 404
+    response_page_path    = "/static/authoring/404.html"
     error_caching_min_ttl = 0
   }
 
   custom_error_response {
     error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
+    response_code         = 404
+    response_page_path    = "/static/authoring/404.html"
     error_caching_min_ttl = 0
   }
 

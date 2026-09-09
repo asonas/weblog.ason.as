@@ -78,11 +78,12 @@ export default defineConfig(({ mode }) => ({
     chunkSizeWarningLimit: 800,
     emptyOutDir: true,
     rollupOptions: {
+      input: { index: resolve(projectRoot, "index.html"), public: resolve(projectRoot, "public.html"), notFound: resolve(projectRoot, "404.html") },
       output: {
-        entryFileNames: "static/authoring/app.js",
+        entryFileNames: (chunk) => chunk.name === "index" ? "static/authoring/app.js" : "static/authoring/assets/[name]-[hash].js",
         chunkFileNames: "static/authoring/assets/[name]-[hash].js",
         assetFileNames: (assetInfo) =>
-          assetInfo.names.some((name) => name.endsWith(".css"))
+          assetInfo.names.some((name) => name === "index.css")
             ? "static/authoring/app.css"
             : "static/authoring/assets/[name]-[hash][extname]",
       },
