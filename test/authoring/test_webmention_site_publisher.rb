@@ -89,6 +89,30 @@ class WebmentionSitePublisherTest < Minitest::Test
     REXML::XPath.match(element, ".//text()").map(&:value).join
   end
 
+  def test_encodes_apostrophes_in_cache_invalidation_paths
+    page = WeblogAuthoring::PageDocument.new(
+      id: "page-id", page_type: "named", name: "Don't use click here", page_date: nil, title: nil,
+      status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
+      path: Pathname("content/pages/article.md"), body: "本文", links: []
+    )
+    outbox = {
+      "id" => "outbox-id", "page_id" => page.id,
+      "payload" => { "source_url" => "https://weblog.ason.as/Don't%20use%20click%20here",
+        "previous_targets" => [], "current_targets" => [] },
+    }
+    database = Database.new(page:, outbox:)
+    services = Services.new
+    publisher = WeblogAuthoring::WebmentionSitePublisher.new(
+      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
+      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+    )
+
+    publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
+
+    assert_equal ["/Don%27t%20use%20click%20here"],
+      services.invalidations.fetch(0).dig(:invalidation_batch, :paths, :items)
+  end
+
   def test_publishes_verifiable_html_before_queuing_the_target_union
     page = WeblogAuthoring::PageDocument.new(
       id: "page-id", page_type: "named", name: "記事", page_date: nil, title: nil,

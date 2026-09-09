@@ -93,7 +93,7 @@ module WeblogAuthoring
     end
 
     def invalidate(routes, outbox_id)
-      paths = routes.map { |route| "/#{URI::DEFAULT_PARSER.escape(route)}" }
+      paths = routes.map { |route| "/#{URI::DEFAULT_PARSER.escape(route).gsub("'", "%27")}" }
       @cloudfront_client.create_invalidation(
         distribution_id: @distribution_id,
         invalidation_batch: {
