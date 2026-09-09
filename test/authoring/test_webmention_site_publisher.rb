@@ -97,8 +97,10 @@ class WebmentionSitePublisherTest < Minitest::Test
     )
     outbox = {
       "id" => "outbox-id", "page_id" => page.id,
-      "payload" => { "source_url" => "https://weblog.ason.as/Don't%20use%20click%20here",
-        "previous_targets" => [], "current_targets" => [] },
+      "payload" => {
+        "source_url" => "https://weblog.ason.as/Don't%20use%20click%20here",
+        "previous_targets" => [], "current_targets" => [],
+      },
     }
     database = Database.new(page:, outbox:)
     services = Services.new
