@@ -2284,6 +2284,10 @@ h2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.content-inbox__items--video {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+}
+
 .content-inbox__item {
   position: relative;
   display: grid;
@@ -2370,7 +2374,16 @@ h2 {
 .content-inbox__tabs svg {
   inline-size: 1.65rem;
   block-size: 1.65rem;
-  fill: currentColor;
+  fill: none;
+}
+
+.content-inbox__video-preview {
+  display: block;
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: var(--ink);
+  pointer-events: none;
 }
 
 .content-inbox__raindrop-icon {
@@ -2478,8 +2491,7 @@ h2 {
     grid-template-columns: minmax(0, 1fr) auto auto;
   }
 
-  html[data-view="article-editing"] .article-editing-cover,
-  html[data-view="article-editing"] .content-inbox-drawer {
+  html[data-view="article-editing"] .article-editing-cover {
     display: none;
   }
 }

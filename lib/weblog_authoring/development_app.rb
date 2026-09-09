@@ -24,6 +24,7 @@ require_relative "image_inbox"
 require_relative "inbox_thumbnail"
 require_relative "image_upload"
 require_relative "video_upload"
+require_relative "video_library"
 require_relative "inbox_sync"
 require_relative "bluesky_source"
 require_relative "raindrop_source"
@@ -343,6 +344,9 @@ module WeblogAuthoring
 
     post "/api/uploads" do
       api_response do |payload|
+        if payload["action"] == "register_video"
+          next({ "item" => VideoLibrary.new(database: settings.database, s3_client: s3_client, bucket: settings.asset_bucket).register(payload) })
+        end
         if payload["content_type"] == "video/mp4" && payload["inbox_date"].nil?
           next VideoUpload.new(s3_client: s3_client, bucket: settings.asset_bucket, clock: settings.clock).create(size: payload["size"])
         end
@@ -411,7 +415,9 @@ module WeblogAuthoring
       sync_development_inbox
       items = settings.database.list_inbox_items(source: params["source"], kind: params["kind"])
       usages = settings.database.list_inbox_item_usages.group_by(&:item_id)
-      JSON.generate("items" => items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, [])) })
+      result = items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, [])) }
+      result.concat(settings.database.list_video_materials) if [nil, "video"].include?(params["source"]) && [nil, "video"].include?(params["kind"])
+      JSON.generate("items" => result)
     end
 
     post "/api/inbox/adopt" do

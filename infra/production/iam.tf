@@ -74,6 +74,12 @@ resource "aws_iam_role_policy" "feed_publish" {
 
 data "aws_iam_policy_document" "image_upload" {
   statement {
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.site.arn}/assets/uploads/*.mp4"]
+  }
+
+  statement {
     effect  = "Allow"
     actions = ["s3:PutObject"]
     resources = [

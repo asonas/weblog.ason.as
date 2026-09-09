@@ -26,7 +26,7 @@ import { markdownForEditor, markdownForSource } from "./markdown";
 import { AUTHORING_TELEMETRY_FLUSH_EVENT } from "./performanceTelemetry";
 import { SpeakerDeckPlayer } from "./speakerDeck";
 import { UniverseGraph } from "./UniverseGraph";
-import { Video } from "./Video";
+import { Video, videoAssetPath } from "./Video";
 import { createVideoUploadCard, VideoUploadCards } from "./VideoUploadCard";
 
 declare global {
@@ -528,12 +528,12 @@ type UploadResponse = {
 
 type InboxItem = {
   id: string;
-  source: "photo" | "bluesky" | "raindrop" | "c4p";
-  kind: "photo" | "post" | "like" | "bookmark" | "track";
+  source: "photo" | "video" | "bluesky" | "raindrop" | "c4p";
+  kind: "photo" | "video" | "post" | "like" | "bookmark" | "track";
   source_id: string;
   occurred_at: string;
   ingested_at: string;
-  expires_at: string;
+  expires_at: string | null;
   payload: Record<string, unknown>;
   used_in_pages: Array<{ id: string; route: string }>;
 };
@@ -549,7 +549,7 @@ type InboxSyncStatus = {
     | "completed_with_errors"
     | "failed";
 };
-type MaterialTab = "photo" | "bluesky" | "raindrop";
+type MaterialTab = "photo" | "video" | "bluesky" | "raindrop";
 
 type ApiError = Error & {
   fields?: Record<string, string[]>;
@@ -804,6 +804,7 @@ export function autoCoverImageUrl(body: string): string | null {
 }
 
 function inboxItemLabel(item: InboxItem): string {
+  if (item.source === "video") return "動画";
   if (item.source === "photo") return "写真";
   if (item.source === "bluesky" && item.kind === "like")
     return "Bluesky いいね";
@@ -813,6 +814,8 @@ function inboxItemLabel(item: InboxItem): string {
 }
 
 function inboxItemName(item: InboxItem): string {
+  if (item.source === "video")
+    return inboxPayloadString(item, "name") || "動画";
   if (item.source === "bluesky") return inboxItemLabel(item);
   if (item.source === "raindrop" && item.kind === "bookmark") {
     if (typeof item.payload.title === "string" && item.payload.title.trim())
@@ -837,6 +840,7 @@ function inboxItemThumbnail(item: InboxItem): string | null {
 }
 
 function inboxItemTitle(item: InboxItem): string | null {
+  if (item.source === "video") return inboxItemName(item);
   if (item.source === "raindrop") return inboxPayloadString(item, "title");
   if (item.source === "bluesky" && item.kind === "like") {
     return (
@@ -848,6 +852,10 @@ function inboxItemTitle(item: InboxItem): string | null {
 }
 
 function inboxItemExcerpt(item: InboxItem): string | null {
+  if (item.source === "video") {
+    const duration = item.payload.duration;
+    return `${typeof duration === "number" ? `${Math.round(duration)}秒 / ` : ""}${item.payload.width}×${item.payload.height}`;
+  }
   if (item.source === "raindrop") return inboxPayloadString(item, "excerpt");
   if (item.source === "bluesky") return inboxPayloadString(item, "text");
   return null;
@@ -855,9 +863,33 @@ function inboxItemExcerpt(item: InboxItem): string | null {
 
 function PhotoMaterialIcon() {
   return (
-    // Adapted from Wikimedia Commons "Photo icon.svg", released under CC0 1.0.
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M4 3h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v14h16V5H4Zm3.5 2.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM5 17l4-4 2.5 2.5 2-2L19 19H5v-2Z" />
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8" cy="8" r="1.5" />
+      <path d="m3 17 5-5 4 4 3-3 6 6" />
+    </svg>
+  );
+}
+
+function VideoMaterialIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="m10 8 6 4-6 4z" />
     </svg>
   );
 }
@@ -2304,19 +2336,16 @@ export function AuthoringEditor({
       }));
       try {
         for (const { file, card } of cards) {
+          let prepared: import("./videoUpload").PreparedVideo | undefined;
+          const urls: { avc: string; av1?: string } = { avc: "" };
           while (!card.signal.aborted) {
             try {
               card.update("動画を確認中…");
               const { prepareVideo } = await import("./videoUpload");
-              const prepared = await prepareVideo(
-                file,
-                card.signal,
-                card.update,
-              );
-              const urls: { avc: string; av1?: string } = { avc: "" };
+              prepared ??= await prepareVideo(file, card.signal, card.update);
               for (const codec of ["avc", "av1"] as const) {
                 const output = prepared[codec];
-                if (!output) continue;
+                if (!output || urls[codec]) continue;
                 card.signal.throwIfAborted();
                 card.update(
                   `動画をアップロード中… ${codec === "avc" ? "H.264" : "AV1"}`,
@@ -2344,6 +2373,23 @@ export function AuthoringEditor({
                   );
                 urls[codec] = upload.public_url;
               }
+              card.signal.throwIfAborted();
+              card.update("動画を素材に登録中…");
+              const registered = await requestJson<{ item: InboxItem }>(
+                "/api/uploads",
+                {
+                  action: "register_video",
+                  ...urls,
+                  width: prepared.width,
+                  height: prepared.height,
+                  duration: prepared.duration,
+                  name: file.name,
+                },
+              );
+              setInboxItems((items) => [
+                registered.item,
+                ...items.filter((item) => item.id !== registered.item.id),
+              ]);
               card.signal.throwIfAborted();
               card.complete({
                 ...urls,
@@ -2376,7 +2422,7 @@ export function AuthoringEditor({
 
     setSyncingInbox(true);
     try {
-      if (activeMaterialTab === "photo") {
+      if (activeMaterialTab === "photo" || activeMaterialTab === "video") {
         await refreshInbox();
         return;
       }
@@ -2421,6 +2467,7 @@ export function AuthoringEditor({
   }, [editor?.isEditable, refreshInbox]);
 
   const visibleInboxItems = inboxItems.filter((item) => {
+    if (activeMaterialTab === "video") return item.source === "video";
     if (activeMaterialTab === "photo")
       return item.source === "photo" && item.kind === "photo";
     if (activeMaterialTab === "bluesky") return item.source === "bluesky";
@@ -2429,7 +2476,12 @@ export function AuthoringEditor({
 
   const handleMaterialTabKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-      const tabs: Array<MaterialTab> = ["photo", "bluesky", "raindrop"];
+      const tabs: Array<MaterialTab> = [
+        "photo",
+        "video",
+        "bluesky",
+        "raindrop",
+      ];
       const current = tabs.indexOf(activeMaterialTab);
       let next = current;
       if (event.key === "ArrowDown" || event.key === "ArrowRight")
@@ -2513,6 +2565,27 @@ export function AuthoringEditor({
     (itemId: string) => {
       const item = inboxItems.find((candidate) => candidate.id === itemId);
       if (!item) return;
+      if (item.source === "video") {
+        if (!editor?.isEditable) return;
+        const avc = videoAssetPath(item.payload.avc);
+        if (!avc) return;
+        ensureBodySelection(editor);
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: "video",
+            attrs: {
+              avc,
+              av1: videoAssetPath(item.payload.av1),
+              width: item.payload.width,
+              height: item.payload.height,
+            },
+          })
+          .run();
+        setMaterialStatus("動画を本文へ追加しました");
+        return;
+      }
       if (item.source === "photo" && item.kind === "photo") {
         void adoptInboxImage(itemId);
         return;
@@ -3029,9 +3102,11 @@ export function AuthoringEditor({
                 <strong>
                   {activeMaterialTab === "photo"
                     ? "写真"
-                    : activeMaterialTab === "bluesky"
-                      ? "Bluesky"
-                      : "Raindrop"}
+                    : activeMaterialTab === "video"
+                      ? "動画"
+                      : activeMaterialTab === "bluesky"
+                        ? "Bluesky"
+                        : "Raindrop"}
                 </strong>
                 <button
                   type="button"
@@ -3047,7 +3122,11 @@ export function AuthoringEditor({
                 </button>
               </div>
               {visibleInboxItems.length === 0 ? (
-                <p className="content-inbox__empty">素材はありません</p>
+                <p className="content-inbox__empty">
+                  {activeMaterialTab === "video"
+                    ? "本文へドロップした動画がここに残ります"
+                    : "素材はありません"}
+                </p>
               ) : (
                 <ol
                   className={`content-inbox__items content-inbox__items--${activeMaterialTab}`}
@@ -3066,6 +3145,7 @@ export function AuthoringEditor({
                             loadingInbox ||
                             (photoUrl === null &&
                               item.source !== "raindrop" &&
+                              item.source !== "video" &&
                               item.source !== "bluesky")
                           }
                           draggable={
@@ -3084,6 +3164,18 @@ export function AuthoringEditor({
                           {photoUrl && (
                             <img src={photoUrl} alt="" loading="lazy" />
                           )}
+                          {item.source === "video" &&
+                            videoAssetPath(item.payload.avc) && (
+                              <video
+                                className="content-inbox__video-preview"
+                                src={`${videoAssetPath(item.payload.avc)}#t=0.001`}
+                                preload="metadata"
+                                muted
+                                playsInline
+                                tabIndex={-1}
+                                aria-hidden="true"
+                              />
+                            )}
                           {activeMaterialTab !== "photo" && (
                             <span className="content-inbox__card">
                               {thumbnailUrl && (
@@ -3168,6 +3260,20 @@ export function AuthoringEditor({
                 onKeyDown={handleMaterialTabKeyDown}
               >
                 <PhotoMaterialIcon />
+              </button>
+              <button
+                type="button"
+                role="tab"
+                data-material-tab="video"
+                tabIndex={activeMaterialTab === "video" ? 0 : -1}
+                aria-selected={activeMaterialTab === "video"}
+                aria-controls="content-inbox-panel"
+                aria-label="動画"
+                title="動画"
+                onClick={() => setActiveMaterialTab("video")}
+                onKeyDown={handleMaterialTabKeyDown}
+              >
+                <VideoMaterialIcon />
               </button>
               <button
                 type="button"

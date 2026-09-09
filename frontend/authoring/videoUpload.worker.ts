@@ -120,7 +120,10 @@ globalThis.onmessage = async (event: MessageEvent<File>) => {
     }
     const avc = await encode("avc");
     const av1 = supportsAv1 ? await encode("av1") : undefined;
-    send({ kind: "result", avc, av1, width, height }, av1 ? [avc, av1] : [avc]);
+    send(
+      { kind: "result", avc, av1, width, height, duration },
+      av1 ? [avc, av1] : [avc],
+    );
   } catch (error) {
     send({
       kind: "error",

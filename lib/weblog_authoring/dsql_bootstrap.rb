@@ -93,6 +93,13 @@ module WeblogAuthoring
         )
       SQL
       connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.video_materials (
+          id TEXT PRIMARY KEY,
+          payload JSONB NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL
+        )
+      SQL
+      connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.inbox_items (
           id TEXT PRIMARY KEY,
           source TEXT NOT NULL,

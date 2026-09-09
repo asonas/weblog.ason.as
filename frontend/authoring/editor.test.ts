@@ -1095,6 +1095,155 @@ test("adopts an inbox photo and marks it as used by the current page", async () 
   }
 });
 
+test("reuses a video material after removing it from the body without uploading or consuming it", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  const saved: Array<Record<string, unknown>> = [];
+  const avc =
+    "/assets/uploads/2026/09/11111111-2222-3333-4444-555555555555.mp4";
+  const av1 =
+    "/assets/uploads/2026/09/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.mp4";
+  const bootstrap: EditorBootstrap = {
+    page_id: "page-id",
+    page_type: "named",
+    date: "",
+    name: "current",
+    title: "current",
+    body: "本文",
+    expected_updated_at: "2026-08-26T11:00:00+09:00",
+    save_message: "",
+    linked_pages: [],
+    linked_pages_has_more: false,
+  };
+  const pageResponse = {
+    ...bootstrap,
+    mode: "editor",
+    id: "page-id",
+    updated_at: bootstrap.expected_updated_at,
+  };
+  let saveComplete: (() => void) | undefined;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    requests.push(url);
+    let result: unknown;
+    if (url === "/api/inbox")
+      result = {
+        items: [
+          {
+            id: "video-1",
+            source: "video",
+            kind: "video",
+            source_id: "video-1",
+            occurred_at: bootstrap.expected_updated_at,
+            ingested_at: bootstrap.expected_updated_at,
+            expires_at: null,
+            used_in_pages: [],
+            payload: {
+              avc,
+              av1,
+              width: 1920,
+              height: 1080,
+              duration: 33.44,
+              name: "IMG_0010.MOV",
+            },
+          },
+        ],
+      };
+    else if (url === "/api/authoring/pages/page-id") {
+      const payload = JSON.parse(String(init?.body));
+      saved.push(payload);
+      result = { ...pageResponse, body: payload.body };
+      saveComplete?.();
+    } else if (url.startsWith("/api/page-names")) result = { names: [] };
+    else if (url.startsWith("/api/routes/") || url.startsWith("/api/related"))
+      result = pageResponse;
+    else throw new Error(`unexpected request: ${url}`);
+    return new Response(JSON.stringify(result), {
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const clickAndSave = async (selector: string) => {
+    const completed = new Promise<void>((resolve) => {
+      saveComplete = resolve;
+    });
+    await act(async () => {
+      const button = container.querySelector<HTMLButtonElement>(selector);
+      assert.ok(button);
+      button.click();
+      await Promise.race([
+        completed,
+        new Promise((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `Save did not complete: ${selector}; ${container.querySelector(".ProseMirror")?.innerHTML}`,
+                ),
+              ),
+            2000,
+          ),
+        ),
+      ]);
+    });
+  };
+  try {
+    await act(async () => {
+      root.render(createElement(AuthoringEditor, { bootstrap }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.deepEqual(
+      Array.from(container.querySelectorAll('[role="tab"]'), (tab) =>
+        tab.getAttribute("aria-label"),
+      ),
+      ["写真", "動画", "Bluesky", "Raindrop"],
+    );
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[role="tab"][aria-label="写真"]')
+        ?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+        );
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    });
+    assert.equal(document.activeElement?.getAttribute("aria-label"), "動画");
+    assert.equal(
+      container.querySelector(".content-inbox__excerpt")?.textContent,
+      "33秒 / 1920×1080",
+    );
+    await clickAndSave(".content-inbox__item");
+    assert.match(String(saved.at(-1)?.body), /:::video/);
+    assert.ok(String(saved.at(-1)?.body).includes(avc));
+    assert.ok(String(saved.at(-1)?.body).includes(av1));
+    await clickAndSave(
+      ".ProseMirror .video-node__actions > button:nth-child(2)",
+    );
+    assert.doesNotMatch(String(saved.at(-1)?.body), /:::video/);
+    assert.ok(container.querySelector(".content-inbox__item"));
+    await clickAndSave(".content-inbox__item");
+    assert.match(String(saved.at(-1)?.body), /:::video/);
+    assert.deepEqual(saved.at(-1)?.consumed_inbox_item_ids, []);
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(".content-inbox__sync")
+        ?.click();
+    });
+    assert.equal(requests.filter((url) => url === "/api/inbox").length, 2);
+    assert.ok(
+      requests.every(
+        (url) =>
+          !url.startsWith("/api/uploads") && !url.startsWith("/api/inbox/sync"),
+      ),
+    );
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
 test("inserts a Raindrop URL and marks it as used by the current page", async () => {
   const container = document.createElement("div");
   document.body.append(container);

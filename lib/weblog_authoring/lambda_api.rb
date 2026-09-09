@@ -16,6 +16,7 @@ require_relative "image_inbox"
 require_relative "inbox_thumbnail"
 require_relative "image_upload"
 require_relative "video_upload"
+require_relative "video_library"
 require_relative "inbox_sync"
 require_relative "mobile_upload"
 require_relative "models"
@@ -469,6 +470,10 @@ module WeblogAuthoring
       return json_response(403, error: "CSRF token mismatch") unless secure_equal?(expected_csrf_token, csrf_token_from(event))
 
       payload = parse_json(event)
+      if payload["action"] == "register_video"
+        item = VideoLibrary.new(database: @database, s3_client:, bucket: @asset_bucket).register(payload)
+        return json_response(200, "item" => item)
+      end
       if payload["content_type"] == "video/mp4" && payload["inbox_date"].nil?
         return json_response(200, VideoUpload.new(s3_client:, bucket: @asset_bucket, clock: @clock).create(size: payload["size"]))
       end
@@ -573,7 +578,11 @@ module WeblogAuthoring
       items = @database.list_inbox_items(source: optional_query(query, "source"), kind: optional_query(query, "kind"))
       usages = @database.list_inbox_item_usages.group_by(&:item_id)
       empty_usages = [] # @type var empty_usages: Array[InboxItemUsage]
-      json_response(200, "items" => items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, empty_usages)) })
+      result = items.map { |item| inbox_item_json(item, usages: usages.fetch(item.id, empty_usages)) }
+      if [nil, "video"].include?(optional_query(query, "source")) && [nil, "video"].include?(optional_query(query, "kind"))
+        result.concat(@database.list_video_materials)
+      end
+      json_response(200, "items" => result)
     end
 
     def webmentions_response(event)

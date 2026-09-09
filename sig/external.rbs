@@ -62,6 +62,10 @@ module WeblogAuthoring
     def self.new: (**untyped) -> untyped
   end
 
+  class VideoLibrary
+    def self.new: (**untyped) -> untyped
+  end
+
   class ImageInbox
     def self.new: (**untyped) -> untyped
   end

@@ -6,6 +6,7 @@ export type PreparedVideo = {
   av1?: File;
   width: number;
   height: number;
+  duration: number;
 };
 export type VideoWorkerResponse =
   | { kind: "progress"; message: string }
@@ -16,6 +17,7 @@ export type VideoWorkerResponse =
       av1?: ArrayBuffer;
       width: number;
       height: number;
+      duration: number;
     };
 
 export async function prepareVideo(
@@ -49,6 +51,7 @@ export async function prepareVideo(
           resolve({
             width: message.width,
             height: message.height,
+            duration: message.duration,
             avc: new File([message.avc], "video-h264.mp4", {
               type: "video/mp4",
             }),

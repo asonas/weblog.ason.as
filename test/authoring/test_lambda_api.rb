@@ -117,6 +117,10 @@ class LambdaApiTest < Minitest::Test
       @inbox_items.find { |item| item.id == id }
     end
 
+    def list_video_materials
+      []
+    end
+
     def list_inbox_item_usages
       @inbox_item_usages
     end

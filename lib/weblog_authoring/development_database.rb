@@ -17,7 +17,7 @@ require_relative "webmention_targets"
 
 module WeblogAuthoring
   class DevelopmentDatabase
-    SCHEMA_VERSION = 10
+    SCHEMA_VERSION = 11
     INBOX_RETENTION_SECONDS = 7 * 24 * 60 * 60
     ADOPTION_RETENTION_SECONDS = 14 * 24 * 60 * 60
     TOKYO_OFFSET = "+09:00"
@@ -1156,6 +1156,24 @@ module WeblogAuthoring
       end
     end
 
+    def save_video_material(id:, payload:)
+      with_connection do |database|
+        database.execute("INSERT INTO video_materials (id, payload, created_at) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING",
+                         [id, JSON.generate(payload), serialize_time(now)])
+      end
+      list_video_materials.find { |item| item.fetch("id") == id }
+    end
+
+    def list_video_materials
+      with_connection do |database|
+        database.execute("SELECT id, payload, created_at FROM video_materials ORDER BY created_at DESC, id DESC").map do |row|
+          { "id" => row[0], "source" => "video", "kind" => "video", "source_id" => row[0],
+            "payload" => JSON.parse(row[1]), "occurred_at" => row[2], "ingested_at" => row[2],
+            "expires_at" => nil, "used_in_pages" => [], }
+        end
+      end
+    end
+
     def list_inbox_items(source: nil, kind: nil)
       clauses = ["expires_at > ?"]
       values = [serialize_time(now)]
@@ -1582,6 +1600,17 @@ module WeblogAuthoring
     def create_schema(database)
       version = database.get_first_value("PRAGMA user_version").to_i
       return if version == SCHEMA_VERSION && table_exists?(database, "pages")
+      database.execute(<<~SQL)
+        CREATE TABLE IF NOT EXISTS video_materials (
+          id TEXT PRIMARY KEY,
+          payload TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      SQL
+      if version == 10 && table_exists?(database, "pages")
+        database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
+        return
+      end
       if version == 1 && table_exists?(database, "pages")
         migrate_date_pages_to_title_routes(database)
         create_inbox_schema(database)

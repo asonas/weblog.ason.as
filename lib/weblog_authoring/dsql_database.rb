@@ -1301,6 +1301,28 @@ module WeblogAuthoring
       end
     end
 
+    def save_video_material(id:, payload:)
+      with_connection do |connection|
+        connection.exec_params("INSERT INTO #{SCHEMA}.video_materials (id, payload, created_at) VALUES ($1, $2::jsonb, $3) ON CONFLICT(id) DO NOTHING",
+                               [id, JSON.generate(payload), now])
+      end
+      list_video_materials.find { |item| item.fetch("id") == id }
+    end
+
+    def list_video_materials
+      with_connection do |connection|
+        params = [] #: Array[untyped]
+        connection.exec_params("SELECT id, payload, created_at FROM #{SCHEMA}.video_materials ORDER BY created_at DESC, id DESC", params).map do |row|
+          payload = row.fetch("payload")
+          timestamp = parse_time(row.fetch("created_at")).iso8601
+          usages = [] #: Array[untyped]
+          { "id" => row.fetch("id"), "source" => "video", "kind" => "video", "source_id" => row.fetch("id"),
+            "payload" => payload.is_a?(String) ? JSON.parse(payload) : payload, "occurred_at" => timestamp,
+            "ingested_at" => timestamp, "expires_at" => nil, "used_in_pages" => usages, }
+        end
+      end
+    end
+
     def list_inbox_items(source: nil, kind: nil)
       timestamp = now
       with_connection do |connection|
