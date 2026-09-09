@@ -85,6 +85,138 @@ const { markdownForSource } = await import("./markdown");
 const { SearchPage, SiteSearch } = await import("./search");
 const { createVideoUploadCard } = await import("./VideoUploadCard");
 
+test("highlights image Markdown during range selection and copies without changing the document", () => {
+  for (const editable of [true, false]) {
+    for (const backwards of [false, true]) {
+      const element = document.createElement("div");
+      document.body.append(element);
+      let updates = 0;
+      const editor = new Editor({
+        element,
+        extensions: EDITOR_EXTENSIONS,
+        editable,
+        content: "前半の文章\n\n![写真](/assets/photo.jpg)\n\n後半の文章",
+        contentType: "markdown",
+        onUpdate: () => updates++,
+      });
+      try {
+        const original = editor.getJSON();
+        const from = 3;
+        const to = editor.state.doc.content.size - 3;
+        editor.view.dom.dispatchEvent(
+          new MouseEvent("mousedown", { bubbles: true }),
+        );
+        editor.view.dispatch(
+          editor.state.tr.setSelection(
+            TextSelection.create(
+              editor.state.doc,
+              backwards ? to : from,
+              backwards ? from : to,
+            ),
+          ),
+        );
+        const selection = editor.state.selection.toJSON();
+        const selectedImage = editor.view.dom.querySelector(
+          ".selectable-image--selected",
+        );
+        assert.ok(selectedImage);
+        assert.equal(selectedImage.querySelectorAll("img").length, 1);
+        const markdown = selectedImage.querySelector(
+          ".selected-image-markdown",
+        );
+        assert.equal(markdown?.textContent, "![写真](/assets/photo.jpg)");
+        assert.equal(markdown?.hasAttribute("hidden"), false);
+        document.dispatchEvent(new MouseEvent("mouseup"));
+        const data = new Map<string, string>([["text/html", "<img>"]]);
+        const event = new ClipboardEvent("copy", {
+          bubbles: true,
+          cancelable: true,
+        });
+        Object.defineProperty(event, "clipboardData", {
+          value: {
+            clearData: () => data.clear(),
+            setData: (type: string, value: string) => data.set(type, value),
+          },
+        });
+        editor.view.dom.dispatchEvent(event);
+        assert.equal(event.defaultPrevented, true);
+        assert.deepEqual(
+          [...data],
+          [["text/plain", "の文章\n\n![写真](/assets/photo.jpg)\n\n後半の"]],
+        );
+        assert.deepEqual(editor.getJSON(), original);
+        assert.deepEqual(editor.state.selection.toJSON(), selection);
+        assert.equal(updates, 0);
+        const nativeSelection = window.getSelection();
+        nativeSelection?.selectAllChildren(editor.view.dom);
+        editor.view.dom.dispatchEvent(new window.FocusEvent("blur"));
+        assert.equal(
+          editor.view.dom.querySelector(".selectable-image--selected"),
+          null,
+        );
+        assert.equal(markdown?.hasAttribute("hidden"), true);
+        assert.equal(editor.state.selection.empty, true);
+        assert.equal(editor.state.selection.head, backwards ? from : to);
+        assert.equal(nativeSelection?.rangeCount, 0);
+        assert.deepEqual(editor.getJSON(), original);
+        assert.equal(updates, 0);
+        editor.view.dom.dispatchEvent(new window.FocusEvent("focus"));
+        assert.equal(markdown?.hasAttribute("hidden"), true);
+        assert.equal(editor.state.selection.empty, true);
+        editor.commands.setTextSelection(1);
+        assert.equal(editor.view.dom.querySelectorAll("img").length, 1);
+        assert.equal(
+          editor.view.dom.querySelector(".selectable-image--selected"),
+          null,
+        );
+        assert.equal(markdown?.hasAttribute("hidden"), true);
+        assert.deepEqual(editor.getJSON(), original);
+        assert.equal(updates, 0);
+      } finally {
+        editor.destroy();
+        element.remove();
+      }
+    }
+  }
+});
+
+test("includes an image when dragging onto it from the following paragraph", () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const editor = new Editor({
+    element,
+    extensions: EDITOR_EXTENSIONS,
+    content: "前半の文章\n\n![写真](/assets/photo.jpg)\n\n後半の文章",
+    contentType: "markdown",
+  });
+  try {
+    const original = editor.getJSON();
+    editor.commands.setTextSelection(14);
+    const paragraph = editor.view.dom.lastElementChild;
+    const image = editor.view.dom.querySelector("img");
+    assert.ok(paragraph);
+    assert.ok(image);
+    paragraph.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, buttons: 1 }),
+    );
+    assert.equal(editor.state.selection.anchor, 14);
+    image.dispatchEvent(
+      new MouseEvent("mousemove", { bubbles: true, buttons: 1 }),
+    );
+    assert.ok(editor.view.dom.querySelector(".selectable-image--selected"));
+    assert.equal(editor.state.selection.anchor, 14);
+    assert.equal(
+      editor.state.selection.content().content.firstChild?.textContent,
+      "",
+    );
+    assert.match(editor.state.selection.content().content.toString(), /image/);
+    assert.deepEqual(editor.getJSON(), original);
+  } finally {
+    editor.destroy();
+    element.remove();
+  }
+});
+
 test("keeps upload progress out of Markdown and inserts at the tracked position without moving the cursor", () => {
   const editor = new Editor({
     extensions: EDITOR_EXTENSIONS,

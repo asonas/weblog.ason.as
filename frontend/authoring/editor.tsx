@@ -1,5 +1,4 @@
 import { type Editor, Extension, Node as TiptapNode } from "@tiptap/core";
-import Image from "@tiptap/extension-image";
 import { Markdown } from "@tiptap/markdown";
 import type { NodeType } from "@tiptap/pm/model";
 import {
@@ -22,8 +21,10 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { MarkdownClipboard } from "./MarkdownClipboard";
 import { markdownForEditor, markdownForSource } from "./markdown";
 import { AUTHORING_TELEMETRY_FLUSH_EVENT } from "./performanceTelemetry";
+import { SelectableImage } from "./SelectableImage";
 import { SpeakerDeckPlayer } from "./speakerDeck";
 import { UniverseGraph } from "./UniverseGraph";
 import { Video, videoAssetPath } from "./Video";
@@ -1464,13 +1465,14 @@ export const EDITOR_EXTENSIONS = [
     },
   }),
   WikiLinks,
-  Image.configure({ allowBase64: false }),
+  SelectableImage.configure({ allowBase64: false }),
   Video,
   VideoUploadCards,
   YouTubePlayer,
   BlueskyPlayer,
   SpeakerDeckPlayer,
   Markdown.configure({ indentation: { style: "space", size: 2 } }),
+  MarkdownClipboard,
 ];
 
 function isJsonObject(value: unknown): value is JsonObject {

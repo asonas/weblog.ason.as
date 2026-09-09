@@ -2586,6 +2586,26 @@ h2 {
   block-size: auto;
 }
 
+.selectable-image {
+  position: relative;
+}
+
+.selectable-image--selected > img {
+  /* Keep the image's space so dragging does not move the text below it. */
+  visibility: hidden;
+}
+
+.selected-image-markdown {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  max-inline-size: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
 .speakerdeck-player iframe {
   display: block;
   width: 100%;
