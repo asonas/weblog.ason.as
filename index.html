@@ -6,6 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="Hatena::Bookmark" content="nocomment">
     <title>weblog.ason.as</title>
+    <script>
+      if (location.pathname === "/" && !new URLSearchParams(location.search).has("new")) {
+        document.documentElement.dataset.home = "true";
+      }
+    </script>
     <link rel="alternate" type="application/atom+xml" title="weblog.ason.as" href="/feed.xml">
     <link rel="stylesheet" href="/frontend/authoring/styles.css">
   </head>

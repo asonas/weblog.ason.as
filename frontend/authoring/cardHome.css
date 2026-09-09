@@ -12,6 +12,7 @@
   border-bottom: 1px solid var(--separator);
 }
 .card-home__tags a {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   min-height: 36px;
@@ -147,6 +148,14 @@
 .card-home__content:focus {
   outline: none;
 }
+
+.card-home__content[aria-busy="true"] {
+  min-block-size: 100svh;
+}
+
+.card-home__content[aria-busy="true"] .card-home__paging {
+  visibility: hidden;
+}
 .card-home__paging button {
   font: inherit;
   cursor: pointer;
@@ -176,8 +185,34 @@
   flex-shrink: 0;
 }
 .card-home .cover-journal__hero {
+  position: relative;
+  isolation: isolate;
   min-block-size: 440px;
   padding: 160px max(40px, calc((100vw - 1200px) / 2)) 40px;
+}
+
+.cover-journal__photo {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  z-index: -2;
+}
+
+.cover-journal__photo > img {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.card-home .cover-journal__hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgb(5 29 34 / 30%), rgb(5 29 34 / 86%));
 }
 .card-home .cover-journal__lead {
   max-inline-size: 1200px;
@@ -236,6 +271,7 @@ html[data-header-scrolled="true"] .card-home__about {
     grid-auto-flow: column;
     grid-auto-columns: max-content;
     justify-content: start;
+    justify-items: start;
     overflow-x: auto;
     padding: 16px 20px;
   }

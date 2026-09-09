@@ -75,6 +75,33 @@ const { CoverJournalHome, HeaderSearch, editorViewMode } = await import(
   "./main"
 );
 const { CardHome } = await import("./CardHome");
+const { CoverPhoto } = await import("./CoverPhoto");
+
+test("cover photos fall back to the original when a preview is unavailable", async () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      createElement(CoverPhoto, { url: "/assets/photo.png", hero: true }),
+    );
+  });
+  const image = container.querySelector("img");
+  assert.ok(image);
+  assert.equal(image.getAttribute("src"), "/assets/photo.png");
+  const source = container.querySelector("picture source");
+  assert.ok(source);
+  assert.equal(source.getAttribute("media"), "(max-width: 600px)");
+  assert.equal(
+    source.getAttribute("srcset"),
+    "/assets/previews/640/photo.png.webp 640w, /assets/previews/1280/photo.png.webp 1280w",
+  );
+  await act(async () => {
+    image.dispatchEvent(new dom.window.Event("error"));
+  });
+  assert.equal(image.getAttribute("src"), "/assets/photo.png");
+  assert.equal(container.querySelector("source"), null);
+  await act(async () => root.unmount());
+});
 
 const editorBootstrap = {
   page_id: "page-id",

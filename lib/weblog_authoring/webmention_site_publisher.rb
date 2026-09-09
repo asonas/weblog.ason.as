@@ -9,6 +9,7 @@ require "uri"
 
 require_relative "markdown"
 require_relative "cover_image"
+require_relative "cover_variants"
 
 module WeblogAuthoring
   class WebmentionSitePublisher
@@ -55,6 +56,7 @@ module WeblogAuthoring
       end
 
       shell = site_shell
+      CoverVariants.new(s3_client: @s3_client, bucket: @site_bucket).create(CoverImage.resolve(page))
       body = render_page(page, source_url: outbox.fetch("payload").fetch("source_url"))
       html = shell.sub('<div id="authoring-root"></div>') { %(<div id="authoring-root">#{body}</div>) }
       raise "site shell does not contain authoring-root" if html == shell

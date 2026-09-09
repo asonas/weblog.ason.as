@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { CoverPhoto } from "./CoverPhoto";
 import { HomeCards } from "./HomeCards";
 import "./cardHome.css";
 
@@ -117,15 +118,9 @@ export function CardHome({
     <div className="cover-journal card-home" id="home-top">
       <header
         className="cover-journal__hero"
-        style={
-          featured?.image_url
-            ? {
-                backgroundImage: `linear-gradient(180deg, rgb(5 29 34 / 30%), rgb(5 29 34 / 86%)), url(${JSON.stringify(featured.image_url)})`,
-              }
-            : undefined
-        }
         data-has-cover={String(Boolean(featured?.image_url))}
       >
+        {featured?.image_url && <CoverPhoto url={featured.image_url} hero />}
         {header}
         {featured && (
           <div className="cover-journal__lead">

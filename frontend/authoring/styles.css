@@ -1810,9 +1810,19 @@ html[data-universe="on"] .linked-pages {
   --atlas-paper: oklch(0.955 0 0);
 }
 
+html[data-home="true"] .page-shell,
 .page-shell:has(.cover-journal) {
   max-inline-size: none;
   padding: 0;
+}
+
+html[data-home="true"] > body > .site-header {
+  display: none;
+}
+
+html[data-home="true"] #authoring-root {
+  display: flow-root;
+  min-block-size: 100svh;
 }
 
 .cover-journal {

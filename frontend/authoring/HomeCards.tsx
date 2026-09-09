@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { HomePage } from "./CardHome";
+import { CoverPhoto } from "./CoverPhoto";
 import { coverPalettes } from "./coverPalettes";
 import "./homeCards.css";
 
@@ -48,12 +49,7 @@ export function HomeCards({ entries }: { entries: HomePage[] }) {
               >
                 <div className="cf-media">
                   {page.image_url ? (
-                    <img
-                      className="cf-photo"
-                      src={page.image_url}
-                      alt=""
-                      loading="lazy"
-                    />
+                    <CoverPhoto url={page.image_url} />
                   ) : (
                     <div
                       className="cf-generated"

@@ -66,6 +66,10 @@ class WebmentionSitePublisherTest < Minitest::Test
       puts << request
     end
 
+    def head_object(**)
+      {}
+    end
+
     def delete_object(**request)
       deletes << request
     end

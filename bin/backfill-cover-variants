@@ -1,0 +1,28 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "optparse"
+require_relative "../lib/weblog_authoring/dsql_database"
+require_relative "../lib/weblog_authoring/cover_image"
+require_relative "../lib/weblog_authoring/cover_variants"
+
+options = { apply: false }
+OptionParser.new do |parser|
+  parser.on("--host HOST") { |value| options[:host] = value }
+  parser.on("--site-bucket BUCKET") { |value| options[:bucket] = value }
+  parser.on("--apply") { options[:apply] = true }
+end.parse!
+host = options.fetch(:host) { raise OptionParser::MissingArgument, "--host" }
+bucket = options.fetch(:bucket) { raise OptionParser::MissingArgument, "--site-bucket" }
+pool = AuroraDsql::Pg.create_pool(host:, user: "admin", application_name: "cover-variants-backfill")
+database = WeblogAuthoring::DsqlDatabase.new(host:, content_dir: ".", pool:)
+urls = database.list_pages.select { |page| page.status == "published" && !page.empty? }
+  .filter_map { |page| WeblogAuthoring::CoverImage.resolve(page) }.uniq
+puts JSON.pretty_generate(mode: options[:apply] ? "apply" : "dry-run", count: urls.length, images: urls)
+if options[:apply]
+  variants = WeblogAuthoring::CoverVariants.new(
+    s3_client: Aws::S3::Client.new(region: "ap-northeast-1"), bucket:
+  )
+  urls.each { |url| variants.create(url) }
+end

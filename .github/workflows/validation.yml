@@ -51,6 +51,9 @@ jobs:
       - name: Install locked dependencies
         run: mise run setup
 
+      - name: Install image processing library
+        run: sudo apt-get update && sudo apt-get install -y libvips-tools
+
       - name: Run portable checks and build site
         run: mise run check:portable
 
