@@ -2473,10 +2473,6 @@ h2 {
 }
 
 @media (max-width: 48rem) {
-  html[data-view="article-editing"] .editor-video-upload {
-    padding-block-start: calc(var(--space-16) * 2 + var(--space-4));
-  }
-
   html[data-view="reading"] .site-header .header-nav,
   html[data-view="article-editing"] .site-header .header-nav {
     grid-template-columns: minmax(0, 1fr) auto auto;
@@ -2631,35 +2627,81 @@ h2 {
   margin-block: 0.5rem;
 }
 
-.video-upload-control {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 44px;
-}
-
-.editor-video-upload {
+.video-upload-card {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 1rem;
+  margin-block: 1.25rem;
   padding: 1rem;
+  border: 1px solid var(--separator);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: normal;
 }
-
-.editor-video-upload button {
-  min-height: 44px;
+.video-upload-card__icon {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  color: var(--accent);
+  background: var(--quiet-fill);
+  border-radius: 3px;
 }
-
-.editor-video-upload__file {
-  flex-basis: 100%;
-  margin: 0;
+.video-upload-card__icon svg {
+  width: 32px;
+  height: 32px;
+}
+.video-upload-card__info {
+  flex: 1;
+  min-width: 0;
+}
+.video-upload-card__info strong {
+  display: block;
   overflow-wrap: anywhere;
 }
-
-.video-upload-control input {
-  max-width: 100%;
+.video-upload-card__status {
+  display: block;
+  margin-block: 0.5rem;
+}
+.video-upload-card progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+.video-upload-card progress[hidden] {
+  display: none;
+}
+.video-upload-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.video-upload-card button {
   min-height: 44px;
+  font-size: 0.8125rem;
+}
+.video-upload-card--error {
+  border-color: #a7654e;
+}
+@media (max-width: 520px) {
+  .video-upload-card {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+  .video-upload-card__icon {
+    width: 48px;
+    height: 48px;
+  }
+  .video-upload-card__actions {
+    margin-left: auto;
+  }
 }
 
 .ProseMirror .youtube-player,

@@ -27,6 +27,7 @@ import { AUTHORING_TELEMETRY_FLUSH_EVENT } from "./performanceTelemetry";
 import { SpeakerDeckPlayer } from "./speakerDeck";
 import { UniverseGraph } from "./UniverseGraph";
 import { Video } from "./Video";
+import { createVideoUploadCard, VideoUploadCards } from "./VideoUploadCard";
 
 declare global {
   interface Window {
@@ -1433,6 +1434,7 @@ export const EDITOR_EXTENSIONS = [
   WikiLinks,
   Image.configure({ allowBase64: false }),
   Video,
+  VideoUploadCards,
   YouTubePlayer,
   BlueskyPlayer,
   SpeakerDeckPlayer,
@@ -1670,8 +1672,6 @@ export function AuthoringEditor({
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
-  const [uploadingVideo, setUploadingVideo] = useState(false);
-  const [videoFileName, setVideoFileName] = useState("");
   const videoAbortRef = useRef<AbortController | null>(null);
   useEffect(() => () => videoAbortRef.current?.abort(), []);
   const [draggingImages, setDraggingImages] = useState(false);
@@ -2250,7 +2250,6 @@ export function AuthoringEditor({
         return;
       }
       setUploadingImages(true);
-      setVideoFileName("");
       setImageUploadStatus("画像を処理中…");
       setStatus("画像を処理中…");
       try {
@@ -2283,7 +2282,12 @@ export function AuthoringEditor({
 
   const handleVideoFiles = useCallback(
     async (files: File[]) => {
-      if (!editor || !files.length || uploadingImages || videoAbortRef.current)
+      if (
+        !editor?.isEditable ||
+        !files.length ||
+        uploadingImages ||
+        videoAbortRef.current
+      )
         return;
       if (!draftRef.current.title.trim()) {
         setImageUploadStatus("先にタイトルを入力してください");
@@ -2292,73 +2296,70 @@ export function AuthoringEditor({
       }
       const controller = new AbortController();
       videoAbortRef.current = controller;
-      setVideoFileName(files[0].name);
-      setUploadingVideo(true);
-      setImageUploadStatus("動画を確認中…");
+      setImageUploadStatus("");
+      ensureBodySelection(editor);
+      const cards = files.map((file) => ({
+        file,
+        card: createVideoUploadCard(editor, file, controller.signal),
+      }));
       try {
-        const { prepareVideo } = await import("./videoUpload");
-        for (const file of files) {
-          setVideoFileName(file.name);
-          const prepared = await prepareVideo(
-            file,
-            controller.signal,
-            setImageUploadStatus,
-          );
-          const urls: { avc: string; av1?: string } = { avc: "" };
-          for (const codec of ["avc", "av1"] as const) {
-            const output = prepared[codec];
-            if (!output) continue;
-            controller.signal.throwIfAborted();
-            setImageUploadStatus("動画をアップロード中…");
-            const upload = await requestJson<UploadResponse>("/api/uploads", {
-              content_type: "video/mp4",
-              size: output.size,
-            });
-            controller.signal.throwIfAborted();
-            const form = new FormData();
-            for (const [key, value] of Object.entries(upload.fields))
-              form.append(key, value);
-            form.append("file", output);
-            const response = await fetch(upload.upload_url, {
-              method: "POST",
-              body: form,
-              signal: controller.signal,
-            });
-            if (!response.ok)
-              throw new Error(
-                "動画を送信できませんでした。もう一度試してください",
+        for (const { file, card } of cards) {
+          while (!card.signal.aborted) {
+            try {
+              card.update("動画を確認中…");
+              const { prepareVideo } = await import("./videoUpload");
+              const prepared = await prepareVideo(
+                file,
+                card.signal,
+                card.update,
               );
-            urls[codec] = upload.public_url;
-          }
-          controller.signal.throwIfAborted();
-          if (editor.isDestroyed) return;
-          ensureBodySelection(editor);
-          editor
-            .chain()
-            .focus()
-            .insertContent({
-              type: "video",
-              attrs: {
+              const urls: { avc: string; av1?: string } = { avc: "" };
+              for (const codec of ["avc", "av1"] as const) {
+                const output = prepared[codec];
+                if (!output) continue;
+                card.signal.throwIfAborted();
+                card.update(
+                  `動画をアップロード中… ${codec === "avc" ? "H.264" : "AV1"}`,
+                );
+                const upload = await requestJson<UploadResponse>(
+                  "/api/uploads",
+                  {
+                    content_type: "video/mp4",
+                    size: output.size,
+                  },
+                );
+                card.signal.throwIfAborted();
+                const form = new FormData();
+                for (const [key, value] of Object.entries(upload.fields))
+                  form.append(key, value);
+                form.append("file", output);
+                const response = await fetch(upload.upload_url, {
+                  method: "POST",
+                  body: form,
+                  signal: card.signal,
+                });
+                if (!response.ok)
+                  throw new Error(
+                    "動画を送信できませんでした。もう一度試してください",
+                  );
+                urls[codec] = upload.public_url;
+              }
+              card.signal.throwIfAborted();
+              card.complete({
                 ...urls,
                 width: prepared.width,
                 height: prepared.height,
-              },
-            })
-            .run();
+              });
+              break;
+            } catch (error) {
+              if (!(await card.retry(error))) break;
+            }
+          }
+          card.dispose();
         }
-        setImageUploadStatus("動画を追加しました");
-      } catch (error) {
-        if (!editor.isDestroyed)
-          setImageUploadStatus(
-            controller.signal.aborted
-              ? "動画の追加をキャンセルしました"
-              : error instanceof Error
-                ? error.message
-                : "動画を追加できませんでした",
-          );
       } finally {
+        for (const { card } of cards) card.dispose();
         videoAbortRef.current = null;
-        setUploadingVideo(false);
       }
     },
     [editor, uploadingImages],
@@ -2984,9 +2985,7 @@ export function AuthoringEditor({
             onClick={(event) => {
               if (
                 event.target instanceof Element &&
-                event.target.closest(
-                  ".editor-shell__actions, .editor-video-upload",
-                )
+                event.target.closest(".editor-shell__actions")
               )
                 return;
               if (!editor || editor.view.dom.contains(event.target as Node))
@@ -3004,45 +3003,10 @@ export function AuthoringEditor({
                 ここにドロップして記事へ追加
               </div>
             )}
-            {editor?.isEditable && (
-              <div className="editor-video-upload">
-                {!uploadingVideo && (
-                  <label className="video-upload-control">
-                    動画を追加
-                    <input
-                      type="file"
-                      accept="video/*,.mov,.mp4,.webm,.mkv"
-                      disabled={uploadingVideo || uploadingImages}
-                      onChange={(event) => {
-                        const files = Array.from(
-                          event.currentTarget.files || [],
-                        );
-                        event.currentTarget.value = "";
-                        void handleVideoFiles(files);
-                      }}
-                    />
-                  </label>
-                )}
-                {videoFileName && (
-                  <p className="editor-video-upload__file" aria-live="polite">
-                    {uploadingVideo ? "追加中の動画" : "選択した動画"}:{" "}
-                    {videoFileName}
-                  </p>
-                )}
-                {uploadingVideo && (
-                  <button
-                    type="button"
-                    onClick={() => videoAbortRef.current?.abort()}
-                  >
-                    キャンセル
-                  </button>
-                )}
-                {imageUploadStatus && (
-                  <span className="editor-shell__upload-status" role="status">
-                    {imageUploadStatus}
-                  </span>
-                )}
-              </div>
+            {editor?.isEditable && imageUploadStatus && (
+              <p className="editor-shell__upload-status" role="status">
+                {imageUploadStatus}
+              </p>
             )}
             <div
               className="wysiwyg-editor"

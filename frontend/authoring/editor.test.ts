@@ -83,6 +83,123 @@ const {
 const { imageDimensions, resizedDimensions } = await import("./imageMetadata");
 const { markdownForSource } = await import("./markdown");
 const { SearchPage, SiteSearch } = await import("./search");
+const { createVideoUploadCard } = await import("./VideoUploadCard");
+
+test("keeps upload progress out of Markdown and inserts at the tracked position without moving the cursor", () => {
+  const editor = new Editor({
+    extensions: EDITOR_EXTENSIONS,
+    content: "タイトル\n\n前半後半",
+    contentType: "markdown",
+  });
+  editor.commands.setTextSelection(9);
+  const controller = new AbortController();
+  const card = createVideoUploadCard(
+    editor,
+    new File(["video"], "clip.mov"),
+    controller.signal,
+  );
+  const original = editor.getMarkdown();
+  card.update("動画を変換中… AV1 82%");
+  assert.equal(editor.getMarkdown(), original);
+  editor.commands.insertContentAt(8, "追加");
+  editor.commands.setTextSelection(1);
+  card.complete({
+    avc: "/assets/uploads/2026/09/11111111-2222-3333-4444-555555555555.mp4",
+    width: 1920,
+    height: 1080,
+  });
+  assert.match(
+    editor.getMarkdown(),
+    /前追加半\n\n:::video .*1920x1080 :::\n\n後半/,
+  );
+  assert.equal(editor.state.selection.from, 1);
+  assert.equal(editor.view.dom.querySelector(".video-upload-card"), null);
+  card.dispose();
+  editor.destroy();
+});
+
+test("retries an inline upload and cancels it without inserting a late result", async () => {
+  const editor = new Editor({
+    extensions: EDITOR_EXTENSIONS,
+    content: "タイトル\n\n本文",
+    contentType: "markdown",
+  });
+  editor.commands.setTextSelection(8);
+  const card = createVideoUploadCard(
+    editor,
+    new File(["video"], "clip.mov"),
+    new AbortController().signal,
+  );
+  const retry = card.retry(new Error("送信できませんでした"));
+  const buttons = () => Array.from(editor.view.dom.querySelectorAll("button"));
+  buttons()
+    .find((b) => b.textContent === "再試行")
+    ?.click();
+  assert.equal(await retry, true);
+  card.update("動画を変換中… 20%");
+  buttons()
+    .find((b) => b.textContent === "キャンセル")
+    ?.click();
+  assert.equal(card.signal.aborted, true);
+  card.complete({
+    avc: "/assets/uploads/2026/09/11111111-2222-3333-4444-555555555555.mp4",
+    width: 1920,
+    height: 1080,
+  });
+  assert.equal(editor.getMarkdown(), "タイトル\n\n本文");
+  card.dispose();
+  editor.destroy();
+});
+
+test("aborts an upload when its insertion position is deleted", () => {
+  const editor = new Editor({
+    extensions: EDITOR_EXTENSIONS,
+    content: "タイトル\n\n本文です",
+    contentType: "markdown",
+  });
+  editor.commands.setTextSelection(8);
+  const card = createVideoUploadCard(
+    editor,
+    new File(["video"], "clip.mov"),
+    new AbortController().signal,
+  );
+  editor.commands.deleteRange({ from: 7, to: 10 });
+  assert.equal(card.signal.aborted, true);
+  card.dispose();
+  editor.destroy();
+});
+
+test("keeps multiple dropped videos in order at their shared insertion position", () => {
+  const editor = new Editor({
+    extensions: EDITOR_EXTENSIONS,
+    content: "タイトル\n\n前後",
+    contentType: "markdown",
+  });
+  editor.commands.setTextSelection(8);
+  const signal = new AbortController().signal;
+  const first = createVideoUploadCard(
+    editor,
+    new File(["video"], "first.mov"),
+    signal,
+  );
+  const second = createVideoUploadCard(
+    editor,
+    new File(["video"], "second.mov"),
+    signal,
+  );
+  const avc =
+    "/assets/uploads/2026/09/11111111-2222-3333-4444-555555555555.mp4";
+  first.complete({ avc, width: 1920, height: 1080 });
+  assert.equal(second.signal.aborted, false);
+  second.complete({ avc, width: 1080, height: 1920 });
+  assert.match(
+    editor.getMarkdown(),
+    /前\n\n:::video .*1920x1080 :::\n\n:::video .*1080x1920 :::\n\n後/,
+  );
+  first.dispose();
+  second.dispose();
+  editor.destroy();
+});
 
 test("preserves uploaded video sources through Markdown save and re-edit", () => {
   const avc =
