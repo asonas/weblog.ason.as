@@ -127,7 +127,6 @@ module WeblogAuthoring
           </div>
           #{render_mentions(mentions)}
           <div data-public-universe="#{CGI.escapeHTML(JSON.generate({ route: page.route, id: page.id, wiki: rendered.links.map(&:name).uniq, urls: WeblogAuthoring.extract_external_urls(page.body.to_s) }))}"></div>
-          <footer class="article-actions"><a href="/editor/#{WeblogAuthoring.encoded_route(page.id)}">この記事を編集</a></footer>
         </article>
       HTML
     end

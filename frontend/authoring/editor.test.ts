@@ -348,6 +348,7 @@ test("preserves uploaded video sources through Markdown save and re-edit", () =>
   assert.equal(editor.getMarkdown().trim(), source);
   assert.match(editor.getHTML(), /preload="metadata"/);
   assert.match(editor.getHTML(), /av01/);
+  assert.doesNotMatch(editor.getHTML(), /動画をダウンロード/);
   editor.commands.setContent(editor.getMarkdown(), { contentType: "markdown" });
   assert.equal(editor.getJSON().content?.[0].attrs?.avc, avc);
   assert.equal(editor.getJSON().content?.[0].attrs?.av1, av1);

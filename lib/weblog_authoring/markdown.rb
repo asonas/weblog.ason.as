@@ -228,8 +228,8 @@ module WeblogAuthoring
           avc, av1, width, height = video.captures
           dimensions = width ? %( width="#{width}" height="#{height}") : ""
           sources = av1 ? %(<source src="#{av1}#t=0.001" type='video/mp4; codecs="av01.0.08M.08"' />) : ""
-          player = %(<video controls playsinline preload="metadata"#{dimensions} style="aspect-ratio: #{width || 16} / #{height || 9}" data-avc="#{avc}"#{av1 ? %( data-av1="#{av1}") : ""}>#{sources}<source src="#{avc}#t=0.001" type="video/mp4" /><a href="#{avc}">動画をダウンロード</a></video>)
-          return %(#{" " * indent}<figure class="article-video">#{player}<figcaption><a href="#{avc}">動画をダウンロード</a></figcaption></figure>\n) if self.class.context[:progressive]
+          player = %(<video controls playsinline preload="metadata"#{dimensions} style="aspect-ratio: #{width || 16} / #{height || 9}" data-avc="#{avc}"#{av1 ? %( data-av1="#{av1}") : ""}>#{sources}<source src="#{avc}#t=0.001" type="video/mp4" /></video>)
+          return %(#{" " * indent}<figure class="article-video">#{player}</figure>\n) if self.class.context[:progressive]
 
           return %(#{" " * indent}#{player}\n)
         end

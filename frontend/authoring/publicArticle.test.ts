@@ -77,7 +77,7 @@ test("site routing preserves article objects and selects the app shell only for 
 
 test("offscreen media keep their waiting state until they approach the viewport", async () => {
   const dom = new JSDOM(
-    '<article><span class="article-image"><img src="/assets/slow.webp" loading="lazy"></span><figure class="article-video"><video></video><a href="/assets/video.mp4">動画をダウンロード</a></figure></article>',
+    '<article><span class="article-image"><img src="/assets/slow.webp" loading="lazy"></span><figure class="article-video"><video></video></figure></article>',
     { url: "https://weblog.ason.as/article" },
   );
   let intersect:
@@ -124,10 +124,6 @@ test("offscreen media keep their waiting state until they approach the viewport"
     video.dispatchEvent(new dom.window.Event("loadeddata"));
     assert.equal(image.parentElement.dataset.mediaState, "ready");
     assert.equal(video.parentElement.dataset.mediaState, "ready");
-    assert.equal(
-      document.querySelector("a")?.textContent,
-      "動画をダウンロード",
-    );
   } finally {
     dom.window.close();
   }

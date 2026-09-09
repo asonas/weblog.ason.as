@@ -19,6 +19,11 @@ class TestMarkdown < Minitest::Test
     assert_includes portrait, 'style="aspect-ratio: 1080 / 1920"'
     assert_operator html.index(av1), :<, html.index('<source src="' + avc)
     refute_includes html, "autoplay"
+    refute_includes html, "動画をダウンロード"
+    refute_includes html, "<a "
+    progressive_html = renderer.render(":::video #{avc} :::", mode: "public", progressive: true).html
+    refute_includes progressive_html, "動画をダウンロード"
+    refute_includes progressive_html, "<figcaption>"
     assert_includes renderer.render(":::video #{avc} :::", mode: "public").html, '<source src="' + avc
     refute_includes renderer.render(":::video https://evil.example/a.mp4 :::", mode: "public").html, "<video"
     refute_includes renderer.render("```\n:::video #{avc} :::\n```", mode: "public").html, "<video"

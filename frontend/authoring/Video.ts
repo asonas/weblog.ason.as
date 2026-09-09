@@ -89,7 +89,6 @@ export const Video = Node.create({
           ]
         : []),
       ["source", { src: `${avc}#t=0.001`, type: "video/mp4" }],
-      ["a", { href: avc }, "動画をダウンロード"],
     ];
   },
   addNodeView() {

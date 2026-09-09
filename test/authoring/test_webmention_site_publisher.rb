@@ -150,7 +150,8 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_equal "https://weblog.ason.as/%E8%A8%98%E4%BA%8B", head.elements["link[@rel='canonical']"].attributes["href"]
     assert_nil head.elements["meta[@property='og:image']"]
     assert_includes html, 'data-public-article="1"'
-    assert_includes html, 'href="/editor/page-id"'
+    refute_includes html, "この記事を編集"
+    refute_includes html, 'href="/editor/page-id"'
     article = REXML::Document.new(html[/<article\b.*<\/article>/m]).root
     jobs = services.messages.map { |message| JSON.parse(message.fetch(:message_body)) }
     targets = jobs.map { |job| job.fetch("target") }
