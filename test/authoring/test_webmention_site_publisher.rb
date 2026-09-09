@@ -203,6 +203,28 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_equal "outbox-id", database.completed
   end
 
+  def test_refresh_invalidates_again_but_retry_reuses_the_same_request
+    page = WeblogAuthoring::PageDocument.new(
+      id: "refresh", page_type: "named", name: "記事", status: "published",
+      created_at: Time.now, updated_at: Time.now, path: Pathname("refresh.md"), body: "本文", links: []
+    )
+    outbox = { "id" => "same-outbox", "page_id" => page.id,
+               "payload" => { "source_url" => "https://weblog.ason.as/article", "revision" => "first" }, }
+    services = Services.new
+    publisher = WeblogAuthoring::WebmentionSitePublisher.new(
+      database: Database.new(page:, outbox:), s3_client: services, cloudfront_client: services,
+      sqs_client: services, site_bucket: "site", distribution_id: "distribution",
+      delivery_queue_url: "queue", sender_enabled: false
+    )
+    publisher.publish(outbox)
+    publisher.publish(outbox)
+    outbox["payload"]["revision"] = "second"
+    publisher.publish(outbox)
+    references = services.invalidations.map { |request| request.fetch(:invalidation_batch).fetch(:caller_reference) }
+    assert_equal references[0], references[1]
+    refute_equal references[1], references[2]
+  end
+
   def test_public_article_keeps_media_and_escaped_metadata_without_editor_data
     page = WeblogAuthoring::PageDocument.new(
       id: "public-media", page_type: "named", name: '画像 & "動画"', title: nil,

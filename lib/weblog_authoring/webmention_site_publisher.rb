@@ -46,7 +46,7 @@ module WeblogAuthoring
       unless page.status == "published" && !page.empty?
         routes = [page.route, old_route].compact.uniq
         routes.each { |route| @s3_client.delete_object(bucket: @site_bucket, key: route) }
-        invalidate(routes, outbox.fetch("id"))
+        invalidate(routes, outbox.fetch("id"), revision: outbox.dig("payload", "revision"))
         completed = @database.complete_webmention_outbox(
           outbox.fetch("id"), revision: outbox.dig("payload", "revision")
         )
@@ -66,7 +66,7 @@ module WeblogAuthoring
         content_type: "text/html; charset=utf-8", cache_control: "public, max-age=0, must-revalidate"
       )
       @s3_client.delete_object(bucket: @site_bucket, key: old_route) if old_route
-      invalidate([page.route, old_route].compact.uniq, outbox.fetch("id"))
+      invalidate([page.route, old_route].compact.uniq, outbox.fetch("id"), revision: outbox.dig("payload", "revision"))
       completed = @database.complete_webmention_outbox(
         outbox.fetch("id"), revision: outbox.dig("payload", "revision")
       )
@@ -92,13 +92,14 @@ module WeblogAuthoring
       nil
     end
 
-    def invalidate(routes, outbox_id)
+    def invalidate(routes, outbox_id, revision:)
       paths = routes.map { |route| "/#{URI::DEFAULT_PARSER.escape(route).gsub("'", "%27")}" }
+      reference = Digest::SHA256.hexdigest(JSON.generate([outbox_id, revision, paths]))
       @cloudfront_client.create_invalidation(
         distribution_id: @distribution_id,
         invalidation_batch: {
           paths: { quantity: paths.length, items: paths },
-          caller_reference: "webmention-#{outbox_id}",
+          caller_reference: "webmention-#{reference}",
         }
       )
     end
