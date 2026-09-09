@@ -1749,7 +1749,7 @@ module WeblogAuthoring
 
     def webmention_source_url(route)
       base = @site_url.end_with?("/") ? @site_url : "#{@site_url}/"
-      URI.join(base, URI::DEFAULT_PARSER.escape(route)).to_s
+      URI.join(base, "./#{URI::DEFAULT_PARSER.escape(route)}").to_s
     end
 
     def webmention_outbox_from_dsql_row(row)

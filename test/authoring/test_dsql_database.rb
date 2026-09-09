@@ -230,6 +230,16 @@ class DsqlDatabaseTest < Minitest::Test
     assert_empty @pool.connection.webmention_targets
   end
 
+  def test_publishes_named_pages_with_a_colon_in_the_route
+    database = dsql_database
+    database.save(WeblogAuthoring::SaveRequest.new(
+      page_type: "named", name: "Alfred Emoji: Search", body: "本文"
+    ))
+
+    assert_equal "https://weblog.ason.as/Alfred%20Emoji:%20Search",
+      @pool.connection.webmention_outboxes.fetch(0).dig("payload", "source_url")
+  end
+
   def test_list_pages_reports_non_overlapping_database_timings
     samples = (0..7).map(&:to_f)
     database = dsql_database(monotonic_clock: -> { samples.shift })
