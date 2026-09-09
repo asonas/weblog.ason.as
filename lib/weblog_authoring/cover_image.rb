@@ -27,7 +27,7 @@ module WeblogAuthoring
       candidates = []
       page.body.to_s.to_enum(:scan, MARKDOWN_IMAGE).each do
         match = Regexp.last_match
-        candidates << [match.begin(0), match[1]]
+        candidates << [match.begin(0), match[1].gsub(/\\([[:punct:]])/, '\1')]
       end
       page.body.to_s.to_enum(:scan, LEGACY_IMAGE).each do
         match = Regexp.last_match

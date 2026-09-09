@@ -18,6 +18,12 @@ class CoverImageTest < Minitest::Test
     )
   end
 
+  def test_auto_unescapes_markdown_image_destinations
+    page = page_document('![photo](/assets/asset\_6a05622b915a8db0.jpg)')
+
+    assert_equal "/assets/asset_6a05622b915a8db0.jpg", WeblogAuthoring::CoverImage.resolve(page)
+  end
+
   def test_none_is_blank_and_explicit_does_not_depend_on_body
     none = page_document("![body](/assets/body.jpg)", cover_mode: "none")
     explicit = page_document("本文", cover_mode: "explicit", cover_image_url: "/assets/chosen.jpg")
