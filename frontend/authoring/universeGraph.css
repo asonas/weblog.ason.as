@@ -95,7 +95,8 @@
 .ug-hit {
   fill: transparent;
 }
-.ug-node:focus-visible > .ug-hit {
+.ug-node:focus-visible > .ug-hit,
+.ug-node[data-selected="true"] > .ug-hit {
   stroke: var(--focus-ring);
   stroke-width: 2;
 }
@@ -133,10 +134,10 @@
 }
 .ug-detail {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  left: 16px;
+  top: 16px;
   z-index: 10;
-  max-height: calc(100dvh - 100px);
+  max-height: calc(100dvh - 32px);
   overscroll-behavior: contain;
   overflow: auto;
   width: min(360px, calc(100vw - 32px));
@@ -282,6 +283,7 @@
   }
   .ug-detail {
     position: fixed;
+    top: auto;
     left: 0;
     right: 0;
     bottom: 0;

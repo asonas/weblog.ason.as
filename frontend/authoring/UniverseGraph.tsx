@@ -11,6 +11,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -381,7 +382,7 @@ export function UniverseGraph({
         }),
     );
   }, [graph, pages]);
-  const focused = active || keyboardFocus,
+  const focused = selected || active || keyboardFocus,
     neighbors = new Set([focused]);
   for (const e of graph.edges)
     if (e.source.id === focused || e.target.id === focused) {
@@ -389,6 +390,38 @@ export function UniverseGraph({
       neighbors.add(e.target.id);
     }
   const detail = graph.nodes.find((n) => n.id === selected);
+  useLayoutEffect(() => {
+    const card = detailRef.current;
+    const trigger = triggerRef.current;
+    if (!detail || !card || !trigger || isMobile) return;
+    const position = () => {
+      const anchor = trigger.querySelector("circle")?.getBoundingClientRect();
+      if (!anchor) return;
+      const bounds = card.getBoundingClientRect();
+      const x = anchor.left + anchor.width / 2;
+      const y = anchor.top + anchor.height / 2;
+      const below = y + 44;
+      const top =
+        below + bounds.height <= window.innerHeight - 16
+          ? below
+          : y - 24 - bounds.height;
+      card.style.left = `${Math.max(16, Math.min(x - bounds.width / 2, window.innerWidth - bounds.width - 16))}px`;
+      card.style.top = `${Math.max(16, Math.min(top, window.innerHeight - bounds.height - 16))}px`;
+    };
+    position();
+    const observer = new ResizeObserver(position);
+    observer.observe(card);
+    if (containerRef.current) observer.observe(containerRef.current);
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+      card.style.removeProperty("left");
+      card.style.removeProperty("top");
+    };
+  }, [detail, isMobile]);
   useEffect(() => {
     if (selected && focusDetailRef.current) {
       detailRef.current?.focus({ preventScroll: true });
@@ -585,6 +618,7 @@ export function UniverseGraph({
               tabIndex={isMobile && n.kind === "related" ? -1 : 0}
               aria-label={`${n.title}${n.kind === "incoming" ? "、この記事へのリンク元" : ""}`}
               aria-expanded={selected === n.id}
+              data-selected={selected === n.id}
               aria-controls={selected === n.id ? detailId : undefined}
               aria-hidden={isMobile && n.kind === "related" ? true : undefined}
               onFocus={() => setKeyboardFocus(n.id)}
@@ -635,33 +669,31 @@ export function UniverseGraph({
             aria-label={detail.title}
             className={`ug-detail ${hasImage ? "ug-detail-with-image" : ""}`}
           >
-            {hasImage && (
-              <header className="ug-detail-header">
-                <a
-                  href={detail.href}
-                  target={externalUrl ? "_blank" : undefined}
-                  rel={externalUrl ? "noreferrer" : undefined}
-                  title="リンク先を開く"
-                >
-                  <span className="visually-hidden">
-                    {externalUrl ? "リンク先を新しいタブで開く" : "記事を開く"}
-                  </span>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M14 4h6v6M20 4 10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" />
-                  </svg>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => closeDetail(true)}
-                  aria-label="詳細を閉じる"
-                  title="詳細を閉じる"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="m6 6 12 12M18 6 6 18" />
-                  </svg>
-                </button>
-              </header>
-            )}
+            <header className="ug-detail-header">
+              <a
+                href={detail.href}
+                target={externalUrl ? "_blank" : undefined}
+                rel={externalUrl ? "noreferrer" : undefined}
+                title="リンク先を開く"
+              >
+                <span className="visually-hidden">
+                  {externalUrl ? "リンク先を新しいタブで開く" : "記事を開く"}
+                </span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M14 4h6v6M20 4 10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" />
+                </svg>
+              </a>
+              <button
+                type="button"
+                onClick={() => closeDetail(true)}
+                aria-label="詳細を閉じる"
+                title="詳細を閉じる"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m6 6 12 12M18 6 6 18" />
+                </svg>
+              </button>
+            </header>
             {externalUrl ? (
               <a
                 className="ug-ogp"

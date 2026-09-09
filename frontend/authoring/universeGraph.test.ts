@@ -181,7 +181,11 @@ test("fetches OGP only on selection and keeps links usable after a failed previe
         await act(async () =>
           image.dispatchEvent(new dom.window.Event("error")),
         );
-        assert.equal(document.querySelector(".ug-detail header"), null);
+        assert.ok(
+          document.querySelector(
+            '.ug-detail button[aria-label="詳細を閉じる"]',
+          ),
+        );
         assert.equal(
           document.querySelector(".ug-ogp")?.getAttribute("href"),
           "https://example.com/page",
@@ -190,7 +194,11 @@ test("fetches OGP only on selection and keeps links usable after a failed previe
         await activate(container, "example.com/page");
         assert.equal(requests.length, 1);
         await activate(container, "example.com/broken");
-        assert.equal(document.querySelector(".ug-detail header"), null);
+        assert.ok(
+          document.querySelector(
+            '.ug-detail button[aria-label="詳細を閉じる"]',
+          ),
+        );
         assert.match(
           document.querySelector(".ug-detail")?.textContent || "",
           /取得できません/,
@@ -253,7 +261,7 @@ test("mobile lanes expose incoming articles and linked pages without tiny tap ta
   }
 });
 
-test("imageless details omit header actions and dismiss only outside the card", async () => {
+test("imageless details keep selection visible and offer an explicit close action", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -282,14 +290,19 @@ test("imageless details omit header actions and dismiss only outside the card", 
     );
     const card = document.querySelector(".ug-detail");
     assert.ok(card);
-    assert.equal(card.querySelector("header"), null);
+    assert.equal(node.getAttribute("data-selected"), "true");
     await act(async () =>
       card.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })),
     );
     assert.equal(document.activeElement, card);
     assert.ok(document.querySelector(".ug-detail"));
-    await act(async () => document.body.click());
+    const close = card.querySelector<HTMLButtonElement>(
+      'button[aria-label="詳細を閉じる"]',
+    );
+    assert.ok(close);
+    await act(async () => close.click());
     assert.equal(document.querySelector(".ug-detail"), null);
+    assert.equal(document.activeElement, node);
   } finally {
     await act(async () => root.unmount());
     container.remove();
