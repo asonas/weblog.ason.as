@@ -56,7 +56,7 @@ module WeblogAuthoring
 
       shell = site_shell
       body = render_page(page, source_url: outbox.fetch("payload").fetch("source_url"))
-      html = shell.sub('<div id="authoring-root"></div>', %(<div id="authoring-root">#{body}</div>))
+      html = shell.sub('<div id="authoring-root"></div>') { %(<div id="authoring-root">#{body}</div>) }
       raise "site shell does not contain authoring-root" if html == shell
       html = html.sub(/<title>.*?<\/title>/m, "")
         .sub("</head>", "#{page_metadata(page, outbox.fetch('payload').fetch('source_url'))}</head>")
@@ -111,17 +111,19 @@ module WeblogAuthoring
       cover = CoverImage.resolve(page)
       cover_html = cover ? %(<img src="#{CGI.escapeHTML(cover)}" alt="" fetchpriority="high" />) : ""
       <<~HTML
-        <article class="page-view webmention-static-page h-entry" data-public-article="1">
-          <header class="page-header#{cover ? ' page-header--covered' : ''}">
+        <article class="article-workspace article-workspace--reading webmention-static-page h-entry" data-public-article="1">
+          <header class="article-reading-header#{cover ? ' article-reading-header--covered' : ''}">
             #{cover_html}
             <h1 class="p-name">#{CGI.escapeHTML(page.display_title.to_s)}</h1>
             <a class="u-url" href="#{escaped_source_url}" hidden="">記事のパーマリンク</a>
             <span class="p-author h-card" hidden=""><a class="p-name u-url" href="#{author_url}">asonas</a></span>
           </header>
-          <div class="e-content">
+          <div class="editor-canvas"><div class="e-content ProseMirror public-article-body">
             #{rendered.html.chomp}
           </div>
+          </div>
           #{render_mentions(mentions)}
+          <div data-public-universe="#{CGI.escapeHTML(JSON.generate({ route: page.route, id: page.id, wiki: rendered.links.map(&:name).uniq, urls: WeblogAuthoring.extract_external_urls(page.body.to_s) }))}"></div>
           <footer class="article-actions"><a href="/editor/#{WeblogAuthoring.encoded_route(page.id)}">この記事を編集</a></footer>
         </article>
       HTML

@@ -65,7 +65,7 @@ export function enhancePublicArticle(root: HTMLElement) {
   for (const media of root.querySelectorAll<
     HTMLImageElement | HTMLIFrameElement | HTMLVideoElement
   >(
-    ".article-image > img, .page-header--covered > img, iframe, .article-video > video",
+    ".article-image > img, .article-reading-header--covered > img, iframe, .article-video > video",
   )) {
     if (media.parentElement)
       pending.set(media.parentElement, watchMedia(media, media.parentElement));
@@ -98,3 +98,16 @@ export function enhancePublicArticle(root: HTMLElement) {
 
 const article = document.querySelector<HTMLElement>("[data-public-article]");
 if (article) enhancePublicArticle(article);
+
+if (document.querySelector("[data-public-universe]")) {
+  const updateHeader = () => {
+    document.documentElement.dataset.headerScrolled = String(
+      window.scrollY > 8,
+    );
+  };
+  updateHeader();
+  window.addEventListener("scroll", updateHeader, { passive: true });
+  void import("./PublicUniverse").then(({ mountPublicReader }) =>
+    mountPublicReader(),
+  );
+}

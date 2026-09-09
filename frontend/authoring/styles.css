@@ -1360,7 +1360,9 @@ html[data-view="webmention-moderation"] .page-shell {
   padding: var(--space-12) clamp(var(--space-4), 5vw, var(--space-12));
 }
 
-.article-workspace--reading .ProseMirror > :first-child {
+.article-workspace--reading
+  .ProseMirror:not(.public-article-body)
+  > :first-child {
   display: none;
 }
 
@@ -2521,7 +2523,7 @@ h2 {
   outline: none;
 }
 
-.ProseMirror > :first-child {
+.ProseMirror:not(.public-article-body) > :first-child {
   margin-block-start: 0;
   margin-block-end: 1.5rem;
   font-size: var(--text-page-title);

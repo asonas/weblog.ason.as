@@ -223,7 +223,10 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_includes html, 'fetchpriority="high"'
     assert_includes html, 'loading="eager"'
     assert_includes html, 'loading="lazy"'
-    assert_includes html, 'style="aspect-ratio: 16 / 9"'
+    assert_includes html, 'class="article-reading-header article-reading-header--covered"'
+    refute_includes html, 'class="article-image" style="aspect-ratio: 16 / 9"'
+    universe = REXML::Document.new(html[/<div data-public-universe="[^"]*"><\/div>/]).root
+    assert_equal page.route, JSON.parse(universe.attributes["data-public-universe"]).fetch("route")
     assert_includes html, 'width="1080" height="1920"'
     assert_includes html, 'href="https://speakerdeck.com/asonas/example"'
     assert_includes html, "読むための本文。"

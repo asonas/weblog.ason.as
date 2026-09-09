@@ -277,9 +277,8 @@ module WeblogAuthoring
             loading = self.class.context[:image_count] == 1 ? "eager" : "lazy"
             width, height = el.attr.values_at("width", "height")
             dimensions = [width, height].all? { |value| value.to_s.match?(/\A[1-9]\d{0,4}\z/) }
-            ratio = dimensions ? "#{width} / #{height}" : "16 / 9"
             size = dimensions ? %( width="#{width}" height="#{height}") : ""
-            return %(<span class="article-image" style="aspect-ratio: #{ratio}"><img#{html_attributes('src' => src, 'alt' => alt)}#{size} loading="#{loading}" decoding="async" /></span>)
+            return %(<span class="article-image"><img#{html_attributes('src' => src, 'alt' => alt)}#{size} loading="#{loading}" decoding="async" /></span>)
           end
           return "<img#{html_attributes('src' => src, 'alt' => alt)} />"
         end
