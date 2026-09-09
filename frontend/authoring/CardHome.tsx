@@ -30,6 +30,7 @@ type PageWindow = {
 export function CardHome({
   initialPages,
   tags,
+  tagsStatus = "ready",
   archive,
   archiveRef,
   header,
@@ -37,6 +38,7 @@ export function CardHome({
 }: {
   initialPages: HomePage[];
   tags: string[];
+  tagsStatus?: "loading" | "ready" | "error";
   archive: Array<{ year: number; months: number[] }>;
   archiveRef: RefObject<HTMLDivElement | null>;
   header: ReactNode;
@@ -133,15 +135,49 @@ export function CardHome({
           </div>
         )}
       </header>
-      {tags.length > 0 && (
-        <nav className="card-home__tags" aria-label="最近更新されたタグ">
-          {tags.map((tag) => (
-            <a href={`/${encodeURIComponent(tag)}`} key={tag}>
-              {tag}
-            </a>
-          ))}
-        </nav>
-      )}
+      <nav
+        className="card-home__tags"
+        aria-label="最近更新されたタグ"
+        aria-busy={tagsStatus === "loading"}
+      >
+        {tagsStatus === "loading" ? (
+          <>
+            <span className="visually-hidden" role="status">
+              タグを読み込んでいます…
+            </span>
+            {[0, 1].map((row) => (
+              <div className="card-home__tag-row" aria-hidden="true" key={row}>
+                {[180, 72, 104, 224, 136, 88, 160, 112].map((width) => (
+                  <span
+                    className="card-home__tag-skeleton"
+                    style={{ width }}
+                    key={width}
+                  />
+                ))}
+              </div>
+            ))}
+          </>
+        ) : tags.length ? (
+          [
+            { name: "first", items: tags.slice(0, Math.ceil(tags.length / 2)) },
+            { name: "second", items: tags.slice(Math.ceil(tags.length / 2)) },
+          ].map(({ name, items }) => (
+            <div className="card-home__tag-row" key={name}>
+              {items.map((tag) => (
+                <a href={`/${encodeURIComponent(tag)}`} key={tag}>
+                  {tag}
+                </a>
+              ))}
+            </div>
+          ))
+        ) : (
+          <p className="card-home__tags-message">
+            {tagsStatus === "error"
+              ? "タグを読み込めませんでした。"
+              : "まだタグはありません。"}
+          </p>
+        )}
+      </nav>
       <section
         className="card-home__content"
         id="home-posts"

@@ -422,12 +422,14 @@ function HeaderDock() {
 export function CoverJournalHome({
   initialWindow,
   tags,
+  tagsStatus,
   archive,
   archiveRef,
   auth,
 }: {
   initialWindow: Pick<HomeBootstrap, "pages">;
   tags: string[];
+  tagsStatus?: "loading" | "ready" | "error";
   archive: NonNullable<HomeBootstrap["archive"]>;
   archiveRef: RefObject<HTMLDivElement | null>;
   auth: AuthState;
@@ -436,6 +438,7 @@ export function CoverJournalHome({
     <CardHome
       initialPages={initialWindow.pages}
       tags={tags}
+      tagsStatus={tagsStatus}
       archive={archive}
       archiveRef={archiveRef}
       header={<HeaderDock />}
@@ -452,13 +455,19 @@ function Home({
   auth: AuthState;
 }) {
   const [tags, setTags] = useState(bootstrap.tags ?? []);
+  const [tagsStatus, setTagsStatus] = useState<"loading" | "ready" | "error">(
+    bootstrap.tags ? "ready" : "loading",
+  );
   const [archive, setArchive] = useState(bootstrap.archive ?? []);
   const archiveRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void fetchBootstrap<{ tags: string[] }>("/api/tags")
-      .then((response) => setTags(response.tags))
-      .catch(() => setTags([]));
+      .then((response) => {
+        setTags(response.tags);
+        setTagsStatus("ready");
+      })
+      .catch(() => setTagsStatus("error"));
   }, []);
 
   useEffect(() => {
@@ -485,6 +494,7 @@ function Home({
       <CoverJournalHome
         initialWindow={bootstrap}
         tags={tags}
+        tagsStatus={tagsStatus}
         archive={archive}
         archiveRef={archiveRef}
         auth={auth}
