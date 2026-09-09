@@ -13,7 +13,7 @@ resource "aws_lambda_function" "authoring" {
       FRONTEND_URL                       = "https://weblog.ason.as"
       GITHUB_ALLOWED_USER_ID             = "630181"
       GITHUB_REDIRECT_URI                = "https://weblog.ason.as/api/auth/github/callback"
-      OAUTH_SECRET_ID                    = aws_secretsmanager_secret.oauth.name
+      OAUTH_SECRET_ID                    = trimprefix(aws_ssm_parameter.oauth.name, "/")
       ASSET_BUCKET                       = aws_s3_bucket.site.id
       DEVELOPMENT_ASSET_BUCKET           = "weblog-asonas-assets-dev-${data.aws_caller_identity.current.account_id}"
       SITE_BUCKET                        = aws_s3_bucket.site.id

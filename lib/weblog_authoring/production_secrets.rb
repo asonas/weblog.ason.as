@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 require "json"
-require "aws-sdk-secretsmanager"
+require "aws-sdk-ssm"
 
 module WeblogAuthoring
   class ProductionSecrets
     REQUIRED_KEYS = %w[github_client_id github_client_secret session_secret].freeze
 
-    def initialize(secret_id:, client: Aws::SecretsManager::Client.new, timings: nil,
+    def initialize(secret_id:, client: Aws::SSM::Client.new, timings: nil,
                    monotonic_clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) })
       @secret_id = secret_id
       @client = client
@@ -18,7 +18,7 @@ module WeblogAuthoring
     def fetch
       @secrets ||= begin
         started_at = monotonic_time
-        secret_string = @client.get_secret_value(secret_id: @secret_id).secret_string
+        secret_string = @client.get_parameter(name: "/#{@secret_id}", with_decryption: true).parameter.value
         record_timing("secret_get", started_at)
         started_at = monotonic_time
         values = JSON.parse(secret_string)

@@ -1,7 +1,4 @@
-import {
-  GetSecretValueCommand,
-  SecretsManagerClient,
-} from "@aws-sdk/client-secrets-manager";
+import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 
 export type BlueskySecret = {
   allowed_did: string;
@@ -10,12 +7,14 @@ export type BlueskySecret = {
 };
 
 export async function loadSecret(secretId: string): Promise<BlueskySecret> {
-  const response = await new SecretsManagerClient({}).send(
-    new GetSecretValueCommand({ SecretId: secretId }),
+  const response = await new SSMClient({}).send(
+    new GetParameterCommand({ Name: `/${secretId}`, WithDecryption: true }),
   );
-  if (!response.SecretString)
-    throw new Error("Bluesky OAuth secret has no SecretString");
-  const secret = JSON.parse(response.SecretString) as Partial<BlueskySecret>;
+  if (!response.Parameter?.Value)
+    throw new Error("Bluesky OAuth secret has no parameter value");
+  const secret = JSON.parse(
+    response.Parameter?.Value,
+  ) as Partial<BlueskySecret>;
   if (
     !secret.allowed_did ||
     !secret.client_private_jwk ||

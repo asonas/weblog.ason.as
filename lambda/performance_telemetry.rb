@@ -3,7 +3,7 @@
 require "weblog_authoring/lambda_session"
 require "weblog_authoring/performance_telemetry"
 require "weblog_authoring/production_secrets"
-require "aws-sdk-secretsmanager"
+require "aws-sdk-ssm"
 
 module WeblogAuthoring
   module PerformanceTelemetryLambdaHandler
@@ -17,7 +17,7 @@ module WeblogAuthoring
       @api ||= begin
         secrets = ProductionSecrets.new(
           secret_id: ENV.fetch("OAUTH_SECRET_ID"),
-          client: Aws::SecretsManager::Client.new,
+          client: Aws::SSM::Client.new,
         ).fetch
         PerformanceTelemetry.new(
           session_codec: LambdaSession.new(secret: secrets.fetch("session_secret")),

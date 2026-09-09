@@ -4,7 +4,7 @@ require "pathname"
 require "securerandom"
 require "json"
 require "aws-sdk-lambda"
-require "aws-sdk-secretsmanager"
+require "aws-sdk-ssm"
 
 require "weblog_authoring/bluesky_source"
 require "weblog_authoring/dsql_database"
@@ -45,10 +45,10 @@ module WeblogAuthoring
     private_class_method :bluesky_source
 
     def raindrop_source
-      response = Aws::SecretsManager::Client.new.get_secret_value(
-        secret_id: ENV.fetch("INBOX_SOURCES_SECRET_ID")
+      response = Aws::SSM::Client.new.get_parameter(
+        name: "/#{ENV.fetch("INBOX_SOURCES_SECRET_ID")}", with_decryption: true
       )
-      token = JSON.parse(response.secret_string).fetch("raindrop_test_token")
+      token = JSON.parse(response.parameter.value).fetch("raindrop_test_token")
       RaindropSource.new(client: RaindropSource::Client.new(token:))
     end
     private_class_method :raindrop_source

@@ -2,10 +2,10 @@
 # frozen_string_literal: true
 
 require "json"
-require "aws-sdk-secretsmanager"
+require "aws-sdk-ssm"
 require "dotenv/load"
 
-SECRET_ID = "weblog-authoring-production/inbox-matrix"
+SECRET_ID = "/weblog-authoring-production/inbox-matrix"
 
 homeserver_url = ENV.fetch("MATRIX_HOMESERVER_URL")
 room_id = ENV.fetch("MATRIX_ROOM_ID")
@@ -14,9 +14,9 @@ raise "MATRIX_HOMESERVER_URL must use HTTPS" unless homeserver_url.start_with?("
 raise "MATRIX_ROOM_ID is empty" if room_id.empty?
 raise "MATRIX_ACCESS_TOKEN is empty" if access_token.empty?
 
-Aws::SecretsManager::Client.new(region: "ap-northeast-1").put_secret_value(
-  secret_id: SECRET_ID,
-  secret_string: JSON.generate(
+Aws::SSM::Client.new(region: "ap-northeast-1").put_parameter(
+  name: SECRET_ID, type: "SecureString", tier: "Standard", overwrite: true,
+  value: JSON.generate(
     homeserver_url:,
     room_id:,
     access_token:

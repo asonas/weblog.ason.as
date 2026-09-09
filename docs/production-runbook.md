@@ -58,6 +58,25 @@ mise exec -- mairu exec --no-login --server asonas-aws 282782318939/Administrato
   aws s3 cp "s3://weblog-asonas-site-production-282782318939/deployments/${DEPLOY_RUN_ID}-${DEPLOY_RUN_ATTEMPT}.json" -
 ```
 
+## Parameter Storeの秘密情報
+
+秘密情報はStandard tierのSecureStringとして保存します。
+Terraformは`value_wo`で空のJSONを初期値として作成し、実際の値は運用コマンドまたはAWS SDKで設定します。
+`value_wo_version`を変更すると初期値で上書きされるため、credentialの更新には使いません。
+Lambdaの`*_SECRET_ID`は先頭の`/`を除いた識別子を保持し、取得時に`/`を付けてParameter Storeのパスにします。
+
+Secrets Managerからの切り替えは次の順序で行います。
+
+1. 5件のParameter Storeリソースだけを対象に保存済みplanをapplyする。
+2. SDKで既存値をコピーし、復号後の値をメモリ内で照合する。秘密情報をCLI引数やファイルに保存しない。
+3. 稼働中のSecrets Manager参照権限を維持したまま、各runtimeへ対応する`ssm:GetParameter`権限を追加する。開発用はIdentity Center permission setへ専用のcustomer managed policyを追加する。
+4. authoring、performance telemetry、inbox sync、Matrix notifier、Bluesky OAuthのLambdaを新しいimageへ更新し、秘密情報の取得とアプリの応答を確認する。
+5. 新しい完全なplanを保存して確認し、旧secretと旧読み取り権限を削除する。旧secretの復旧猶予は7日間とする。
+
+本番のWebmention機能を維持するため、plan時には現在の有効化設定を渡します。
+2026-09-09時点では`webmention_receiver_enabled`、`webmention_verification_enabled`、`webmention_publisher_enabled`、`webmention_sender_enabled`、`webmention_alerting_enabled`がすべて`true`です。
+各apply後のplanで、切り替えの残作業以外の差分がないことと、SecureStringの値がstateに保存されていないことを確認します。
+
 ## GitHub OAuth credentialの更新
 
 OAuth Appで新しいclient secretを発行してから、既存の唯一の更新入口である`bin/configure-production-oauth`を使います。
@@ -74,7 +93,7 @@ mise exec -- mairu exec --no-login --server asonas-aws 282782318939/Administrato
 unset GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET
 ```
 
-commandはsecret値を表示せず、更新したSecrets Manager secret IDだけを表示します。
+commandはsecret値を表示せず、更新したParameter Storeのパスだけを表示します。
 更新後は新しいブラウザsessionでGitHub loginを確認し、`mise run check:production`を実行します。
 確認が終わるまで古いOAuth credentialを失効させません。
 

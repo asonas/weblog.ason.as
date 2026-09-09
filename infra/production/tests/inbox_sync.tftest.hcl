@@ -66,8 +66,8 @@ run "inbox_sync_alerting" {
   }
 
   assert {
-    condition     = aws_lambda_function.matrix_notifier.environment[0].variables.MATRIX_SECRET_ID == aws_secretsmanager_secret.inbox_matrix.name
-    error_message = "Matrix notifier must load its configuration from Secrets Manager"
+    condition     = aws_lambda_function.matrix_notifier.environment[0].variables.MATRIX_SECRET_ID == trimprefix(aws_ssm_parameter.inbox_matrix.name, "/")
+    error_message = "Matrix notifier must load its configuration from Parameter Store"
   }
 
   assert {

@@ -26,7 +26,7 @@ class ProductionCheckTest < Minitest::Test
       )
       assert_equal(
         2,
-        commands.count { |command| command.start_with?("secretsmanager describe-secret ") }
+        commands.count { |command| command.start_with?("ssm get-parameter ") }
       )
       assert(commands.none? { |command| command.match?(/\b(put|update|delete|invoke)\b/) })
     end
@@ -67,7 +67,7 @@ class ProductionCheckTest < Minitest::Test
       case "$1 $2" in
         "sts get-caller-identity") printf '%s\\n' "${FAKE_AWS_ACCOUNT}" ;;
         "lambda get-function-configuration") printf 'Active\\tSuccessful\\n' ;;
-        "secretsmanager describe-secret") printf 'arn:aws:secretsmanager:ap-northeast-1:282782318939:secret:test\\n' ;;
+        "ssm get-parameter") printf 'arn:aws:ssm:ap-northeast-1:282782318939:parameter/test\\n' ;;
         *) exit 64 ;;
       esac
     SH

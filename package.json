@@ -28,7 +28,7 @@
     "@atproto/jwk-jose": "^0.2.4",
     "@atproto/oauth-client": "^0.8.4",
     "@atproto/oauth-client-node": "^0.5.4",
-    "@aws-sdk/client-secrets-manager": "^3.1121.0",
+    "@aws-sdk/client-ssm": "^3.1121.0",
     "@aws-sdk/dsql-signer": "^3.1121.0",
     "@jsquash/webp": "^1.5.0",
     "@progfay/scrapbox-parser": "10.1.1",

@@ -45,7 +45,7 @@ module WeblogAuthoring
       @api ||= begin
         timings = {} # @type var timings: Hash[String, Float]
         api_started_at = monotonic_time
-        secrets_client = measure(timings, "secrets_client") { Aws::SecretsManager::Client.new }
+        secrets_client = measure(timings, "secrets_client") { Aws::SSM::Client.new }
         secrets = ProductionSecrets.new(
           secret_id: ENV.fetch("OAUTH_SECRET_ID"), client: secrets_client, timings:
         ).fetch

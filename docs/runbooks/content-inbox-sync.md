@@ -12,7 +12,7 @@
 Matrix botとEmail購読を設定してから有効にする。
 
 1. 自宅のMatrix homeserverに通知専用botアカウントと非公開roomを作り、botをroomへ参加させる。
-2. homeserver URL、room ID、bot access tokenを次のコマンドでSecrets Managerへ保存する。
+2. homeserver URL、room ID、bot access tokenを次のコマンドでParameter Storeへ保存する。
 
 ```sh
 read -r MATRIX_HOMESERVER_URL
@@ -81,7 +81,7 @@ Alarm名から対象ソースと障害分類を確認する。
 Blueskyの `authentication` では、エディタからBluesky接続状態を確認する。
 `reauthorization_required` なら、Bluesky OAuthを再接続してから更新対象をBlueskyにして手動同期する。
 
-Raindropの `authentication` では、Secrets Managerの `weblog-authoring-production/inbox-sources` にあるtokenを更新する。
+Raindropの `authentication` では、Parameter Storeの `/weblog-authoring-production/inbox-sources` にあるtokenを更新する。
 token値をCloudWatch Logs、Issue、コマンドライン引数へ出さない。
 
 `persistence` では、Aurora DSQLの状態とInbox Sync Lambdaの `dsql:DbConnect` 権限を確認する。
@@ -122,7 +122,7 @@ ruleやpermissionをコンソールで作り直さず、Terraformとの差分を
 `lambda-errors` Alarmは、ソース別結果を記録できないLambda例外を検出する。
 
 CloudWatch Logsで同じ時刻の例外を確認する。
-DSQL接続、Secrets Manager取得、Bluesky OAuth Lambda呼び出し、Lambda imageの更新状態を順に確認する。
+DSQL接続、Parameter Store取得、Bluesky OAuth Lambda呼び出し、Lambda imageの更新状態を順に確認する。
 
 原因を修正して対象ソースを手動同期する。
 実行が成功し、Alarmが `OK` へ戻れば復旧完了である。

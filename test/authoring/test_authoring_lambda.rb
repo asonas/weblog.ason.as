@@ -5,16 +5,17 @@ require_relative "../../lambda/authoring"
 require "open3"
 
 class AuthoringLambdaTest < Minitest::Test
-  SecretResponse = Data.define(:secret_string)
+  SecretResponse = Data.define(:parameter)
+  Parameter = Data.define(:value)
 
   def test_fresh_process_logs_require_timings_once_without_changing_session_responses
     source = <<~'RUBY'
       require_relative "lambda/authoring"
       Aws.config[:stub_responses] = true
-      Aws.config[:secretsmanager] = { stub_responses: {
-        get_secret_value: { secret_string: JSON.generate(
+      Aws.config[:ssm] = { stub_responses: {
+        get_parameter: { parameter: { value: JSON.generate(
           "github_client_id" => "id", "github_client_secret" => "secret", "session_secret" => "s" * 64
-        ) }
+        ) } }
       } }
       {
         "AWS_REGION" => "ap-northeast-1", "OAUTH_SECRET_ID" => "oauth", "DSQL_HOST" => "cluster",
@@ -74,12 +75,12 @@ class AuthoringLambdaTest < Minitest::Test
 
   def test_logs_cold_api_construction_timings
     secret_client = Object.new
-    secret_client.define_singleton_method(:get_secret_value) do |secret_id:|
-      raise "unexpected secret" unless secret_id == "oauth"
+    secret_client.define_singleton_method(:get_parameter) do |name:, with_decryption:|
+      raise "unexpected secret" unless name == "/oauth" && with_decryption
 
-      SecretResponse.new(JSON.generate(
+      SecretResponse.new(Parameter.new(JSON.generate(
         "github_client_id" => "id", "github_client_secret" => "secret", "session_secret" => "s" * 64
-      ))
+      )))
     end
     pool = Object.new
     client = Object.new
@@ -95,7 +96,7 @@ class AuthoringLambdaTest < Minitest::Test
     WeblogAuthoring::LambdaHandler.remove_instance_variable(:@api) if WeblogAuthoring::LambdaHandler.instance_variable_defined?(:@api)
 
     output, _stderr = capture_io do
-      with_new_returning(Aws::SecretsManager::Client, secret_client) do
+      with_new_returning(Aws::SSM::Client, secret_client) do
         with_new_returning(Aws::S3::Client, -> { s3_client_constructions += 1; client }) do
           with_new_returning(Aws::SQS::Client, client) do
             with_new_returning(Aws::Lambda::Client, -> { lambda_client_constructions += 1; client }) do

@@ -34,7 +34,7 @@ run "bluesky_oauth_runtime" {
   }
 
   assert {
-    condition     = aws_lambda_function.bluesky_oauth.environment[0].variables.BLUESKY_OAUTH_SECRET_ID == aws_secretsmanager_secret.bluesky_oauth.name
+    condition     = aws_lambda_function.bluesky_oauth.environment[0].variables.BLUESKY_OAUTH_SECRET_ID == trimprefix(aws_ssm_parameter.bluesky_oauth.name, "/")
     error_message = "Bluesky OAuth Lambda must receive its dedicated secret name"
   }
 }

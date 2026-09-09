@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
-require "aws-sdk-secretsmanager"
+require "aws-sdk-ssm"
 
 require "weblog_authoring/matrix_notifier"
 
@@ -16,10 +16,10 @@ module WeblogAuthoring
     def default_notifier
       @default_notifier ||= MatrixNotifier.new(
         secret_loader: lambda do
-          response = Aws::SecretsManager::Client.new.get_secret_value(
-            secret_id: ENV.fetch("MATRIX_SECRET_ID")
+          response = Aws::SSM::Client.new.get_parameter(
+            name: "/#{ENV.fetch("MATRIX_SECRET_ID")}", with_decryption: true
           )
-          JSON.parse(response.secret_string)
+          JSON.parse(response.parameter.value)
         end
       )
     end

@@ -79,8 +79,8 @@ output "inbox_alerts_topic_arn" {
 }
 
 output "inbox_matrix_secret_arn" {
-  description = "Secrets Manager secret configured by the Matrix bot operator."
-  value       = aws_secretsmanager_secret.inbox_matrix.arn
+  description = "Parameter Store secret configured by the Matrix bot operator."
+  value       = aws_ssm_parameter.inbox_matrix.arn
 }
 
 output "matrix_notifier_lambda_function_name" {
@@ -105,7 +105,7 @@ output "bluesky_oauth_lambda_function_name" {
 
 output "bluesky_oauth_secret_arn" {
   description = "ARN of the production Bluesky OAuth secret."
-  value       = aws_secretsmanager_secret.bluesky_oauth.arn
+  value       = aws_ssm_parameter.bluesky_oauth.arn
 }
 
 output "authoring_api_endpoint" {
@@ -114,13 +114,13 @@ output "authoring_api_endpoint" {
 }
 
 output "authoring_oauth_secret_arn" {
-  description = "ARN of the Secrets Manager secret used by production GitHub OAuth."
-  value       = aws_secretsmanager_secret.oauth.arn
+  description = "ARN of the Parameter Store secret used by production GitHub OAuth."
+  value       = aws_ssm_parameter.oauth.arn
 }
 
 output "development_inbox_sources_secret_arn" {
   description = "ARN of the development inbox source credentials secret."
-  value       = aws_secretsmanager_secret.inbox_sources_development.arn
+  value       = aws_ssm_parameter.inbox_sources_development.arn
 }
 
 output "site_bucket_name" {

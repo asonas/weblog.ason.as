@@ -1,6 +1,9 @@
-resource "aws_secretsmanager_secret" "bluesky_oauth" {
-  name                    = "weblog-authoring-production/bluesky-oauth"
-  recovery_window_in_days = 7
+resource "aws_ssm_parameter" "bluesky_oauth" {
+  name             = "/weblog-authoring-production/bluesky-oauth"
+  type             = "SecureString"
+  tier             = "Standard"
+  value_wo         = "{}"
+  value_wo_version = 1
 }
 
 resource "aws_iam_role" "bluesky_oauth_runtime" {
@@ -22,8 +25,8 @@ data "aws_iam_policy_document" "bluesky_oauth_runtime" {
 
   statement {
     effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.bluesky_oauth.arn]
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.bluesky_oauth.arn]
   }
 }
 
@@ -45,7 +48,7 @@ resource "aws_lambda_function" "bluesky_oauth" {
   environment {
     variables = {
       DSQL_HOST               = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
-      BLUESKY_OAUTH_SECRET_ID = aws_secretsmanager_secret.bluesky_oauth.name
+      BLUESKY_OAUTH_SECRET_ID = trimprefix(aws_ssm_parameter.bluesky_oauth.name, "/")
     }
   }
 

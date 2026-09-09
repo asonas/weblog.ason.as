@@ -39,16 +39,16 @@ for function_name in "${functions[@]}"; do
   echo "${function_name}: active"
 done
 
-aws secretsmanager describe-secret \
+aws ssm get-parameter \
   --region "${region}" \
-  --secret-id "weblog-authoring-production/oauth" \
-  --query ARN \
+  --name "/weblog-authoring-production/oauth" \
+  --query Parameter.ARN \
   --output text >/dev/null
 
-aws secretsmanager describe-secret \
+aws ssm get-parameter \
   --region "${region}" \
-  --secret-id "weblog-authoring-production/inbox-matrix" \
-  --query ARN \
+  --name "/weblog-authoring-production/inbox-matrix" \
+  --query Parameter.ARN \
   --output text >/dev/null
 
 echo "Production check passed"

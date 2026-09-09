@@ -14,7 +14,7 @@ require "sinatra/base"
 require "time"
 require "uri"
 require "aws-sdk-s3"
-require "aws-sdk-secretsmanager"
+require "aws-sdk-ssm"
 require "base64"
 
 require_relative "development_database"
@@ -648,8 +648,8 @@ module WeblogAuthoring
         bluesky_origin = ENV["BLUESKY_OAUTH_ORIGIN"]
         return pending_inbox_sources if secret_id.to_s.empty? || bluesky_origin.to_s.empty?
 
-        response = Aws::SecretsManager::Client.new(region: DEVELOPMENT_ASSET_REGION).get_secret_value(secret_id:)
-        token = JSON.parse(response.secret_string).fetch("raindrop_test_token")
+        response = Aws::SSM::Client.new(region: DEVELOPMENT_ASSET_REGION).get_parameter(name: "/#{secret_id}", with_decryption: true)
+        token = JSON.parse(response.parameter.value).fetch("raindrop_test_token")
         {
           "bluesky" => BlueskySource.new(client: BlueskySource::HttpClient.new(origin: bluesky_origin)),
           "raindrop" => RaindropSource.new(client: RaindropSource::Client.new(token:)),

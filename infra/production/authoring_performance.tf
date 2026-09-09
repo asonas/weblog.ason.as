@@ -11,8 +11,8 @@ resource "aws_iam_role" "authoring_performance" {
 data "aws_iam_policy_document" "authoring_performance_oauth_secret" {
   statement {
     effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.oauth.arn]
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.oauth.arn]
   }
 }
 
@@ -43,7 +43,7 @@ resource "aws_lambda_function" "authoring_performance" {
   environment {
     variables = {
       GITHUB_ALLOWED_USER_ID = "630181"
-      OAUTH_SECRET_ID        = aws_secretsmanager_secret.oauth.name
+      OAUTH_SECRET_ID        = trimprefix(aws_ssm_parameter.oauth.name, "/")
     }
   }
 

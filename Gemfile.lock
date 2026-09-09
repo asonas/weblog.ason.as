@@ -45,10 +45,10 @@ GEM
       aws-sdk-core (~> 3, >= 3.254.1)
       aws-sdk-kms (~> 1)
       aws-sigv4 (~> 1.5)
-    aws-sdk-secretsmanager (1.134.0)
+    aws-sdk-sqs (1.117.0)
       aws-sdk-core (~> 3, >= 3.254.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-sqs (1.117.0)
+    aws-sdk-ssm (1.220.0)
       aws-sdk-core (~> 3, >= 3.254.0)
       aws-sigv4 (~> 1.5)
     aws-sigv4 (1.12.1)
@@ -221,8 +221,8 @@ DEPENDENCIES
   aws-sdk-cloudfront
   aws-sdk-lambda
   aws-sdk-s3
-  aws-sdk-secretsmanager
   aws-sdk-sqs
+  aws-sdk-ssm
   dotenv
   kramdown
   kramdown-parser-gfm

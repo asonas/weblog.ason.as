@@ -8,7 +8,7 @@ InboxのAlarmとは別に `webmention_alerting_enabled` で有効化するため
 
 ## 通知を有効にする
 
-Matrix bot、room、Secrets Manager、SNS subscriptionが設定済みであることを確認する。
+Matrix bot、room、Parameter Store、SNS subscriptionが設定済みであることを確認する。
 secret値は表示しない。
 
 ```sh

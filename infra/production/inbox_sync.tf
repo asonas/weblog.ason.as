@@ -22,8 +22,8 @@ data "aws_iam_policy_document" "inbox_sync_runtime" {
 
   statement {
     effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.inbox_sources.arn]
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.inbox_sources.arn]
   }
 
   statement {
@@ -52,7 +52,7 @@ resource "aws_lambda_function" "inbox_sync" {
   environment {
     variables = {
       DSQL_HOST                   = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
-      INBOX_SOURCES_SECRET_ID     = aws_secretsmanager_secret.inbox_sources.name
+      INBOX_SOURCES_SECRET_ID     = trimprefix(aws_ssm_parameter.inbox_sources.name, "/")
       BLUESKY_OAUTH_FUNCTION_NAME = aws_lambda_function.bluesky_oauth.function_name
     }
   }
@@ -169,8 +169,8 @@ resource "aws_iam_role_policy_attachment" "matrix_notifier_basic_execution" {
 data "aws_iam_policy_document" "matrix_notifier_runtime" {
   statement {
     effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.inbox_matrix.arn]
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.inbox_matrix.arn]
   }
 }
 
@@ -200,7 +200,7 @@ resource "aws_lambda_function" "matrix_notifier" {
 
   environment {
     variables = {
-      MATRIX_SECRET_ID = aws_secretsmanager_secret.inbox_matrix.name
+      MATRIX_SECRET_ID = trimprefix(aws_ssm_parameter.inbox_matrix.name, "/")
     }
   }
 
