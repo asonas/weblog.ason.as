@@ -225,16 +225,17 @@ class TestMarkdown < Minitest::Test
     assert_empty rendered.problems
   end
 
-  def test_public_render_keeps_saved_links_same_tab_and_omits_unsaved_targets
+  def test_public_render_links_saved_pages_and_uncreated_hubs
     renderer = WeblogAuthoring::MarkdownRenderer.new(pages: [named_page("page-a")])
 
-    rendered = renderer.render("[[page-a]] [[draft page]]", mode: "public")
+    rendered = renderer.render("[[page-a]] [[draft page]] [[KORG multi/poly]]", mode: "public")
 
     assert_includes rendered.html, 'href="/page-a"'
     refute_includes rendered.html, 'target="_blank"'
-    refute_includes rendered.html, 'href="/draft page"'
+    assert_includes rendered.html, 'href="/draft%20page"'
+    assert_includes rendered.html, 'href="/%4B%4F%52%47%20multi%2Fpoly"'
     assert_includes rendered.html, "draft page"
-    assert_includes rendered.problems, "wiki link omitted in public output: draft page"
+    assert_empty rendered.problems
   end
 
   def test_public_render_encodes_named_routes_for_wikilinks_and_backlinks

@@ -65,6 +65,7 @@ class WebmentionSitePublisherTest < Minitest::Test
     end
 
     def get_object(bucket:, key:)
+      return Body.new(StringIO.new('<html><body><div id="authoring-root"></div><script src="/static/authoring/app.js"></script></body></html>')) if bucket == "site" && key == "index.html"
       raise "unexpected shell" unless bucket == "site" && key == "static/authoring/public.html"
 
       Body.new(StringIO.new('<html><head><title>weblog.ason.as</title><link rel="webmention" href="/api/webmentions" /></head><body><div id="authoring-root"></div></body></html>'))
@@ -125,6 +126,34 @@ class WebmentionSitePublisherTest < Minitest::Test
 
     assert_equal ["/Don%27t%20use%20click%20here"],
       services.invalidations.fetch(0).dig(:invalidation_batch, :paths, :items)
+  end
+
+  def test_publishes_uncreated_hubs_without_overwriting_articles
+    page = WeblogAuthoring::PageDocument.new(
+      id: "page-id", page_type: "named", name: "article", page_date: nil, title: nil,
+      status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
+      path: Pathname("content/pages/article.md"), body: "[[sub]] [[KORG multi/poly]] [[article]]", links: []
+    )
+    outbox = { "id" => "outbox-id", "page_id" => page.id, "payload" => {
+      "source_url" => "https://weblog.ason.as/article", "previous_targets" => [], "current_targets" => [],
+    }, }
+    database = Database.new(page:, outbox:)
+    services = Services.new
+    publisher = WeblogAuthoring::WebmentionSitePublisher.new(
+      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
+      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+    )
+    publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
+    article, *hubs = services.puts
+    assert_equal "article", article.fetch(:key)
+    assert_includes article.fetch(:body), 'href="/sub"'
+    assert_includes article.fetch(:body), 'multi%2Fpoly'
+    assert_equal(["sub", "KORG multi/poly"], hubs.map { |hub| hub.fetch(:key) })
+    hubs.each do |hub|
+      assert_equal "*", hub.fetch(:if_none_match)
+      assert_includes hub.fetch(:body), '/static/authoring/app.js'
+    end
+    assert_includes services.invalidations.first.dig(:invalidation_batch, :paths, :items), "/KORG%20multi%2Fpoly"
   end
 
   def test_publishes_verifiable_html_before_queuing_the_target_union

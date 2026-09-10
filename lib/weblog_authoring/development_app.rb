@@ -200,8 +200,8 @@ module WeblogAuthoring
       conditional_json_response(editor_json(page))
     end
 
-    get "/api/routes/:route" do
-      route = valid_page_route(params.fetch("route"))
+    get "/api/routes/*" do
+      route = valid_page_route(params.fetch("splat").first)
       return json_error(404, "ページが見つかりません") if route.nil?
 
       conditional_json_response(editor_state_for_route(route))

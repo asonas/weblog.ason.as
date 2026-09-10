@@ -18,8 +18,10 @@ export default defineConfig(({ mode }) => ({
           if (!request.headers.accept?.includes("text/html") || !request.url) return next();
 
           let pathname: string;
+          let rawPathname: string;
           try {
-            pathname = decodeURIComponent(new URL(request.url, "http://127.0.0.1").pathname);
+            rawPathname = new URL(request.url, "http://127.0.0.1").pathname;
+            pathname = decodeURIComponent(rawPathname);
           } catch (_error) {
             response.statusCode = 400;
             response.end("Bad Request");
@@ -30,9 +32,9 @@ export default defineConfig(({ mode }) => ({
             return next();
           }
 
-          const route = pathname.slice(1).replace(/\/$/, "");
-          const isEditorRoute = /^\/editor\/[^/]+\/?$/.test(pathname);
-          if ((!isEditorRoute && route.includes("/")) || /[<>\\]/.test(route)) {
+          const route = rawPathname.slice(1).replace(/\/$/, "");
+          const isEditorRoute = /^\/editor\/[^/]+\/?$/.test(rawPathname);
+          if ((!isEditorRoute && route.includes("/")) || /[<>\\]/.test(pathname)) {
             response.statusCode = 404;
             response.end("Not Found");
             return;

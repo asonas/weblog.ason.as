@@ -16,7 +16,12 @@ module WeblogAuthoring
     normalized = name.strip
     raise ArgumentError, "page name must not be empty" if normalized.empty?
     raise ArgumentError, "page name must not be . or .." if %w[. ..].include?(normalized)
-    raise ArgumentError, "page name contains a forbidden character" if normalized.match?(/[\/?#<>\\\r\n]/)
+    raise ArgumentError, "page name contains a forbidden character" if normalized.match?(/[?#<>\\\r\n]/)
+    if normalized.include?("/")
+      parts = normalized.split("/", -1)
+      raise ArgumentError, "page name contains a path segment" if parts.any? { |part| ["", ".", ".."].include?(part) }
+      raise ArgumentError, "page name collides with a reserved route" if %w[manage api static assets editor authoring oauth].include?(parts.first)
+    end
     raise ArgumentError, "page name contains a control character" if normalized.each_codepoint.any? { |codepoint| codepoint < 32 || codepoint == 127 }
     raise ArgumentError, "page name collides with a reserved route" if RESERVED_ROUTES.include?(normalized)
     if normalized.include?("[[") || normalized.include?("]]") || normalized.start_with?("---")

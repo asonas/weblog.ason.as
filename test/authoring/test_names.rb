@@ -4,12 +4,14 @@ require_relative "../test_helper"
 
 class TestNames < Minitest::Test
   def test_invalid_page_names_are_rejected
-    ["", ".", "..", "a/b", "a?b", "a#b", "a<b", "a>b", "a\\b", "a\nb", "a\x00b", "manage", "api"].each do |name|
+    ["", ".", "..", "a/../b", "assets/file", "api/routes", "a?b", "a#b", "a<b", "a>b", "a\\b", "a\nb", "a\x00b", "manage", "api"].each do |name|
       assert_raises(ArgumentError) { WeblogAuthoring.validate_page_name(name) }
     end
   end
 
   def test_page_names_are_trimmed_but_case_sensitive
+    assert_equal "KORG multi/poly", WeblogAuthoring.validate_page_name("KORG multi/poly")
+    assert_equal "%4B%4F%52%47%20multi%2Fpoly", WeblogAuthoring.encoded_route("KORG multi/poly")
     assert_equal "page-a", WeblogAuthoring.validate_page_name(" page-a ")
     assert_equal "Page-A", WeblogAuthoring.validate_page_name("Page-A")
     assert_equal "日本語 page", WeblogAuthoring.validate_page_name(" 日本語 page ")

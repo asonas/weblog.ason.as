@@ -109,11 +109,6 @@ module WeblogAuthoring
         end
 
         route = wiki_route_for(name, mode)
-        if route.nil?
-          problems << "wiki link omitted in public output: #{name}"
-          replacements << [link.start, link.end, escape_markdown_text(name)]
-          next
-        end
 
         token = "#{WIKI_SENTINEL_PREFIX}#{index}"
         wiki_targets[token] = { "route" => route, "label" => name }
@@ -127,10 +122,9 @@ module WeblogAuthoring
       [prepared, wiki_targets.freeze, problems.freeze]
     end
 
-    def wiki_route_for(name, mode)
+    def wiki_route_for(name, _mode)
       page = @pages_by_name[name]
       return route_href(page.route) unless page.nil?
-      return nil if mode == "public"
 
       "/#{WeblogAuthoring.encoded_route(name)}"
     end

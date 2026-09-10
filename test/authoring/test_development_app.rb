@@ -9,6 +9,22 @@ require "rack/mock"
 class TestDevelopmentApp < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-08-21T12:00:00+09:00")
 
+  def test_slash_named_hub_can_be_opened_and_materialized
+    route = "/api/routes/KORG%20multi%2Fpoly"
+    status, _headers, body = request("GET", route)
+    assert_equal 200, status
+    assert_equal "KORG multi/poly", JSON.parse(body).fetch("title")
+    assert_empty JSON.parse(body).fetch("page_id")
+
+    status, _headers, body = json_request("POST", "/api/authoring/pages", page_type: "named", title: "KORG multi/poly", body: "シンセサイザー")
+    assert_equal 201, status
+    id = JSON.parse(body).fetch("id")
+    status, _headers, body = request("GET", route)
+    assert_equal 200, status
+    assert_equal id, JSON.parse(body).fetch("page_id")
+    assert_equal "KORG multi/poly", JSON.parse(body).fetch("title")
+  end
+
   FakeS3Response = Data.define(:content_type, :body)
   FakeS3Object = Data.define(:key)
   FakeS3List = Data.define(:contents)

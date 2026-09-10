@@ -68,7 +68,8 @@ module WeblogAuthoring
         content_type: "text/html; charset=utf-8", cache_control: "public, max-age=0, must-revalidate"
       )
       @s3_client.delete_object(bucket: @site_bucket, key: old_route) if old_route
-      invalidate([page.route, old_route].compact.uniq, outbox.fetch("id"), revision: outbox.dig("payload", "revision"))
+      hubs = publish_linked_hubs(page)
+      invalidate([page.route, old_route, *hubs].compact.uniq, outbox.fetch("id"), revision: outbox.dig("payload", "revision"))
       completed = @database.complete_webmention_outbox(
         outbox.fetch("id"), revision: outbox.dig("payload", "revision")
       )
@@ -79,6 +80,29 @@ module WeblogAuthoring
     end
 
     private
+
+    def publish_linked_hubs(page)
+      saved_routes = @database.list_pages.reject(&:empty?).map(&:route)
+      names = WeblogAuthoring.extract_wiki_links(page.body).filter_map do |link|
+        WeblogAuthoring.validate_page_name(link.name)
+      rescue ArgumentError
+        nil
+      end.uniq - saved_routes
+      return [] if names.empty?
+
+      shell = @s3_client.get_object(bucket: @site_bucket, key: "index.html").body.read
+      names.each do |name|
+        @s3_client.put_object(
+          bucket: @site_bucket, key: name, body: shell,
+          content_type: "text/html; charset=utf-8", cache_control: "public, max-age=0, must-revalidate",
+          if_none_match: "*"
+        )
+      rescue Aws::S3::Errors::PreconditionFailed
+        # A saved article or an existing hub must not be overwritten.
+        next
+      end
+      names
+    end
 
     def site_shell
       @s3_client.get_object(bucket: @site_bucket, key: "static/authoring/public.html").body.read
@@ -95,7 +119,7 @@ module WeblogAuthoring
     end
 
     def invalidate(routes, outbox_id, revision:)
-      paths = routes.map { |route| "/#{URI::DEFAULT_PARSER.escape(route).gsub("'", "%27")}" }
+      paths = routes.map { |route| "/#{URI::DEFAULT_PARSER.escape(route).gsub("'", "%27").gsub("/", "%2F")}" }
       reference = Digest::SHA256.hexdigest(JSON.generate([outbox_id, revision, paths]))
       @cloudfront_client.create_invalidation(
         distribution_id: @distribution_id,

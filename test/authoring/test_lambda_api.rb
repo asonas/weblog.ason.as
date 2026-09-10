@@ -511,10 +511,11 @@ class LambdaApiTest < Minitest::Test
   end
 
   def test_missing_route_requests_its_related_pages
-    response = @api.call(event("GET", "/api/routes/202608", { "route" => "202608" }))
+    response = @api.call(event("GET", "/api/routes/KORG%20multi%2Fpoly", { "route" => "KORG%20multi%2Fpoly" }))
     page = JSON.parse(response.fetch(:body))
 
     assert_equal 200, response.fetch(:statusCode)
+    assert_equal "KORG multi/poly", page.fetch("title")
     assert page.fetch("linked_pages_has_more")
   end
 
