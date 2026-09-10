@@ -16,16 +16,20 @@ struct PhotoInboxApp: App {
     _selection = State(initialValue: selection)
     BGTaskScheduler.shared.register(
       forTaskWithIdentifier: "com.asonas.weblog.PhotoInbox.retry-uploads",
-      using: nil
+      // The launch handler inherits MainActor isolation from App.init.
+      using: .main
     ) { task in
       guard let processingTask = task as? BGProcessingTask else { return }
       let operation = Task { @MainActor in
         await coordinator.processQueue()
         processingTask.setTaskCompleted(success: true)
       }
-      processingTask.expirationHandler = {
-        operation.cancel()
+      let expire: @MainActor @Sendable () -> Void = {
         processingTask.setTaskCompleted(success: false)
+      }
+      processingTask.expirationHandler = { @Sendable in
+        operation.cancel()
+        Task { @MainActor in expire() }
       }
     }
   }
