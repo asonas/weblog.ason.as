@@ -10,6 +10,8 @@ class TestArticleComparisonEvidence < Minitest::Test
   FIXTURE = ROOT.join("test/fixtures/article_comparison/rubykaigi-follow-up.json")
 
   def test_detects_an_article_layout_change_through_the_publication_path
+    require_system_chrome
+
     Dir.mktmpdir do |directory|
       root = Pathname(directory)
       candidate_source = extract_head(root)

@@ -10,6 +10,8 @@ class TestReportArticleComparison < Minitest::Test
   REPORT_COMMAND = ROOT.join("bin/report-article-comparison")
 
   def test_reports_baseline_candidate_and_pixel_difference
+    require_system_chrome
+
     Dir.mktmpdir do |directory|
       root = Pathname(directory)
       pair = create_pair(root)
@@ -62,6 +64,8 @@ class TestReportArticleComparison < Minitest::Test
   end
 
   def test_reports_no_difference_for_the_same_input
+    require_system_chrome
+
     Dir.mktmpdir do |directory|
       root = Pathname(directory)
       pair = create_pair(root, candidate_color: "#003c3c", candidate_height: 900)

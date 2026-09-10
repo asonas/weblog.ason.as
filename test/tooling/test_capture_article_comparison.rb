@@ -9,6 +9,8 @@ class TestCaptureArticleComparison < Minitest::Test
   COMMAND = ROOT.join("bin/capture-article-comparison")
 
   def test_captures_both_sites_at_mobile_and_desktop_widths
+    require_system_chrome
+
     Dir.mktmpdir do |directory|
       pair = create_pair(Pathname(directory))
       output = Pathname(directory).join("capture")
@@ -31,6 +33,8 @@ class TestCaptureArticleComparison < Minitest::Test
   end
 
   def test_fails_when_an_article_image_cannot_be_loaded
+    require_system_chrome
+
     Dir.mktmpdir do |directory|
       pair = create_pair(Pathname(directory), image_path: "/assets/missing.svg")
       _stdout, stderr, status = Open3.capture3(
@@ -46,6 +50,8 @@ class TestCaptureArticleComparison < Minitest::Test
   end
 
   def test_fails_when_a_required_stylesheet_cannot_be_loaded
+    require_system_chrome
+
     Dir.mktmpdir do |directory|
       pair = create_pair(Pathname(directory), stylesheet: "/assets/missing.css")
       _stdout, stderr, status = Open3.capture3(
