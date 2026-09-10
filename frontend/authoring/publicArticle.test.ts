@@ -75,6 +75,39 @@ test("site routing preserves article objects and selects the app shell only for 
   assert.equal(route("/RubyKaigi%202026/"), "/RubyKaigi%202026");
 });
 
+test("authenticated public reading restores the header edit action", async () => {
+  const dom = new JSDOM(
+    '<header class="site-header"><nav><span class="header-actions"><a href="/feed.xml">Feed</a></span></nav></header><article data-public-article="1" data-editing-href="/editor/page-id"></article>',
+    { url: "https://weblog.ason.as/article" },
+  );
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    HTMLElement: dom.window.HTMLElement,
+  });
+  try {
+    const { enhancePublicArticleEditing } = await import("./publicArticle");
+    const article = document.querySelector<HTMLElement>("article");
+    assert.ok(article);
+    await enhancePublicArticleEditing(
+      article,
+      async () => new Response(JSON.stringify({ can_edit: false })),
+    );
+    assert.equal(document.querySelector(".header-action--view-mode"), null);
+    await enhancePublicArticleEditing(
+      article,
+      async () => new Response(JSON.stringify({ can_edit: true })),
+    );
+    const edit = document.querySelector<HTMLAnchorElement>(
+      ".header-action--view-mode",
+    );
+    assert.equal(edit?.textContent, "編集");
+    assert.equal(edit?.getAttribute("href"), "/editor/page-id");
+  } finally {
+    dom.window.close();
+  }
+});
+
 test("offscreen media keep their waiting state until they approach the viewport", async () => {
   const dom = new JSDOM(
     '<article><span class="article-image"><img src="/assets/slow.webp" loading="lazy"></span><figure class="article-video"><video></video></figure></article>',

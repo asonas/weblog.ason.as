@@ -60,6 +60,40 @@ async function loadSpeakerDeck(container: HTMLElement) {
   }
 }
 
+export async function enhancePublicArticleEditing(
+  article: HTMLElement,
+  fetcher: typeof fetch = fetch,
+) {
+  const editingHref = article.dataset.editingHref;
+  const actions = document.querySelector<HTMLElement>(
+    ".site-header .header-actions",
+  );
+  if (!editingHref || !actions) return;
+
+  try {
+    const response = await fetcher("/api/auth/session", {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return;
+    const auth: unknown = await response.json();
+    if (
+      typeof auth !== "object" ||
+      auth === null ||
+      !("can_edit" in auth) ||
+      auth.can_edit !== true
+    )
+      return;
+
+    const edit = document.createElement("a");
+    edit.className = "header-action header-action--view-mode";
+    edit.href = editingHref;
+    edit.textContent = "編集";
+    actions.append(edit);
+  } catch {
+    return;
+  }
+}
+
 export function enhancePublicArticle(root: HTMLElement) {
   const pending = new Map<HTMLElement, () => void>();
   for (const media of root.querySelectorAll<
@@ -97,7 +131,10 @@ export function enhancePublicArticle(root: HTMLElement) {
 }
 
 const article = document.querySelector<HTMLElement>("[data-public-article]");
-if (article) enhancePublicArticle(article);
+if (article) {
+  enhancePublicArticle(article);
+  void enhancePublicArticleEditing(article);
+}
 
 if (document.querySelector("[data-public-universe]")) {
   const updateHeader = () => {

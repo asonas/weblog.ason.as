@@ -111,10 +111,11 @@ module WeblogAuthoring
       mentions = @database.approved_webmentions_for_page(page.id)
       escaped_source_url = CGI.escapeHTML(source_url)
       author_url = CGI.escapeHTML(URI.join(source_url, "/").to_s)
+      editing_href = CGI.escapeHTML("/editor/#{WeblogAuthoring.encoded_route(page.id)}")
       cover = CoverImage.resolve(page)
       cover_html = cover ? %(<img src="#{CGI.escapeHTML(cover)}" alt="" fetchpriority="high" />) : ""
       <<~HTML
-        <article class="article-workspace article-workspace--reading webmention-static-page h-entry" data-public-article="1">
+        <article class="article-workspace article-workspace--reading webmention-static-page h-entry" data-public-article="1" data-editing-href="#{editing_href}">
           <header class="article-reading-header#{cover ? ' article-reading-header--covered' : ''}">
             #{cover_html}
             <h1 class="p-name">#{CGI.escapeHTML(page.display_title.to_s)}</h1>
