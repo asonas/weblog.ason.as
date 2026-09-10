@@ -17,7 +17,7 @@ require_relative "webmention_targets"
 
 module WeblogAuthoring
   class DevelopmentDatabase
-    SCHEMA_VERSION = 11
+    SCHEMA_VERSION = 12
     INBOX_RETENTION_SECONDS = 7 * 24 * 60 * 60
     ADOPTION_RETENTION_SECONDS = 14 * 24 * 60 * 60
     TOKYO_OFFSET = "+09:00"
@@ -34,6 +34,18 @@ module WeblogAuthoring
 
     def setup!
       with_connection { |database| create_schema(database) }
+    end
+
+    def find_image_dimensions(url)
+      with_connection do |database|
+        database.get_first_row("SELECT width, height FROM image_dimensions WHERE url = ?", [url])
+      end
+    end
+
+    def save_image_dimensions(url, width:, height:)
+      with_connection do |database|
+        database.execute("INSERT INTO image_dimensions (url, width, height) VALUES (?, ?, ?) ON CONFLICT (url) DO NOTHING", [url, width, height])
+      end
     end
 
     def list_timeline_pages(limit:, before: nil, after: nil, month: nil)
@@ -1600,6 +1612,7 @@ module WeblogAuthoring
     def create_schema(database)
       version = database.get_first_value("PRAGMA user_version").to_i
       return if version == SCHEMA_VERSION && table_exists?(database, "pages")
+      database.execute("CREATE TABLE IF NOT EXISTS image_dimensions (url TEXT PRIMARY KEY, width INTEGER NOT NULL, height INTEGER NOT NULL)")
       database.execute(<<~SQL)
         CREATE TABLE IF NOT EXISTS video_materials (
           id TEXT PRIMARY KEY,
@@ -1607,7 +1620,7 @@ module WeblogAuthoring
           created_at TEXT NOT NULL
         )
       SQL
-      if version == 10 && table_exists?(database, "pages")
+      if [10, 11].include?(version) && table_exists?(database, "pages")
         database.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
         return
       end

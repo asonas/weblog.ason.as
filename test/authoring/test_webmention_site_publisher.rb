@@ -24,6 +24,14 @@ class WebmentionSitePublisherTest < Minitest::Test
       [@page]
     end
 
+    def find_image_dimensions(url)
+      (@dimensions ||= {})[url]
+    end
+
+    def save_image_dimensions(url, width:, height:)
+      (@dimensions ||= {})[url] = [width, height]
+    end
+
     def approved_webmentions_for_page(_id)
       [{
         "id" => "mention-id", "source_url" => "https://mention.example/post",
@@ -239,8 +247,10 @@ class WebmentionSitePublisherTest < Minitest::Test
     )
     outbox = { "id" => "media", "page_id" => page.id, "payload" => { "source_url" => "https://weblog.ason.as/Media" } }
     services = Services.new
+    database = Database.new(page:, outbox:)
+    database.save_image_dimensions("/assets/photo.webp", width: 48, height: 32)
     WeblogAuthoring::WebmentionSitePublisher.new(
-      database: Database.new(page:, outbox:), s3_client: services, cloudfront_client: services,
+      database:, s3_client: services, cloudfront_client: services,
       sqs_client: services, site_bucket: "site", distribution_id: "distribution",
       delivery_queue_url: "queue", sender_enabled: false
     ).publish(outbox)
@@ -250,6 +260,7 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_includes html, 'fetchpriority="high"'
     assert_includes html, 'loading="eager"'
     assert_includes html, 'loading="lazy"'
+    assert_match(/style="--image-width: 48px".*width="48" height="32"/, html)
     assert_includes html, 'class="article-reading-header article-reading-header--covered"'
     refute_includes html, 'class="article-image" style="aspect-ratio: 16 / 9"'
     universe = REXML::Document.new(html[/<div data-public-universe="[^"]*"><\/div>/]).root

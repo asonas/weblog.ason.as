@@ -478,13 +478,14 @@ module WeblogAuthoring
         return json_response(200, VideoUpload.new(s3_client:, bucket: @asset_bucket, clock: @clock).create(size: payload["size"]))
       end
       upload = ImageUpload.new(
+        database: @database,
         s3_client:,
         bucket: @asset_bucket,
         clock: @clock
       ).create(
         content_type: payload["content_type"],
         size: payload["size"],
-        inbox_date: payload["inbox_date"]
+        inbox_date: payload["inbox_date"], width: payload["width"], height: payload["height"]
       )
       json_response(200, upload)
     end

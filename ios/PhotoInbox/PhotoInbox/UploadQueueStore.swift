@@ -73,6 +73,8 @@ struct UploadItem: Codable, Equatable, Identifiable, Sendable {
   var contentType: String?
   var size: Int?
   var sha256: String?
+  var width: Int?
+  var height: Int?
   var failure: UploadFailure?
 
   var shouldAttemptAutomatically: Bool {
@@ -89,6 +91,8 @@ struct UploadItem: Codable, Equatable, Identifiable, Sendable {
     contentType: String? = nil,
     size: Int? = nil,
     sha256: String? = nil,
+    width: Int? = nil,
+    height: Int? = nil,
     failure: UploadFailure? = nil
   ) {
     self.clientUploadID = clientUploadID
@@ -100,6 +104,8 @@ struct UploadItem: Codable, Equatable, Identifiable, Sendable {
     self.contentType = contentType
     self.size = size
     self.sha256 = sha256
+    self.width = width
+    self.height = height
     self.failure = failure
   }
 }
@@ -162,6 +168,8 @@ actor UploadQueueStore {
       current[index].contentType = nil
       current[index].size = nil
       current[index].sha256 = nil
+      current[index].width = nil
+      current[index].height = nil
       current[index].clientUploadID = UUID()
     }
     current[index].stage = .pending

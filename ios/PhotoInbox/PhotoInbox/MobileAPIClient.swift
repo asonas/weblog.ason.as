@@ -75,11 +75,13 @@ struct CreateUploadRequest: Encodable, Sendable {
   let sha256: String
   let capturedAt: Date
   let capturedAtSource: String
+  var width: Int? = nil
+  var height: Int? = nil
 
   enum CodingKeys: String, CodingKey {
     case clientUploadID = "client_upload_id"
     case contentType = "content_type"
-    case size, sha256
+    case size, sha256, width, height
     case capturedAt = "captured_at"
     case capturedAtSource = "captured_at_source"
   }
@@ -92,6 +94,8 @@ struct CreateUploadRequest: Encodable, Sendable {
     try container.encode(sha256, forKey: .sha256)
     try container.encode(capturedAt, forKey: .capturedAt)
     try container.encode(capturedAtSource, forKey: .capturedAtSource)
+    try container.encodeIfPresent(width, forKey: .width)
+    try container.encodeIfPresent(height, forKey: .height)
   }
 }
 

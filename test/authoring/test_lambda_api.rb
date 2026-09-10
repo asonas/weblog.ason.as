@@ -51,6 +51,13 @@ class LambdaApiTest < Minitest::Test
   end
 
   class FakeDatabase
+    def find_image_dimensions(url)
+      (@image_dimensions ||= {})[url]
+    end
+
+    def save_image_dimensions(url, width:, height:)
+      (@image_dimensions ||= {})[url] = [width, height]
+    end
     attr_reader :health_checks, :pages, :saved_requests, :inbox_filters, :preview_updates
     attr_accessor :webmentions, :webmention_delivery_failures
 
@@ -901,7 +908,7 @@ class LambdaApiTest < Minitest::Test
     response = api.call(json_event(
       "POST",
       "/api/uploads",
-      { content_type: "image/webp", size: 1024 },
+      { content_type: "image/webp", size: 1024, width: 1200, height: 800 },
       cookies: ["weblog_authoring_session=#{token}"],
       headers: { "x-csrf-token" => "csrf-token" }
     ))
@@ -910,6 +917,7 @@ class LambdaApiTest < Minitest::Test
     assert_equal 200, response.fetch(:statusCode)
     assert_match(%r{\A/assets/uploads/2026/08/[0-9a-f-]+\.webp\z}, body.fetch("public_url"))
     assert_equal "image/webp", body.dig("fields", "Content-Type")
+    assert_equal [1200, 800], @database.find_image_dimensions(body.fetch("public_url"))
     video_payload = { content_type: "video/mp4", size: 10_000_000 }
     assert_equal 401, api.call(json_event("POST", "/api/uploads", video_payload)).fetch(:statusCode)
     assert_equal 403, api.call(json_event("POST", "/api/uploads", video_payload,

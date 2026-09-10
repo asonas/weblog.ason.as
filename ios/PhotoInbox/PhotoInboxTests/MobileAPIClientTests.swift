@@ -20,7 +20,9 @@ final class MobileAPIClientTests: XCTestCase {
         size: 42,
         sha256: String(repeating: "a", count: 64),
         capturedAt: Date(timeIntervalSince1970: 0),
-        capturedAtSource: "photos"
+        capturedAtSource: "photos",
+        width: 800,
+        height: 1200
       ))
 
     let recordedRequest = await transport.lastRequest
@@ -32,6 +34,9 @@ final class MobileAPIClientTests: XCTestCase {
       "application/json, application/problem+json"
     )
     let payload = try XCTUnwrap(request.httpBody)
+    let dimensions = try XCTUnwrap(JSONSerialization.jsonObject(with: payload) as? [String: Any])
+    XCTAssertEqual(dimensions["width"] as? Int, 800)
+    XCTAssertEqual(dimensions["height"] as? Int, 1200)
     XCTAssertTrue(String(decoding: payload, as: UTF8.self).contains(id.uuidString.lowercased()))
   }
 

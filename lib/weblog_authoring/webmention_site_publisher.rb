@@ -107,7 +107,11 @@ module WeblogAuthoring
     end
 
     def render_page(page, source_url:)
-      rendered = MarkdownRenderer.new(pages: @database.list_pages).render(page.body, mode: "public", progressive: true)
+      dimensions = {}
+      rendered = MarkdownRenderer.new(pages: @database.list_pages).render(
+        page.body, mode: "public", progressive: true,
+        image_dimensions: ->(src) { dimensions.fetch(src) { dimensions[src] = @database.find_image_dimensions(src) } }
+      )
       mentions = @database.approved_webmentions_for_page(page.id)
       escaped_source_url = CGI.escapeHTML(source_url)
       author_url = CGI.escapeHTML(URI.join(source_url, "/").to_s)

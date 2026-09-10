@@ -3,6 +3,7 @@
 require "aws-sdk-s3"
 require "date"
 require "securerandom"
+require_relative "image_dimensions"
 
 module WeblogAuthoring
   class ImageUpload
@@ -16,18 +17,20 @@ module WeblogAuthoring
       "image/webp" => "webp",
     }.freeze
 
-    def initialize(s3_client:, bucket:, clock: Time.method(:now), random: SecureRandom.method(:uuid))
+    def initialize(s3_client:, bucket:, database: nil, clock: Time.method(:now), random: SecureRandom.method(:uuid))
       @s3_client = s3_client
       @bucket = bucket
+      @database = database
       @clock = clock
       @random = random
     end
 
-    def create(content_type:, size:, inbox_date: nil)
+    def create(content_type:, size:, inbox_date: nil, width: nil, height: nil)
       extension = CONTENT_TYPES[content_type]
       raise ArgumentError, "対応していない画像形式です" if extension.nil?
       raise ArgumentError, "画像サイズが不正です" unless size.is_a?(Integer) && size.positive?
       raise ArgumentError, "画像は25MB以下にしてください" if size > MAX_BYTES
+      dimensions = ImageDimensions.validate(width, height)
 
       now = @clock.call
       prefix = inbox_date.nil? ? "uploads/#{now.strftime("%Y/%m")}" : inbox_prefix(inbox_date)
@@ -45,6 +48,7 @@ module WeblogAuthoring
         signature_expiration: now + 300
       )
 
+      @database.save_image_dimensions("/#{key}", width:, height:) if dimensions && @database
       {
         "upload_url" => post.url,
         "fields" => post.fields,

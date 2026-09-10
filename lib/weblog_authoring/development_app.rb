@@ -351,13 +351,14 @@ module WeblogAuthoring
           next VideoUpload.new(s3_client: s3_client, bucket: settings.asset_bucket, clock: settings.clock).create(size: payload["size"])
         end
         ImageUpload.new(
+          database: settings.database,
           s3_client: s3_client,
           bucket: settings.asset_bucket,
           clock: settings.clock
         ).create(
           content_type: payload["content_type"],
           size: payload["size"],
-          inbox_date: payload["inbox_date"]
+          inbox_date: payload["inbox_date"], width: payload["width"], height: payload["height"]
         )
       end
     end

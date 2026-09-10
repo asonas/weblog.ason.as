@@ -45,6 +45,8 @@ module WeblogAuthoring
         tagging: "weblog-inbox-adoption=pending",
         tagging_directive: "REPLACE"
       )
+      dimensions = @database.find_image_dimensions("/#{adoption.inbox_key}")
+      @database.save_image_dimensions("/#{adoption.public_key}", width: dimensions[0], height: dimensions[1]) if dimensions
       { "public_url" => "/#{adoption.public_key}" }
     end
 

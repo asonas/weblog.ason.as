@@ -95,6 +95,7 @@ class MobileUploadApiTest < Minitest::Test
       client_upload_id: "11111111-2222-4333-8444-555555555555",
       content_type: "image/jpeg",
       size: 1024,
+      width: 800, height: 1200,
       sha256: "a" * 64,
       captured_at: "2026-08-27T08:30:00+09:00",
       captured_at_source: "photos",
@@ -115,6 +116,7 @@ class MobileUploadApiTest < Minitest::Test
     assert_match(/\A[0-9a-f]{32}\z/, upload.fetch("upload_id"))
     assert_equal (NOW + 300).iso8601, upload.fetch("expires_at")
     assert_equal "image/jpeg", upload.dig("fields", "Content-Type")
+    assert_equal [800, 1200], @database.find_image_dimensions("/#{upload.dig('fields', 'key')}")
     assert_equal "a" * 64, upload.dig("fields", "x-amz-meta-sha256")
     assert_match(%r{\Aassets/inbox/2026/08/27/[0-9a-f]{32}\.jpg\z}, upload.dig("fields", "key"))
   end

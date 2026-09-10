@@ -150,6 +150,7 @@ module WeblogAuthoring
           expires_at TIMESTAMPTZ NOT NULL
         )
       SQL
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.image_dimensions (url TEXT PRIMARY KEY, width INTEGER NOT NULL, height INTEGER NOT NULL)")
       connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.mobile_pairings (
           id TEXT PRIMARY KEY,

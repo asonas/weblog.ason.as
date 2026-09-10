@@ -1662,7 +1662,12 @@ async function fetchPageIfChanged(
 }
 
 async function uploadImage(file: File, inboxDate?: string): Promise<string> {
+  const { imageDimensions } = await import("./imageMetadata");
+  const dimensions = imageDimensions(await file.arrayBuffer(), file.type);
+  if (!dimensions) throw new Error("画像の寸法を読み取れませんでした");
   const upload = await requestJson<UploadResponse>("/api/uploads", {
+    width: dimensions.width,
+    height: dimensions.height,
     content_type: file.type,
     size: file.size,
     ...(inboxDate ? { inbox_date: inboxDate } : {}),

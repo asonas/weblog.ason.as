@@ -62,6 +62,19 @@ module WeblogAuthoring
       )
     end
 
+    def find_image_dimensions(url)
+      with_connection do |connection|
+        row = connection.exec_params("SELECT width, height FROM #{SCHEMA}.image_dimensions WHERE url = $1", [url]).first
+        row && [row.fetch("width").to_i, row.fetch("height").to_i]
+      end
+    end
+
+    def save_image_dimensions(url, width:, height:)
+      with_connection do |connection|
+        connection.exec_params("INSERT INTO #{SCHEMA}.image_dimensions (url, width, height) VALUES ($1, $2, $3) ON CONFLICT (url) DO NOTHING", [url, width, height])
+      end
+    end
+
     def list_timeline_pages(limit:, before: nil, after: nil, month: nil)
       with_connection do |connection|
         sql = <<~SQL

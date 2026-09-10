@@ -30,6 +30,8 @@ final class ImagePreparerTests: XCTestCase {
     )
     XCTAssertEqual(image.width, 2)
     XCTAssertEqual(image.height, 4)
+    XCTAssertEqual(prepared.width, 2)
+    XCTAssertEqual(prepared.height, 4)
   }
 
   func testPrepareReducesPixelsToMeetTheByteLimit() throws {

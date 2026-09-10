@@ -103,7 +103,9 @@ final class UploadCoordinator {
       let sha = item.sha256,
       FileManager.default.fileExists(atPath: path)
     {
-      prepared = .init(fileURL: URL(filePath: path), contentType: type, size: size, sha256: sha)
+      prepared = .init(
+        fileURL: URL(filePath: path), contentType: type, size: size, sha256: sha,
+        width: item.width, height: item.height)
     } else {
       guard let asset = library.asset(identifier: item.assetLocalIdentifier) else {
         throw ImagePreparationError.unavailable
@@ -115,6 +117,8 @@ final class UploadCoordinator {
       item.contentType = prepared.contentType
       item.size = prepared.size
       item.sha256 = prepared.sha256
+      item.width = prepared.width
+      item.height = prepared.height
       try await store.update(item)
     }
     let signed = try await api.createUpload(
@@ -124,7 +128,9 @@ final class UploadCoordinator {
         size: prepared.size,
         sha256: prepared.sha256,
         capturedAt: item.capturedAt,
-        capturedAtSource: item.capturedAtSource
+        capturedAtSource: item.capturedAtSource,
+        width: prepared.width,
+        height: prepared.height
       ))
     try await store.updateStage(item.clientUploadID, stage: .uploading(uploadID: signed.uploadID))
     try await uploader.upload(fileURL: prepared.fileURL, to: signed)

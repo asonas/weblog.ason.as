@@ -37,7 +37,7 @@ module WeblogAuthoring
       end
     end
 
-    def render(body, mode:, progressive: false)
+    def render(body, mode:, progressive: false, image_dimensions: nil)
       validate_mode!(mode)
 
       source = body.to_s
@@ -51,7 +51,7 @@ module WeblogAuthoring
         smart_quotes: %w[apos apos quot quot]
       )
 
-      html, converter_warnings = SafeHtmlConverter.with_context(mode:, wiki_targets:, progressive:, image_count: 0) do
+      html, converter_warnings = SafeHtmlConverter.with_context(mode:, wiki_targets:, progressive:, image_dimensions:, image_count: 0) do
         SafeHtmlConverter.convert(document.root, document.options)
       end
 
@@ -276,9 +276,12 @@ module WeblogAuthoring
             self.class.context[:image_count] += 1
             loading = self.class.context[:image_count] == 1 ? "eager" : "lazy"
             width, height = el.attr.values_at("width", "height")
+            measured = self.class.context[:image_dimensions]&.call(src)
+            width, height = measured if measured
             dimensions = [width, height].all? { |value| value.to_s.match?(/\A[1-9]\d{0,4}\z/) }
             size = dimensions ? %( width="#{width}" height="#{height}") : ""
-            return %(<span class="article-image"><img#{html_attributes('src' => src, 'alt' => alt)}#{size} loading="#{loading}" decoding="async" /></span>)
+            style = dimensions ? %( style="--image-width: #{width}px") : ""
+            return %(<span class="article-image"#{style}><img#{html_attributes('src' => src, 'alt' => alt)}#{size} loading="#{loading}" decoding="async" /></span>)
           end
           return "<img#{html_attributes('src' => src, 'alt' => alt)} />"
         end

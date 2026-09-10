@@ -10,6 +10,8 @@ struct PreparedPhoto: Sendable {
   let contentType: String
   let size: Int
   let sha256: String
+  var width: Int? = nil
+  var height: Int? = nil
 }
 
 enum ImagePreparationError: Error { case unavailable, conversionFailed }
@@ -68,7 +70,9 @@ struct ImagePreparer {
           fileURL: fileURL,
           contentType: "image/webp",
           size: output.count,
-          sha256: SHA256.hash(data: output).map { String(format: "%02x", $0) }.joined()
+          sha256: SHA256.hash(data: output).map { String(format: "%02x", $0) }.joined(),
+          width: image.width,
+          height: image.height
         )
       }
     }

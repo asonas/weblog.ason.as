@@ -7,6 +7,7 @@ require "securerandom"
 require "time"
 require "aws-sdk-s3"
 require "rack/utils"
+require_relative "image_dimensions"
 
 module WeblogAuthoring
   class MobileUpload
@@ -83,12 +84,14 @@ module WeblogAuthoring
       return nil if device.nil?
 
       attributes = upload_attributes(payload)
+      dimensions = ImageDimensions.validate(payload["width"], payload["height"])
       upload, created = @database.create_mobile_upload(
         device_id: device.fetch("id"),
         upload_id: @random_uuid.call,
         s3_key: inbox_key(attributes.fetch(:captured_at), attributes.fetch(:content_type)),
         **attributes
       )
+      @database.save_image_dimensions("/#{upload.fetch('s3_key')}", width: dimensions[0], height: dimensions[1]) if dimensions
       @database.touch_mobile_device(device.fetch("id"))
       [signed_upload(upload), created]
     end

@@ -7,6 +7,8 @@ module WeblogAuthoring
   end
 
   class DsqlDatabase
+    def find_image_dimensions: (String) -> [Integer, Integer]?
+    def save_image_dimensions: (String, width: Integer, height: Integer) -> untyped
     def save_video_material: (id: String, payload: Hash[String, untyped]) -> Hash[String, untyped]?
     def list_video_materials: () -> Array[Hash[String, untyped]]
     DATABASE_ROLE: String

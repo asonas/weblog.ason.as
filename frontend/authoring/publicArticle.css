@@ -22,8 +22,15 @@
 }
 .article-image img {
   max-width: 100%;
-  width: auto;
+  width: var(--image-width, auto);
   height: auto;
+}
+.article-image:not([data-media-state])::before {
+  background-color: var(--surface);
+}
+.article-image[data-media-state="failed"]:has(> img[width][height]) {
+  /* Broken images lose the space below the normal inline-image baseline. */
+  padding-block-end: 6px;
 }
 .speakerdeck-player,
 .youtube-player,

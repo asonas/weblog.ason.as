@@ -20,6 +20,11 @@ class ImageInboxTest < Minitest::Test
       created_at: Time.now, updated_at: Time.now
     )
     adoption = nil
+    dimensions = {}
+    @database.define_singleton_method(:find_image_dimensions) { |_url| [800, 1200] }
+    @database.define_singleton_method(:save_image_dimensions) do |url, width:, height:|
+      dimensions[url] = [width, height]
+    end
     @database.define_singleton_method(:find_inbox_item) { |_id| item }
     @database.define_singleton_method(:prepare_inbox_image_adoption) do |item_id:, inbox_key:, public_key:|
       adoption ||= WeblogAuthoring::InboxImageAdoption.new(
@@ -29,6 +34,7 @@ class ImageInboxTest < Minitest::Test
     end
 
     result = @inbox.prepare(item_id: "item-1")
+    assert_equal [800, 1200], dimensions.fetch(result.fetch("public_url"))
 
     assert_equal "/assets/uploads/2026/08/11111111222233334444555555555555.webp",
                  result.fetch("public_url")
