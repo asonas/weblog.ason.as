@@ -69,7 +69,7 @@ jobs:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 0
 
-      - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: arn:aws:iam::282782318939:role/WeblogGitHubDeploy
           aws-region: ${{ env.AWS_REGION }}
@@ -152,7 +152,7 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
         if: steps.inspect.outputs.build == 'true'
 
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
         if: steps.inspect.outputs.build == 'true'
 
       - name: Build and publish image

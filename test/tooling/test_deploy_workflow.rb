@@ -25,11 +25,13 @@ class DeployWorkflowTest < Minitest::Test
   def test_deploy_verifies_and_reuses_the_validation_artifact
     steps = @workflow.dig("jobs", "deploy", "steps")
     checkout = steps.find { |step| step["uses"]&.start_with?("actions/checkout@") }
-    download = steps.find { |step| step["uses"]&.start_with?("actions/download-artifact@") }
+    download = steps.find { |step| step["name"] == "Download validated site artifact" }
     verify = steps.find { |step| step["name"] == "Verify deployment inputs" }.fetch("run")
     assert_equal "${{ github.event.workflow_run.head_sha }}", checkout.dig("with", "ref")
-    assert_equal "site-${{ github.event.workflow_run.head_sha }}", download.dig("with", "name")
-    assert_equal "${{ github.event.workflow_run.id }}", download.dig("with", "run-id")
+    assert_equal "${{ github.event.workflow_run.id }}", download.dig("env", "VALIDATION_RUN_ID")
+    assert_equal "${{ github.token }}", download.dig("env", "GH_TOKEN")
+    assert_includes download.fetch("run"), 'gh run download "$VALIDATION_RUN_ID" --repo "$GITHUB_REPOSITORY"'
+    assert_includes download.fetch("run"), '--name "site-${TARGET_SHA}" --dir dist/site'
     assert_includes verify, "artifact-metadata.json"
     assert_includes verify, '[[ "$checkout_sha" == "$TARGET_SHA" ]]'
     assert_includes verify, '[[ "$artifact_sha" == "$TARGET_SHA" ]]'

@@ -157,13 +157,12 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Download validated site artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: site-${{ github.event.workflow_run.head_sha }}
-          path: dist/site
-          repository: ${{ github.repository }}
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATION_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          gh run download "$VALIDATION_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "site-${TARGET_SHA}" --dir dist/site
 
       - name: Verify deployment inputs
         run: |
@@ -184,7 +183,7 @@ jobs:
           ruby-version: 4.0.6
           bundler-cache: true
 
-      - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: arn:aws:iam::282782318939:role/WeblogGitHubDeploy
           aws-region: ${{ env.AWS_REGION }}

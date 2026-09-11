@@ -55,7 +55,7 @@ jobs:
       WEBMENTION_PUBLISHER_LAMBDA_FUNCTION: weblog-webmention-publisher-production
       WEBMENTION_CLEANUP_LAMBDA_FUNCTION: weblog-webmention-cleanup-production
     steps:
-      - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: arn:aws:iam::282782318939:role/WeblogGitHubDeploy
           aws-region: ${{ env.AWS_REGION }}

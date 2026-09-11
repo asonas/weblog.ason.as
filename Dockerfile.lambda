@@ -1,7 +1,7 @@
 FROM public.ecr.aws/lambda/ruby:4.0 AS libvips-build
 
 RUN dnf install -y \
-      gcc gcc-c++ make meson ninja-build pkgconf-pkg-config tar xz \
+      gcc gcc-c++ make meson ninja-build pkgconf-pkg-config tar xz gettext \
       glib2-devel expat-devel libjpeg-turbo-devel libpng-devel libwebp-devel \
     && dnf clean all
 
