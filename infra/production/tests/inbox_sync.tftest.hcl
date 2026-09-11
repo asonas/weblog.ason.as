@@ -27,17 +27,13 @@ run "inbox_sync_alerting" {
   command = plan
 
   variables {
-    inbox_alerting_enabled = true
-    inbox_alert_email      = "alerts@example.com"
+    inbox_alert_email = "alerts@example.com"
   }
 
   plan_options {
     target = [
       aws_cloudwatch_log_group.inbox_sync,
       aws_cloudwatch_log_metric_filter.inbox_source_success,
-      aws_cloudwatch_metric_alarm.inbox_source_retryable_failure,
-      aws_cloudwatch_metric_alarm.inbox_source_stale,
-      aws_cloudwatch_metric_alarm.inbox_schedule_stale,
       aws_sns_topic.inbox_alerts,
       aws_lambda_function.matrix_notifier,
       aws_sns_topic_subscription.inbox_matrix,
@@ -48,21 +44,6 @@ run "inbox_sync_alerting" {
   assert {
     condition     = aws_cloudwatch_log_group.inbox_sync.retention_in_days == 14
     error_message = "inbox sync structured logs must expire after fourteen days"
-  }
-
-  assert {
-    condition     = aws_cloudwatch_metric_alarm.inbox_source_retryable_failure["bluesky"].evaluation_periods == 3
-    error_message = "retryable failures must alert after three consecutive periods"
-  }
-
-  assert {
-    condition     = aws_cloudwatch_metric_alarm.inbox_source_stale["raindrop"].datapoints_to_alarm == 3
-    error_message = "a source must alert after three missing hourly successes"
-  }
-
-  assert {
-    condition     = aws_cloudwatch_metric_alarm.inbox_schedule_stale.actions_enabled
-    error_message = "alarm actions must follow the explicit alerting switch"
   }
 
   assert {

@@ -96,34 +96,6 @@ resource "aws_cloudwatch_log_metric_filter" "authoring_restore_slow" {
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "authoring_restore_slow" {
-  alarm_name          = "weblog-authoring-restore-over-five-seconds"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = 1
-  metric_name         = "RestoreOverFiveSeconds"
-  namespace           = "Weblog/AuthoringPerformance"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = 1
-  treat_missing_data  = "notBreaching"
-}
-
-resource "aws_cloudwatch_metric_alarm" "authoring_performance_errors" {
-  alarm_name          = "weblog-authoring-performance-ingestion-errors"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = 1
-  metric_name         = "Errors"
-  namespace           = "AWS/Lambda"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = 1
-  treat_missing_data  = "notBreaching"
-
-  dimensions = {
-    FunctionName = aws_lambda_function.authoring_performance.function_name
-  }
-}
-
 resource "aws_cloudwatch_dashboard" "authoring_performance" {
   dashboard_name = "weblog-authoring-performance"
   dashboard_body = jsonencode({

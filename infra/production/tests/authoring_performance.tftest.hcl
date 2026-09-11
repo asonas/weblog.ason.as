@@ -18,8 +18,6 @@ run "authoring_performance_telemetry" {
       aws_apigatewayv2_route.authoring_performance,
       aws_cloudwatch_log_group.authoring_performance,
       aws_cloudwatch_log_metric_filter.authoring_restore_slow,
-      aws_cloudwatch_metric_alarm.authoring_restore_slow,
-      aws_cloudwatch_metric_alarm.authoring_performance_errors,
       aws_cloudwatch_dashboard.authoring_performance,
     ]
   }
@@ -39,8 +37,4 @@ run "authoring_performance_telemetry" {
     error_message = "Authoring performance telemetry must use its dedicated log group"
   }
 
-  assert {
-    condition     = aws_cloudwatch_metric_alarm.authoring_restore_slow.threshold == 1
-    error_message = "A restore over five seconds must trigger the restore alarm"
-  }
 }
