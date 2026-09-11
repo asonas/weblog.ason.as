@@ -55,6 +55,7 @@ module WeblogAuthoring
     def new_editor_response: (lambda_event) -> lambda_response
     def daily_editor_response: (lambda_event) -> lambda_response
     def save_response: (lambda_event, ?page_id: String?, ?status: Integer) -> lambda_response
+    def rename_response: (lambda_event) -> lambda_response
     def notify_search_index: () -> void
     def notify_webmention_publisher: (PageDocument) -> void
     def upload_response: (lambda_event) -> lambda_response

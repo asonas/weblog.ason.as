@@ -5,5 +5,6 @@ module WeblogAuthoring
     def find: (String id, ?timings: Hash[String, Float]?) -> PageDocument?
     def find_route: (String route) -> PageDocument?
     def save: (SaveRequest request) -> PageDocument?
+    def rename: (String page_id, String new_name, body: String, ?expected_updated_at: Time?) -> PageDocument?
   end
 end

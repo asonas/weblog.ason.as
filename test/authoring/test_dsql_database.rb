@@ -129,6 +129,12 @@ class DsqlDatabaseTest < Minitest::Test
       when /INSERT INTO weblog_authoring\.pages/
         store_page(params)
         Result.new
+      when /UPDATE weblog_authoring\.pages SET name/
+        page = @pages.fetch(params.fetch(2))
+        page["name"] = params.fetch(0)
+        page["title"] = params.fetch(0)
+        page["path"] = params.fetch(1)
+        Result.new
       when /UPDATE weblog_authoring\.pages/
         update_page(params)
         Result.new
@@ -211,6 +217,38 @@ class DsqlDatabaseTest < Minitest::Test
     end
 
     def shutdown; end
+  end
+
+  def test_renames_long_titles_and_rewrites_incoming_links
+    database = dsql_database
+    page = database.save(WeblogAuthoring::SaveRequest.new(title: "旧題", body: "本文", page_type: "named"))
+    source = database.save(WeblogAuthoring::SaveRequest.new(title: "参照元", body: "[[旧題]]", page_type: "named"))
+    title = "プログラムに乗って数多くのサービスが立ち上がったが、すでにサービスを停止している企業もある。それも、満足にデータのエクスポートすらできないことも少なくない。こんな状況で、安心して日記を書けるだろうか。"
+
+    renamed = database.rename(page.id, title, body: page.body, expected_updated_at: page.updated_at)
+
+    assert_equal title, renamed.name
+    assert_equal title, renamed.title
+    assert_equal page.id, database.find_route(title).id
+    assert_nil database.find_route("旧題")
+    assert_equal "本文", renamed.body
+    assert_equal "[[#{title}]]", database.find(source.id).body
+    assert_equal [title], database.find(source.id).links.map(&:name)
+    assert_equal page.updated_at, database.scrapbox_line_metadata(page.id).first.fetch(:updated_at)
+    assert_equal [page.id, source.id].sort, @pool.connection.webmention_outboxes.last(2).map { |row| row.fetch("page_id") }.sort
+  end
+
+  def test_rename_rejects_stale_edits_and_existing_names_without_changing_pages
+    database = dsql_database
+    page = database.save(WeblogAuthoring::SaveRequest.new(title: "旧題", body: "本文", page_type: "named"))
+    database.save(WeblogAuthoring::SaveRequest.new(title: "既存", body: "別の本文", page_type: "named"))
+    assert_raises(WeblogAuthoring::ConflictError) do
+      database.rename(page.id, "新題", body: "上書き", expected_updated_at: page.updated_at - 1)
+    end
+    assert_raises(WeblogAuthoring::ConflictError) do
+      database.rename(page.id, "既存", body: "上書き", expected_updated_at: page.updated_at)
+    end
+    assert_equal page, database.find(page.id)
   end
 
   def test_saves_reads_and_lists_page_documents

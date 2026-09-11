@@ -4,8 +4,16 @@ require_relative "../test_helper"
 require_relative "../../lib/weblog_authoring/github_oauth"
 require_relative "../../lib/weblog_authoring/lambda_api"
 require_relative "../../lib/weblog_authoring/lambda_session"
+require_relative "../../lib/weblog_authoring/development_database"
 
 class LambdaApiTest < Minitest::Test
+  class SqliteDatabase < WeblogAuthoring::DevelopmentDatabase
+    def list_pages(**options)
+      options.delete(:timings)
+      super(**options)
+    end
+  end
+
   class FakeS3
     ObjectBody = Data.define(:body)
 
@@ -741,6 +749,27 @@ class LambdaApiTest < Minitest::Test
     assert_equal 200, response.fetch(:statusCode)
     assert_equal "Example", JSON.parse(response.fetch(:body)).fetch("title")
     assert_equal [url], fetcher.requests
+  end
+
+  def test_rename_requires_authorization_and_csrf_before_updating_the_page
+    Dir.mktmpdir do |directory|
+      database = SqliteDatabase.new(File.join(directory, "pages.sqlite3"), content_dir: directory)
+      page = database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", title: "旧題", body: "本文"))
+      codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+      token = codec.issue(kind: "session", attributes: { "github_user_id" => 630_181, "csrf_token" => "csrf-token" }, ttl: 600)
+      api = WeblogAuthoring::LambdaApi.new(database:, session_codec: codec, allowed_github_user_id: 630_181)
+      payload = { page_id: page.id, name: "新題", body: "本文", expected_updated_at: page.updated_at.iso8601(9) }
+      assert_equal 401, api.call(json_event("POST", "/api/rename", payload)).fetch(:statusCode)
+      cookies = ["weblog_authoring_session=#{token}"]
+      assert_equal 403, api.call(json_event("POST", "/api/rename", payload, cookies:)).fetch(:statusCode)
+      response = api.call(json_event(
+        "POST", "/api/rename", payload, cookies:, headers: { "x-csrf-token" => "csrf-token" }
+      ))
+      assert_equal 200, response.fetch(:statusCode), response.fetch(:body)
+      assert_equal "no-store", response.fetch(:headers).fetch("cache-control")
+      assert_equal "新題", JSON.parse(response.fetch(:body)).fetch("name")
+      assert_equal "新題", database.find(page.id).name
+    end
   end
 
   def test_mutations_require_an_allowed_session_and_csrf_token

@@ -203,6 +203,7 @@ module WeblogAuthoring
       return page_response(@database.find(event.dig("pathParameters", "id")), event:) if method == "GET" && page_id_path?(path)
       return route_response(event) if method == "GET" && route_path?(path)
       return save_response(event, status: 201) if method == "POST" && path == "/api/authoring/pages"
+      return rename_response(event) if method == "POST" && path == "/api/rename"
       if method == "PATCH" && authoring_page_id_path?(path)
         return save_response(event, page_id: event.dig("pathParameters", "id"))
       end
@@ -442,6 +443,29 @@ module WeblogAuthoring
       page = @database.save(save_request(parse_json(event), page_id:))
       notify_search_index
       json_response(status, saved_page_json(page))
+    end
+
+    def rename_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required to edit") if session.nil?
+      return json_response(403, error: "Editing is not allowed for this GitHub account") unless allowed_session?(session)
+      return json_response(403, error: "CSRF token mismatch") unless secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
+
+      payload = parse_json(event)
+      page_id = optional_string(payload, "page_id")
+      name = optional_string(payload, "name")
+      raise InputError.new("page_id is required", field: "page_id") if page_id.nil?
+      raise InputError.new("name is required", field: "name") if name.nil?
+      body = payload["body"]
+      raise InputError.new("body must be a string", field: "body") unless body.is_a?(String)
+      return json_response(404, error: "Page not found") if @database.find(page_id).nil?
+
+      page = @database.rename(
+        page_id, name, body:,
+        expected_updated_at: parse_time(optional_string(payload, "expected_updated_at"), "expected_updated_at")
+      )
+      notify_search_index
+      json_response(200, saved_page_json(page))
     end
 
     def notify_search_index

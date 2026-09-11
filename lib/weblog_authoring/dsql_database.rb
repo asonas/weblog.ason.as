@@ -248,6 +248,68 @@ module WeblogAuthoring
       raise ConflictError, "ページの保存に失敗しました: #{error.message}"
     end
 
+    def rename(page_id, new_name, body:, expected_updated_at: nil)
+      normalized_name = WeblogAuthoring.validate_page_name(new_name)
+      pages = list_pages
+      current = pages.find { |page| page.id == page_id }
+      raise ConflictError, "ページが見つかりません" if current.nil?
+      raise ConflictError, "名前付き記事だけを変更できます" unless current.page_type == "named"
+      if expected_updated_at && expected_updated_at != current.updated_at
+        raise ConflictError, "ページが別の編集で更新されています"
+      end
+      return current if normalized_name == current.name && body == current.body
+      if pages.any? { |page| page.id != page_id && page.route == normalized_name }
+        raise ConflictError, "ページが既に存在します: #{normalized_name}"
+      end
+
+      timestamp = now
+      # @type var changes: Array[[PageDocument, PageDocument, Array[Hash[Symbol, untyped]]]]
+      changes = pages.filter_map do |source|
+        rewritten_body = WeblogAuthoring.replace_wiki_links(
+          source.id == page_id ? body : source.body,
+          old_name: current.name.to_s, new_name: normalized_name
+        )
+        next if source.id != page_id && rewritten_body == source.body
+
+        renamed = source.id == page_id
+        document = PageDocument.new(
+          id: source.id, page_type: source.page_type, page_date: source.page_date,
+          status: source.status, created_at: source.created_at, published_at: source.published_at,
+          cover_mode: source.cover_mode, cover_image_url: source.cover_image_url,
+          name: renamed ? normalized_name : source.name,
+          title: renamed ? normalized_name : source.title,
+          path: renamed ? WeblogAuthoring.page_path(@content_dir, "named", name: normalized_name, page_date: nil) : source.path,
+          body: rewritten_body, updated_at: timestamp,
+          links: WeblogAuthoring.extract_wiki_links(rewritten_body)
+        )
+        [source, document, scrapbox_line_metadata(source.id)]
+      end
+      with_connection do |connection|
+        connection.transaction do
+          changes.each do |source, _document, _metadata|
+            row = connection.exec_params(select_sql("id"), [source.id]).first
+            if row.nil? || parse_time(row.fetch("updated_at")) != source.updated_at
+              raise ConflictError, "ページが別の編集で更新されています"
+            end
+          end
+          path = WeblogAuthoring.page_path(@content_dir, "named", name: normalized_name, page_date: nil)
+          connection.exec_params(
+            "UPDATE #{SCHEMA}.pages SET name = $1, title = $1, path = $2 WHERE id = $3",
+            [normalized_name, path.to_s, page_id]
+          )
+          changes.each do |source, document, metadata|
+            update_page(connection, document)
+            replace_line_metadata_after_save(connection, document, source, metadata)
+            replace_links(connection, document)
+            enqueue_webmention_outbox(connection, source, document)
+          end
+        end
+      end
+      find(page_id)
+    rescue PG::UniqueViolation => error
+      raise ConflictError, "ページ名の変更に失敗しました: #{error.message}"
+    end
+
     def close
       @pool.shutdown
     end
