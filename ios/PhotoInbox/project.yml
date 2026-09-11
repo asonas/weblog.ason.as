@@ -6,6 +6,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: 6.0
+    # PhotoInbox does not define App Intents or App Shortcuts.
+    LM_SKIP_METADATA_EXTRACTION: YES
 packages:
   SDWebImageWebPCoder:
     url: https://github.com/SDWebImage/SDWebImageWebPCoder.git
