@@ -45,7 +45,24 @@ module WeblogAuthoring
       @api ||= begin
         timings = {} # @type var timings: Hash[String, Float]
         api_started_at = monotonic_time
-        secrets_client = measure(timings, "secrets_client") { Aws::SSM::Client.new }
+        client_wall_started_at = monotonic_time
+        client_cpu_started_at = Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID)
+        client_gc_started_at = GC.total_time
+        client_allocations_started_at = GC.stat(:total_allocated_objects)
+        secrets_client = Aws::SSM::Client.new
+        timings["secrets_client"] = elapsed_ms(client_wall_started_at)
+        puts(JSON.generate(
+          "event" => "ssm_client_init_diagnostic", "debug" => "[DEBUG-ssm-init-7f31]",
+          "request_id" => request_id, "route" => route, "cold" => true,
+          "wall_ms" => timings.fetch("secrets_client"),
+          "cpu_ms" => ((Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID) - client_cpu_started_at) * 1000).round(1),
+          "gc_ms" => ((GC.total_time - client_gc_started_at) / 1_000_000.0).round(1),
+          "allocated_objects" => GC.stat(:total_allocated_objects) - client_allocations_started_at,
+          "environment" => {
+            "region" => ENV.key?("AWS_REGION"), "access_key" => ENV.key?("AWS_ACCESS_KEY_ID"),
+            "secret_key" => ENV.key?("AWS_SECRET_ACCESS_KEY"), "session_token" => ENV.key?("AWS_SESSION_TOKEN"),
+          }
+        ))
         secrets = ProductionSecrets.new(
           secret_id: ENV.fetch("OAUTH_SECRET_ID"), client: secrets_client, timings:
         ).fetch

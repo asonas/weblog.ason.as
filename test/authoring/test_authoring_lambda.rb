@@ -109,7 +109,17 @@ class AuthoringLambdaTest < Minitest::Test
       end
     end
 
-    entry = JSON.parse(output)
+    entries = output.lines.map { |line| JSON.parse(line) }
+    diagnostic = entries.find { |item| item["event"] == "ssm_client_init_diagnostic" }
+    assert_equal "[DEBUG-ssm-init-7f31]", diagnostic.fetch("debug")
+    assert_equal "request-id", diagnostic.fetch("request_id")
+    assert_kind_of Numeric, diagnostic.fetch("wall_ms")
+    assert_kind_of Numeric, diagnostic.fetch("cpu_ms")
+    assert_kind_of Numeric, diagnostic.fetch("gc_ms")
+    assert_kind_of Integer, diagnostic.fetch("allocated_objects")
+    assert_equal %w[access_key region secret_key session_token], diagnostic.fetch("environment").keys.sort
+
+    entry = entries.find { |item| item["event"] == "cold_api_timing" }
     assert_equal "cold_api_timing", entry.fetch("event")
     assert_equal "request-id", entry.fetch("request_id")
     assert_equal "/api/tags", entry.fetch("route")
