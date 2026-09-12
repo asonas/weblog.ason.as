@@ -998,6 +998,56 @@ test("pastes one Japanese URL link through the editor event path", async () => {
   }
 });
 
+test("pastes rich text as plain text through the editor event path", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = minimalEditorFetch;
+  try {
+    await act(async () => {
+      root.render(
+        createElement(AuthoringEditor, { bootstrap: minimalEditorBootstrap() }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const element = container.querySelector<HTMLElement>(".ProseMirror");
+    assert.ok(element);
+    const mountedEditor = (element as HTMLElement & { editor: Editor }).editor;
+    mountedEditor.commands.setTextSelection(
+      mountedEditor.state.doc.content.size,
+    );
+    const event = new window.Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        getData: (type: string) => {
+          if (type === "text/plain") return "太字ではないテキスト";
+          if (type === "text/html")
+            return "<strong>太字ではないテキスト</strong>";
+          return "";
+        },
+      },
+    });
+
+    await act(async () => {
+      element.dispatchEvent(event);
+    });
+
+    assert.equal(
+      mountedEditor.getMarkdown(),
+      "current\n\n本文太字ではないテキスト",
+    );
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
 test("navigates material tabs with arrows, Home, and End", async () => {
   const container = document.createElement("div");
   document.body.append(container);

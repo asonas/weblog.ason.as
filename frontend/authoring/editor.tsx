@@ -2765,8 +2765,8 @@ export function AuthoringEditor({
         return;
       }
       const text = event.clipboardData?.getData("text/plain") || "";
-      if (!insertPastedJapaneseUrl(editor, text)) return;
       event.preventDefault();
+      if (!insertPastedJapaneseUrl(editor, text)) editor.view.pasteText(text);
     };
     const drop = (event: DragEvent) => {
       imageDragDepthRef.current = 0;
