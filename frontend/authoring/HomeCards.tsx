@@ -4,6 +4,23 @@ import { CoverPhoto } from "./CoverPhoto";
 import { coverPalettes } from "./coverPalettes";
 import "./homeCards.css";
 
+export function HomeCardsSkeleton() {
+  return (
+    <div className="home-loading__cards" aria-hidden="true">
+      {["first", "second", "third", "fourth", "fifth", "sixth"].map((card) => (
+        <div className="home-loading__card" key={card}>
+          <div className="home-loading__shimmer home-loading__card-media" />
+          <div className="home-loading__card-copy">
+            <span className="home-loading__shimmer home-loading__card-line home-loading__card-line--long" />
+            <span className="home-loading__shimmer home-loading__card-line" />
+            <span className="home-loading__shimmer home-loading__card-line home-loading__card-line--short" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function HomeCards({ entries }: { entries: HomePage[] }) {
   return (
     <section className="cf" aria-label="新しい順の日記と記事">

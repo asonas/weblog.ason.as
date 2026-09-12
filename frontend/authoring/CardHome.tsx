@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import { CoverPhoto } from "./CoverPhoto";
-import { HomeCards } from "./HomeCards";
+import { HomeCards, HomeCardsSkeleton } from "./HomeCards";
 import "./cardHome.css";
 
 export type HomePage = {
@@ -209,7 +209,12 @@ export function CardHome({
           </div>
         )}
         {isLoading ? (
-          <p role="status">読み込んでいます…</p>
+          <>
+            <p className="visually-hidden" role="status">
+              読み込んでいます…
+            </p>
+            <HomeCardsSkeleton />
+          </>
         ) : error ? (
           <div role="alert">
             <p>{error}</p>

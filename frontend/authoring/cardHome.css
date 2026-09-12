@@ -221,10 +221,15 @@
   color: var(--ink);
   flex-shrink: 0;
 }
+:root {
+  --home-hero-height: 440px;
+}
+
 .card-home .cover-journal__hero {
   position: relative;
   isolation: isolate;
-  min-block-size: 440px;
+  block-size: var(--home-hero-height);
+  min-block-size: var(--home-hero-height);
   padding: 160px max(40px, calc((100vw - 1200px) / 2)) 40px;
 }
 
@@ -253,6 +258,8 @@
 }
 .card-home .cover-journal__lead {
   max-inline-size: 1200px;
+  overflow: auto;
+  justify-content: safe end;
 }
 .card-home .cover-journal__lead > strong {
   max-inline-size: 800px;
@@ -291,8 +298,10 @@ html[data-header-scrolled="true"] .card-home__about {
   }
 }
 @media (max-width: 600px) {
+  :root {
+    --home-hero-height: 420px;
+  }
   .card-home .cover-journal__hero {
-    min-block-size: 420px;
     padding: 180px 20px 24px;
   }
   .card-home .cover-journal__lead > strong {

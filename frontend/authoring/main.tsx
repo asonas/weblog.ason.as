@@ -5,9 +5,11 @@ import { createRoot } from "react-dom/client";
 import { CardHome, type HomePage } from "./CardHome";
 import { DesignSystemPage } from "./designSystem";
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
+import { HomeCardsSkeleton } from "./HomeCards";
 import { startAuthoringPerformanceTelemetry } from "./performanceTelemetry";
 import { SearchPage, SiteSearch } from "./search";
 import { WebmentionModerationPage } from "./webmentions";
+import "./homeLoading.css";
 import "./styles.css";
 import "./universeGraph.css";
 
@@ -182,6 +184,28 @@ async function fetchBootstrap<T>(url: string): Promise<T> {
   return raw as T;
 }
 
+function isHomeRoute(): boolean {
+  return (
+    window.location.pathname === "/" &&
+    !new URLSearchParams(window.location.search).has("new")
+  );
+}
+
+const HOME_LOADING_TAGS = [
+  "tag-1",
+  "tag-2",
+  "tag-3",
+  "tag-4",
+  "tag-5",
+  "tag-6",
+  "tag-7",
+  "tag-8",
+  "tag-9",
+  "tag-10",
+  "tag-11",
+  "tag-12",
+] as const;
+
 function routeBootstrapUrl(): string {
   const path = window.location.pathname;
   if (path === "/") {
@@ -205,7 +229,41 @@ function routeBootstrapUrl(): string {
   throw new Error("対応していないページです");
 }
 
-function App({
+export function HomeLoading() {
+  return (
+    <div className="home-loading" aria-busy="true">
+      <p className="home-loading__status" role="status">
+        記事を読み込んでいます
+      </p>
+      <div className="home-loading__hero" aria-hidden="true">
+        <div className="home-loading__header">
+          <strong>weblog.ason.as</strong>
+          <div className="home-loading__header-actions">
+            <span className="home-loading__shimmer home-loading__header-search" />
+            <span className="home-loading__shimmer home-loading__header-action" />
+            <span className="home-loading__shimmer home-loading__header-action" />
+          </div>
+        </div>
+        <div className="home-loading__hero-copy">
+          <span className="home-loading__shimmer home-loading__hero-label" />
+          <span className="home-loading__shimmer home-loading__hero-title" />
+          <span className="home-loading__shimmer home-loading__hero-title home-loading__hero-title--short" />
+          <span className="home-loading__shimmer home-loading__hero-excerpt" />
+        </div>
+      </div>
+      <div className="home-loading__tags" aria-hidden="true">
+        {HOME_LOADING_TAGS.map((tag) => (
+          <span className="home-loading__shimmer home-loading__tag" key={tag} />
+        ))}
+      </div>
+      <section className="home-loading__content" aria-hidden="true">
+        <HomeCardsSkeleton />
+      </section>
+    </div>
+  );
+}
+
+export function App({
   initialBootstrap,
   auth,
 }: {
@@ -259,6 +317,7 @@ function App({
     );
   }
   if (!bootstrap) {
+    if (isHomeRoute()) return <HomeLoading />;
     return (
       <p className="loading-state" role="status">
         記事を読み込んでいます

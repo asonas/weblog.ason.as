@@ -71,7 +71,7 @@ registerHooks({
     return nextLoad(url, context);
   },
 });
-const { CoverJournalHome, HeaderSearch, editorViewMode } = await import(
+const { App, CoverJournalHome, HeaderSearch, editorViewMode } = await import(
   "./main"
 );
 const { CardHome } = await import("./CardHome");
@@ -177,6 +177,42 @@ test("opens only today's diary in editing mode by default", () => {
     }),
     "reading",
   );
+});
+
+test("shows a home skeleton while initial home data is pending", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = () => new Promise<Response>(() => {});
+
+  try {
+    await act(async () =>
+      root.render(
+        createElement(App, {
+          auth: {
+            authenticated: false,
+            authentication_required: false,
+            can_edit: false,
+            login: null,
+            csrf_token: "",
+          },
+        }),
+      ),
+    );
+
+    assert.ok(container.querySelector(".home-loading"));
+    assert.ok(container.querySelectorAll(".home-loading__shimmer").length > 1);
+    assert.equal(container.querySelector(".loading-state"), null);
+    assert.equal(
+      container.querySelector('[role="status"]')?.textContent,
+      "記事を読み込んでいます",
+    );
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
 });
 
 test("keeps today's title-routed diary in editing mode after reload", () => {
