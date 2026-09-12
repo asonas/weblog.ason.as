@@ -51,45 +51,6 @@
   width: 32px;
   height: 32px;
 }
-.cf-generated {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 50% 0%, white, #fafaf8 55%, #f5f5f2);
-}
-.cf-generated::before {
-  content: "";
-  position: absolute;
-  inset: -16px;
-  filter: blur(24px);
-  background:
-    radial-gradient(
-      ellipse 28% 24% at var(--cf-x) var(--cf-y),
-      color-mix(in oklch, var(--cf-color-a) 18%, transparent) 40%,
-      transparent 100%
-    ),
-    radial-gradient(
-      ellipse 25% 21% at 69% 49%,
-      color-mix(in oklch, var(--cf-color-b) 14%, transparent) 40%,
-      transparent 100%
-    ),
-    radial-gradient(
-      ellipse 27% 23% at 51% 73%,
-      color-mix(in oklch, var(--cf-color-b) 12%, transparent) 40%,
-      transparent 100%
-    ),
-    radial-gradient(
-      ellipse 19% 16% at 59% 66%,
-      color-mix(in oklch, var(--cf-color-a) 16%, transparent) 40%,
-      transparent 100%
-    );
-}
-.cf-generated::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0.025;
-  background: radial-gradient(#292524 1px, transparent 1px) 0 0 / 5px 5px;
-}
 .cf-copy {
   position: relative;
   padding: 20px;
@@ -140,4 +101,19 @@
     grid-template-columns: 1fr;
     gap: 20px;
   }
+}
+
+.cf-media:has(.generated-cover) .cf-title {
+  color: #293b3b;
+  background: none;
+  text-shadow: none;
+}
+.cf-media:has(.generated-cover) .cf-empty-marker {
+  color: #526767;
+}
+.cf-card
+  a:is(:hover, :focus-visible)
+  .cf-media:has(.generated-cover)
+  .cf-title {
+  color: oklch(0.4 0.06 195);
 }

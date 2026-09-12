@@ -22,6 +22,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { DiaryNavigation } from "./DiaryNavigation";
+import { GeneratedCover } from "./GeneratedCover";
 import { MarkdownClipboard } from "./MarkdownClipboard";
 import { markdownForEditor, markdownForSource } from "./markdown";
 import { AUTHORING_TELEMETRY_FLUSH_EVENT } from "./performanceTelemetry";
@@ -2967,9 +2968,12 @@ export function AuthoringEditor({
             {draft.resolvedCoverImageUrl ? (
               <img src={draft.resolvedCoverImageUrl} alt="" />
             ) : (
-              <span className="article-editing-cover__prompt">
-                画像をドロップしてカバーに設定
-              </span>
+              <>
+                <GeneratedCover />
+                <span className="article-editing-cover__prompt">
+                  画像をドロップしてカバーに設定
+                </span>
+              </>
             )}
             <fieldset
               className="article-editing-cover__actions"

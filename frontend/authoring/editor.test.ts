@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
 import { Editor } from "@tiptap/core";
@@ -53,6 +54,18 @@ function installDom() {
 }
 
 installDom();
+registerHooks({
+  load(url, context, nextLoad) {
+    if (url.endsWith(".css")) {
+      return {
+        format: "module",
+        source: "export default {};",
+        shortCircuit: true,
+      };
+    }
+    return nextLoad(url, context);
+  },
+});
 Object.defineProperty(document, "hidden", { configurable: true, value: false });
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const {

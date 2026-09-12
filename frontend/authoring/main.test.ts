@@ -76,6 +76,70 @@ const { App, CoverJournalHome, HeaderSearch, editorViewMode } = await import(
 );
 const { CardHome } = await import("./CardHome");
 const { CoverPhoto } = await import("./CoverPhoto");
+const { HomeCards } = await import("./HomeCards");
+
+test("missing covers choose a palette on mount and retain it across card updates", async (context) => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const random = context.mock.method(Math, "random", () => 0);
+  const entries = [
+    {
+      id: "empty",
+      route: "empty",
+      title: "画像なし",
+      excerpt: "本文",
+      image_url: null,
+      is_diary: false,
+      created_at: "",
+      updated_at: "",
+    },
+    {
+      id: "photo",
+      route: "photo",
+      title: "写真あり",
+      excerpt: "本文",
+      image_url: "/assets/photo.jpg",
+      is_diary: false,
+      created_at: "",
+      updated_at: "",
+    },
+  ];
+  try {
+    await act(async () => root.render(createElement(HomeCards, { entries })));
+    const cover = container.querySelector<HTMLElement>(".generated-cover");
+    assert.ok(cover);
+    const initialStyle = cover.getAttribute("style");
+    assert.equal(container.querySelectorAll(".generated-cover").length, 1);
+    assert.equal(container.querySelectorAll(".cf-photo").length, 1);
+    assert.equal(container.querySelector(".cf-title")?.textContent, "画像なし");
+    assert.ok(container.querySelector(".cf-empty-marker"));
+    random.mock.mockImplementation(() => 0.99);
+    await act(async () =>
+      root.render(
+        createElement(HomeCards, {
+          entries: entries.map((entry) => ({
+            ...entry,
+            excerpt: "更新した本文",
+          })),
+        }),
+      ),
+    );
+    assert.equal(
+      container.querySelector(".generated-cover")?.getAttribute("style"),
+      initialStyle,
+    );
+    await act(async () =>
+      root.render(createElement(HomeCards, { entries: [] })),
+    );
+    await act(async () => root.render(createElement(HomeCards, { entries })));
+    assert.notEqual(
+      container.querySelector(".generated-cover")?.getAttribute("style"),
+      initialStyle,
+    );
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 
 test("cover photos fall back to the original when a preview is unavailable", async () => {
   const container = document.createElement("div");

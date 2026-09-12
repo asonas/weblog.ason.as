@@ -1252,7 +1252,8 @@ html[data-view="webmention-moderation"] .page-shell {
 }
 
 .article-editing-cover__prompt {
-  color: var(--muted-ink);
+  position: relative;
+  color: #384343;
   font-size: var(--text-ui);
 }
 
@@ -3232,4 +3233,34 @@ td {
   .search-page {
     padding-block-start: 1rem;
   }
+}
+
+.generated-cover {
+  position: absolute;
+  inset: 0;
+  container-type: inline-size;
+  background: white;
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+}
+.generated-cover::before,
+.generated-cover::after {
+  content: "";
+  position: absolute;
+  top: calc(-100cqw + 50%);
+  width: 100cqw;
+  height: 100cqw;
+  border-radius: 50%;
+  filter: blur(16cqw);
+}
+.generated-cover::before {
+  left: -33cqw;
+  background: var(--cover-left);
+  z-index: 1;
+}
+.generated-cover::after {
+  right: -32cqw;
+  top: calc(-100cqw + 42%);
+  background: var(--cover-right);
 }

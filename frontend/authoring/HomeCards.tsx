@@ -1,7 +1,6 @@
-import type { CSSProperties } from "react";
 import type { HomePage } from "./CardHome";
 import { CoverPhoto } from "./CoverPhoto";
-import { coverPalettes } from "./coverPalettes";
+import { GeneratedCover } from "./GeneratedCover";
 import "./homeCards.css";
 
 export function HomeCardsSkeleton() {
@@ -26,21 +25,6 @@ export function HomeCards({ entries }: { entries: HomePage[] }) {
     <section className="cf" aria-label="新しい順の日記と記事">
       <div className="cf-grid">
         {entries.map((page) => {
-          const seed = [...page.id].reduce(
-            (value, char) => value + char.charCodeAt(0),
-            0,
-          );
-          const palette =
-            coverPalettes[page.id] ??
-            Object.values(coverPalettes)[
-              seed % Object.keys(coverPalettes).length
-            ];
-          const coverStyle: CSSProperties & Record<`--cf-${string}`, string> = {
-            "--cf-color-a": palette[0],
-            "--cf-color-b": palette[1],
-            "--cf-x": `${15 + (seed % 45)}%`,
-            "--cf-y": `${10 + (seed % 35)}%`,
-          };
           const missingCoverMarker = !page.image_url && (
             <span className="cf-empty-marker" aria-hidden="true">
               <svg
@@ -68,12 +52,7 @@ export function HomeCards({ entries }: { entries: HomePage[] }) {
                   {page.image_url ? (
                     <CoverPhoto url={page.image_url} />
                   ) : (
-                    <div
-                      className="cf-generated"
-                      style={coverStyle}
-                      aria-hidden="true"
-                      data-palette-source="https://randoma11y.com/"
-                    />
+                    <GeneratedCover />
                   )}
                   {missingCoverMarker}
                   <h2 className="cf-title">
