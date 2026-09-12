@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+fixture = File.expand_path("../test/fixtures/home_comparison/home.json", __dir__)
+ARGV.unshift("--fixture", fixture) unless ARGV.include?("--fixture")
+load File.expand_path("compare-public-article", __dir__)

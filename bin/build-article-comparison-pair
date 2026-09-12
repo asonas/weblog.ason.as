@@ -78,7 +78,8 @@ begin
     "candidate_commit" => candidate_commit,
     "fixture_id" => fixture_data.fetch("fixture_id"),
     "fixture_captured_at" => fixture_data.fetch("captured_at"),
-    "page_route" => fixture_data.fetch("page").fetch("name")
+    "page_route" => fixture_data.fetch("page_route", fixture_data.dig("page", "name")),
+    "scenario" => fixture_data.fetch("scenario", "article")
   ) << "\n")
   puts "Built comparison pair at #{output}"
 rescue KeyError, JSON::ParserError, ArgumentError, RuntimeError => error

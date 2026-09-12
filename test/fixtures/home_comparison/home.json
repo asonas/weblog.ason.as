@@ -1,0 +1,30 @@
+{
+  "fixture_id": "home-tags-and-images",
+  "captured_at": "2026-09-12T03:00:00Z",
+  "scenario": "home",
+  "page_route": "",
+  "resources": [
+    { "source": "../article_comparison/assets/rubykaigi-follow-up.webp", "path": "assets/comparison/home-hero.webp" },
+    { "source": "../article_comparison/assets/rubykaigi-follow-up.webp", "path": "assets/previews/640/comparison/home-hero.webp.webp" },
+    { "source": "../article_comparison/assets/rubykaigi-follow-up.webp", "path": "assets/previews/1280/comparison/home-hero.webp.webp" },
+    { "source": "../article_comparison/assets/rubykaigi-follow-up.webp", "path": "assets/comparison/home-article.webp" },
+    { "source": "../article_comparison/assets/rubykaigi-follow-up.webp", "path": "assets/previews/640/comparison/home-article.webp.webp" },
+    { "source": "../article_comparison/assets/rubykaigi-follow-up.webp", "path": "assets/comparison/home-diary.webp" },
+    { "source": "../article_comparison/assets/rubykaigi-follow-up.webp", "path": "assets/previews/640/comparison/home-diary.webp.webp" }
+  ],
+  "api": {
+    "pages": {
+      "mode": "home",
+      "pages": [
+        { "id": "home-hero", "title": "ソフトウェアと楽器の記録", "route": "software-instruments", "created_at": "2026-09-10T09:00:00Z", "updated_at": "2026-09-10T09:00:00Z", "excerpt": "手で触れられる音の道具を作る。", "image_url": "/assets/comparison/home-hero.webp", "is_diary": false },
+        { "id": "home-article", "title": "RubyKaigi のあとで", "route": "rubykaigi-notes", "created_at": "2026-09-09T09:00:00Z", "updated_at": "2026-09-09T09:00:00Z", "excerpt": "登壇と街の記録。", "image_url": "/assets/comparison/home-article.webp", "is_diary": false },
+        { "id": "home-diary", "title": "2026-09-08", "route": "2026-09-08", "created_at": "2026-09-08T09:00:00Z", "updated_at": "2026-09-08T09:00:00Z", "excerpt": "今日作ったものと考えたこと。", "image_url": "/assets/comparison/home-diary.webp", "is_diary": true }
+      ],
+      "has_newer": false,
+      "has_older": false
+    },
+    "tags": { "tags": ["Ruby", "日記", "Web", "ソフトウェアでつくる電子楽器", "写真", "アクセシビリティ", "AWS", "ものづくり"] },
+    "archive": { "archive": [{ "year": 2026, "months": [9, 8, 7] }] },
+    "auth": { "authenticated": false, "authentication_required": true, "can_edit": false, "login": null, "csrf_token": "" }
+  }
+}

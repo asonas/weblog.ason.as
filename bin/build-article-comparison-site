@@ -46,7 +46,7 @@ begin
 
   data = JSON.parse(fixture.read)
   resources = resource_paths(fixture, data)
-  page_route = data.fetch("page").fetch("name")
+  scenario = data.fetch("scenario", "article")
 
   Dir.mktmpdir("article-comparison-build") do |directory|
     build = Pathname(directory).join("site")
@@ -58,14 +58,29 @@ begin
       FileUtils.mkdir_p(destination.dirname)
       FileUtils.copy_file(source, destination)
     end
-    run!(
-      source_root,
-      RENDER_COMMAND.to_s,
-      "--fixture", fixture.to_s,
-      "--shell", output.join("public.html").to_s,
-      "--output", output.join(page_route).to_s,
-      "--source-root", source_root.to_s
-    )
+    if scenario == "home"
+      api = data.fetch("api")
+      {
+        "api/pages" => api.fetch("pages"),
+        "api/tags" => api.fetch("tags"),
+        "api/archive" => api.fetch("archive"),
+        "api/auth/session" => api.fetch("auth"),
+      }.each do |path, response|
+        destination = output.join(path)
+        FileUtils.mkdir_p(destination.dirname)
+        destination.write(JSON.generate(response) << "\n")
+      end
+    else
+      page_route = data.fetch("page").fetch("name")
+      run!(
+        source_root,
+        RENDER_COMMAND.to_s,
+        "--fixture", fixture.to_s,
+        "--shell", output.join("public.html").to_s,
+        "--output", output.join(page_route).to_s,
+        "--source-root", source_root.to_s
+      )
+    end
   end
 
   puts "Built comparison site #{data.fetch('fixture_id')} at #{output}"

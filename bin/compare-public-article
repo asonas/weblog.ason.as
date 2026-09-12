@@ -65,7 +65,7 @@ begin
     "status" => "completed",
     "report" => report.join("index.html").to_s
   ) << "\n")
-  puts "Completed public article comparison: #{report.join('index.html')}"
+  puts "Completed visual comparison: #{report.join('index.html')}"
 rescue ComparisonStageError => error
   output.join("result.json").write(JSON.pretty_generate(
     "status" => "failed",

@@ -67,6 +67,21 @@ class TestCaptureArticleComparison < Minitest::Test
     end
   end
 
+  def test_fails_when_a_required_home_image_cannot_be_loaded
+    require_system_chrome
+
+    Dir.mktmpdir do |directory|
+      pair = create_home_pair(Pathname(directory), include_image: false)
+      _stdout, stderr, status = Open3.capture3(
+        COMMAND.to_s, "--pair", pair.to_s, "--output", Pathname(directory).join("capture").to_s,
+        chdir: ROOT.to_s
+      )
+
+      refute status.success?
+      assert_includes stderr, "Home media failed to load"
+    end
+  end
+
   private
 
   def create_pair(root, image_path: "/assets/pixel.svg", stylesheet: nil)
@@ -89,6 +104,24 @@ class TestCaptureArticleComparison < Minitest::Test
       "fixture_id" => "fixture",
       "fixture_captured_at" => "2026-09-09T06:58:10Z",
       "page_route" => "article"
+    ))
+    pair
+  end
+
+  def create_home_pair(root, include_image:)
+    pair = root.join("pair")
+    %w[baseline candidate].each do |revision|
+      site = pair.join(revision)
+      site.join("assets").mkpath
+      site.join("index.html").write(<<~HTML)
+        <!doctype html><html><body><main class="card-home"><nav class="card-home__tags"><a>Ruby</a><a>ソフトウェアでつくる電子楽器</a></nav><div class="cf-card">1</div><div class="cf-card">2</div><div class="cf-card">3</div><img src="/assets/hero.svg"></main></body></html>
+      HTML
+      site.join("assets/hero.svg").write('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>') if include_image
+    end
+    pair.join("manifest.json").write(JSON.generate(
+      "baseline_commit" => "a" * 40, "candidate_commit" => "b" * 40,
+      "fixture_id" => "home", "fixture_captured_at" => "2026-09-12T03:00:00Z",
+      "page_route" => "", "scenario" => "home"
     ))
     pair
   end

@@ -71,6 +71,7 @@ async function compareScreenshots({ baselinePath, candidatePath, diffPath }) {
 }
 
 function renderReport(manifest, comparisons) {
+  const subject = manifest.scenario === "home" ? "トップページ" : "公開記事";
   const conditions = [
     ["基準コミット", manifest.baseline_commit],
     ["変更版コミット", manifest.candidate_commit],
@@ -95,8 +96,8 @@ function renderReport(manifest, comparisons) {
           <p>基準 ${comparison.baseline_width}×${comparison.baseline_height}px、変更版 ${comparison.candidate_width}×${comparison.candidate_height}px、viewport ${comparison.viewport.width}×${comparison.viewport.height}px</p>
         </header>
         <div class="images">
-          <figure><figcaption>基準</figcaption><img src="images/baseline-${comparison.viewport.width}.png" alt="基準コミットの記事"></figure>
-          <figure><figcaption>変更版</figcaption><img src="images/candidate-${comparison.viewport.width}.png" alt="変更版コミットの記事"></figure>
+          <figure><figcaption>基準</figcaption><img src="images/baseline-${comparison.viewport.width}.png" alt="基準コミットの${subject}"></figure>
+          <figure><figcaption>変更版</figcaption><img src="images/candidate-${comparison.viewport.width}.png" alt="変更版コミットの${subject}"></figure>
           <figure><figcaption>差分</figcaption><img src="images/diff-${comparison.viewport.width}.png" alt="基準と変更版の画像差分"></figure>
         </div>
       </section>`;
@@ -106,7 +107,7 @@ function renderReport(manifest, comparisons) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>公開記事の比較</title>
+  <title>${subject}の比較</title>
   <style>
     :root { color-scheme: light; font-family: system-ui, sans-serif; background: #f4f7f6; color: #172321; }
     body { margin: 0 auto; max-width: 1800px; padding: 32px; }
@@ -126,7 +127,7 @@ function renderReport(manifest, comparisons) {
 </head>
 <body>
   <main>
-    <h1>公開記事の比較</h1>
+    <h1>${subject}の比較</h1>
     <p>固定した条件で撮影した基準、変更版、画像差分です。</p>
     <dl class="conditions">${conditions.map(([term, value]) => `<dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl>
     ${sections}

@@ -44,7 +44,7 @@ async function startStaticServer(root) {
       const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://127.0.0.1").pathname);
       const file = normalize(join(absoluteRoot, pathname));
       if (!file.startsWith(absoluteRoot)) throw new Error("Invalid path");
-      const body = await readFile(file);
+      const body = await readFile(pathname === "/" ? join(absoluteRoot, "index.html") : file);
       response.writeHead(200, { "content-type": contentType(file), "cache-control": "no-store" });
       response.end(body);
     } catch {
@@ -65,7 +65,7 @@ async function closeServer(server) {
   await new Promise((resolveClosed) => server.close(resolveClosed));
 }
 
-async function capturePage({ browser, origin, route, revision, viewport, output, fixedTime }) {
+async function capturePage({ browser, origin, route, revision, viewport, output, fixedTime, scenario }) {
   const context = await browser.newContext({
     viewport,
     deviceScaleFactor: 1,
@@ -111,16 +111,31 @@ async function capturePage({ browser, origin, route, revision, viewport, output,
       }
     });
     const response = await page.goto(url, { waitUntil: "networkidle" });
-    if (!response?.ok()) throw new Error(`Article request failed: ${url} (${response?.status() ?? "no response"})`);
+    if (!response?.ok()) throw new Error(`Page request failed: ${url} (${response?.status() ?? "no response"})`);
     if (resourceFailures.length > 0) throw new Error(`Required page resource failed: ${resourceFailures.join(", ")}`);
-    await page.locator("[data-public-article]").waitFor();
+    if (scenario === "home") {
+      await page.locator(".card-home__tags a", { hasText: "Ruby" }).waitFor();
+      await page.locator(".card-home__tags a", { hasText: "ソフトウェアでつくる電子楽器" }).waitFor();
+      await page.locator(".cf-card").nth(2).waitFor();
+      const images = await page.locator(".card-home img").all();
+      for (const image of images) {
+        await image.evaluate((element) => { element.loading = "eager"; });
+        await image.scrollIntoViewIfNeeded();
+        await image.evaluate((element) => element.decode().catch(() => undefined));
+      }
+      await page.waitForLoadState("networkidle");
+    } else {
+      await page.locator("[data-public-article]").waitFor();
+    }
     await page.evaluate(async () => {
       await document.fonts.ready;
       const failed = [...document.querySelectorAll("img, video")].filter((media) => {
         if (media instanceof HTMLImageElement) return !media.complete || media.naturalWidth === 0;
         return media.readyState < HTMLMediaElement.HAVE_METADATA;
       });
-      if (failed.length > 0) throw new Error(`Article media failed to load: ${failed.map((media) => media.currentSrc || media.src).join(", ")}`);
+      return failed.map((media) => media.currentSrc || media.src);
+    }).then((failed) => {
+      if (failed.length > 0) throw new Error(`${scenario === "home" ? "Home" : "Article"} media failed to load: ${failed.join(", ")}`);
     });
     await page.screenshot({
       path: join(output, "screenshots", `${revision}-${viewport.width}.png`),
@@ -160,6 +175,7 @@ async function main() {
           viewport,
           output: options.output,
           fixedTime: pairManifest.fixture_captured_at,
+          scenario: pairManifest.scenario ?? "article",
         });
       }
     }
