@@ -49,10 +49,15 @@ module WeblogAuthoring
         client_cpu_started_at = Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID)
         client_gc_started_at = GC.total_time
         client_allocations_started_at = GC.stat(:total_allocated_objects)
-        secrets_client = Aws::SSM::Client.new
+        secrets_client = Aws::SSM::Client.new(
+          region: ENV.fetch("AWS_REGION"),
+          credentials: Aws::Credentials.new(
+            ENV.fetch("AWS_ACCESS_KEY_ID"), ENV.fetch("AWS_SECRET_ACCESS_KEY"), ENV.fetch("AWS_SESSION_TOKEN")
+          )
+        )
         timings["secrets_client"] = elapsed_ms(client_wall_started_at)
         puts(JSON.generate(
-          "event" => "ssm_client_init_diagnostic", "debug" => "[DEBUG-ssm-init-7f31]",
+          "event" => "ssm_client_init_diagnostic", "debug" => "[DEBUG-ssm-init-7f31]", "mode" => "explicit_config",
           "request_id" => request_id, "route" => route, "cold" => true,
           "wall_ms" => timings.fetch("secrets_client"),
           "cpu_ms" => ((Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID) - client_cpu_started_at) * 1000).round(1),
