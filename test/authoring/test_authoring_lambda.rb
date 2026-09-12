@@ -19,7 +19,6 @@ class AuthoringLambdaTest < Minitest::Test
       } }
       {
         "AWS_REGION" => "ap-northeast-1", "OAUTH_SECRET_ID" => "oauth", "DSQL_HOST" => "cluster",
-        "AWS_ACCESS_KEY_ID" => "key", "AWS_SECRET_ACCESS_KEY" => "secret", "AWS_SESSION_TOKEN" => "token",
         "ASSET_BUCKET" => "assets", "SITE_BUCKET" => "site",
         "GITHUB_REDIRECT_URI" => "https://example.com/callback",
         "FRONTEND_URL" => "https://example.com", "GITHUB_ALLOWED_USER_ID" => "1"
@@ -91,8 +90,6 @@ class AuthoringLambdaTest < Minitest::Test
       "OAUTH_SECRET_ID" => "oauth", "DSQL_HOST" => "cluster", "ASSET_BUCKET" => "assets",
       "SITE_BUCKET" => "site", "GITHUB_REDIRECT_URI" => "https://example.com/callback",
       "FRONTEND_URL" => "https://example.com", "GITHUB_ALLOWED_USER_ID" => "1",
-      "AWS_REGION" => "ap-northeast-1", "AWS_ACCESS_KEY_ID" => "key",
-      "AWS_SECRET_ACCESS_KEY" => "secret", "AWS_SESSION_TOKEN" => "token",
     }
     previous = variables.to_h { |name, _value| [name, ENV[name]] }
     variables.each { |name, value| ENV[name] = value }
@@ -112,18 +109,7 @@ class AuthoringLambdaTest < Minitest::Test
       end
     end
 
-    entries = output.lines.map { |line| JSON.parse(line) }
-    diagnostic = entries.find { |item| item["event"] == "ssm_client_init_diagnostic" }
-    assert_equal "[DEBUG-ssm-init-7f31]", diagnostic.fetch("debug")
-    assert_equal "explicit_config", diagnostic.fetch("mode")
-    assert_equal "request-id", diagnostic.fetch("request_id")
-    assert_kind_of Numeric, diagnostic.fetch("wall_ms")
-    assert_kind_of Numeric, diagnostic.fetch("cpu_ms")
-    assert_kind_of Numeric, diagnostic.fetch("gc_ms")
-    assert_kind_of Integer, diagnostic.fetch("allocated_objects")
-    assert_equal %w[access_key region secret_key session_token], diagnostic.fetch("environment").keys.sort
-
-    entry = entries.find { |item| item["event"] == "cold_api_timing" }
+    entry = JSON.parse(output)
     assert_equal "cold_api_timing", entry.fetch("event")
     assert_equal "request-id", entry.fetch("request_id")
     assert_equal "/api/tags", entry.fetch("route")
