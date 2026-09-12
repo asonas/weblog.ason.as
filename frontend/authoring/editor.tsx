@@ -21,6 +21,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { DiaryNavigation } from "./DiaryNavigation";
 import { MarkdownClipboard } from "./MarkdownClipboard";
 import { markdownForEditor, markdownForSource } from "./markdown";
 import { AUTHORING_TELEMETRY_FLUSH_EVENT } from "./performanceTelemetry";
@@ -3320,6 +3321,11 @@ export function AuthoringEditor({
               </button>
             </div>
           </aside>
+        )}
+        {!canEdit && (
+          <DiaryNavigation
+            route={draft.pageType === "date" ? draft.date : draft.name}
+          />
         )}
         {!editor?.isEditable &&
           bootstrap.external_mentions &&

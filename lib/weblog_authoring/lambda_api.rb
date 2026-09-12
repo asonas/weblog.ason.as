@@ -21,6 +21,7 @@ require_relative "inbox_sync"
 require_relative "mobile_upload"
 require_relative "models"
 require_relative "home_timeline"
+require_relative "diary_navigation"
 require_relative "names"
 require_relative "cover_image"
 require_relative "atom_feed"
@@ -198,6 +199,7 @@ module WeblogAuthoring
       return archive_response(event) if method == "GET" && path == "/api/archive"
       return page_names_response(event) if method == "GET" && path == "/api/page-names"
       return related_pages_response(event) if method == "GET" && path == "/api/related"
+      return diary_navigation_response(event) if method == "GET" && path == "/api/diary-navigation"
       return embed_response(event) if method == "GET" && path == "/api/embed"
       return new_editor_response(event) if method == "GET" && path == "/api/editor/new"
       return page_response(@database.find(event.dig("pathParameters", "id")), event:) if method == "GET" && page_id_path?(path)
@@ -885,6 +887,11 @@ module WeblogAuthoring
       return json_response(404, error: "Page not found") if page.nil?
 
       conditional_json_response(event, editor_json(page:))
+    end
+
+    def diary_navigation_response(event)
+      route = event.dig("queryStringParameters", "route").to_s
+      conditional_json_response(event, DiaryNavigation.new(@database).neighbors(route))
     end
 
     def related_pages_response(event)

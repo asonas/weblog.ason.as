@@ -31,6 +31,7 @@ require_relative "raindrop_source"
 require_relative "mobile_upload"
 require_relative "models"
 require_relative "home_timeline"
+require_relative "diary_navigation"
 require_relative "names"
 require_relative "atom_feed"
 require_relative "performance_telemetry"
@@ -205,6 +206,10 @@ module WeblogAuthoring
       return json_error(404, "ページが見つかりません") if route.nil?
 
       conditional_json_response(editor_state_for_route(route))
+    end
+
+    get "/api/diary-navigation" do
+      conditional_json_response(DiaryNavigation.new(settings.database).neighbors(params.fetch("route", "")))
     end
 
     get "/api/related" do

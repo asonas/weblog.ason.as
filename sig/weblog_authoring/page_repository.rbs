@@ -1,5 +1,6 @@
 module WeblogAuthoring
   interface _PageRepository
+    def list_diary_routes: () -> Array[String]
     def list_timeline_pages: (limit: Integer, ?before: timeline_cursor?, ?after: timeline_cursor?, ?month: String?) -> Array[PageDocument]
     def list_pages: (?limit: Integer?, ?before: page_cursor?, ?after: page_cursor?, ?kind: String?, ?timings: Hash[String, Float]?) -> Array[PageDocument]
     def find: (String id, ?timings: Hash[String, Float]?) -> PageDocument?

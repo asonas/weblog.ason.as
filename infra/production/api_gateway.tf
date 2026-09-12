@@ -56,6 +56,7 @@ resource "aws_apigatewayv2_route" "authoring" {
     "GET /api/page-names"                                      = "NONE"
     "GET /api/search"                                          = "NONE"
     "GET /api/related"                                         = "NONE"
+    "GET /api/diary-navigation"                                = "NONE"
     "GET /api/embed"                                           = "NONE"
     "GET /api/editor/new"                                      = "NONE"
     "GET /api/pages/{id}"                                      = "NONE"

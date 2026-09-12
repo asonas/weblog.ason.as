@@ -109,6 +109,17 @@ module WeblogAuthoring
       end
     end
 
+    def list_diary_routes
+      with_connection do |connection|
+        connection.exec(<<~SQL).map { |row| row.fetch("route") }
+          SELECT CASE WHEN page_type = 'date' THEN page_date ELSE name END AS route
+          FROM #{SCHEMA}.pages
+          WHERE status = 'published' AND is_empty = FALSE
+            AND EXISTS (SELECT 1 FROM #{SCHEMA}.links WHERE links.source_id = pages.id AND links.target_name = '日記')
+        SQL
+      end
+    end
+
     def list_pages(limit: nil, before: nil, after: nil, kind: nil, timings: nil)
       with_connection(timings:) do |connection|
         order_column = kind == "diary" ? "created_at" : "updated_at"

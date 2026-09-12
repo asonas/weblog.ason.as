@@ -93,6 +93,7 @@ module WeblogAuthoring
     def optional_query: (untyped, String) -> String?
     def page_response: (PageDocument?, event: lambda_event) -> lambda_response
     def related_pages_response: (lambda_event) -> lambda_response
+    def diary_navigation_response: (lambda_event) -> lambda_response
     def embed_response: (lambda_event) -> lambda_response
     def embed_metadata: (String) -> Hash[String, untyped]
     def read_embed_cache: (String, String) -> Hash[String, untyped]?

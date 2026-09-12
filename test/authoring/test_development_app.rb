@@ -9,6 +9,16 @@ require "rack/mock"
 class TestDevelopmentApp < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-08-21T12:00:00+09:00")
 
+  def test_public_diary_navigation_skips_ordinary_articles
+    %w[2026-09-07 2026-09-10 2026-09-11].each do |name|
+      json_request("POST", "/api/authoring/pages", page_type: "named", name:, body: "本文 [[日記]]")
+    end
+    json_request("POST", "/api/authoring/pages", page_type: "named", name: "2026-09-09", body: "普通の記事")
+    status, _headers, body = request("GET", "/api/diary-navigation?route=2026-09-10")
+    assert_equal 200, status
+    assert_equal({ "newer" => "2026-09-11", "older" => "2026-09-07" }, JSON.parse(body))
+  end
+
   def test_slash_named_hub_can_be_opened_and_materialized
     route = "/api/routes/KORG%20multi%2Fpoly"
     status, _headers, body = request("GET", route)
