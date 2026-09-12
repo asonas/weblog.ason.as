@@ -9,7 +9,7 @@ module WeblogAuthoring
         pathname json
         weblog_authoring/dsql_database weblog_authoring/embed_metadata
         weblog_authoring/github_oauth weblog_authoring/lambda_api
-        weblog_authoring/lambda_session weblog_authoring/production_secrets
+        weblog_authoring/lambda_session weblog_authoring/production_secrets weblog_authoring/parameter_extension
         weblog_authoring/search_index aws-sdk-sqs aws-sdk-lambda
       ].each do |feature|
         section_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -45,7 +45,7 @@ module WeblogAuthoring
       @api ||= begin
         timings = {} # @type var timings: Hash[String, Float]
         api_started_at = monotonic_time
-        secrets_client = measure(timings, "secrets_client") { Aws::SSM::Client.new }
+        secrets_client = measure(timings, "secrets_client") { ParameterExtension.new }
         secrets = ProductionSecrets.new(
           secret_id: ENV.fetch("OAUTH_SECRET_ID"), client: secrets_client, timings:
         ).fetch

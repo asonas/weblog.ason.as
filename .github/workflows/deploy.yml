@@ -73,7 +73,7 @@ jobs:
       repository: weblog-authoring-production
       function_name: weblog-authoring-production
       dockerfile: Dockerfile.lambda
-      build_inputs: '[".dockerignore","Dockerfile.lambda","Gemfile","Gemfile.lock","lib","lambda"]'
+      build_inputs: '[".dockerignore","Dockerfile.lambda","Gemfile","Gemfile.lock","lib","lambda","scripts/prepare-parameter-extension.py"]'
 
   build-search:
     needs: gate

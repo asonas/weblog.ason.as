@@ -11,12 +11,20 @@ class AuthoringLambdaTest < Minitest::Test
   def test_fresh_process_logs_require_timings_once_without_changing_session_responses
     source = <<~'RUBY'
       require_relative "lambda/authoring"
+      require "socket"
       Aws.config[:stub_responses] = true
-      Aws.config[:ssm] = { stub_responses: {
-        get_parameter: { parameter: { value: JSON.generate(
+      server = TCPServer.new("127.0.0.1", 0)
+      ENV["PARAMETERS_SECRETS_EXTENSION_HTTP_PORT"] = server.addr[1].to_s
+      ENV["AWS_SESSION_TOKEN"] = "test-token"
+      worker = Thread.new do
+        socket = server.accept
+        loop { break if socket.gets == "\r\n" }
+        body = JSON.generate("Parameter" => { "Value" => JSON.generate(
           "github_client_id" => "id", "github_client_secret" => "secret", "session_secret" => "s" * 64
-        ) } }
-      } }
+        ) })
+        socket.write("HTTP/1.1 200 OK\r\nContent-Length: #{body.bytesize}\r\nConnection: close\r\n\r\n#{body}")
+        socket.close
+      end
       {
         "AWS_REGION" => "ap-northeast-1", "OAUTH_SECRET_ID" => "oauth", "DSQL_HOST" => "cluster",
         "ASSET_BUCKET" => "assets", "SITE_BUCKET" => "site",
@@ -32,6 +40,8 @@ class AuthoringLambdaTest < Minitest::Test
         )
         puts JSON.generate("response" => response)
       end
+      worker.value
+      server.close
     RUBY
     output, stderr, status = Open3.capture3(
       RbConfig.ruby, "-Ilib", "-e", source, chdir: File.expand_path("../..", __dir__)
@@ -96,7 +106,7 @@ class AuthoringLambdaTest < Minitest::Test
     WeblogAuthoring::LambdaHandler.remove_instance_variable(:@api) if WeblogAuthoring::LambdaHandler.instance_variable_defined?(:@api)
 
     output, _stderr = capture_io do
-      with_new_returning(Aws::SSM::Client, secret_client) do
+      with_new_returning(WeblogAuthoring::ParameterExtension, secret_client) do
         with_new_returning(Aws::S3::Client, -> { s3_client_constructions += 1; client }) do
           with_new_returning(Aws::SQS::Client, client) do
             with_new_returning(Aws::Lambda::Client, -> { lambda_client_constructions += 1; client }) do

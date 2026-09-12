@@ -1,13 +1,12 @@
 # frozen_string_literal: true
 
 require "json"
-require "aws-sdk-ssm"
 
 module WeblogAuthoring
   class ProductionSecrets
     REQUIRED_KEYS = %w[github_client_id github_client_secret session_secret].freeze
 
-    def initialize(secret_id:, client: Aws::SSM::Client.new, timings: nil,
+    def initialize(secret_id:, client:, timings: nil,
                    monotonic_clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) })
       @secret_id = secret_id
       @client = client

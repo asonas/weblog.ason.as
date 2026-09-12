@@ -95,6 +95,13 @@ data "aws_iam_policy_document" "github_deploy" {
   }
 
   statement {
+    sid       = "ReadParameterExtension"
+    effect    = "Allow"
+    actions   = ["lambda:GetLayerVersion"]
+    resources = ["arn:aws:lambda:ap-northeast-1:133490724326:layer:AWS-Parameters-and-Secrets-Lambda-Extension-Arm64:124"]
+  }
+
+  statement {
     sid    = "ReadDevelopmentAssets"
     effect = "Allow"
     actions = [

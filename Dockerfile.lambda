@@ -20,6 +20,7 @@ FROM public.ecr.aws/lambda/ruby:4.0
 RUN dnf install -y gcc make glib2 expat libjpeg-turbo libpng libwebp && dnf clean all
 
 COPY --from=libvips-build /opt/vips/ /opt/vips/
+COPY dist/parameter-extension/ /opt/
 ENV LD_LIBRARY_PATH=/opt/vips/lib
 
 COPY Gemfile Gemfile.lock ./

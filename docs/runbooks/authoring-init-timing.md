@@ -1,5 +1,19 @@
 # Authoring initialization timing
 
+## Parameter Store extension comparison
+
+The authoring handler reads OAuth configuration through the AWS Parameters and Secrets Lambda Extension during INVOKE. `secrets_client` now measures construction of the local HTTP adapter; `secret_get` includes the extension's first Parameter Store request. Keep `sqs_client` in the comparison to detect initial SDK work moving to SQS. The memory setting remains 512 MB.
+
+The application still keeps its OAuth configuration for the life of its execution environment. The extension's cache TTL does not change that existing refresh behavior.
+
+Before building `Dockerfile.lambda`, run `python3 scripts/prepare-parameter-extension.py` with AWS credentials permitted to read the pinned public layer. The script verifies its SHA-256 and extracts its executable into `dist/parameter-extension`; the Dockerfile copies it into `/opt`. The authoring image is shared by other Ruby Lambda entry points, so check their deployment smoke tests as well.
+
+Apply the `infra/bootstrap` permission for the pinned layer before deploying the image through GitHub Actions. Do not attach a Lambda layer to this image-based function. To upgrade the extension, update the script's ARN and checksum and the matching IAM resource together.
+
+After deployment, compare natural cold invocations against the baseline (SSM client construction approximately 5–6 seconds). Join `cold_api_timing`, `cold_require_timing` and REPORT by request ID, compare total billed GB-seconds as well as client timings, and confirm successful `/api/pages` and `/api/auth/session` responses. Also check warm invocations and extension error logs. A fast local adapter construction alone does not establish a production improvement.
+
+References: [AWS extension protocol and INVOKE restriction](https://docs.aws.amazon.com/systems-manager/latest/userguide/ps-integration-lambda-extensions.html), [extensions in container images](https://docs.aws.amazon.com/lambda/latest/dg/extensions-configuration.html).
+
 Use this probe to investigate the cold critical path in Issue #78.
 
 `cold_require_timing` records the sequential dependency loads in `lambda/authoring.rb` without changing their order. Each section includes any dependencies loaded transitively by that require. Sections do not overlap; a dependency already loaded by an earlier section will take almost no time in a later section.
