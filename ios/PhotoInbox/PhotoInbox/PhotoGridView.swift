@@ -198,6 +198,7 @@ private struct PhotoCell: View {
         }
       }
       .aspectRatio(1, contentMode: .fit)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .disabled(status == .uploaded || (failure != nil && failureActionsDisabled))
