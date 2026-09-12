@@ -227,6 +227,7 @@
 
 .card-home .cover-journal__hero {
   position: relative;
+  z-index: 1;
   isolation: isolate;
   block-size: var(--home-hero-height);
   min-block-size: var(--home-hero-height);
