@@ -1,5 +1,6 @@
 @import "./styles.css";
 @import "./universeGraph.css";
+@import "./mobileArticleSheet.css";
 
 .article-video {
   position: relative;

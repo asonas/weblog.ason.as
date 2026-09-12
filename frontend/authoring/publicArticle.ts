@@ -1,3 +1,5 @@
+import { installMobileArticleSheet } from "./mobileArticleSheet";
+
 function watchMedia(
   media: HTMLImageElement | HTMLIFrameElement | HTMLVideoElement,
   container: HTMLElement,
@@ -134,6 +136,7 @@ const article = document.querySelector<HTMLElement>("[data-public-article]");
 if (article) {
   enhancePublicArticle(article);
   void enhancePublicArticleEditing(article);
+  installMobileArticleSheet();
 }
 
 if (document.querySelector("[data-public-universe]")) {
