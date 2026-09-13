@@ -341,11 +341,6 @@ jobs:
             aws s3 cp "dist/site/${page}.html" "s3://${SITE_BUCKET}/static/authoring/${page}.html" --only-show-errors \
               --content-type 'text/html; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
           done
-      - name: Invalidate CloudFront
-        if: steps.current.outputs.current == 'true'
-        run: |
-          invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths '/static/authoring/app.js' '/static/authoring/app.css' '/index.html' '/static/authoring/public.html' '/static/authoring/404.html' --query 'Invalidation.Id' --output text)"
-          aws cloudfront wait invalidation-completed --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --id "$invalidation_id"
       - name: Smoke check production
         if: steps.current.outputs.current == 'true'
         run: bundle exec ruby bin/smoke-production "$SITE_URL"

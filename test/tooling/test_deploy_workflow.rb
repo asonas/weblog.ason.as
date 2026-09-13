@@ -38,10 +38,10 @@ class DeployWorkflowTest < Minitest::Test
     refute(steps.any? { |step| step["run"]&.match?(/npm run build(?:\s|$)/) })
   end
 
-  def test_mutations_publish_stable_entrypoints_before_targeted_invalidation
+  def test_mutations_publish_revalidating_entrypoints_without_invalidation
     steps = @workflow.dig("jobs", "deploy", "steps")
     names = steps.filter_map { |step| step["name"] }
-    ordered = ["Apply database schema", "Deploy authoring Lambda image", "Publish immutable site assets", "Publish stable site assets", "Publish site HTML", "Invalidate CloudFront", "Smoke check production"]
+    ordered = ["Apply database schema", "Deploy authoring Lambda image", "Publish immutable site assets", "Publish stable site assets", "Publish site HTML", "Smoke check production"]
     assert_equal(ordered, names.select { |name| ordered.include?(name) })
     assets = steps.find { |step| step["name"] == "Publish immutable site assets" }.fetch("run")
     assert_includes assets, "static/authoring/assets/"
@@ -55,14 +55,7 @@ class DeployWorkflowTest < Minitest::Test
     refute(steps.any? { |step| step["run"]&.include?("--delete") })
     html = steps.find { |step| step["name"] == "Publish site HTML" }.fetch("run")
     assert_includes html, "max-age=0,must-revalidate"
-    invalidation = steps.find { |step| step["name"] == "Invalidate CloudFront" }.fetch("run")
-    assert_includes invalidation, "'/static/authoring/app.js' '/static/authoring/app.css' '/index.html'"
-    refute_includes invalidation, "'/*'"
-    assert_includes invalidation, "wait invalidation-completed"
-
-    deploy_policy = File.read(File.join(ROOT, "infra/bootstrap/github_actions.tf"))
-    assert_includes deploy_policy, '"cloudfront:CreateInvalidation"'
-    assert_includes deploy_policy, '"cloudfront:GetInvalidation"'
+    refute(steps.any? { |step| step["run"]&.match?(/create-invalidation|invalidation-completed/) })
   end
 
   def test_images_are_prepared_in_parallel_on_native_arm64
