@@ -1105,6 +1105,56 @@ test("renders pasted Markdown through the editor event path", async () => {
   }
 });
 
+test("renders pasted Markdown tables through the editor event path", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = minimalEditorFetch;
+  try {
+    await act(async () => {
+      root.render(
+        createElement(AuthoringEditor, { bootstrap: minimalEditorBootstrap() }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const element = container.querySelector<HTMLElement>(".ProseMirror");
+    assert.ok(element);
+    const mountedEditor = (element as HTMLElement & { editor: Editor }).editor;
+    mountedEditor.commands.setTextSelection(
+      mountedEditor.state.doc.content.size,
+    );
+    const event = new window.Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        getData: (type: string) =>
+          type === "text/plain"
+            ? "| 時刻 | 事象 |\n| --- | --- |\n| 10:53 | `client 101 refused switch` で拒否された |"
+            : "",
+      },
+    });
+
+    await act(async () => element.dispatchEvent(event));
+
+    assert.equal(element.querySelectorAll("table").length, 1);
+    assert.equal(element.querySelectorAll("th").length, 2);
+    assert.equal(element.querySelectorAll("td").length, 2);
+    assert.match(mountedEditor.getMarkdown(), /\| 時刻\s+\| 事象\s+\|/);
+    assert.match(
+      mountedEditor.getMarkdown(),
+      /\| 10:53\s+\| `client 101 refused switch` で拒否された\s+\|/,
+    );
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
 test("navigates material tabs with arrows, Home, and End", async () => {
   const container = document.createElement("div");
   document.body.append(container);

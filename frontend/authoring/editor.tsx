@@ -4,6 +4,7 @@ import {
   type JSONContent,
   Node as TiptapNode,
 } from "@tiptap/core";
+import { TableKit } from "@tiptap/extension-table";
 import { Markdown } from "@tiptap/markdown";
 import type { NodeType } from "@tiptap/pm/model";
 import {
@@ -1478,6 +1479,7 @@ export const EDITOR_EXTENSIONS = [
   YouTubePlayer,
   BlueskyPlayer,
   SpeakerDeckPlayer,
+  TableKit,
   Markdown.configure({ indentation: { style: "space", size: 2 } }),
   MarkdownClipboard,
 ];
