@@ -5,48 +5,44 @@
 }
 
 .card-home__tags {
+  padding: 24px max(40px, calc((100vw - 1200px) / 2));
+  border-bottom: 1px solid var(--separator);
+}
+.card-home__tag-list {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 24px max(40px, calc((100vw - 1200px) / 2));
-  border-bottom: 1px solid var(--separator);
-  min-block-size: 173px;
   align-content: start;
+  block-size: 124px;
+  overflow: hidden;
+}
+.card-home__tag-list[data-expanded="true"] {
+  block-size: auto;
+  min-block-size: 124px;
+}
+.card-home__tag-disclosure {
+  block-size: 44px;
+}
+.card-home__tag-disclosure button {
+  min-block-size: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--tag-ink);
+  font: inherit;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 .card-home__tag-row {
   display: contents;
-}
-.card-home__tag-skeleton {
-  display: block;
-  flex: 0 0 auto;
-  block-size: 36px;
-  border-radius: 24px;
-  background: linear-gradient(
-    100deg,
-    var(--tag-surface) 25%,
-    var(--canvas) 50%,
-    var(--tag-surface) 75%
-  );
-  background-size: 200% 100%;
-  animation: home-tag-shimmer 1.8s ease-in-out infinite;
 }
 .card-home__tags-message {
   margin: 0;
   align-self: center;
   color: var(--muted-ink);
-}
-@keyframes home-tag-shimmer {
-  from {
-    background-position: 100% 0;
-  }
-  to {
-    background-position: -100% 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .card-home__tag-skeleton {
-    animation: none;
-  }
 }
 .card-home__tags a {
   flex: 0 0 auto;
@@ -59,6 +55,10 @@
   color: var(--tag-ink);
   font-size: 14px;
   text-decoration: none;
+  max-inline-size: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .card-home__paging {
@@ -232,6 +232,7 @@
   block-size: var(--home-hero-height);
   min-block-size: var(--home-hero-height);
   padding: 160px max(40px, calc((100vw - 1200px) / 2)) 40px;
+  justify-content: end;
 }
 
 .cover-journal__photo {
@@ -259,14 +260,22 @@
 }
 .card-home .cover-journal__lead {
   max-inline-size: 1200px;
-  overflow: auto;
-  justify-content: safe end;
+  overflow: visible;
+  justify-content: end;
+  flex: none;
 }
 .card-home .cover-journal__lead > strong {
   max-inline-size: 800px;
-  font-size: clamp(40px, 6.7vw, 96px);
+  font-size: clamp(40px, 5vw, 72px);
   line-height: 1.15;
   letter-spacing: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  block-size: 2.3em;
+  flex-shrink: 0;
 }
 .card-home .cover-journal__lead > strong a:hover {
   color: #a8e4dd;
@@ -275,6 +284,11 @@
 .card-home .cover-journal__lead > small {
   max-inline-size: 660px;
   margin-block-start: 20px;
+  font-size: 16px;
+  line-height: 1.6;
+  block-size: 3.2em;
+  flex-shrink: 0;
+  -webkit-line-clamp: 2;
 }
 .card-home .atlas-header__actions {
   display: flex;
@@ -313,13 +327,20 @@ html[data-header-scrolled="true"] .card-home__about {
     margin-block-start: 14px;
   }
   .card-home__tags {
-    display: flex;
+    min-block-size: 129px;
+    padding: 16px 20px;
+  }
+  .card-home__tag-list,
+  .card-home__tag-list[data-expanded="true"] {
     flex-direction: column;
     flex-wrap: nowrap;
     align-items: start;
-    min-block-size: 129px;
+    block-size: 96px;
+    min-block-size: 96px;
     overflow-x: auto;
-    padding: 16px 20px;
+  }
+  .card-home__tag-disclosure {
+    display: none;
   }
   .card-home__tag-row {
     display: flex;
@@ -331,9 +352,7 @@ html[data-header-scrolled="true"] .card-home__about {
   .card-home__tags a {
     min-height: 44px;
     white-space: nowrap;
-  }
-  .card-home__tag-skeleton {
-    block-size: 44px;
+    max-inline-size: none;
   }
   .card-home__content {
     padding: 28px 20px 40px;

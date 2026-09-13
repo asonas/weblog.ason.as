@@ -8,7 +8,12 @@ export function HomeCardsSkeleton() {
     <div className="home-loading__cards" aria-hidden="true">
       {["first", "second", "third", "fourth", "fifth", "sixth"].map((card) => (
         <div className="home-loading__card" key={card}>
-          <div className="home-loading__shimmer home-loading__card-media" />
+          <div className="home-loading__card-media cf-media">
+            <div className="cf-title home-loading__card-title">
+              <span className="home-loading__shimmer" />
+              <span className="home-loading__shimmer" />
+            </div>
+          </div>
           <div className="home-loading__card-copy">
             <span className="home-loading__shimmer home-loading__card-line home-loading__card-line--long" />
             <span className="home-loading__shimmer home-loading__card-line" />

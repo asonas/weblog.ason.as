@@ -59,6 +59,13 @@ class TestIntersectionObserver {
 
 Object.assign(globalThis, { IntersectionObserver: TestIntersectionObserver });
 
+class TestResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+Object.assign(globalThis, { ResizeObserver: TestResizeObserver });
+
 registerHooks({
   load(url, context, nextLoad) {
     if (url.endsWith(".css")) {
@@ -268,6 +275,14 @@ test("shows a home skeleton while initial home data is pending", async () => {
     assert.ok(container.querySelector(".home-loading"));
     assert.ok(container.querySelectorAll(".home-loading__shimmer").length > 1);
     assert.equal(container.querySelector(".loading-state"), null);
+    assert.equal(
+      container.querySelector(".card-home__about")?.textContent,
+      "このサイトについて",
+    );
+    assert.equal(
+      container.querySelector(".card-home__tags-message")?.textContent,
+      "タグを読み込み中…",
+    );
     assert.equal(
       container.querySelector('[role="status"]')?.textContent,
       "記事を読み込んでいます",
