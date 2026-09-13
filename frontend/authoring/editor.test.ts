@@ -78,6 +78,7 @@ const {
   ensureBodySelection,
   extractEmbeddableUrls,
   insertPastedJapaneseUrl,
+  isMarkdownPaste,
   isImageDrag,
   isVisibleLine,
   lineUpdateLabel,
@@ -1041,6 +1042,62 @@ test("pastes rich text as plain text through the editor event path", async () =>
       mountedEditor.getMarkdown(),
       "current\n\n本文太字ではないテキスト",
     );
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
+test("recognizes Markdown formatting without treating plain prose as Markdown", () => {
+  const editor = new Editor({ extensions: EDITOR_EXTENSIONS });
+  try {
+    assert.equal(isMarkdownPaste(editor, "## 結論\n\n- iGPU\n- dGPU"), true);
+    assert.equal(isMarkdownPaste(editor, "これは **重要** です"), true);
+    assert.equal(
+      isMarkdownPaste(editor, "通常の文章です。\n次の行です。"),
+      false,
+    );
+  } finally {
+    editor.destroy();
+  }
+});
+
+test("renders pasted Markdown through the editor event path", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = minimalEditorFetch;
+  try {
+    await act(async () => {
+      root.render(
+        createElement(AuthoringEditor, { bootstrap: minimalEditorBootstrap() }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const element = container.querySelector<HTMLElement>(".ProseMirror");
+    assert.ok(element);
+    const mountedEditor = (element as HTMLElement & { editor: Editor }).editor;
+    mountedEditor.commands.setTextSelection(
+      mountedEditor.state.doc.content.size,
+    );
+    const event = new window.Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        getData: (type: string) =>
+          type === "text/plain" ? "## 結論\n\n- iGPU\n- dGPU" : "",
+      },
+    });
+
+    await act(async () => element.dispatchEvent(event));
+
+    assert.equal(element.querySelectorAll("h2").length, 1);
+    assert.equal(element.querySelectorAll("li").length, 2);
   } finally {
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;

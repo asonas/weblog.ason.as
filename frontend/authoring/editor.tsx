@@ -1,4 +1,9 @@
-import { type Editor, Extension, Node as TiptapNode } from "@tiptap/core";
+import {
+  type Editor,
+  Extension,
+  type JSONContent,
+  Node as TiptapNode,
+} from "@tiptap/core";
 import { Markdown } from "@tiptap/markdown";
 import type { NodeType } from "@tiptap/pm/model";
 import {
@@ -1582,6 +1587,24 @@ export function insertPastedJapaneseUrl(editor: Editor, text: string): boolean {
   return true;
 }
 
+function containsMarkdownFormatting(content: JSONContent): boolean {
+  if (content.marks?.length) return true;
+  if (
+    content.type &&
+    content.type !== "doc" &&
+    content.type !== "paragraph" &&
+    content.type !== "text"
+  ) {
+    return true;
+  }
+  return content.content?.some(containsMarkdownFormatting) ?? false;
+}
+
+export function isMarkdownPaste(editor: Editor, text: string): boolean {
+  if (!text.trim() || !editor.markdown) return false;
+  return containsMarkdownFormatting(editor.markdown.parse(text));
+}
+
 async function requestJson<T>(
   url: string,
   payload: JsonObject,
@@ -2765,8 +2788,17 @@ export function AuthoringEditor({
         return;
       }
       const text = event.clipboardData?.getData("text/plain") || "";
+      if (insertPastedJapaneseUrl(editor, text)) {
+        event.preventDefault();
+        return;
+      }
+      if (!text) return;
       event.preventDefault();
-      if (!insertPastedJapaneseUrl(editor, text)) editor.view.pasteText(text);
+      if (isMarkdownPaste(editor, text)) {
+        editor.commands.insertContent(text, { contentType: "markdown" });
+        return;
+      }
+      editor.view.pasteText(text, event);
     };
     const drop = (event: DragEvent) => {
       imageDragDepthRef.current = 0;
