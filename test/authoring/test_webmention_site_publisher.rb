@@ -55,13 +55,12 @@ class WebmentionSitePublisherTest < Minitest::Test
   end
 
   class Services
-    attr_reader :puts, :deletes, :messages, :invalidations
+    attr_reader :puts, :deletes, :messages
 
     def initialize
       @puts = []
       @deletes = []
       @messages = []
-      @invalidations = []
     end
 
     def get_object(bucket:, key:)
@@ -83,10 +82,6 @@ class WebmentionSitePublisherTest < Minitest::Test
       deletes << request
     end
 
-    def create_invalidation(**request)
-      invalidations << request
-    end
-
     def send_message(**request)
       messages << request
     end
@@ -102,32 +97,6 @@ class WebmentionSitePublisherTest < Minitest::Test
     REXML::XPath.match(element, ".//text()").map(&:value).join
   end
 
-  def test_encodes_apostrophes_in_cache_invalidation_paths
-    page = WeblogAuthoring::PageDocument.new(
-      id: "page-id", page_type: "named", name: "Don't use click here", page_date: nil, title: nil,
-      status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
-      path: Pathname("content/pages/article.md"), body: "本文", links: []
-    )
-    outbox = {
-      "id" => "outbox-id", "page_id" => page.id,
-      "payload" => {
-        "source_url" => "https://weblog.ason.as/Don't%20use%20click%20here",
-        "previous_targets" => [], "current_targets" => [],
-      },
-    }
-    database = Database.new(page:, outbox:)
-    services = Services.new
-    publisher = WeblogAuthoring::WebmentionSitePublisher.new(
-      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
-      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
-    )
-
-    publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
-
-    assert_equal ["/Don%27t%20use%20click%20here"],
-      services.invalidations.fetch(0).dig(:invalidation_batch, :paths, :items)
-  end
-
   def test_publishes_uncreated_hubs_without_overwriting_articles
     page = WeblogAuthoring::PageDocument.new(
       id: "page-id", page_type: "named", name: "article", page_date: nil, title: nil,
@@ -140,8 +109,8 @@ class WebmentionSitePublisherTest < Minitest::Test
     database = Database.new(page:, outbox:)
     services = Services.new
     publisher = WeblogAuthoring::WebmentionSitePublisher.new(
-      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
-      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+      database:, s3_client: services, sqs_client: services,
+      site_bucket: "site", delivery_queue_url: "queue"
     )
     publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
     article, *hubs = services.puts
@@ -153,7 +122,6 @@ class WebmentionSitePublisherTest < Minitest::Test
       assert_equal "*", hub.fetch(:if_none_match)
       assert_includes hub.fetch(:body), '/static/authoring/app.js'
     end
-    assert_includes services.invalidations.first.dig(:invalidation_batch, :paths, :items), "/KORG%20multi%2Fpoly"
   end
 
   def test_publishes_verifiable_html_before_queuing_the_target_union
@@ -174,8 +142,8 @@ class WebmentionSitePublisherTest < Minitest::Test
     database = Database.new(page:, outbox:)
     services = Services.new
     publisher = WeblogAuthoring::WebmentionSitePublisher.new(
-      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
-      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+      database:, s3_client: services, sqs_client: services,
+      site_bucket: "site", delivery_queue_url: "queue"
     )
 
     publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
@@ -208,8 +176,6 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_equal "https://weblog.ason.as/old-route", jobs.fetch(0).fetch("source")
     assert_equal "https://weblog.ason.as/%E8%A8%98%E4%BA%8B", jobs.fetch(1).fetch("source")
     assert_equal({ bucket: "site", key: "old-route" }, services.deletes.fetch(0))
-    invalidated = services.invalidations.fetch(0).dig(:invalidation_batch, :paths, :items)
-    assert_equal ["/%E8%A8%98%E4%BA%8B", "/old-route"], invalidated
     assert_equal "outbox-id", database.completed
     assert_nil database.failed
   end
@@ -234,8 +200,8 @@ class WebmentionSitePublisherTest < Minitest::Test
     database = Database.new(page:, outbox:)
     services = Services.new
     publisher = WeblogAuthoring::WebmentionSitePublisher.new(
-      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
-      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+      database:, s3_client: services, sqs_client: services,
+      site_bucket: "site", delivery_queue_url: "queue"
     )
 
     publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
@@ -243,28 +209,6 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_equal 1, services.puts.length
     assert_equal 1, services.messages.length
     assert_equal "outbox-id", database.completed
-  end
-
-  def test_refresh_invalidates_again_but_retry_reuses_the_same_request
-    page = WeblogAuthoring::PageDocument.new(
-      id: "refresh", page_type: "named", name: "記事", status: "published",
-      created_at: Time.now, updated_at: Time.now, path: Pathname("refresh.md"), body: "本文", links: []
-    )
-    outbox = { "id" => "same-outbox", "page_id" => page.id,
-               "payload" => { "source_url" => "https://weblog.ason.as/article", "revision" => "first" }, }
-    services = Services.new
-    publisher = WeblogAuthoring::WebmentionSitePublisher.new(
-      database: Database.new(page:, outbox:), s3_client: services, cloudfront_client: services,
-      sqs_client: services, site_bucket: "site", distribution_id: "distribution",
-      delivery_queue_url: "queue", sender_enabled: false
-    )
-    publisher.publish(outbox)
-    publisher.publish(outbox)
-    outbox["payload"]["revision"] = "second"
-    publisher.publish(outbox)
-    references = services.invalidations.map { |request| request.fetch(:invalidation_batch).fetch(:caller_reference) }
-    assert_equal references[0], references[1]
-    refute_equal references[1], references[2]
   end
 
   def test_public_article_keeps_media_and_escaped_metadata_without_editor_data
@@ -279,8 +223,8 @@ class WebmentionSitePublisherTest < Minitest::Test
     database = Database.new(page:, outbox:)
     database.save_image_dimensions("/assets/photo.webp", width: 48, height: 32)
     WeblogAuthoring::WebmentionSitePublisher.new(
-      database:, s3_client: services, cloudfront_client: services,
-      sqs_client: services, site_bucket: "site", distribution_id: "distribution",
+      database:, s3_client: services,
+      sqs_client: services, site_bucket: "site",
       delivery_queue_url: "queue", sender_enabled: false
     ).publish(outbox)
     html = services.puts.fetch(0).fetch(:body)
@@ -320,8 +264,8 @@ class WebmentionSitePublisherTest < Minitest::Test
     database = Database.new(page:, outbox:)
     services = Services.new
     publisher = WeblogAuthoring::WebmentionSitePublisher.new(
-      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
-      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+      database:, s3_client: services, sqs_client: services,
+      site_bucket: "site", delivery_queue_url: "queue"
     )
 
     publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
@@ -348,8 +292,8 @@ class WebmentionSitePublisherTest < Minitest::Test
     database = Database.new(page:, outbox:)
     services = Services.new
     publisher = WeblogAuthoring::WebmentionSitePublisher.new(
-      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
-      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+      database:, s3_client: services, sqs_client: services,
+      site_bucket: "site", delivery_queue_url: "queue"
     )
 
     publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])
@@ -364,8 +308,6 @@ class WebmentionSitePublisherTest < Minitest::Test
       "page_id" => "page-id", "source" => "https://weblog.ason.as/old-route",
       "target" => "https://old.example/post",
     }], jobs
-    invalidated = services.invalidations.fetch(0).dig(:invalidation_batch, :paths, :items)
-    assert_equal ["/%E8%A8%98%E4%BA%8B", "/old-route"], invalidated
     assert_equal "outbox-id", database.completed
     assert_nil database.failed
   end
@@ -387,8 +329,8 @@ class WebmentionSitePublisherTest < Minitest::Test
     database = Database.new(page:, outbox:)
     services = Services.new
     publisher = WeblogAuthoring::WebmentionSitePublisher.new(
-      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
-      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue",
+      database:, s3_client: services, sqs_client: services,
+      site_bucket: "site", delivery_queue_url: "queue",
       sender_enabled: false
     )
 
@@ -417,8 +359,8 @@ class WebmentionSitePublisherTest < Minitest::Test
     database = Database.new(page:, outbox:)
     services = Services.new
     publisher = WeblogAuthoring::WebmentionSitePublisher.new(
-      database:, s3_client: services, cloudfront_client: services, sqs_client: services,
-      site_bucket: "site", distribution_id: "distribution", delivery_queue_url: "queue"
+      database:, s3_client: services, sqs_client: services,
+      site_bucket: "site", delivery_queue_url: "queue"
     )
 
     publisher.call("Records" => [{ "body" => JSON.generate("outbox_id" => "outbox-id") }])

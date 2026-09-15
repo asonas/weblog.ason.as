@@ -138,4 +138,12 @@ run "webmention_rollout_starts_stopped_and_keeps_sender_independent" {
     condition     = aws_lambda_function.webmention_publisher.environment[0].variables.WEBMENTION_SENDER_ENABLED == "false"
     error_message = "Outbound delivery must remain stopped when static publishing is enabled first"
   }
+
+  assert {
+    condition = !contains(
+      keys(aws_lambda_function.webmention_publisher.environment[0].variables),
+      "CLOUDFRONT_DISTRIBUTION_ID",
+    )
+    error_message = "Static publishing must rely on cache revalidation"
+  }
 }

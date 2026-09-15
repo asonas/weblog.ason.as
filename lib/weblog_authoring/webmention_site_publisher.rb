@@ -13,14 +13,11 @@ require_relative "cover_variants"
 
 module WeblogAuthoring
   class WebmentionSitePublisher
-    def initialize(database:, s3_client:, cloudfront_client:, sqs_client:, site_bucket:,
-                   distribution_id:, delivery_queue_url:, sender_enabled: true)
+    def initialize(database:, s3_client:, sqs_client:, site_bucket:, delivery_queue_url:, sender_enabled: true)
       @database = database
       @s3_client = s3_client
-      @cloudfront_client = cloudfront_client
       @sqs_client = sqs_client
       @site_bucket = site_bucket
-      @distribution_id = distribution_id
       @delivery_queue_url = delivery_queue_url
       @sender_enabled = sender_enabled
     end
@@ -47,7 +44,6 @@ module WeblogAuthoring
       unless page.status == "published" && !page.empty?
         routes = [page.route, old_route].compact.uniq
         routes.each { |route| @s3_client.delete_object(bucket: @site_bucket, key: route) }
-        invalidate(routes, outbox.fetch("id"), revision: outbox.dig("payload", "revision"))
         completed = @database.complete_webmention_outbox(
           outbox.fetch("id"), revision: outbox.dig("payload", "revision")
         )
@@ -68,8 +64,7 @@ module WeblogAuthoring
         content_type: "text/html; charset=utf-8", cache_control: "public, max-age=0, must-revalidate"
       )
       @s3_client.delete_object(bucket: @site_bucket, key: old_route) if old_route
-      hubs = publish_linked_hubs(page)
-      invalidate([page.route, old_route, *hubs].compact.uniq, outbox.fetch("id"), revision: outbox.dig("payload", "revision"))
+      publish_linked_hubs(page)
       completed = @database.complete_webmention_outbox(
         outbox.fetch("id"), revision: outbox.dig("payload", "revision")
       )
@@ -101,7 +96,6 @@ module WeblogAuthoring
         # A saved article or an existing hub must not be overwritten.
         next
       end
-      names
     end
 
     def site_shell
@@ -116,18 +110,6 @@ module WeblogAuthoring
       route.empty? || route == current_route ? nil : route
     rescue URI::InvalidURIError, ArgumentError
       nil
-    end
-
-    def invalidate(routes, outbox_id, revision:)
-      paths = routes.map { |route| "/#{URI::DEFAULT_PARSER.escape(route).gsub("'", "%27").gsub("/", "%2F")}" }
-      reference = Digest::SHA256.hexdigest(JSON.generate([outbox_id, revision, paths]))
-      @cloudfront_client.create_invalidation(
-        distribution_id: @distribution_id,
-        invalidation_batch: {
-          paths: { quantity: paths.length, items: paths },
-          caller_reference: "webmention-#{reference}",
-        }
-      )
     end
 
     def render_page(page, source_url:)

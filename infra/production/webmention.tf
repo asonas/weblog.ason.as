@@ -300,12 +300,6 @@ data "aws_iam_policy_document" "webmention_publisher" {
   }
 
   statement {
-    effect    = "Allow"
-    actions   = ["cloudfront:CreateInvalidation"]
-    resources = [aws_cloudfront_distribution.weblog.arn]
-  }
-
-  statement {
     effect = "Allow"
     actions = [
       "sqs:ChangeMessageVisibility",
@@ -349,11 +343,10 @@ resource "aws_lambda_function" "webmention_publisher" {
 
   environment {
     variables = {
-      CLOUDFRONT_DISTRIBUTION_ID = aws_cloudfront_distribution.weblog.id
-      DSQL_HOST                  = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
-      SITE_BUCKET                = aws_s3_bucket.site.id
-      WEBMENTION_QUEUE_URL       = aws_sqs_queue.webmention.url
-      WEBMENTION_SENDER_ENABLED  = tostring(var.webmention_sender_enabled)
+      DSQL_HOST                 = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
+      SITE_BUCKET               = aws_s3_bucket.site.id
+      WEBMENTION_QUEUE_URL      = aws_sqs_queue.webmention.url
+      WEBMENTION_SENDER_ENABLED = tostring(var.webmention_sender_enabled)
     }
   }
 
