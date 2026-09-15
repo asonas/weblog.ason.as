@@ -8,7 +8,7 @@ struct PhotoGridView: View {
   @State private var showingSettings = false
   @State private var presentedFailure: PresentedUploadFailure?
 
-  private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
+  private let columns = [GridItem(.adaptive(minimum: 112, maximum: 180), spacing: 2)]
 
   var body: some View {
     ZStack(alignment: .topTrailing) {
@@ -146,6 +146,7 @@ private struct PresentedUploadFailure: Identifiable {
 }
 
 private struct PhotoCell: View {
+  @Environment(\.displayScale) private var displayScale
   let photo: LibraryPhoto
   let library: PhotoLibrary
   let status: PhotoSelectionStatus
@@ -205,9 +206,8 @@ private struct PhotoCell: View {
     .accessibilityLabel("\(photo.capturedAt.formatted(date: .omitted, time: .shortened))の写真")
     .accessibilityValue(accessibilityValue)
     .task {
-      let scale = UIScreen.main.scale
       image = await library.thumbnail(
-        for: photo, size: CGSize(width: 240 * scale, height: 240 * scale))
+        for: photo, size: CGSize(width: 240 * displayScale, height: 240 * displayScale))
     }
   }
 

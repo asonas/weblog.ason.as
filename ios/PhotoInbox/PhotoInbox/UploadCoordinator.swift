@@ -43,7 +43,7 @@ final class UploadCoordinator {
           )
         })
       await refreshState()
-      scheduleRetry()
+      await scheduleRetry()
       await processQueue()
     } catch {
       lastError = error.localizedDescription
@@ -64,7 +64,7 @@ final class UploadCoordinator {
         let failure = UploadFailure(error: error)
         try? await store.updateFailure(item.clientUploadID, failure: failure)
         lastError = failure.message
-        if failure.automaticallyRetryable { scheduleRetry() }
+        if failure.automaticallyRetryable { await scheduleRetry() }
       }
       await refreshState()
     }
@@ -149,10 +149,10 @@ final class UploadCoordinator {
       })
   }
 
-  private func scheduleRetry() {
+  private func scheduleRetry() async {
     let request = BGProcessingTaskRequest(identifier: "com.asonas.weblog.PhotoInbox.retry-uploads")
     request.requiresNetworkConnectivity = true
     request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-    try? BGTaskScheduler.shared.submit(request)
+    try? await BGTaskScheduler.shared.submitTaskRequest(request)
   }
 }
