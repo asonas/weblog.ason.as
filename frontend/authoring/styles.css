@@ -2602,6 +2602,81 @@ h2 {
   color: var(--canvas);
 }
 
+.ProseMirror :not(pre) > code,
+.page-view :not(pre) > code {
+  padding: 0.08em 0.28em;
+  border-radius: 0.2em;
+  background: color-mix(in oklch, var(--quiet-fill) 55%, transparent);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+  font-size: 1em;
+  font-weight: 500;
+  line-height: inherit;
+  box-decoration-break: clone;
+}
+
+.ProseMirror pre code,
+.page-view pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+  font-size: 0.95rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.hljs-comment,
+.hljs-quote,
+.highlight .c,
+.highlight .c1,
+.highlight .cm {
+  color: oklch(0.72 0.025 260);
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.highlight .k,
+.highlight .kd,
+.highlight .kr {
+  color: oklch(0.78 0.13 30);
+}
+
+.hljs-string,
+.hljs-regexp,
+.highlight .s,
+.highlight .s1,
+.highlight .s2 {
+  color: oklch(0.82 0.12 145);
+}
+
+.hljs-number,
+.hljs-literal,
+.highlight .mi,
+.highlight .mf,
+.highlight .kc {
+  color: oklch(0.82 0.11 80);
+}
+
+.hljs-title,
+.hljs-section,
+.highlight .nf,
+.highlight .nc {
+  color: oklch(0.82 0.11 245);
+}
+
+.hljs-type,
+.hljs-built_in,
+.hljs-attribute,
+.highlight .kt,
+.highlight .nb,
+.highlight .na {
+  color: oklch(0.82 0.11 320);
+}
+
 .ProseMirror img,
 .page-view img {
   max-inline-size: 100%;

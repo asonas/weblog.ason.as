@@ -4,6 +4,7 @@ import {
   type JSONContent,
   Node as TiptapNode,
 } from "@tiptap/core";
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import { TableKit } from "@tiptap/extension-table";
 import { Markdown } from "@tiptap/markdown";
 import type { NodeType } from "@tiptap/pm/model";
@@ -15,6 +16,20 @@ import {
 } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import bash from "highlight.js/lib/languages/bash";
+import css from "highlight.js/lib/languages/css";
+import diff from "highlight.js/lib/languages/diff";
+import ini from "highlight.js/lib/languages/ini";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import ruby from "highlight.js/lib/languages/ruby";
+import rust from "highlight.js/lib/languages/rust";
+import swift from "highlight.js/lib/languages/swift";
+import typescript from "highlight.js/lib/languages/typescript";
+import xml from "highlight.js/lib/languages/xml";
+import yaml from "highlight.js/lib/languages/yaml";
+import { createLowlight } from "lowlight";
 import {
   type CSSProperties,
   type DragEvent as ReactDragEvent,
@@ -51,6 +66,22 @@ declare global {
     onYouTubeIframeAPIReady?: () => void;
   }
 }
+
+const lowlight = createLowlight({
+  bash,
+  css,
+  diff,
+  ini,
+  javascript,
+  json,
+  markdown,
+  ruby,
+  rust,
+  swift,
+  typescript,
+  xml,
+  yaml,
+});
 
 let youtubeApiPromise: Promise<NonNullable<Window["YT"]>> | null = null;
 
@@ -384,6 +415,39 @@ const WikiLinks = Extension.create({
         },
       }),
     ];
+  },
+});
+
+const CodeLineNavigation = Extension.create({
+  name: "codeLineNavigation",
+  priority: 1_000,
+
+  addKeyboardShortcuts() {
+    return {
+      "Ctrl-a": () => {
+        const { $head } = this.editor.state.selection;
+        if ($head.parent.type.name !== "codeBlock") return false;
+
+        const lineStart = $head.parent.textContent.lastIndexOf(
+          "\n",
+          $head.parentOffset - 1,
+        );
+        const position =
+          lineStart === -1 ? $head.start() : $head.start() + lineStart + 1;
+        return this.editor.commands.setTextSelection(position);
+      },
+      "Ctrl-e": () => {
+        const { $head } = this.editor.state.selection;
+        if ($head.parent.type.name !== "codeBlock") return false;
+
+        const lineEnd = $head.parent.textContent.indexOf(
+          "\n",
+          $head.parentOffset,
+        );
+        const position = lineEnd === -1 ? $head.end() : $head.start() + lineEnd;
+        return this.editor.commands.setTextSelection(position);
+      },
+    };
   },
 });
 
@@ -1460,6 +1524,7 @@ const YouTubePlayer = TiptapNode.create({
 
 export const EDITOR_EXTENSIONS = [
   StarterKit.configure({
+    codeBlock: false,
     dropcursor: false,
     gapcursor: false,
     underline: false,
@@ -1472,6 +1537,8 @@ export const EDITOR_EXTENSIONS = [
       },
     },
   }),
+  CodeBlockLowlight.configure({ lowlight }),
+  CodeLineNavigation,
   WikiLinks,
   SelectableImage.configure({ allowBase64: false }),
   Video,

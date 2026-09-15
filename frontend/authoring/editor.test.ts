@@ -40,6 +40,10 @@ function installDom() {
     configurable: true,
     value: dom.window.navigator,
   });
+  Object.defineProperty(dom.window.navigator, "platform", {
+    configurable: true,
+    value: "MacIntel",
+  });
   dom.window.requestAnimationFrame = (callback: FrameRequestCallback) =>
     setTimeout(() => callback(0), 0) as unknown as number;
   dom.window.cancelAnimationFrame = (handle: number) => clearTimeout(handle);
@@ -1152,6 +1156,81 @@ test("renders pasted Markdown tables through the editor event path", async () =>
     await act(async () => root.unmount());
     globalThis.fetch = originalFetch;
     container.remove();
+  }
+});
+
+test("highlights fenced code while preserving its Markdown", () => {
+  const source = [
+    "```typescript",
+    'const message: string = "こんにちは";',
+    "```",
+  ].join("\n");
+  const editor = new Editor({
+    extensions: EDITOR_EXTENSIONS,
+    content: source,
+    contentType: "markdown",
+  });
+  try {
+    assert.equal(editor.view.dom.querySelectorAll("pre code").length, 1);
+    assert.ok(editor.view.dom.querySelector(".hljs-keyword"));
+    assert.ok(editor.view.dom.querySelector(".hljs-string"));
+    assert.equal(editor.getMarkdown(), source);
+  } finally {
+    editor.destroy();
+  }
+});
+
+test("moves Ctrl-e to the end of the current code line", () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const editor = new Editor({
+    element,
+    extensions: EDITOR_EXTENSIONS,
+    content: "```ruby\nclass User\nend\n```",
+    contentType: "markdown",
+  });
+  try {
+    editor.commands.setTextSelection(1);
+    editor.view.dom.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "e",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    assert.equal(editor.state.selection.head, 11);
+  } finally {
+    editor.destroy();
+    element.remove();
+  }
+});
+
+test("moves Ctrl-a to the start of the current code line", () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const editor = new Editor({
+    element,
+    extensions: EDITOR_EXTENSIONS,
+    content: "```ruby\nclass User\nend\n```",
+    contentType: "markdown",
+  });
+  try {
+    editor.commands.setTextSelection(15);
+    editor.view.dom.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "a",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    assert.equal(editor.state.selection.head, 12);
+  } finally {
+    editor.destroy();
+    element.remove();
   }
 });
 
