@@ -62,9 +62,6 @@ module ArticleComparisonFixture
       @output.write(body)
     end
 
-    def create_invalidation(**)
-    end
-
     def delete_object(**)
     end
 
@@ -103,10 +100,8 @@ module ArticleComparisonFixture
     publisher = WeblogAuthoring::WebmentionSitePublisher.new(
       database: Database.new(page),
       s3_client: services,
-      cloudfront_client: services,
       sqs_client: services,
       site_bucket: "local-comparison",
-      distribution_id: "local-comparison",
       delivery_queue_url: "local-comparison",
       sender_enabled: false
     )
