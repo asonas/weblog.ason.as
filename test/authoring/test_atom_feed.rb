@@ -44,6 +44,45 @@ class AtomFeedTest < Minitest::Test
                     '&lt;img src=&quot;https://weblog.ason.as/assets/uploads/2026/09/example.webp&quot; alt=&quot;photo&quot; /&gt;'
   end
 
+  def test_orders_entries_by_update_time_without_changing_publication_time
+    newly_published = page(
+      name: "新しい記事",
+      body: "新しい記事の本文",
+      updated_at: Time.iso8601("2026-09-15T10:00:00+09:00"),
+      published_at: Time.iso8601("2026-09-15T10:00:00+09:00")
+    )
+    recently_updated = page(
+      name: "追記した記事",
+      body: "追記した記事の本文",
+      updated_at: Time.iso8601("2026-09-16T10:00:00+09:00"),
+      published_at: Time.iso8601("2026-08-29T10:00:00+09:00")
+    )
+
+    feed = WeblogAuthoring::AtomFeed.new(site_url: "https://weblog.ason.as").render(
+      [newly_published, recently_updated]
+    )
+
+    assert_operator feed.index("<title>追記した記事</title>"), :<, feed.index("<title>新しい記事</title>")
+    assert_includes feed, "<published>2026-08-29T10:00:00+09:00</published>"
+    assert_includes feed, "<updated>2026-09-16T10:00:00+09:00</updated>"
+  end
+
+  def test_limits_entries_after_ordering_by_update_time
+    pages = 31.times.map do |index|
+      page(
+        name: "記事#{index}",
+        body: "本文#{index}",
+        updated_at: Time.iso8601("2026-08-01T00:00:00Z") + index
+      )
+    end
+
+    feed = WeblogAuthoring::AtomFeed.new(site_url: "https://weblog.ason.as").render(pages)
+
+    assert_equal 30, feed.scan("<entry>").length
+    assert_includes feed, "<title>記事30</title>"
+    refute_includes feed, "<title>記事0</title>"
+  end
+
   private
 
   def page(name:, body:, updated_at: Time.iso8601("2026-08-21T12:00:00+09:00"),
