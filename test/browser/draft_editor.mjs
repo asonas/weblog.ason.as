@@ -55,6 +55,71 @@ try {
   assert.equal(await reopened.getByLabel("タイトル", { exact: true }).inputValue(), "保存と公開は別");
   await other.close();
 
+  const previewMarkdown = `## 表とコード
+
+| 時刻 | 事象 |
+|---|---|
+| 10:53 | 切り替え |
+
+\`\`\`ruby
+class User
+end
+\`\`\`
+
+![カバー](/assets/photo.webp)
+
+[[公開先]]`;
+  await page.getByLabel("タイトル", { exact: true }).fill("作業版の表示確認");
+  await body.fill(previewMarkdown);
+  const preview = page.getByLabel("作業版の表示");
+  await until(async () =>
+    (await preview.locator(".article-reading-header h1").textContent()) ===
+    "作業版の表示確認",
+  );
+  assert.equal(await preview.locator("table").count(), 1);
+  assert.equal(
+    await preview.locator("pre .hljs-keyword").first().textContent(),
+    "class",
+  );
+  assert.ok(
+    (await preview
+      .locator(".article-reading-header img")
+      .getAttribute("src"))?.endsWith("/assets/photo.webp"),
+  );
+  const wideSource = await page.locator(".draft-editor__source").boundingBox();
+  const widePreview = await preview.boundingBox();
+  assert.ok(wideSource && widePreview && widePreview.x >= wideSource.x + wideSource.width - 1);
+  const popupPromise = page.waitForEvent("popup");
+  await preview.getByRole("link", { name: "公開先" }).click();
+  const publishedDestination = await popupPromise;
+  assert.ok(decodeURI(publishedDestination.url()).endsWith("/公開先"));
+  await publishedDestination.close();
+
+  await page.setViewportSize({ width: 700, height: 900 });
+  await setTimeout(250);
+  assert.equal(await preview.isVisible(), false);
+  await page.getByRole("button", { name: "プレビュー" }).click();
+  await setTimeout(250);
+  assert.equal(await preview.isVisible(), true);
+  await page.getByRole("button", { name: "閉じる" }).click();
+  await setTimeout(250);
+  assert.equal(await preview.isVisible(), false);
+  await page.context().setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+  await page.getByRole("button", { name: "プレビュー" }).click();
+  await preview
+    .getByText("オフラインのため画像や埋め込みを表示できません。本文の表示は更新されています。")
+    .waitFor();
+  await body.fill(`${previewMarkdown}\n\nオフラインで追記`);
+  await until(async () =>
+    (await preview.locator(".public-article-body").textContent()).includes(
+      "オフラインで追記",
+    ),
+  );
+  await page.context().setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await page.setViewportSize({ width: 1280, height: 720 });
+
   await body.press("End");
   await body.pressSequentially("local undo");
   await body.press("Meta+z");
@@ -401,7 +466,7 @@ try {
   const publicPages = await (await fetch("http://127.0.0.1:18082/api/pages")).json();
   assert.deepEqual(publicPages.pages, []);
   assert.deepEqual(errors, []);
-  console.log("PASS: reopen, Undo/Redo, API-offline reload/reconnect, lost response retry, deployment failure recovery, remote refresh, continuous-input save, metadata conflicts/reload/choice/send race, independent metadata merge, same-browser offline tabs/reload/conflict/flight handoff, storage quota warning/export/recovery, explicit generation recovery, oversized retention, public isolation");
+  console.log("PASS: reopen, shared public preview wide/narrow/offline, Undo/Redo, API-offline reload/reconnect, lost response retry, deployment failure recovery, remote refresh, continuous-input save, metadata conflicts/reload/choice/send race, independent metadata merge, same-browser offline tabs/reload/conflict/flight handoff, storage quota warning/export/recovery, explicit generation recovery, oversized retention, public isolation");
 } finally {
   await browser?.close();
   for (const child of children) child.kill("SIGTERM");

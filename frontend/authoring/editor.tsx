@@ -46,6 +46,7 @@ import { DiaryNavigation } from "./DiaryNavigation";
 import { GeneratedCover } from "./GeneratedCover";
 import { MarkdownClipboard } from "./MarkdownClipboard";
 import { markdownForEditor, markdownForSource } from "./markdown";
+import { PublicArticleHeader } from "./PublicArticlePresentation";
 import { AUTHORING_TELEMETRY_FLUSH_EVENT } from "./performanceTelemetry";
 import { SelectableImage } from "./SelectableImage";
 import { SpeakerDeckPlayer } from "./speakerDeck";
@@ -3128,14 +3129,10 @@ export function AuthoringEditor({
           </section>
         )}
         {!canEdit && (
-          <header
-            className={`article-reading-header${bootstrap.resolved_cover_image_url ? " article-reading-header--covered" : ""}`}
-          >
-            {bootstrap.resolved_cover_image_url && (
-              <img src={bootstrap.resolved_cover_image_url} alt="" />
-            )}
-            <h1>{draft.title}</h1>
-          </header>
+          <PublicArticleHeader
+            coverImageUrl={bootstrap.resolved_cover_image_url || null}
+            title={draft.title}
+          />
         )}
         {wikiLinkSuggestionStyle && (
           <div

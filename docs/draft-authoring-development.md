@@ -36,7 +36,15 @@ Browser verification covers two tabs editing while the API is disconnected, imme
 
 The browser test injects `QuotaExceededError` at the IndexedDB write boundary. It verifies that text remains editable, the storage warning appears, Markdown download preserves the exact body, and no update is sent before durable local storage succeeds. After storage recovers, retry persists the failed changes before synchronization; reload and a fresh browser context both recover the body. This simulates the storage error rather than filling the user's disk. When synchronization is stopped by an error, an explicit recovery action copies the current Markdown and metadata into a new draft ID. The old draft and server state remain untouched, so an obsolete tab cannot write into the recovered draft. This is a recovery generation boundary, not an implicit reset or deletion.
 
-Real Japanese IME/mobile menu Undo validation, corruption recovery, compaction and publication remain unfinished. No public preview, inbox or administration UI is implemented here. Issue #163 is not complete.
+Real Japanese IME/mobile menu Undo validation and publication remain unfinished. No inbox or administration UI is implemented here. Issue #163 is not complete.
+
+### Working-version preview
+
+The development draft editor displays the native Markdown textarea and a read-only working-version preview in two columns. At narrow widths the preview is hidden off the right edge until the pull tab opens it. The title and future publication action remain on one compact row; the preview has no route, editable surface, Universe or visual diff.
+
+The preview reuses `PublicArticlePresentation`, the public article class contract and the production presentation CSS. The existing React reading view also uses the shared title/cover header. The static publisher remains Ruby-owned and emits the same public classes; the preview does not introduce a second article stylesheet or a public draft document. The browser-side Markdown extensions render the current local Y.Text directly, so text, tables and highlighted code continue to update without the API. Media uses the existing URL and embed rules; an offline message distinguishes unavailable images and embeds from the still-available text preview. Preview links open their published destinations in a separate tab.
+
+The browser integration covers the public title and automatic cover placement, table and Ruby syntax rendering, side-by-side and sliding layouts, separate link navigation and offline text updates at wide and narrow viewport sizes.
 
 ### Remaining manual input verification
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
+import { DraftPreview } from "./DraftPreview";
 import {
   DRAFT_BODY_LIMIT,
   type DraftMetadata,
@@ -17,6 +18,7 @@ const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
 export function DraftEditor() {
   const [session, setSession] = useState<DraftSession>();
   const [loadError, setLoadError] = useState("");
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [, refresh] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const [{ id, isNew }] = useState(() => {
@@ -202,16 +204,23 @@ export function DraftEditor() {
   const bytes = new TextEncoder().encode(session?.body.toString() || "").length;
   return (
     <section className="draft-editor" aria-label="下書き編集">
-      <p>開発用の下書き保存です。公開ページは変更されません。</p>
-      <label htmlFor="draft-title">タイトル</label>
-      <input
-        id="draft-title"
-        value={session?.metadata.title || ""}
-        disabled={!session}
-        onChange={(event) =>
-          session?.setMetadata({ title: event.target.value })
-        }
-      />
+      <div className="draft-editor__titlebar">
+        <label className="visually-hidden" htmlFor="draft-title">
+          タイトル
+        </label>
+        <input
+          id="draft-title"
+          placeholder="タイトル"
+          value={session?.metadata.title || ""}
+          disabled={!session}
+          onChange={(event) =>
+            session?.setMetadata({ title: event.target.value })
+          }
+        />
+        <button type="button" disabled title="明示公開は今後の実装です">
+          公開
+        </button>
+      </div>
       <details>
         <summary>記事とカバーの設定</summary>
         <label htmlFor="draft-type">記事種別</label>
@@ -258,14 +267,39 @@ export function DraftEditor() {
           </>
         )}
       </details>
-      <textarea
-        ref={textarea}
-        aria-label="本文"
-        aria-describedby="draft-size"
-        aria-invalid={bytes > DRAFT_BODY_LIMIT}
-        disabled={!session}
-        spellCheck={false}
-      />
+      <div className="draft-editor__workspace">
+        <div className="draft-editor__source">
+          <textarea
+            ref={textarea}
+            aria-label="本文"
+            aria-describedby="draft-size"
+            aria-invalid={bytes > DRAFT_BODY_LIMIT}
+            disabled={!session}
+            spellCheck={false}
+          />
+        </div>
+        <aside
+          id="draft-preview"
+          className={`draft-preview${isPreviewOpen ? " is-open" : ""}`}
+          aria-label="作業版の表示"
+        >
+          {session && (
+            <DraftPreview
+              body={session.body.toString()}
+              metadata={session.metadata}
+            />
+          )}
+        </aside>
+        <button
+          className="draft-preview__pull"
+          type="button"
+          aria-controls="draft-preview"
+          aria-expanded={isPreviewOpen}
+          onClick={() => setIsPreviewOpen((value) => !value)}
+        >
+          {isPreviewOpen ? "閉じる" : "プレビュー"}
+        </button>
+      </div>
       <p id="draft-size">
         {bytes >= DRAFT_BODY_LIMIT * 0.9
           ? `本文 ${Math.ceil(bytes / 1024)} / 512 KiB。上限を超えても本文は削除されません。`
