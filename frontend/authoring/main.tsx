@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { CardHome, type HomePage } from "./CardHome";
+import { DraftEditor } from "./DraftEditor";
 import { DesignSystemPage } from "./designSystem";
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
 import { HomeCardsSkeleton } from "./HomeCards";
@@ -369,6 +370,16 @@ function RootApp({
         <HeaderSearch />
         <SearchPage />
       </>
+    );
+  }
+  if (
+    __DEPLOYMENT_ENVIRONMENT__ !== "production" &&
+    window.location.pathname === "/draft-editor"
+  ) {
+    return auth.can_edit ? (
+      <DraftEditor />
+    ) : (
+      <p>下書きを編集するにはログインしてください。</p>
     );
   }
   if (window.location.pathname === "/authoring/webmentions") {

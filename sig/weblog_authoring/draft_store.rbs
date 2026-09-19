@@ -1,0 +1,11 @@
+module WeblogAuthoring
+  class DraftStore
+    class Error < StandardError
+      attr_reader status: Integer
+      def initialize: (String, ?Integer) -> void
+    end
+    def create: (String, Hash[String, untyped]) -> Hash[String, untyped]
+    def append: (String, Hash[String, untyped]) -> Hash[String, untyped]
+    def read: (String, Hash[String, untyped]) -> Hash[String, untyped]
+  end
+end

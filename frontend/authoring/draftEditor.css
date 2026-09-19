@@ -1,0 +1,32 @@
+.draft-editor {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 60rem;
+  margin-inline: auto;
+  padding: 1rem;
+}
+.draft-editor input,
+.draft-editor select,
+.draft-editor textarea {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: 0.5rem;
+}
+.draft-editor textarea {
+  min-height: 55vh;
+  resize: vertical;
+  line-height: 1.5;
+}
+.draft-editor p {
+  margin: 0;
+}
+.draft-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}

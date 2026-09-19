@@ -35,6 +35,7 @@ require_relative "diary_navigation"
 require_relative "names"
 require_relative "atom_feed"
 require_relative "performance_telemetry"
+require_relative "draft_store"
 
 module WeblogAuthoring
   class DevelopmentRequestLog
@@ -111,6 +112,11 @@ module WeblogAuthoring
 
     before do
       validate_loopback_host!
+      if request.path_info.start_with?("/api/authoring/drafts/")
+        headers "Cache-Control" => "private, no-store"
+        halt 404 unless settings.draft_store
+        require_authenticated! if settings.authentication_required
+      end
       if settings.authentication_required && mutation_request? && !mobile_device_request?
         require_authenticated!
       end
@@ -326,6 +332,23 @@ module WeblogAuthoring
       halt 404
     end
 
+    put "/api/authoring/drafts/:id" do
+      api_response { |payload| settings.draft_store.create(params.fetch("id"), payload) }
+    end
+
+    post "/api/authoring/drafts/:id/updates" do
+      api_response { |payload| settings.draft_store.append(params.fetch("id"), payload) }
+    end
+
+    get "/api/authoring/drafts/:id" do
+      json_response(settings.draft_store.read(params.fetch("id"), params))
+    end
+
+    error DraftStore::Error do
+      error = env.fetch("sinatra.error")
+      json_error(error.status, error.message)
+    end
+
     post "/api/authoring/pages" do
       api_response(201) do |payload|
         request = save_request(payload)
@@ -495,7 +518,8 @@ module WeblogAuthoring
                          s3_client: nil, asset_bucket: DEVELOPMENT_ASSET_BUCKET, embed_fetcher: nil,
                          oauth_client: default_oauth_client, allowed_github_user_id: default_allowed_github_user_id,
                          github_redirect_uri: ENV.fetch("GITHUB_REDIRECT_URI", DEFAULT_GITHUB_REDIRECT_URI),
-                         session_secret: nil, inbox_sources: default_inbox_sources)
+                         session_secret: nil, inbox_sources: default_inbox_sources,
+                         drafts_enabled: ENV["AUTHORING_DRAFTS_ENABLED"] == "1")
       root_path = Pathname(root).expand_path
       session_secret ||= development_session_secret(root_path)
       database = DevelopmentDatabase.new(
@@ -508,6 +532,9 @@ module WeblogAuthoring
       app = Class.new(self)
       app.set :root_path, root_path
       app.set :database, database
+      draft_store = drafts_enabled ? DraftStore.sqlite(root_path.join("data/development/drafts.sqlite3")) : nil
+      draft_store&.setup!
+      app.set :draft_store, draft_store
       app.set :clock, -> { clock }
       app.set :s3_client, s3_client
       app.set :asset_bucket, asset_bucket

@@ -26,6 +26,7 @@ require_relative "names"
 require_relative "cover_image"
 require_relative "atom_feed"
 require_relative "search_index"
+require_relative "draft_store"
 
 module WeblogAuthoring
   class LambdaApi
@@ -65,7 +66,8 @@ module WeblogAuthoring
                    bluesky_oauth_function_name: nil, webmention_queue_url: nil,
                    webmention_publish_queue_url: nil, webmention_dead_letter_arn: nil,
                    webmention_queue_arn: nil, webmention_publish_dead_letter_arn: nil,
-                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, clock: Time.method(:now))
+                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, draft_store: nil, clock: Time.method(:now))
+      @draft_store = draft_store
       @database = database
       @oauth = oauth
       @session_codec = session_codec
@@ -97,6 +99,8 @@ module WeblogAuthoring
 
     def call(event)
       cache_control_response(event, dispatch(event))
+    rescue DraftStore::Error => error
+      cache_control_response(event, json_error(error.status, error.message))
     rescue MobileUpload::ValidationError => error
       cache_control_response(event, mobile_upload_problem_response(event, error))
     rescue InputError => error
@@ -140,6 +144,7 @@ module WeblogAuthoring
 
       method = event.dig("requestContext", "http", "method").to_s
       path = event.fetch("rawPath", "")
+      return draft_response(event, method, path) if path.start_with?("/api/authoring/drafts/")
       return health_response if method == "GET" && path == "/health"
       return auth_session_response(event) if method == "GET" && path == "/api/auth/session"
       return github_login_response(event) if method == "GET" && path == "/api/auth/github"
@@ -417,6 +422,28 @@ module WeblogAuthoring
       return daily_editor_response(event) if event.dig("queryStringParameters", "template") == "daily"
 
       json_response(200, editor_json(title: "", name: "", body: ""))
+    end
+
+    def draft_response(event, method, path)
+      store = @draft_store
+      return json_response(404, error: "Not Found") unless store
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required") unless session
+      return json_response(403, error: "Editing is not allowed") unless allowed_session?(session)
+      if method != "GET" && !secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
+        return json_response(403, error: "CSRF token mismatch")
+      end
+      match = %r{\A/api/authoring/drafts/([^/]+)(/updates)?\z}.match(path)
+      return json_response(404, error: "Not Found") unless match
+      id = match[1].to_s
+      suffix = match[2]
+      payload = case [method, suffix]
+                when ["PUT", nil] then store.create(id, parse_json(event))
+                when ["POST", "/updates"] then store.append(id, parse_json(event))
+                when ["GET", nil] then store.read(id, event["queryStringParameters"] || {})
+                else return json_response(404, error: "Not Found")
+                end
+      json_response(200, payload)
     end
 
     def daily_editor_response(event)
@@ -1338,12 +1365,12 @@ module WeblogAuthoring
       method = event.dig("requestContext", "http", "method").to_s
       path = event.fetch("rawPath", "")
       return response if method.empty?
-
-      authentication_response = path.start_with?("/api/auth/") || path == "/api/inbox/sources/bluesky/callback"
+      draft_response = path.start_with?("/api/authoring/drafts/")
+      authentication_response = draft_response || path.start_with?("/api/auth/") || path == "/api/inbox/sources/bluesky/callback"
       return response unless authentication_response || !%w[GET HEAD OPTIONS].include?(method)
 
       existing_headers = response.fetch(:headers, EMPTY_HASH) # @type var existing_headers: Hash[String, String]
-      headers = existing_headers.merge("cache-control" => "no-store")
+      headers = existing_headers.merge("cache-control" => draft_response ? "private, no-store" : "no-store")
       if response.key?(:cookies)
         { statusCode: response.fetch(:statusCode), headers:, cookies: response.fetch(:cookies), body: response.fetch(:body) }
       else
