@@ -40,4 +40,14 @@ Real Japanese IME/mobile menu Undo validation, corruption recovery, compaction a
 
 Use two tabs of the development editor with a disposable draft. With the real Japanese IME, leave a phrase uncommitted in one tab while appending text in the other. Confirm the composition is not replaced, commit it, and check that both edits remain with the caret in a usable position. Repeat using browser-menu Undo/Redo and the mobile editing menu; Undo must remove only that tab's edit. Record OS, browser, input method, result and any untested environment. Synthetic composition and keyboard automation do not substitute for these checks.
 
+### Checkpoint reconstruction core
+
+The initial part of [checkpoint compaction](https://github.com/asonas/weblog.ason.as/issues/164) is in `lambda/draft_worker/reconstruct.ts`. It reconstructs an exact sequence range from a prior checkpoint and complete decoded logical updates. The caller must supply one article's trusted persisted records; this function is not a public request handler. Payload digests, sequence continuity, protocol/generation, unresolved Yjs dependencies, plain-text shape, the 512 KiB UTF-8 body limit, 2 MiB updates and 16 MiB checkpoints are checked before returning a candidate.
+
+Candidate verification checks coverage of both structures and deletion ranges, then reconstructs the candidate in a second document. It preserves CRDT identity instead of replacing the document with Markdown. Tests cover deletion-only updates whose state vector is unchanged, an old offline client's changes after checkpoint creation, later suffix updates, and corrupt/missing/incompatible input. The pinned Yjs version's unresolved-state fields are inspected because applying an update alone does not prove its dependencies were available. The update APIs are described in the [Yjs documentation](https://docs.yjs.dev/api/document-updates).
+
+Run `mise exec -- npm run test:draft-worker`, `mise exec -- npm run typecheck:draft-worker` and `mise exec -- npm run lint:draft-worker`.
+
+The core has no database, AWS or publishing side effects. Chunk manifests, worker invocation/authentication, scoped database reads, compaction scheduling, CAS activation, checkpoint catch-up and seven-day payload cleanup are not wired yet. A returned candidate does not authorize activation or deletion. `markdownDigest` hashes only the body, not the complete publication content including metadata. Issue #164 remains incomplete.
+
 Outbound Webmention sending remains intentionally disabled. This work must never enable delivery, drain queues or replay unsent notifications. Production deployment and migration require separate authorization.

@@ -4,6 +4,7 @@
     "includes": [
       "frontend/authoring/**/*.{ts,tsx,css}",
       "lambda/bluesky_oauth/**/*.ts",
+      "lambda/draft_worker/**/*.ts",
       "scripts/scrapbox-to-weblog.ts",
       "scripts/scrapbox-to-weblog.test.ts"
     ]
