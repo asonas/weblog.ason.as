@@ -623,9 +623,14 @@ end
   await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).click();
   await until(async () => (await publicationPage.getByRole("alert").textContent()).includes("通信できません"));
   await publicationPage.reload();
+  await fetch("http://127.0.0.1:18082/api/draft-test-search-failure", { method: "POST", headers: { "X-Draft-Test-Token": token } });
   await publicationPage.getByRole("button", { name: "公開を再試行", exact: true }).click();
   await until(async () => (await publicationPage.getByRole("status").textContent()).includes("公開が完了しました"));
   assert.ok((await (await fetch(readerUrl)).text()).includes("読者向けの内容"));
+  assert.ok((await (await fetch("http://127.0.0.1:18082/feed.xml")).text()).includes(`urn:uuid:${publicationId}`));
+  await publicationPage.getByRole("button", { name: "公開後の更新を再試行", exact: true }).click();
+  await until(async () => (await publicationPage.getByRole("status").textContent()).includes("公開後の更新が完了しました"));
+  assert.equal((await fetch(`http://127.0.0.1:18082/api/search?q=${encodeURIComponent("読者")}`)).status, 200);
   await publicationBody.fill("まだ見せない追記");
   await until(async () => (await publicationPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
   assert.ok(!(await (await fetch(readerUrl)).text()).includes("まだ見せない追記"));

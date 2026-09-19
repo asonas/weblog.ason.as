@@ -14,6 +14,7 @@ module WeblogAuthoring
     def publication_receipt: (String, String, String) -> Hash[String, untyped]?
     def accept_verified_publication: (String, Hash[String, untyped], Hash[String, untyped]) -> Hash[String, untyped]
     def publication_job: (String, String) -> Hash[String, untyped]
+    def publication_stages: (String, String) -> Array[Hash[String, untyped]]
     def publication_snapshot: (String, String) -> Hash[String, untyped]
     def published_snapshot: (String) -> Hash[String, untyped]?
     def published_route: (String) -> Hash[String, untyped]?

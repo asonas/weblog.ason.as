@@ -43,7 +43,29 @@ module WeblogAuthoring
     end
 
     def read(snapshot)
-      @read.call("published/#{snapshot.fetch('article_id')}/#{snapshot.fetch('id')}.html")
+      @read.call(snapshot.fetch("html_key", "published/#{snapshot.fetch('article_id')}/#{snapshot.fetch('id')}.html"))
+    end
+
+    def current?(snapshot)
+      snapshot && snapshot["html_digest"] && Digest::SHA256.hexdigest(read(snapshot)) == snapshot.fetch("html_digest")
+    rescue Aws::S3::Errors::NoSuchKey, Errno::ENOENT
+      false
+    end
+
+    def repair(snapshot)
+      unless snapshot["html_digest"]
+        begin
+          body = read(snapshot)
+          return { "html_key" => "published/#{snapshot.fetch('article_id')}/#{snapshot.fetch('id')}.html", "html_digest" => Digest::SHA256.hexdigest(body) }
+        rescue Aws::S3::Errors::NoSuchKey, Errno::ENOENT
+          # An interrupted placement is rebuilt from its immutable snapshot.
+        end
+      end
+      page = self.class.page(snapshot)
+      html = @renderer.render_document(page, shell: @shell.call, source_url: "#{@site_url}/#{URI::DEFAULT_PARSER.escape(page.route)}")
+      key = "published/#{snapshot.fetch('article_id')}/#{snapshot.fetch('id')}/#{SecureRandom.uuid}.html"
+      @place.call(key, html)
+      { "html_key" => key, "html_digest" => Digest::SHA256.hexdigest(html) }
     end
 
     def run(id, version_id)

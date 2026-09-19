@@ -43,12 +43,13 @@ module WeblogAuthoring
       end
     end
 
-    def initialize(database:, s3_client:, bucket:, runner: QmdRunner.new, clock: Time.method(:now))
+    def initialize(database:, s3_client:, bucket:, runner: QmdRunner.new, clock: Time.method(:now), manifest_key: MANIFEST_KEY)
       @database = database
       @s3_client = s3_client
       @bucket = bucket
       @runner = runner
       @clock = clock
+      @manifest_key = manifest_key
     end
 
     def call
@@ -78,7 +79,7 @@ module WeblogAuthoring
     end
 
     def read_manifest
-      response = @s3_client.get_object(bucket: @bucket, key: MANIFEST_KEY)
+      response = @s3_client.get_object(bucket: @bucket, key: @manifest_key)
       JSON.parse(response.body.read)
     rescue Aws::S3::Errors::NoSuchKey
       {}
@@ -133,7 +134,7 @@ module WeblogAuthoring
     end
 
     def publish(index_path, corpus_hash, document_count)
-      index_key = "search/generations/#{corpus_hash}/index.sqlite3"
+      index_key = "#{File.dirname(@manifest_key)}/generations/#{corpus_hash}/index.sqlite3"
       File.open(index_path, "rb") do |index|
         @s3_client.put_object(
           bucket: @bucket,
@@ -153,7 +154,7 @@ module WeblogAuthoring
       }
       @s3_client.put_object(
         bucket: @bucket,
-        key: MANIFEST_KEY,
+        key: @manifest_key,
         body: JSON.generate(manifest),
         content_type: "application/json; charset=utf-8",
         cache_control: "no-cache"

@@ -9,4 +9,14 @@ module WeblogAuthoring
     def read: (Hash[String, untyped]) -> String
     def self.page: (Hash[String, untyped]?) -> PageDocument?
   end
+
+  class DraftJobs
+    def run: (String, String, ?retry_now: bool) -> Hash[String, untyped]
+    def repair: () -> Hash[String, untyped]
+  end
+
+  class DraftOutputs
+    def feed: () -> String
+    def search: (query: String, limit: Integer) -> untyped
+  end
 end

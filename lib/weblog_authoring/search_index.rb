@@ -23,10 +23,11 @@ module WeblogAuthoring
       LIMIT ?
     SQL
 
-    def initialize(s3_client:, bucket:, cache_dir: "/tmp/search-index")
+    def initialize(s3_client:, bucket:, cache_dir: "/tmp/search-index", manifest_key: MANIFEST_KEY)
       @s3_client = s3_client
       @bucket = bucket
       @cache_dir = cache_dir
+      @manifest_key = manifest_key
     end
 
     def search(query:, limit:)
@@ -43,6 +44,10 @@ module WeblogAuthoring
         }
       end
       Result.new(results:, generated_at: @generated_at)
+    end
+
+    def close
+      @database&.close
     end
 
     private
@@ -68,7 +73,7 @@ module WeblogAuthoring
     end
 
     def read_manifest
-      response = @s3_client.get_object(bucket: @bucket, key: MANIFEST_KEY)
+      response = @s3_client.get_object(bucket: @bucket, key: @manifest_key)
       JSON.parse(response.body.read)
     end
 

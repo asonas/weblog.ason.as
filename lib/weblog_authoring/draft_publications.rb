@@ -74,7 +74,8 @@ module WeblogAuthoring
       @connect.call do |db|
         head = db.query("SELECT * FROM #{db.prefix}draft_publication_heads WHERE article_id = $1", [id]).first
         next nil unless head && head["active_id"]
-        snapshot_from(db, id, head.fetch("active_id")).merge(head.slice("published_at", "updated_at"))
+        html = db.query("SELECT html_key, html_digest FROM #{db.prefix}draft_html_outputs WHERE article_id = $1 AND version_id = $2", [id, head.fetch("active_id")]).first || {}
+        snapshot_from(db, id, head.fetch("active_id")).merge(head.slice("published_at", "updated_at"), html)
       end
     end
 
@@ -99,6 +100,7 @@ module WeblogAuthoring
           end
           now = Time.now.utc.iso8601(6)
           db.query("UPDATE #{db.prefix}draft_publication_heads SET active_id = $1, published_at = COALESCE(published_at, $2), updated_at = $2 WHERE article_id = $3", [version_id, now, id])
+          db.query("UPDATE #{db.prefix}draft_publication_clock SET revision = revision + 1 WHERE id = 1")
           db.query("UPDATE #{db.prefix}draft_publication_jobs SET status = 'completed', html_key = $1, error = NULL WHERE id = $2", [html_key, version_id])
           row.merge("status" => "completed", "html_key" => html_key, "error" => nil)
         end

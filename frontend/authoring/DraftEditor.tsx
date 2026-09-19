@@ -369,6 +369,17 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           : "読み込み中"}
       </p>
       <p role="alert">{loadError || publicationError || session?.error}</p>
+      {session?.pendingOutputs && (
+        <button
+          type="button"
+          disabled={session.isRetryingOutputs}
+          onClick={() => void session.retryOutputs()}
+        >
+          {session.isRetryingOutputs
+            ? "公開後の更新を再試行中"
+            : "公開後の更新を再試行"}
+        </button>
+      )}
       <DraftOfflineStatus />
       {session?.metadataConflicts.map(({ field, local, remote, source }) => (
         <fieldset key={field} className="draft-editor__conflict">

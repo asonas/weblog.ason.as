@@ -6,11 +6,11 @@ module WeblogAuthoring
     DEFAULT_LIMIT: Integer
 
     def initialize: (site_url: String, ?title: String, ?limit: Integer) -> void
-    def render: (Array[PageDocument]) -> String
+    def render: (Array[PageDocument], ?ids: Hash[String, String]) -> String
 
     private
 
-    def entries_xml: (Array[PageDocument], MarkdownRenderer) -> String
+    def entries_xml: (Array[PageDocument], MarkdownRenderer, Hash[String, String]) -> String
     def page_url: (PageDocument) -> String
     def updated_time: (PageDocument) -> Time
     def atom_time: (Time?) -> String

@@ -84,6 +84,12 @@ type PublicationJob = {
     | "superseded"
     | "needs_attention";
   error?: string;
+  stages?: Array<{
+    stage: string;
+    status: string;
+    attempts: number;
+    error?: string;
+  }>;
 };
 
 const DEFAULT_METADATA: DraftMetadata = {
@@ -202,6 +208,8 @@ export class DraftSession extends EventTarget {
   isPublishing = false;
   publicationStatus = "";
   pendingPublication?: PublicationRequest;
+  pendingOutputs?: string;
+  isRetryingOutputs = false;
   private isClosed = false;
   private isComposing = false;
   private isBackgroundPaused = false;
@@ -234,6 +242,8 @@ export class DraftSession extends EventTarget {
       throw new Error("下書きのIDが不正です。");
     }
     const session = new DraftSession(id, csrf);
+    session.pendingOutputs =
+      sessionStorage.getItem(`draft-outputs:${id}`) || undefined;
     const pendingPublication = sessionStorage.getItem(
       `draft-publication:${id}`,
     );
@@ -784,6 +794,19 @@ export class DraftSession extends EventTarget {
           job.status === "completed"
             ? "公開が完了しました"
             : "新しい公開操作が優先されました";
+        if (
+          job.stages?.some(
+            (stage) => !["completed", "superseded"].includes(stage.status),
+          )
+        ) {
+          this.pendingOutputs = job.id;
+          sessionStorage.setItem(`draft-outputs:${this.id}`, job.id);
+          this.publicationStatus =
+            "記事の公開が完了しました。フィード・検索の更新を再試行してください。";
+        } else {
+          this.pendingOutputs = undefined;
+          sessionStorage.removeItem(`draft-outputs:${this.id}`);
+        }
       }
       this.pendingPublication = undefined;
       sessionStorage.removeItem(`draft-publication:${this.id}`);
@@ -799,6 +822,38 @@ export class DraftSession extends EventTarget {
       throw error;
     } finally {
       this.cancelPublication();
+    }
+  }
+
+  async retryOutputs() {
+    if (!this.pendingOutputs || this.isRetryingOutputs) return;
+    this.isRetryingOutputs = true;
+    this.emit();
+    try {
+      const job = await this.request<PublicationJob>(
+        `/publications/${this.pendingOutputs}/run`,
+        "POST",
+        {},
+      );
+      if (
+        job.stages?.some(
+          (stage) => !["completed", "superseded"].includes(stage.status),
+        )
+      )
+        throw new Error(
+          "記事は公開済みです。フィード・検索の更新を完了できませんでした。",
+        );
+      this.pendingOutputs = undefined;
+      sessionStorage.removeItem(`draft-outputs:${this.id}`);
+      this.publicationStatus = "公開後の更新が完了しました";
+    } catch (error) {
+      this.publicationStatus =
+        error instanceof Error
+          ? error.message
+          : "公開後の更新を再試行してください";
+    } finally {
+      this.isRetryingOutputs = false;
+      this.emit();
     }
   }
 

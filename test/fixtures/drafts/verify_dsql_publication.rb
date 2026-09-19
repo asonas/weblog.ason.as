@@ -9,7 +9,7 @@ require "aurora_dsql_pg"
 require_relative "../../../lib/weblog_authoring/draft_publication"
 
 SCHEMA = "draft_publish_verify_#{SecureRandom.hex(6)}"
-TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes].freeze
+TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes draft_publication_clock draft_publication_stages draft_output_heads draft_html_outputs].freeze
 $stdout.sync = true
 
 module IsolatedPublicationSchema
@@ -74,6 +74,27 @@ begin
   end
   check("old completion cannot replace newer publication") { store.publication_job(id, second.fetch("id")).fetch("status") == "superseded" && store.published_snapshot(id).dig("metadata", "cover_mode") == "explicit" }
   check("first publication time is preserved") { store.published_snapshot(id).fetch("published_at") == active.fetch("published_at") }
+  now = Time.now.utc
+  current_id = store.published_snapshot(id).fetch("id")
+  store.record_publication_html(id, current_id, { "html_key" => "test/current.html", "html_digest" => "b" * 64 })
+  check("HTML repair pointer follows the active version") { store.published_snapshot(id).fetch("html_key") == "test/current.html" }
+  check("old HTML repair cannot replace the active pointer") { !store.record_publication_html(id, second.fetch("id"), { "html_key" => "test/old.html", "html_digest" => "c" * 64 }) }
+  claim = store.begin_publication_stage(id, current_id, "atom", now:)
+  collection = store.published_collection
+  store.complete_publication_stage(claim, now:, output: { "revision" => collection.fetch("revision"), "object_key" => "test/feed.xml", "digest" => "a" * 64 })
+  check("derived pointer and completed stage commit atomically") { store.output_head("atom").fetch("revision").to_i == collection.fetch("revision") && store.publication_stages(id, current_id).first.fetch("status") == "completed" }
+  failed = store.begin_publication_stage(id, current_id, "search", now:)
+  store.fail_publication_stage(failed, "temporary failure", now:)
+  check("backoff defers a stage") { store.begin_publication_stage(id, current_id, "search", now:).nil? }
+  store.cleanup_publication_stages(now: now + (31 * 86400))
+  check("unfinished stage survives retention") { store.publication_stages(id, current_id).any? { |stage| stage.fetch("status") == "retry_wait" } }
+  begin
+    store.publication_job(id, second.fetch("id"))
+    raise "Expired job retained"
+  rescue WeblogAuthoring::DraftStore::Error => error
+    check("completed old jobs expire without removing snapshots") { error.status == 404 && store.publication_snapshot(id, second.fetch("id")).fetch("id") == second.fetch("id") }
+  end
+  store.supersede_publication_stages(id, now:)
 ensure
   if created
     pool.with do |connection|

@@ -28,6 +28,7 @@ require_relative "atom_feed"
 require_relative "search_index"
 require_relative "draft_store"
 require_relative "draft_publisher"
+require_relative "draft_jobs"
 
 module WeblogAuthoring
   class LambdaApi
@@ -67,10 +68,12 @@ module WeblogAuthoring
                    bluesky_oauth_function_name: nil, webmention_queue_url: nil,
                    webmention_publish_queue_url: nil, webmention_dead_letter_arn: nil,
                    webmention_queue_arn: nil, webmention_publish_dead_letter_arn: nil,
-                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, draft_store: nil, draft_publication: nil, draft_publisher: nil, clock: Time.method(:now))
+                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, draft_store: nil, draft_publication: nil, draft_publisher: nil, draft_jobs: nil, draft_outputs: nil, clock: Time.method(:now))
       @draft_store = draft_store
       @draft_publication = draft_publication
       @draft_publisher = draft_publisher
+      @draft_jobs = draft_jobs
+      @draft_outputs = draft_outputs
       @database = database
       @oauth = oauth
       @session_codec = session_codec
@@ -148,6 +151,10 @@ module WeblogAuthoring
       method = event.dig("requestContext", "http", "method").to_s
       path = event.fetch("rawPath", "")
       return draft_response(event, method, path) if path.start_with?("/api/authoring/drafts/")
+      outputs = @draft_outputs
+      if method == "GET" && path == "/feed.xml" && outputs
+        return { statusCode: 200, headers: { "content-type" => "application/atom+xml; charset=utf-8", "cache-control" => "public, max-age=300" }, body: outputs.feed }
+      end
       return health_response if method == "GET" && path == "/health"
       return auth_session_response(event) if method == "GET" && path == "/api/auth/session"
       return github_login_response(event) if method == "GET" && path == "/api/auth/github"
@@ -253,7 +260,8 @@ module WeblogAuthoring
     end
 
     def run_scheduled_maintenance
-      response = publish_feed
+      jobs = @draft_jobs
+      response = jobs ? json_response(200, jobs.repair) : publish_feed
       image_inbox.finalize unless @asset_bucket.nil?
       @database.cleanup_mobile_uploads if @database.respond_to?(:cleanup_mobile_uploads)
       response
@@ -462,9 +470,10 @@ module WeblogAuthoring
         elsif method == "POST" && version_id == "prepare" && action.nil?
           return json_response(200, service.prepare(id))
         elsif method == "POST" && action == "run" && version_id
-          return json_response(200, publisher.run(id, version_id))
+          jobs = @draft_jobs
+          return json_response(200, jobs ? jobs.run(id, version_id, retry_now: true) : publisher.run(id, version_id))
         elsif method == "GET" && version_id && action.nil?
-          return json_response(200, store.publication_job(id, version_id))
+          return json_response(200, store.publication_job(id, version_id).merge("stages" => store.publication_stages(id, version_id)))
         end
         return json_response(404, error: "Not Found")
       end
@@ -1047,6 +1056,7 @@ module WeblogAuthoring
     end
 
     def search_index
+      return @draft_outputs if @draft_outputs
       @search_index = resolve_dependency(@search_index)
     end
 

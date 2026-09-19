@@ -16,7 +16,7 @@ module WeblogAuthoring
       @limit = limit
     end
 
-    def render(pages)
+    def render(pages, ids: {})
       public_pages = Array(pages).select { |page| page.status == "published" }
       feed_pages = public_pages.reject(&:empty?).sort_by { |page| updated_time(page) }.reverse.first(@limit)
       renderer = MarkdownRenderer.new(pages: public_pages)
@@ -32,20 +32,20 @@ module WeblogAuthoring
           <author>
             <name>#{xml(@title)}</name>
           </author>
-        #{entries_xml(feed_pages, renderer)}
+        #{entries_xml(feed_pages, renderer, ids)}
         </feed>
       XML
     end
 
     private
 
-    def entries_xml(pages, renderer)
+    def entries_xml(pages, renderer, ids)
       pages.map do |page|
         url = page_url(page)
         content = absolute_internal_urls(renderer.render(page.body, mode: "public").html)
         <<~XML.chomp
             <entry>
-              <id>#{xml(url)}</id>
+              <id>#{xml(ids.fetch(page.id, url))}</id>
               <title>#{xml(page.display_title)}</title>
               <link rel="alternate" type="text/html" href="#{xml(url)}" />
               <published>#{atom_time(page.published_at || page.created_at)}</published>

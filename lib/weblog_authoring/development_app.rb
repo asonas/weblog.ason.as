@@ -37,6 +37,7 @@ require_relative "atom_feed"
 require_relative "performance_telemetry"
 require_relative "draft_store"
 require_relative "draft_publisher"
+require_relative "draft_jobs"
 
 module WeblogAuthoring
   class DevelopmentRequestLog
@@ -246,7 +247,23 @@ module WeblogAuthoring
     get "/feed.xml" do
       content_type "application/atom+xml; charset=utf-8"
       cache_control :public, max_age: 300
-      AtomFeed.new(site_url: frontend_url("/").sub(%r{/\z}, "")).render(settings.database.list_pages)
+      if settings.draft_store
+        settings.draft_outputs.feed
+      else
+        AtomFeed.new(site_url: frontend_url("/").sub(%r{/\z}, "")).render(settings.database.list_pages)
+      end
+    end
+
+    get "/api/search" do
+      halt 404 unless settings.draft_store
+      query = params.fetch("q", "").to_s.strip
+      limit = Integer(params.fetch("limit", "10"))
+      halt 422 unless (1..20).cover?(limit)
+      json_response({ "results" => query.empty? ? [] : settings.draft_outputs.search(query:, limit:).results })
+    rescue ArgumentError, TypeError
+      json_error(422, "検索件数が不正です")
+    rescue SearchIndex::Unavailable
+      json_error(503, "検索の更新を待っています")
     end
 
     get "/assets/:filename" do
@@ -348,11 +365,12 @@ module WeblogAuthoring
     end
 
     get "/api/authoring/drafts/:id/publications/:version_id" do
-      json_response(settings.draft_store.publication_job(params.fetch("id"), params.fetch("version_id")))
+      id, version = params.values_at("id", "version_id")
+      json_response(settings.draft_store.publication_job(id, version).merge("stages" => settings.draft_store.publication_stages(id, version)))
     end
 
     post "/api/authoring/drafts/:id/publications/:version_id/run" do
-      api_response { settings.draft_publisher.run(params.fetch("id"), params.fetch("version_id")) }
+      api_response { settings.draft_jobs.run(params.fetch("id"), params.fetch("version_id"), retry_now: true) }
     end
 
     post "/api/authoring/drafts/:id/uploads" do
@@ -555,7 +573,7 @@ module WeblogAuthoring
                          oauth_client: default_oauth_client, allowed_github_user_id: default_allowed_github_user_id,
                          github_redirect_uri: ENV.fetch("GITHUB_REDIRECT_URI", DEFAULT_GITHUB_REDIRECT_URI),
                          session_secret: nil, inbox_sources: default_inbox_sources,
-                         drafts_enabled: ENV["AUTHORING_DRAFTS_ENABLED"] == "1")
+                         drafts_enabled: ENV["AUTHORING_DRAFTS_ENABLED"] == "1", draft_search_runner: SearchIndexer::QmdRunner.new)
       root_path = Pathname(root).expand_path
       session_secret ||= development_session_secret(root_path)
       database = DevelopmentDatabase.new(
@@ -574,9 +592,15 @@ module WeblogAuthoring
       if draft_store
         publication = DraftPublication.local(store: draft_store)
         app.set :draft_publication, publication
-        app.set :draft_publisher, DraftPublisher.local(publication:, database:,
+        publisher = DraftPublisher.local(publication:, database:,
           root: root_path.join("data/development/publications"),
           shell: -> { ROOT.join("index.html").read }, site_url: FRONTEND_ORIGIN)
+        app.set :draft_publisher, publisher
+        outputs = DraftOutputs.new(store: draft_store,
+          s3_client: LocalPublicationObjects.new(root_path.join("data/development/publication-outputs")),
+          bucket: "site", site_url: FRONTEND_ORIGIN, cache_dir: root_path.join("data/development/published-search").to_s, search_runner: draft_search_runner)
+        app.set :draft_outputs, outputs
+        app.set :draft_jobs, DraftJobs.new(store: draft_store, publisher:, outputs:)
       end
       app.set :clock, -> { clock }
       app.set :s3_client, s3_client
