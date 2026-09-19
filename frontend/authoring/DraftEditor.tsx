@@ -1,7 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
-import { DRAFT_BODY_LIMIT, DraftSession } from "./draftSession";
+import {
+  DRAFT_BODY_LIMIT,
+  type DraftMetadata,
+  DraftSession,
+} from "./draftSession";
 import "./draftEditor.css";
+
+const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
+  title: "タイトル",
+  page_type: "記事種別",
+  cover_mode: "カバー",
+  cover_image_url: "カバー画像のパス",
+};
 
 export function DraftEditor() {
   const [session, setSession] = useState<DraftSession>();
@@ -89,10 +100,12 @@ export function DraftEditor() {
     };
     const startComposition = () => {
       isComposing = true;
+      session.setComposing(true);
     };
     const endComposition = () => {
       isComposing = false;
       input();
+      session.setComposing(false);
     };
     const keydown = (event: KeyboardEvent) => {
       if (
@@ -236,6 +249,32 @@ export function DraftEditor() {
           : "読み込み中"}
       </p>
       <p role="alert">{loadError || session?.error}</p>
+      {session?.metadataConflicts.map(({ field, local, remote, source }) => (
+        <fieldset key={field} className="draft-editor__conflict">
+          <legend>{FIELD_LABELS[field]}の競合</legend>
+          <p>
+            別の編集で同じ項目が変更されました。残す値を選んでください。本文と未送信の変更は端末に保持しています。
+          </p>
+          <p>この端末: {local || "（未設定）"}</p>
+          <p>
+            {source === "tab" ? "別タブ" : "サーバー"}: {remote || "（未設定）"}
+          </p>
+          <div className="draft-editor__actions">
+            <button
+              type="button"
+              onClick={() => session.resolveMetadata(field, "local")}
+            >
+              この端末の値を使う
+            </button>
+            <button
+              type="button"
+              onClick={() => session.resolveMetadata(field, "remote")}
+            >
+              {source === "tab" ? "別タブの値を使う" : "サーバーの値を使う"}
+            </button>
+          </div>
+        </fieldset>
+      ))}
       <div className="draft-editor__actions">
         <button
           type="button"

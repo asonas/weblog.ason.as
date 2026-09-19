@@ -30,3 +30,10 @@
   gap: 0.75rem;
   align-items: center;
 }
+.draft-editor__conflict {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 0.5rem;
+}

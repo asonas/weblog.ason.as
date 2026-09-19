@@ -85,6 +85,209 @@ try {
   await until(async () => await freshPage.getByRole("textbox", { name: "本文", exact: true }).inputValue() === "保存の応答を待つ間に追記した本文");
   await fresh.close();
 
+  // API disconnection keeps the application shell available for an offline reload.
+  await page.route("**/api/authoring/drafts/**", (route) => route.abort("internetdisconnected"));
+  await body.fill("通信断の間に書いた本文");
+  await until(async () => (await page.getByRole("status").textContent()).includes("端末に保存済み"));
+  await page.reload();
+  await until(async () => await body.inputValue() === "通信断の間に書いた本文");
+  await page.unroute("**/api/authoring/drafts/**");
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+
+  const sentIds = [];
+  await page.route("**/updates", async (route) => {
+    sentIds.push(route.request().postDataJSON().update_id);
+    const response = await route.fetch();
+    if (sentIds.length === 1) await route.abort("failed");
+    else await route.fulfill({ response });
+  });
+  await body.fill("応答を失っても一度だけ保存する本文");
+  await until(() => sentIds.length >= 2);
+  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  assert.equal(new Set(sentIds).size, 1);
+  await page.unroute("**/updates");
+
+  let failedDuringDeploy = false;
+  await page.route("**/updates", async (route) => {
+    failedDuringDeploy = true;
+    await route.fulfill({ status: 502, contentType: "text/html", body: "temporarily unavailable" });
+  }, { times: 1 });
+  await body.fill("デプロイ中のエラーから自動復旧した本文");
+  await until(() => failedDuringDeploy);
+  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+
+  let unauthorizedSends = 0;
+  await page.route("**/updates", async (route) => {
+    unauthorizedSends++;
+    await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "ログインが必要です" }) });
+  });
+  await body.fill("ログイン切れでも保持する本文");
+  await until(async () => (await page.getByRole("alert").textContent()).includes("ログインが必要"));
+  await setTimeout(2200);
+  assert.equal(unauthorizedSends, 1);
+  assert.equal(await body.inputValue(), "ログイン切れでも保持する本文");
+  await page.unroute("**/updates");
+  await page.getByRole("button", { name: "サーバー保存を再試行" }).click();
+  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+
+  const remote = await browser.newContext();
+  const remotePage = await remote.newPage();
+  await remotePage.goto(url);
+  await remotePage.getByRole("textbox", { name: "本文", exact: true }).fill("別端末からの追記");
+  await until(async () => (await remotePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await page.bringToFront();
+  await until(async () => await body.inputValue() === "別端末からの追記");
+  await body.evaluate((field) => {
+    field.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    field.value += "ローカル変換";
+  });
+  await remotePage.getByRole("textbox", { name: "本文", exact: true }).fill("別端末からの追記リモート追記");
+  await until(async () => (await remotePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await setTimeout(300);
+  assert.equal(await body.inputValue(), "別端末からの追記ローカル変換");
+  await body.evaluate((field) => field.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true })));
+  await until(async () => (await body.inputValue()).includes("リモート追記"));
+  assert.ok((await body.inputValue()).includes("ローカル変換"));
+  await body.press("Meta+z");
+  assert.ok((await body.inputValue()).includes("リモート追記"));
+  assert.ok(!(await body.inputValue()).includes("ローカル変換"));
+  await remote.close();
+
+  let savedDuringTyping = false;
+  await page.route("**/updates", async (route) => {
+    savedDuringTyping = true;
+    await route.continue();
+  }, { times: 1 });
+  await body.focus();
+  await body.press("ControlOrMeta+End");
+  await body.pressSequentially("abcdefghijklmnopqrstuvwx", { delay: 250 });
+  assert.ok(savedDuringTyping, "continuous input must start saving without waiting for idle");
+  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+
+  const competing = await browser.newContext();
+  const competingPage = await competing.newPage();
+  await competingPage.goto(url);
+  await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await page.route("**/api/authoring/drafts/**", (route) => route.abort("internetdisconnected"));
+  await page.getByLabel("タイトル", { exact: true }).fill("端末側のタイトル");
+  await body.fill("競合解決を待つ本文");
+  await competingPage.getByLabel("タイトル", { exact: true }).fill("別端末側のタイトル");
+  await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await page.unroute("**/api/authoring/drafts/**");
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  const conflict = page.getByRole("group", { name: "タイトルの競合" });
+  await conflict.waitFor();
+  assert.ok((await conflict.textContent()).includes("別端末側のタイトル"));
+  await page.reload();
+  await conflict.waitFor();
+  assert.equal(await page.getByLabel("タイトル", { exact: true }).inputValue(), "端末側のタイトル");
+  assert.equal(await body.inputValue(), "競合解決を待つ本文");
+  await conflict.getByRole("button", { name: "この端末の値を使う" }).focus();
+  await page.keyboard.press("Enter");
+  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await competingPage.reload();
+  await until(async () => await competingPage.getByLabel("タイトル", { exact: true }).inputValue() === "端末側のタイトル");
+
+  let releaseConflict;
+  const holdConflict = new Promise((resolve) => { releaseConflict = resolve; });
+  let flightStarted = false;
+  await page.route("**/updates", async (route) => {
+    flightStarted = true;
+    await holdConflict;
+    await route.continue();
+  }, { times: 1 });
+  await page.getByLabel("タイトル", { exact: true }).fill("送信中に競合するタイトル");
+  await until(() => flightStarted);
+  await competingPage.getByLabel("タイトル", { exact: true }).fill("先に保存されたタイトル");
+  await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  releaseConflict();
+  await conflict.waitFor();
+  await conflict.getByRole("button", { name: "サーバーの値を使う" }).click();
+  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  assert.equal(await page.getByLabel("タイトル", { exact: true }).inputValue(), "先に保存されたタイトル");
+
+  await page.route("**/api/authoring/drafts/**", (route) => route.abort("internetdisconnected"));
+  await page.getByLabel("タイトル", { exact: true }).fill("別項目の変更とは競合しないタイトル");
+  await competingPage.getByText("記事とカバーの設定", { exact: true }).click();
+  await competingPage.getByLabel("記事種別", { exact: true }).selectOption("date");
+  await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await page.unroute("**/api/authoring/drafts/**");
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  assert.equal(await conflict.count(), 0);
+  assert.equal(await page.getByLabel("記事種別", { exact: true }).inputValue(), "date");
+  await competingPage.reload();
+  await until(async () => await competingPage.getByLabel("タイトル", { exact: true }).inputValue() === "別項目の変更とは競合しないタイトル");
+  await competing.close();
+
+  const tabs = await browser.newContext();
+  tabs.on("page", (tab) => tab.on("pageerror", (error) => errors.push(error.message)));
+  await tabs.route("**/api/authoring/drafts/**", (route) => route.abort("internetdisconnected"));
+  const tabA = await tabs.newPage();
+  await tabA.goto("http://127.0.0.1:15182/draft-editor");
+  const tabABody = tabA.getByRole("textbox", { name: "本文", exact: true });
+  await tabABody.fill("共通の本文\n");
+  await until(async () => (await tabA.getByRole("status").textContent()).includes("端末に保存済み"));
+  const tabsUrl = tabA.url();
+  const tabB = await tabs.newPage();
+  await tabB.goto(tabsUrl);
+  const tabBBody = tabB.getByRole("textbox", { name: "本文", exact: true });
+  await until(async () => await tabBBody.inputValue() === "共通の本文\n");
+  await Promise.all([
+    tabABody.evaluate((field) => { field.value += "Aの追記\n"; field.dispatchEvent(new Event("input", { bubbles: true })); }),
+    tabBBody.evaluate((field) => { field.value += "Bの追記\n"; field.dispatchEvent(new Event("input", { bubbles: true })); }),
+  ]);
+  await until(async () => (await tabABody.inputValue()).includes("Bの追記") && (await tabBBody.inputValue()).includes("Aの追記"));
+  assert.equal(await tabABody.inputValue(), await tabBBody.inputValue());
+  const mergedBody = await tabABody.inputValue();
+  await tabABody.press("Meta+z");
+  assert.ok((await tabABody.inputValue()).includes("Bの追記"));
+  assert.ok(!(await tabABody.inputValue()).includes("Aの追記"));
+  await tabABody.press("Meta+Shift+z");
+  await until(async () => await tabBBody.inputValue() === mergedBody);
+  await Promise.all([tabA.reload(), tabB.reload()]);
+  await until(async () => await tabABody.inputValue() === mergedBody && await tabBBody.inputValue() === mergedBody);
+  await Promise.all([
+    tabA.getByLabel("タイトル", { exact: true }).fill("タブAのタイトル"),
+    tabB.getByLabel("タイトル", { exact: true }).fill("タブBのタイトル"),
+  ]);
+  const tabConflict = tabA.getByRole("group", { name: "タイトルの競合" });
+  await tabConflict.waitFor();
+  assert.ok((await tabConflict.textContent()).includes("タブAのタイトル"));
+  assert.ok((await tabConflict.textContent()).includes("タブBのタイトル"));
+  await tabA.reload();
+  await tabConflict.waitFor();
+  await tabConflict.getByRole("button", { name: "この端末の値を使う" }).click();
+  await until(async () => await tabB.getByRole("group", { name: "タイトルの競合" }).count() === 0);
+  await tabB.close();
+  const handoffIds = [];
+  let responseLost = false;
+  await tabs.route("**/updates", async (route) => {
+    handoffIds.push(route.request().postDataJSON().update_id);
+    const response = await route.fetch();
+    if (!responseLost) {
+      responseLost = true;
+      await route.abort("failed");
+    } else await route.fulfill({ response });
+  });
+  await tabs.unroute("**/api/authoring/drafts/**");
+  await tabA.evaluate(() => window.dispatchEvent(new Event("online")));
+  await until(() => responseLost);
+  await tabA.close();
+  const handoffTab = await tabs.newPage();
+  await handoffTab.goto(tabsUrl);
+  await until(async () => (await handoffTab.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  assert.ok(handoffIds.length >= 2);
+  assert.equal(handoffIds[0], handoffIds[1]);
+  await tabs.close();
+  const recoveredTabs = await browser.newContext();
+  const recoveredTab = await recoveredTabs.newPage();
+  await recoveredTab.goto(tabsUrl);
+  await until(async () => await recoveredTab.getByRole("textbox", { name: "本文", exact: true }).inputValue() === mergedBody);
+  await recoveredTabs.close();
+
   await body.fill("あ".repeat(174_763));
   await until(async () => (await page.getByRole("alert").textContent()).includes("512 KiB"));
   assert.equal((await body.inputValue()).length, 174_763);
@@ -93,7 +296,7 @@ try {
   const publicPages = await (await fetch("http://127.0.0.1:18082/api/pages")).json();
   assert.deepEqual(publicPages.pages, []);
   assert.deepEqual(errors, []);
-  console.log("PASS: API and IndexedDB reopen, native textarea Undo/Redo, oversized text retention, public isolation");
+  console.log("PASS: reopen, Undo/Redo, API-offline reload/reconnect, lost response retry, deployment failure recovery, remote refresh, continuous-input save, metadata conflicts/reload/choice/send race, independent metadata merge, same-browser offline tabs/reload/conflict/flight handoff, oversized retention, public isolation");
 } finally {
   await browser?.close();
   for (const child of children) child.kill("SIGTERM");
