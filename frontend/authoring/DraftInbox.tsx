@@ -204,7 +204,7 @@ export function DraftInbox({
   const insert = useCallback(
     async (item: InboxItem) => {
       const field = textarea.current;
-      if (!field || busyItem) return;
+      if (!field || busyItem || session.isPublishing) return;
       if (!navigator.onLine) {
         setError(
           "オフラインでは素材を追加できません。本文の編集は続けられます。",
@@ -234,6 +234,10 @@ export function DraftInbox({
         }
         if (!markdown)
           throw new Error("素材のURLが不正なため追加できませんでした");
+        if (session.isPublishing)
+          throw new Error(
+            "公開処理中は素材を追加できません。完了後にもう一度選んでください。",
+          );
 
         const next = insertMarkdownBlock(
           field.value,
@@ -314,7 +318,7 @@ export function DraftInbox({
                           type="button"
                           className={`draft-inbox__item draft-inbox__item--${source}`}
                           aria-label={`${label}を本文へ追加`}
-                          disabled={Boolean(busyItem)}
+                          disabled={Boolean(busyItem) || session.isPublishing}
                           onClick={() => void insert(item)}
                         >
                           {source === "photo" && photo && (

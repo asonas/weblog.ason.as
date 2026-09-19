@@ -36,6 +36,7 @@ require_relative "names"
 require_relative "atom_feed"
 require_relative "performance_telemetry"
 require_relative "draft_store"
+require_relative "draft_publisher"
 
 module WeblogAuthoring
   class DevelopmentRequestLog
@@ -201,7 +202,8 @@ module WeblogAuthoring
     end
 
     get "/api/pages/:id" do
-      page = settings.database.find(params.fetch("id"))
+      page = settings.draft_store && DraftPublisher.page(settings.draft_store.published_snapshot(params.fetch("id")))
+      page ||= settings.database.find(params.fetch("id"))
       return json_error(404, "ページが見つかりません") if page.nil?
 
       conditional_json_response(editor_json(page))
@@ -211,7 +213,8 @@ module WeblogAuthoring
       route = valid_page_route(params.fetch("splat").first)
       return json_error(404, "ページが見つかりません") if route.nil?
 
-      conditional_json_response(editor_state_for_route(route))
+      page = settings.draft_store && DraftPublisher.page(settings.draft_store.published_route(route))
+      conditional_json_response(page ? editor_json(page) : editor_state_for_route(route))
     end
 
     get "/api/diary-navigation" do
@@ -334,6 +337,22 @@ module WeblogAuthoring
 
     put "/api/authoring/drafts/:id" do
       api_response { |payload| settings.draft_store.create(params.fetch("id"), payload) }
+    end
+
+    post "/api/authoring/drafts/:id/publications/prepare" do
+      api_response { settings.draft_publication.prepare(params.fetch("id")) }
+    end
+
+    post "/api/authoring/drafts/:id/publications" do
+      api_response(202) { |payload| settings.draft_publication.accept(params.fetch("id"), payload) }
+    end
+
+    get "/api/authoring/drafts/:id/publications/:version_id" do
+      json_response(settings.draft_store.publication_job(params.fetch("id"), params.fetch("version_id")))
+    end
+
+    post "/api/authoring/drafts/:id/publications/:version_id/run" do
+      api_response { settings.draft_publisher.run(params.fetch("id"), params.fetch("version_id")) }
     end
 
     post "/api/authoring/drafts/:id/uploads" do
@@ -512,6 +531,15 @@ module WeblogAuthoring
       end
     end
 
+    get "/*" do
+      halt 404 unless settings.draft_store
+      snapshot = settings.draft_store.published_route(params.fetch("splat").first)
+      halt 404 unless snapshot
+      content_type "text/html", charset: "utf-8"
+      headers "Cache-Control" => "no-store"
+      settings.draft_publisher.read(snapshot)
+    end
+
     error DevelopmentInputError do
       error = env.fetch("sinatra.error")
       json_error(error.status, error.message, field: error.field)
@@ -543,6 +571,13 @@ module WeblogAuthoring
       draft_store = drafts_enabled ? DraftStore.sqlite(root_path.join("data/development/drafts.sqlite3")) : nil
       draft_store&.setup!
       app.set :draft_store, draft_store
+      if draft_store
+        publication = DraftPublication.local(store: draft_store)
+        app.set :draft_publication, publication
+        app.set :draft_publisher, DraftPublisher.local(publication:, database:,
+          root: root_path.join("data/development/publications"),
+          shell: -> { ROOT.join("index.html").read }, site_url: FRONTEND_ORIGIN)
+      end
       app.set :clock, -> { clock }
       app.set :s3_client, s3_client
       app.set :asset_bucket, asset_bucket

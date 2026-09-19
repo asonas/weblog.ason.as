@@ -7,6 +7,7 @@ import {
   DRAFT_BODY_LIMIT,
   type DraftMetadata,
   DraftSession,
+  type PublicationConfirmation,
 } from "./draftSession";
 import "./draftEditor.css";
 
@@ -21,6 +22,8 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [session, setSession] = useState<DraftSession>();
   const [loadError, setLoadError] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState<PublicationConfirmation>();
+  const [publicationError, setPublicationError] = useState("");
   const [, refresh] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const [{ id, isNew }] = useState(() => {
@@ -186,6 +189,32 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  async function preparePublication() {
+    if (!session) return;
+    setPublicationError("");
+    try {
+      setConfirmation(await session.preparePublication());
+    } catch (error) {
+      setPublicationError(
+        error instanceof Error ? error.message : "公開の準備に失敗しました",
+      );
+    }
+  }
+
+  async function publish() {
+    if (!session) return;
+    const confirmed = confirmation;
+    setConfirmation(undefined);
+    setPublicationError("");
+    try {
+      await session.publish(confirmed);
+    } catch (error) {
+      setPublicationError(
+        error instanceof Error ? error.message : "公開に失敗しました",
+      );
+    }
+  }
+
   function recoverAsNewDraft() {
     if (!session) return;
     const nextId = crypto.randomUUID();
@@ -210,22 +239,51 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           id="draft-title"
           placeholder="タイトル"
           value={session?.metadata.title || ""}
-          disabled={!session}
+          disabled={!session || session.isPublishing}
           onChange={(event) =>
             session?.setMetadata({ title: event.target.value })
           }
         />
-        <button type="button" disabled title="明示公開は今後の実装です">
-          公開
+        <button
+          type="button"
+          disabled={!session || session.isPublishing}
+          onClick={() =>
+            void (session?.pendingPublication
+              ? publish()
+              : preparePublication())
+          }
+        >
+          {session?.pendingPublication
+            ? "公開を再試行"
+            : session?.isPublishing
+              ? "公開内容を確認中"
+              : "公開"}
         </button>
       </div>
+      {confirmation && (
+        <section aria-label="公開内容の確認">
+          <p>本文・タイトル・カバーを確認しましたか。この版を公開します。</p>
+          <button type="button" onClick={() => void publish()}>
+            この内容で公開
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmation(undefined);
+              session?.cancelPublication();
+            }}
+          >
+            キャンセル
+          </button>
+        </section>
+      )}
       <details>
         <summary>記事とカバーの設定</summary>
         <label htmlFor="draft-type">記事種別</label>
         <select
           id="draft-type"
           value={session?.metadata.page_type || "named"}
-          disabled={!session}
+          disabled={!session || session.isPublishing}
           onChange={(event) =>
             session?.setMetadata({ page_type: event.target.value })
           }
@@ -237,7 +295,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
         <select
           id="draft-cover-mode"
           value={session?.metadata.cover_mode || "auto"}
-          disabled={!session}
+          disabled={!session || session.isPublishing}
           onChange={(event) =>
             session?.setMetadata({
               cover_mode: event.target.value,
@@ -257,6 +315,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             <label htmlFor="draft-cover">カバー画像のパス</label>
             <input
               id="draft-cover"
+              disabled={session.isPublishing}
               value={session.metadata.cover_image_url || ""}
               onChange={(event) =>
                 session.setMetadata({ cover_image_url: event.target.value })
@@ -272,7 +331,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             aria-label="本文"
             aria-describedby="draft-size"
             aria-invalid={bytes > DRAFT_BODY_LIMIT}
-            disabled={!session}
+            disabled={!session || session.isPublishing}
             spellCheck={false}
           />
         </div>
@@ -306,10 +365,10 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       </p>
       <p role="status">
         {session
-          ? `${session.localStatus} · ${session.serverStatus}`
+          ? `${session.localStatus} · ${session.serverStatus}${session.publicationStatus ? ` · ${session.publicationStatus}` : ""}`
           : "読み込み中"}
       </p>
-      <p role="alert">{loadError || session?.error}</p>
+      <p role="alert">{loadError || publicationError || session?.error}</p>
       <DraftOfflineStatus />
       {session?.metadataConflicts.map(({ field, local, remote, source }) => (
         <fieldset key={field} className="draft-editor__conflict">

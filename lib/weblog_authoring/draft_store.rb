@@ -5,9 +5,11 @@ require "digest"
 require "json"
 require "time"
 require_relative "cover_image"
+require_relative "draft_publications"
 
 module WeblogAuthoring
   class DraftStore
+    include DraftPublications
     class Error < StandardError
       attr_reader :status
 
@@ -48,6 +50,7 @@ module WeblogAuthoring
 
     def setup!
       @connect.call do |db|
+        setup_publications(db)
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_articles (id TEXT PRIMARY KEY, generation INTEGER NOT NULL, head INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_updates (article_id TEXT NOT NULL, update_id TEXT NOT NULL, sequence INTEGER NOT NULL, digest TEXT NOT NULL, fingerprint TEXT NOT NULL, receipt TEXT NOT NULL, chunks INTEGER NOT NULL, PRIMARY KEY (article_id, update_id))")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_chunks (article_id TEXT NOT NULL, update_id TEXT NOT NULL, position INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (article_id, update_id, position))")
@@ -240,6 +243,7 @@ module WeblogAuthoring
           current = document(db, id)
           checkpoint = stored_checkpoint(db, id)
           { "article_id" => id, "generation" => current.fetch("generation"), "protocol" => 1,
+            "metadata" => current.fetch("metadata"),
             "through" => current.fetch("head"), "expected_checkpoint" => checkpoint ? checkpoint.fetch("through") : 0,
             "checkpoint" => checkpoint, }
         end

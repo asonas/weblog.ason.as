@@ -53,11 +53,7 @@ module WeblogAuthoring
 
       shell = site_shell
       CoverVariants.new(s3_client: @s3_client, bucket: @site_bucket).create(CoverImage.resolve(page))
-      body = render_page(page, source_url: outbox.fetch("payload").fetch("source_url"))
-      html = shell.sub('<div id="authoring-root"></div>') { %(<div id="authoring-root">#{body}</div>) }
-      raise "site shell does not contain authoring-root" if html == shell
-      html = html.sub(/<title>.*?<\/title>/m, "")
-        .sub("</head>", "#{page_metadata(page, outbox.fetch('payload').fetch('source_url'))}</head>")
+      html = render_document(page, shell:, source_url: outbox.fetch("payload").fetch("source_url"))
 
       @s3_client.put_object(
         bucket: @site_bucket, key: page.route, body: html,
@@ -72,6 +68,14 @@ module WeblogAuthoring
     rescue StandardError
       @database.fail_webmention_outbox(outbox.fetch("id"))
       raise
+    end
+
+    def render_document(page, shell:, source_url:)
+      body = render_page(page, source_url:)
+      html = shell.sub('<div id="authoring-root"></div>') { %(<div id="authoring-root">#{body}</div>) }
+      raise "site shell does not contain authoring-root" if html == shell
+      html.sub(/<title>.*?<\/title>/m, "")
+        .sub("</head>", "#{page_metadata(page, source_url)}</head>")
     end
 
     private

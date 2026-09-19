@@ -66,6 +66,25 @@ type UploadManifest = {
   digest: string;
   chunks: number;
 };
+export type PublicationConfirmation = {
+  protocol: number;
+  generation: number;
+  head: number;
+  metadata_revisions: Record<Field, number>;
+  content_hash: string;
+  article_state: "draft" | "public" | "unpublished_changes";
+};
+type PublicationRequest = PublicationConfirmation & { request_id: string };
+type PublicationJob = {
+  id: string;
+  status:
+    | "accepted"
+    | "unchanged"
+    | "completed"
+    | "superseded"
+    | "needs_attention";
+  error?: string;
+};
 
 const DEFAULT_METADATA: DraftMetadata = {
   title: "",
@@ -180,6 +199,9 @@ export class DraftSession extends EventTarget {
   private revision = 0;
   private persistedRevision = 0;
   private isSyncing = false;
+  isPublishing = false;
+  publicationStatus = "";
+  pendingPublication?: PublicationRequest;
   private isClosed = false;
   private isComposing = false;
   private isBackgroundPaused = false;
@@ -212,6 +234,13 @@ export class DraftSession extends EventTarget {
       throw new Error("下書きのIDが不正です。");
     }
     const session = new DraftSession(id, csrf);
+    const pendingPublication = sessionStorage.getItem(
+      `draft-publication:${id}`,
+    );
+    if (pendingPublication) {
+      session.pendingPublication = JSON.parse(pendingPublication);
+      session.publicationStatus = "公開処理の結果を再確認してください";
+    }
     let saved: SavedDraft | undefined;
     try {
       session.database = await openLocalDatabase();
@@ -256,7 +285,7 @@ export class DraftSession extends EventTarget {
     session.pollTimer = setInterval(session.refresh, 10_000);
     session.channel = new BroadcastChannel(`draft:${id}`);
     session.channel.onmessage = () => {
-      if (!session.isSyncing && !session.isComposing)
+      if (!session.isSyncing && !session.isComposing && !session.isPublishing)
         void session.readShared().catch((error: unknown) => {
           session.error =
             error instanceof Error
@@ -492,6 +521,7 @@ export class DraftSession extends EventTarget {
   }
 
   setBody(value: string) {
+    if (this.isPublishing) return;
     const old = Array.from(this.body.toString());
     const next = Array.from(value);
     let prefix = 0;
@@ -519,6 +549,7 @@ export class DraftSession extends EventTarget {
   }
 
   setMetadata(values: Partial<DraftMetadata>) {
+    if (this.isPublishing) return;
     this.metadata = { ...this.metadata, ...values };
     this.changed();
   }
@@ -616,7 +647,13 @@ export class DraftSession extends EventTarget {
   }
 
   async sync() {
-    if (this.isSyncing || this.isClosed || this.isComposing) return;
+    if (
+      this.isSyncing ||
+      this.isClosed ||
+      this.isComposing ||
+      this.isPublishing
+    )
+      return;
     this.isSyncing = true;
     try {
       await navigator.locks.request(`draft-sync:${this.id}`, async () => {
@@ -631,6 +668,137 @@ export class DraftSession extends EventTarget {
       this.emit();
     } finally {
       this.isSyncing = false;
+    }
+  }
+
+  private contentHash() {
+    return digest(
+      new TextEncoder().encode(
+        JSON.stringify([
+          this.body.toString().replaceAll("\r\n", "\n"),
+          this.metadata.title.trim(),
+          this.metadata.page_type,
+          this.metadata.cover_mode,
+          this.metadata.cover_mode === "explicit"
+            ? this.metadata.cover_image_url
+            : null,
+        ]),
+      ),
+    );
+  }
+
+  async preparePublication(): Promise<PublicationConfirmation> {
+    if (this.isComposing || this.isPublishing || this.isClosed)
+      throw new Error("入力の確定後に公開してください。");
+    this.isPublishing = true;
+    this.emit();
+    try {
+      const seen = await this.contentHash();
+      await navigator.locks.request(`draft-sync:${this.id}`, async () => {
+        this.isSyncing = true;
+        try {
+          if (this.failedBase) await this.persist();
+          await this.readShared();
+          await this.syncLocked();
+        } finally {
+          this.isSyncing = false;
+        }
+      });
+      if (
+        this.error ||
+        this.hasPendingChanges() ||
+        this.metadataConflicts.length ||
+        this.localStatus !== "端末に保存済み"
+      )
+        throw new Error(
+          this.error ||
+            "未保存の変更または設定の競合を解決してから公開してください。",
+        );
+      if (seen !== (await this.contentHash()))
+        throw new Error(
+          "別の編集が合流しました。本文と設定を確認して、もう一度公開してください。",
+        );
+      const confirmation = await this.request<PublicationConfirmation>(
+        "/publications/prepare",
+        "POST",
+        {},
+      );
+      if (
+        confirmation.content_hash !== seen ||
+        confirmation.head !== this.cursor ||
+        FIELDS.some(
+          (field) =>
+            confirmation.metadata_revisions[field] !==
+            this.serverMetadata[field].revision,
+        )
+      )
+        throw new Error(
+          "確認中に別の編集が届きました。再同期して内容を確認してください。",
+        );
+      return confirmation;
+    } catch (error) {
+      this.cancelPublication();
+      throw error;
+    }
+  }
+
+  cancelPublication() {
+    this.isPublishing = false;
+    this.emit();
+  }
+
+  async publish(confirmation?: PublicationConfirmation) {
+    this.isPublishing = true;
+    this.emit();
+    try {
+      if (!this.pendingPublication) {
+        if (!confirmation) throw new Error("公開内容を確認してください。");
+        this.pendingPublication = {
+          ...confirmation,
+          request_id: crypto.randomUUID(),
+        };
+        sessionStorage.setItem(
+          `draft-publication:${this.id}`,
+          JSON.stringify(this.pendingPublication),
+        );
+      }
+      const accepted = await this.request<PublicationJob>(
+        "/publications",
+        "POST",
+        this.pendingPublication,
+      );
+      this.publicationStatus =
+        accepted.status === "unchanged"
+          ? "公開版と同じ内容です"
+          : "公開を受け付けました。HTMLを配置中";
+      this.emit();
+      if (accepted.status !== "unchanged") {
+        const job = await this.request<PublicationJob>(
+          `/publications/${accepted.id}/run`,
+          "POST",
+          {},
+        );
+        if (job.status !== "completed" && job.status !== "superseded")
+          throw new Error(job.error || "公開処理を再試行してください。");
+        this.publicationStatus =
+          job.status === "completed"
+            ? "公開が完了しました"
+            : "新しい公開操作が優先されました";
+      }
+      this.pendingPublication = undefined;
+      sessionStorage.removeItem(`draft-publication:${this.id}`);
+    } catch (error) {
+      if (error instanceof DraftRequestError && error.status === 409) {
+        this.pendingPublication = undefined;
+        sessionStorage.removeItem(`draft-publication:${this.id}`);
+      }
+      this.publicationStatus =
+        error instanceof Error
+          ? error.message
+          : "公開結果を確認できません。再試行してください。";
+      throw error;
+    } finally {
+      this.cancelPublication();
     }
   }
 

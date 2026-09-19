@@ -27,6 +27,7 @@ require_relative "cover_image"
 require_relative "atom_feed"
 require_relative "search_index"
 require_relative "draft_store"
+require_relative "draft_publisher"
 
 module WeblogAuthoring
   class LambdaApi
@@ -66,8 +67,10 @@ module WeblogAuthoring
                    bluesky_oauth_function_name: nil, webmention_queue_url: nil,
                    webmention_publish_queue_url: nil, webmention_dead_letter_arn: nil,
                    webmention_queue_arn: nil, webmention_publish_dead_letter_arn: nil,
-                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, draft_store: nil, clock: Time.method(:now))
+                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, draft_store: nil, draft_publication: nil, draft_publisher: nil, clock: Time.method(:now))
       @draft_store = draft_store
+      @draft_publication = draft_publication
+      @draft_publisher = draft_publisher
       @database = database
       @oauth = oauth
       @session_codec = session_codec
@@ -207,12 +210,26 @@ module WeblogAuthoring
       return diary_navigation_response(event) if method == "GET" && path == "/api/diary-navigation"
       return embed_response(event) if method == "GET" && path == "/api/embed"
       return new_editor_response(event) if method == "GET" && path == "/api/editor/new"
-      return page_response(@database.find(event.dig("pathParameters", "id")), event:) if method == "GET" && page_id_path?(path)
+      if method == "GET" && page_id_path?(path)
+        id = event.dig("pathParameters", "id")
+        page = DraftPublisher.page(@draft_store&.published_snapshot(id))
+        return page_response(page || @database.find(id), event:)
+      end
       return route_response(event) if method == "GET" && route_path?(path)
       return save_response(event, status: 201) if method == "POST" && path == "/api/authoring/pages"
       return rename_response(event) if method == "POST" && path == "/api/rename"
       if method == "PATCH" && authoring_page_id_path?(path)
         return save_response(event, page_id: event.dig("pathParameters", "id"))
+      end
+
+      store = @draft_store
+      publisher = @draft_publisher
+      if method == "GET" && store && publisher && !path.start_with?("/api/")
+        route = URI::DEFAULT_PARSER.unescape(path.delete_prefix("/"))
+        snapshot = store.published_route(route)
+        if snapshot
+          return { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => "no-store" }, body: publisher.read(snapshot) }
+        end
       end
 
       json_response(404, error: "Not Found")
@@ -432,6 +449,24 @@ module WeblogAuthoring
       return json_response(403, error: "Editing is not allowed") unless allowed_session?(session)
       if method != "GET" && !secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
         return json_response(403, error: "CSRF token mismatch")
+      end
+      publication = %r{\A/api/authoring/drafts/([^/]+)/publications(?:/([^/]+)(?:/(run))?)?\z}.match(path)
+      if publication
+        service = @draft_publication
+        publisher = @draft_publisher
+        return json_response(404, error: "Not Found") unless service && publisher
+        id = publication[1].to_s
+        version_id, action = publication.captures.drop(1)
+        if method == "POST" && version_id.nil?
+          return json_response(202, service.accept(id, parse_json(event)))
+        elsif method == "POST" && version_id == "prepare" && action.nil?
+          return json_response(200, service.prepare(id))
+        elsif method == "POST" && action == "run" && version_id
+          return json_response(200, publisher.run(id, version_id))
+        elsif method == "GET" && version_id && action.nil?
+          return json_response(200, store.publication_job(id, version_id))
+        end
+        return json_response(404, error: "Not Found")
       end
       match = %r{\A/api/authoring/drafts/([^/]+)(?:/(uploads)(?:/([^/]+)(?:(?:/(chunks)/(\d+))|(?:/(commit)))?)?)?\z}.match(path)
       return json_response(404, error: "Not Found") unless match
@@ -1023,7 +1058,8 @@ module WeblogAuthoring
       route = event.dig("pathParameters", "route").to_s
       route = URI.decode_www_form_component(route)
       route = WeblogAuthoring.validate_page_name(route)
-      page = @database.find_route(route)
+      page = DraftPublisher.page(@draft_store&.published_route(route))
+      page ||= @database.find_route(route)
       return page_response(page, event:) unless page.nil?
 
       response = json_response(200, editor_json(title: route, name: route, body: "", linked_pages_has_more: true))

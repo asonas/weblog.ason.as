@@ -11,6 +11,12 @@ module WeblogAuthoring
     def commit_upload: (String, String, Hash[String, untyped]) -> Hash[String, untyped]
     def read: (String, Hash[String, untyped]) -> Hash[String, untyped]
     def checkpoint_job: (String) -> Hash[String, untyped]
+    def publication_receipt: (String, String, String) -> Hash[String, untyped]?
+    def accept_verified_publication: (String, Hash[String, untyped], Hash[String, untyped]) -> Hash[String, untyped]
+    def publication_job: (String, String) -> Hash[String, untyped]
+    def publication_snapshot: (String, String) -> Hash[String, untyped]
+    def published_snapshot: (String) -> Hash[String, untyped]?
+    def published_route: (String) -> Hash[String, untyped]?
     def compact: (String) { (Hash[String, untyped]) -> Hash[String, untyped] } -> Hash[String, untyped]?
     def cleanup_compacted: (String, ?now: Time) -> Integer
     def activate_verified_checkpoint: (String, Hash[String, untyped], expected_checkpoint: Integer) -> Hash[String, untyped]

@@ -1,0 +1,12 @@
+module WeblogAuthoring
+  class DraftPublication
+    def prepare: (String) -> Hash[String, untyped]
+    def accept: (String, Hash[String, untyped]) -> Hash[String, untyped]
+  end
+
+  class DraftPublisher
+    def run: (String, String) -> Hash[String, untyped]
+    def read: (Hash[String, untyped]) -> String
+    def self.page: (Hash[String, untyped]?) -> PageDocument?
+  end
+end

@@ -2,6 +2,18 @@
 
 This is the first implementation slice of [the draft authoring specification](https://github.com/asonas/weblog.ason.as/issues/161), tracked in [Create, save and resume drafts](https://github.com/asonas/weblog.ason.as/issues/162). It does not replace the legacy editor or enable production draft writes.
 
+## Explicit publication
+
+The development editor supports the publication flow from #167. Pressing Publish flushes and acknowledges pending work and completes inbound catch-up. If new content was merged, the author must review it and start again. During confirmation and publication, body, metadata and inbox insertion are disabled. A cancelled confirmation does not publish. The confirmed request key is kept in sessionStorage so an uncertain acceptance can be retried after a tab reload.
+
+`POST /api/authoring/drafts/:id/publications/prepare` returns the persisted head, metadata revisions, normalized content hash and article state. `POST .../publications` atomically stores an immutable snapshot, a job and an idempotency receipt, returning HTTP 202. `GET .../publications/:version_id` reports job status. `POST .../publications/:version_id/run` places HTML at an immutable version-specific key before activating it. Failed placement remains retryable; a superseded completion cannot move the active pointer. No-op publication leaves both first-publication and public-update timestamps unchanged.
+
+The JavaScript reconstructor receives only persisted Y.Text. Local development runs it as a Node subprocess; `DraftPublication.remote` invokes the internal worker with IAM authentication and only an article ID, never browser-supplied Markdown. Revision comparison and snapshot storage happen after reconstruction, without holding a transaction open across a worker call.
+
+The enabled development backend and injected Lambda API read active snapshots for article JSON and select immutable HTML through the active route pointer. Local HTML is stored beneath `data/development/publications`; the S3 adapter uses `published/:article_id/:version_id.html`. Production handler injection and CloudFront reader-origin cutover remain disabled until #172. Saving drafts does not modify legacy article tables. Atom/search follow-up and repair belong to #168; published-route rename is blocked until #169. No publication path calls Webmention sending or its outbox.
+
+`test/authoring/test_draft_publication.rb` covers real SQLite/Yjs reconstruction, immutable acceptance, no-op/idempotent requests, stale confirmation, failed placement, superseded completion and authenticated API/reader isolation. `test/browser/draft_editor.mjs` includes publication confirmation, response-loss recovery and editing after publication. Run `DSQL_HOST=... mise exec -- ruby -rbundler/setup test/fixtures/drafts/verify_dsql_publication.rb` only with authorized temporary-schema credentials. Its real DSQL run on 2026-09-20 verified concurrent identical requests and delayed completion races, and removed all thirteen temporary tables and its unique schema without modifying existing article tables.
+
 ## Local use
 
 Run the backend with `AUTHORING_DRAFTS_ENABLED=1 mise exec -- ruby -S bundle exec ruby bin/authoring`, then the frontend with `mise exec -- npm run dev`. Open `/draft-editor`. Its URL receives a stable draft ID; keep that URL to reopen the draft until the administration list is implemented.
