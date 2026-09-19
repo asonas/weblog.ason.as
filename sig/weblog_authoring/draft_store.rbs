@@ -1,5 +1,7 @@
 module WeblogAuthoring
   class DraftStore
+    def published_redirect: (String) -> String?
+    def resolve_published_route: (String) -> Hash[String, untyped]
     class Error < StandardError
       attr_reader status: Integer
       def initialize: (String, ?Integer) -> void

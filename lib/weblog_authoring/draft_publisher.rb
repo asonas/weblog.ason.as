@@ -73,7 +73,7 @@ module WeblogAuthoring
         shell = @shell.call
         page = self.class.page(snapshot)
         html = @renderer.render_document(page, shell:, source_url: "#{@site_url}/#{URI::DEFAULT_PARSER.escape(page.route)}")
-        key = "published/#{id}/#{version_id}.html"
+        key = "published/#{snapshot.fetch('article_id')}/#{snapshot.fetch('id')}.html"
         @place.call(key, html)
         key
       end

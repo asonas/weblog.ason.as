@@ -233,7 +233,10 @@ module WeblogAuthoring
       publisher = @draft_publisher
       if method == "GET" && store && publisher && !path.start_with?("/api/")
         route = URI::DEFAULT_PARSER.unescape(path.delete_prefix("/"))
-        snapshot = store.published_route(route)
+        resolution = store.resolve_published_route(route)
+        destination = resolution["redirect"]
+        return { statusCode: 301, headers: { "location" => "/#{WeblogAuthoring.encoded_route(destination)}", "cache-control" => "no-cache" }, body: "" } if destination
+        snapshot = resolution["snapshot"]
         if snapshot
           return { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => "no-store" }, body: publisher.read(snapshot) }
         end
@@ -1068,7 +1071,10 @@ module WeblogAuthoring
       route = event.dig("pathParameters", "route").to_s
       route = URI.decode_www_form_component(route)
       route = WeblogAuthoring.validate_page_name(route)
-      page = DraftPublisher.page(@draft_store&.published_route(route))
+      resolution = @draft_store&.resolve_published_route(route) || {}
+      destination = resolution["redirect"]
+      return { statusCode: 301, headers: { "location" => "/api/routes/#{WeblogAuthoring.encoded_route(destination)}", "cache-control" => "no-cache" }, body: "" } if destination
+      page = DraftPublisher.page(resolution["snapshot"])
       page ||= @database.find_route(route)
       return page_response(page, event:) unless page.nil?
 

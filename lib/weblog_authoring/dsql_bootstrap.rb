@@ -265,6 +265,10 @@ module WeblogAuthoring
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_publication_stages (article_id TEXT NOT NULL, version_id TEXT NOT NULL, stage TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL, token TEXT NOT NULL, next_attempt_at TEXT, error TEXT, completed_at TEXT, PRIMARY KEY (article_id, version_id, stage))")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_output_heads (stage TEXT PRIMARY KEY, revision INTEGER NOT NULL, object_key TEXT NOT NULL, digest TEXT NOT NULL)")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_html_outputs (article_id TEXT PRIMARY KEY, version_id TEXT NOT NULL, html_key TEXT NOT NULL, html_digest TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_route_reservations (route TEXT PRIMARY KEY, article_id TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_redirects (route TEXT PRIMARY KEY, article_id TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_rename_batches (id TEXT PRIMARY KEY, revision INTEGER NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_rename_members (batch_id TEXT NOT NULL, article_id TEXT NOT NULL, version_id TEXT NOT NULL, previous_id TEXT NOT NULL, html_key TEXT, PRIMARY KEY (batch_id, article_id))")
       connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_updates (
           article_id TEXT NOT NULL,

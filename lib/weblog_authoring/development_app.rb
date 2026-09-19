@@ -214,7 +214,12 @@ module WeblogAuthoring
       route = valid_page_route(params.fetch("splat").first)
       return json_error(404, "ページが見つかりません") if route.nil?
 
-      page = settings.draft_store && DraftPublisher.page(settings.draft_store.published_route(route))
+      resolution = settings.draft_store&.resolve_published_route(route) || {}
+      destination = resolution["redirect"]
+      headers "Cache-Control" => "no-cache" if destination
+      redirect "/api/routes/#{WeblogAuthoring.encoded_route(destination)}", 301 if destination
+
+      page = DraftPublisher.page(resolution["snapshot"])
       conditional_json_response(page ? editor_json(page) : editor_state_for_route(route))
     end
 
@@ -551,7 +556,11 @@ module WeblogAuthoring
 
     get "/*" do
       halt 404 unless settings.draft_store
-      snapshot = settings.draft_store.published_route(params.fetch("splat").first)
+      resolution = settings.draft_store.resolve_published_route(params.fetch("splat").first)
+      destination = resolution["redirect"]
+      headers "Cache-Control" => "no-cache" if destination
+      redirect "/#{WeblogAuthoring.encoded_route(destination)}", 301 if destination
+      snapshot = resolution["snapshot"]
       halt 404 unless snapshot
       content_type "text/html", charset: "utf-8"
       headers "Cache-Control" => "no-store"

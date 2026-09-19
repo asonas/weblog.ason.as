@@ -4,12 +4,14 @@ require "openssl"
 require "securerandom"
 require "open3"
 require "json"
+require "timeout"
 ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
 require "aurora_dsql_pg"
 require_relative "../../../lib/weblog_authoring/draft_publication"
+require_relative "../../../lib/weblog_authoring/lambda_api"
 
 SCHEMA = "draft_publish_verify_#{SecureRandom.hex(6)}"
-TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes draft_publication_clock draft_publication_stages draft_output_heads draft_html_outputs].freeze
+TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes draft_publication_clock draft_publication_stages draft_output_heads draft_html_outputs draft_route_reservations draft_redirects draft_rename_batches draft_rename_members].freeze
 $stdout.sync = true
 
 module IsolatedPublicationSchema
@@ -17,7 +19,9 @@ module IsolatedPublicationSchema
 
   def query(sql, values = [])
     raise "SQL outside verification schema" unless sql.include?(prefix) && !sql.include?("weblog_authoring.")
-    super
+    result = super
+    Thread.current[:after_publication_query]&.call(sql)
+    result
   end
 end
 WeblogAuthoring::DraftStore::PostgresConnection.prepend(IsolatedPublicationSchema)
@@ -95,6 +99,52 @@ begin
     check("completed old jobs expire without removing snapshots") { error.status == 404 && store.publication_snapshot(id, second.fetch("id")).fetch("id") == second.fetch("id") }
   end
   store.supersede_publication_stages(id, now:)
+  referring_id = SecureRandom.uuid
+  store.create(referring_id, scope)
+  reference_output, reference_error, reference_status = Open3.capture3("node", "node_modules/tsx/dist/cli.mjs", "test/fixtures/drafts/reconstruct.mjs", "history", "text", "公開済み [[DSQL公開の確認]]")
+  raise reference_error unless reference_status.success?
+  reference_update = JSON.parse(reference_output).first
+  store.append(referring_id, scope.merge(reference_update).merge("update_id" => "reference", "body_bytes" => 100, "metadata" => { "title" => { "value" => "DSQL参照元", "expected_revision" => 0 } }))
+  reference_version = publication.accept(referring_id, publication.prepare(referring_id).merge("request_id" => "reference")).fetch("id")
+  publication.complete(referring_id, reference_version) { "reference.html" }
+  before_reference = store.published_snapshot(referring_id)
+  store.append(id, change.merge("update_id" => "rename", "metadata" => { "title" => { "value" => "DSQL新URL", "expected_revision" => 1 } }))
+  rename_request = publication.prepare(id).merge("request_id" => "rename")
+  rename_results = 2.times.map { Thread.new { publication.accept(id, rename_request) } }.map(&:value)
+  check("concurrent rename retries accept one batch") { rename_results.uniq.length == 1 }
+  batch_id = rename_results.first.fetch("id")
+  begin
+    publication.complete(id, batch_id) { |snapshot| raise IOError, "partial placement" if snapshot.fetch("article_id") == referring_id; "target.html" }
+  rescue IOError
+    check("partial batch retains old public pointers") { store.published_route("DSQL公開の確認") && store.published_route("DSQL新URL").nil? && store.published_snapshot(referring_id) == before_reference }
+  end
+  s3 = Aws::S3::Client.new(stub_responses: true)
+  s3.stub_responses(:get_object, body: "previously published HTML")
+  reader_publisher = WeblogAuthoring::DraftPublisher.s3(publication:, database: nil, s3_client: s3, site_bucket: "test", site_url: "https://example.com")
+  reader_api = WeblogAuthoring::LambdaApi.new(database: nil, draft_store: store, draft_publisher: reader_publisher)
+  paused = Queue.new
+  resume = Queue.new
+  old_html_key = store.published_snapshot(id).fetch("html_key")
+  reader_thread = Thread.new do
+    Thread.current[:after_publication_query] = lambda do |sql|
+      if sql.include?("draft_publication_routes WHERE route")
+        Thread.current[:after_publication_query] = nil
+        paused << true
+        resume.pop
+      end
+    end
+    reader_api.call({ "requestContext" => { "http" => { "method" => "GET" } }, "rawPath" => "/DSQL公開の確認" })
+  end
+  begin
+    Timeout.timeout(20) { paused.pop }
+    publication.complete(id, batch_id) { |snapshot| "#{snapshot.fetch('id')}.html" }
+  ensure
+    resume << true
+  end
+  overlapping_read = Timeout.timeout(20) { reader_thread.value }
+  check("reader overlapping activation keeps its consistent old page instead of 404") { overlapping_read.fetch(:statusCode) == 200 && s3.api_requests.last.fetch(:params).fetch(:key) == old_html_key }
+  check("batch activation rewrites references without advancing their public time") { store.published_snapshot(referring_id).fetch("body") == "公開済み [[DSQL新URL]]" && store.published_snapshot(referring_id).fetch("updated_at") == before_reference.fetch("updated_at") }
+  check("old route redirects to the active article") { store.published_redirect("DSQL公開の確認") == "DSQL新URL" }
 ensure
   if created
     pool.with do |connection|

@@ -40,21 +40,36 @@ module WeblogAuthoring
               end
       { "protocol" => 1, "generation" => 1, "head" => verified.fetch("through"),
         "metadata_revisions" => verified.fetch("metadata_revisions"), "content_hash" => verified.fetch("content_hash"),
-        "article_state" => state, }
+        "article_state" => state, "rename" => @store.rename_impact(id, verified.fetch("route")), }
     end
 
     def accept(id, request)
-      request = request.slice("protocol", "generation", "head", "metadata_revisions", "content_hash", "request_id")
+      request = request.slice("protocol", "generation", "head", "metadata_revisions", "content_hash", "request_id", "rename")
       raise DraftStore::Error, "Invalid publication ID" unless request["request_id"].is_a?(String) && /\A[a-zA-Z0-9-]{1,80}\z/.match?(request["request_id"])
       fingerprint = Digest::SHA256.hexdigest(JSON.generate(request.sort.to_h))
       previous = @store.publication_receipt(id, request.fetch("request_id"), fingerprint)
       return previous if previous
-      @store.accept_verified_publication(id, request, verified_content(id))
+      verified = verified_content(id)
+      impact = @store.rename_impact(id, verified.fetch("route"))
+      raise DraftStore::Error.new("名前変更の影響範囲を再確認してください。", 409) unless request["rename"] == impact
+      batch_id = @store.stage_rename_versions(impact) if impact
+      @store.accept_verified_publication(id, request, verified.merge("rename" => impact, "batch_id" => batch_id))
     end
 
     def complete(id, version_id)
       job = @store.publication_job(id, version_id)
       return job if %w[completed superseded].include?(job.fetch("status"))
+      members = @store.rename_members(version_id)
+      unless members.empty?
+        members.each do |member|
+          next if member["html_key"]
+          snapshot = @store.publication_snapshot(member.fetch("article_id"), member.fetch("version_id"))
+          key = yield snapshot
+          raise DraftStore::Error, "HTML placement was not acknowledged" unless key.is_a?(String) && !key.empty?
+          @store.stage_rename_html(version_id, member.fetch("article_id"), key)
+        end
+        return @store.finish_rename(id, version_id)
+      end
       snapshot = @store.publication_snapshot(id, version_id)
       key = yield snapshot
       raise DraftStore::Error, "HTML placement was not acknowledged" unless key.is_a?(String) && !key.empty?

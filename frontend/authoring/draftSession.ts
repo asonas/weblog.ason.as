@@ -73,6 +73,16 @@ export type PublicationConfirmation = {
   metadata_revisions: Record<Field, number>;
   content_hash: string;
   article_state: "draft" | "public" | "unpublished_changes";
+  rename?: {
+    revision: number;
+    from: string;
+    to: string;
+    references: Array<{
+      article_id: string;
+      version_id: string;
+      title: string;
+    }>;
+  } | null;
 };
 type PublicationRequest = PublicationConfirmation & { request_id: string };
 type PublicationJob = {

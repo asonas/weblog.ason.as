@@ -7,11 +7,13 @@ require "time"
 require_relative "cover_image"
 require_relative "draft_publications"
 require_relative "draft_output_store"
+require_relative "draft_renames"
 
 module WeblogAuthoring
   class DraftStore
     include DraftPublications
     include DraftOutputStore
+    include DraftRenames
     class Error < StandardError
       attr_reader :status
 
@@ -54,6 +56,7 @@ module WeblogAuthoring
       @connect.call do |db|
         setup_publications(db)
         setup_outputs(db)
+        setup_renames(db)
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_articles (id TEXT PRIMARY KEY, generation INTEGER NOT NULL, head INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_updates (article_id TEXT NOT NULL, update_id TEXT NOT NULL, sequence INTEGER NOT NULL, digest TEXT NOT NULL, fingerprint TEXT NOT NULL, receipt TEXT NOT NULL, chunks INTEGER NOT NULL, PRIMARY KEY (article_id, update_id))")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_chunks (article_id TEXT NOT NULL, update_id TEXT NOT NULL, position INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (article_id, update_id, position))")
@@ -183,6 +186,9 @@ module WeblogAuthoring
           end
 
           metadata = merge_metadata(current.fetch("metadata"), changes)
+          if changes.key?("title") && db.query("SELECT active_id FROM #{db.prefix}draft_publication_heads WHERE article_id = $1 AND active_id IS NOT NULL", [id]).any?
+            reserve_working_route(db, id, metadata.fetch("title").fetch("value"))
+          end
           sequence = current.fetch("head") + 1
           now = Time.now.utc.iso8601(6)
           rows = db.query("UPDATE #{db.prefix}draft_articles SET head = $1, metadata = $2, updated_at = $3 WHERE id = $4 AND head = $5 RETURNING head", [sequence, JSON.generate(metadata), now, id, sequence - 1])

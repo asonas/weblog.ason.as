@@ -38,16 +38,18 @@ module WeblogAuthoring
             response = { "id" => active.fetch("id"), "status" => "unchanged" }
           else
             route = verified.fetch("route")
-            if active && active.fetch("route") != route
-              raise DraftStore::Error.new("公開済み記事のURL変更はrename対応後に利用できます。", 409)
+            if active && active.fetch("route") != route && !verified["rename"]
+              raise DraftStore::Error.new("名前変更の影響範囲を再確認してください。", 409)
             end
+            reserve_working_route(db, id, route)
             db.query("INSERT INTO #{db.prefix}draft_publication_routes (route, article_id) VALUES ($1, $2) ON CONFLICT (route) DO NOTHING", [route, id])
             owner = db.query("SELECT article_id FROM #{db.prefix}draft_publication_routes WHERE route = $1", [route]).first
             raise DraftStore::Error.new("このURLは別の記事で使用中です。", 409) unless owner.fetch("article_id") == id
-            version_id = SecureRandom.uuid
+            version_id = verified["batch_id"] || SecureRandom.uuid
             db.query("INSERT INTO #{db.prefix}draft_published_versions (id, article_id, content_hash, body, metadata, route, created_at, article_created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [version_id, id, verified.fetch("content_hash"), verified.fetch("body"), JSON.generate(verified.fetch("metadata")), route, now, current.fetch("created_at")])
             db.query("INSERT INTO #{db.prefix}draft_publication_jobs (id, article_id, status) VALUES ($1, $2, 'accepted')", [version_id, id])
             db.query("INSERT INTO #{db.prefix}draft_publication_heads (article_id, latest_id) VALUES ($1, $2) ON CONFLICT (article_id) DO UPDATE SET latest_id = $2", [id, version_id])
+            accept_rename_batch(db, id, version_id, active, verified.fetch("rename")) if verified["rename"]
             response = { "id" => version_id, "status" => "accepted" }
           end
           # Touch the working head so DSQL detects a concurrent edit at commit.
@@ -80,11 +82,7 @@ module WeblogAuthoring
     end
 
     def published_route(route)
-      id = @connect.call do |db|
-        db.query("SELECT article_id FROM #{db.prefix}draft_publication_routes WHERE route = $1", [route]).first&.fetch("article_id")
-      end
-      snapshot = id && published_snapshot(id)
-      snapshot if snapshot && snapshot.fetch("route") == route
+      resolve_published_route(route)["snapshot"]
     end
 
     def finish_publication(id, version_id, html_key)

@@ -263,6 +263,25 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       {confirmation && (
         <section aria-label="公開内容の確認">
           <p>本文・タイトル・カバーを確認しましたか。この版を公開します。</p>
+          {confirmation.rename && (
+            <div>
+              <p>
+                URLを「{confirmation.rename.from}」から「
+                {confirmation.rename.to}」へ変更します。
+                旧URLは新URLへ転送されます。
+              </p>
+              <p>
+                参照元{confirmation.rename.references.length}
+                件の公開版のリンクも更新します。
+                参照元で編集中の下書きは変更・公開しません。
+              </p>
+              <ul>
+                {confirmation.rename.references.map((reference) => (
+                  <li key={reference.article_id}>{reference.title}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <button type="button" onClick={() => void publish()}>
             この内容で公開
           </button>

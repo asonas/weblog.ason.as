@@ -11,6 +11,8 @@ if (process.argv[2] === "history") {
       doc.getText("body").insert(0, "x".repeat(400 * 1024));
       doc.getText("body").delete(0, 400 * 1024);
     }
+  } else if (process.argv[3] === "text") {
+    doc.getText("body").insert(0, process.argv[4]);
   } else {
     doc.getText("body").insert(0, "残す消す");
     doc.getText("body").delete(2, 2);
