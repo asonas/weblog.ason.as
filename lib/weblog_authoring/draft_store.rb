@@ -19,6 +19,7 @@ module WeblogAuthoring
 
     BODY_LIMIT = 512 * 1024
     UPDATE_LIMIT = 2 * 1024 * 1024
+    CHECKPOINT_LIMIT = 16 * 1024 * 1024
     CHUNK_BYTES = 128 * 1024
     DEFAULT_METADATA = { "title" => "", "page_type" => "named", "cover_mode" => "auto", "cover_image_url" => nil }.freeze
 
@@ -49,6 +50,9 @@ module WeblogAuthoring
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_articles (id TEXT PRIMARY KEY, generation INTEGER NOT NULL, head INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_updates (article_id TEXT NOT NULL, update_id TEXT NOT NULL, sequence INTEGER NOT NULL, digest TEXT NOT NULL, fingerprint TEXT NOT NULL, receipt TEXT NOT NULL, chunks INTEGER NOT NULL, PRIMARY KEY (article_id, update_id))")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_chunks (article_id TEXT NOT NULL, update_id TEXT NOT NULL, position INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (article_id, update_id, position))")
+        db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_checkpoint_heads (article_id TEXT PRIMARY KEY, sequence INTEGER NOT NULL)")
+        db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_checkpoints (article_id TEXT NOT NULL, sequence INTEGER NOT NULL, digest TEXT NOT NULL, chunks INTEGER NOT NULL, activated_at TEXT NOT NULL, PRIMARY KEY (article_id, sequence))")
+        db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_checkpoint_chunks (article_id TEXT NOT NULL, sequence INTEGER NOT NULL, position INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (article_id, sequence, position))")
       end
     end
 
@@ -128,7 +132,77 @@ module WeblogAuthoring
       end
     end
 
+    def checkpoint_job(id)
+      validate_scope!(id, { "generation" => 1, "protocol" => 1 })
+      @connect.call do |db|
+        db.transaction do
+          current = document(db, id)
+          checkpoint = stored_checkpoint(db, id)
+          { "article_id" => id, "generation" => current.fetch("generation"), "protocol" => 1,
+            "through" => current.fetch("head"), "expected_checkpoint" => checkpoint ? checkpoint.fetch("through") : 0,
+            "checkpoint" => checkpoint, }
+        end
+      end
+    end
+
+    # Internal-only: payload must come from trusted reconstruction, never a browser request.
+    def activate_verified_checkpoint(id, payload, expected_checkpoint:)
+      validate_scope!(id, payload)
+      raise Error, "Checkpoint article mismatch" unless payload["article_id"] == id
+      sequence = payload["through"]
+      raise Error, "Invalid checkpoint sequence" unless sequence.is_a?(Integer) && sequence.positive? && expected_checkpoint.is_a?(Integer) && expected_checkpoint >= 0 && expected_checkpoint < sequence
+      encoded = payload["data"]
+      raise Error, "Checkpoint exceeds limit" unless encoded.is_a?(String) && encoded.bytesize <= ((CHECKPOINT_LIMIT + 2) / 3) * 4
+      data = decode_update(encoded)
+      raise Error, "Checkpoint exceeds limit" if data.empty? || data.bytesize > CHECKPOINT_LIMIT
+      digest = Digest::SHA256.hexdigest(data)
+      raise Error, "Checkpoint digest mismatch" unless digest == payload["digest"]
+      @connect.call do |db|
+        db.transaction do
+          current = document(db, id)
+          raise Error.new("Checkpoint exceeds document head", 409) if sequence > current.fetch("head")
+          active = stored_checkpoint(db, id)
+          if active && active.fetch("through") == sequence
+            raise Error.new("Checkpoint content changed", 409) unless active.fetch("digest") == digest
+            next active
+          end
+          active_sequence = active ? active.fetch("through") : 0
+          raise Error.new("Checkpoint changed; reconstruct again", 409) unless active_sequence == expected_checkpoint
+          db.query("INSERT INTO #{db.prefix}draft_checkpoint_heads (article_id, sequence) VALUES ($1, 0) ON CONFLICT (article_id) DO NOTHING", [id])
+          rows = db.query("UPDATE #{db.prefix}draft_checkpoint_heads SET sequence = $1 WHERE article_id = $2 AND sequence = $3 RETURNING sequence", [sequence, id, expected_checkpoint])
+          raise Error.new("Checkpoint changed; reconstruct again", 409) if rows.empty?
+          chunks = (data.bytesize + CHUNK_BYTES - 1) / CHUNK_BYTES
+          chunks.times do |position|
+            chunk = Base64.strict_encode64(data.byteslice(position * CHUNK_BYTES, CHUNK_BYTES))
+            db.query("INSERT INTO #{db.prefix}draft_checkpoint_chunks (article_id, sequence, position, data) VALUES ($1, $2, $3, $4)", [id, sequence, position, chunk])
+          end
+          now = Time.now.utc.iso8601(6)
+          db.query("INSERT INTO #{db.prefix}draft_checkpoints (article_id, sequence, digest, chunks, activated_at) VALUES ($1, $2, $3, $4, $5)", [id, sequence, digest, chunks, now])
+          { "through" => sequence, "digest" => digest, "data" => encoded, "activated_at" => now }
+        end
+      end
+    end
+
     private
+
+    def stored_checkpoint(db, id)
+      pointer = db.query("SELECT sequence FROM #{db.prefix}draft_checkpoint_heads WHERE article_id = $1", [id]).first
+      return nil unless pointer && pointer.fetch("sequence").to_i.positive?
+      sequence = pointer.fetch("sequence").to_i
+      row = db.query("SELECT digest, chunks, activated_at FROM #{db.prefix}draft_checkpoints WHERE article_id = $1 AND sequence = $2", [id, sequence]).first
+      raise Error.new("Missing checkpoint manifest", 503) unless row
+      count = row.fetch("chunks").to_i
+      raise Error.new("Invalid checkpoint manifest", 503) unless (1..(CHECKPOINT_LIMIT / CHUNK_BYTES)).cover?(count)
+      chunks = db.query("SELECT position, data FROM #{db.prefix}draft_checkpoint_chunks WHERE article_id = $1 AND sequence = $2 ORDER BY position", [id, sequence])
+      raise Error.new("Incomplete checkpoint", 503) unless chunks.map { |chunk| chunk.fetch("position").to_i } == (0...count).to_a
+      begin
+        binary = chunks.map { |chunk| Base64.strict_decode64(chunk.fetch("data")) }.join
+      rescue ArgumentError
+        raise Error.new("Corrupt checkpoint encoding", 503)
+      end
+      raise Error.new("Corrupt checkpoint", 503) unless binary.bytesize <= CHECKPOINT_LIMIT && Digest::SHA256.hexdigest(binary) == row.fetch("digest")
+      { "through" => sequence, "digest" => row.fetch("digest"), "data" => Base64.strict_encode64(binary), "activated_at" => row.fetch("activated_at") }
+    end
 
     def decode_update(encoded)
       Base64.strict_decode64(encoded)

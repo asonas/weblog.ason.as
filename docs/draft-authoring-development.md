@@ -48,6 +48,14 @@ Candidate verification checks coverage of both structures and deletion ranges, t
 
 Run `mise exec -- npm run test:draft-worker`, `mise exec -- npm run typecheck:draft-worker` and `mise exec -- npm run lint:draft-worker`.
 
-The core has no database, AWS or publishing side effects. Chunk manifests, worker invocation/authentication, scoped database reads, compaction scheduling, CAS activation, checkpoint catch-up and seven-day payload cleanup are not wired yet. A returned candidate does not authorize activation or deletion. `markdownDigest` hashes only the body, not the complete publication content including metadata. Issue #164 remains incomplete.
+The reconstruction core has no database, AWS or publishing side effects. `markdownDigest` hashes only the body, not the complete publication content including metadata.
+
+### Internal checkpoint persistence
+
+`DraftStore#checkpoint_job` captures the article's fixed head and active checkpoint in one transaction. The existing paginated update reader can supply the suffix through that head. `activate_verified_checkpoint` is an internal-only storage boundary for trusted worker results, not a verification service or a browser endpoint. It checks article identity, protocol/generation, sequence, digest and size, then atomically writes all checkpoint chunks, the manifest and a compare-and-swap active pointer. The expected previous checkpoint prevents stale workers from replacing newer checkpoints. Later document updates and all original receipts/payloads remain intact. Retrying the same active checkpoint preserves its activation timestamp; changing its bytes is rejected.
+
+Focused SQLite integration tests cover chunked storage, suffix and receipt preservation, stale-worker rejection, transaction rollback on write failure and rejection of missing chunks. A Ruby-to-JavaScript fixture passes real stored Yjs updates through the reconstruction core, activates the result, then reconstructs from the stored checkpoint. Run `mise exec -- ruby -S bundle exec ruby -Itest test/authoring/test_draft_checkpoints.rb` with Node dependencies installed. This is local integration evidence, not DSQL transaction/limit verification.
+
+Production worker invocation/authentication, transport chunk manifests, compaction scheduling, client checkpoint catch-up and seven-day payload cleanup are not wired yet. The new checkpoint tables are created only where draft-store setup is explicitly run; no production schema was provisioned. No checkpoint reader or activation route was added to the public API. An untrusted caller must never be allowed to supply results to the internal activation method. Issue #164 remains incomplete.
 
 Outbound Webmention sending remains intentionally disabled. This work must never enable delivery, drain queues or replay unsent notifications. Production deployment and migration require separate authorization.
