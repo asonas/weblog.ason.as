@@ -32,6 +32,12 @@ Same-browser tabs merge each IndexedDB write with the current stored record in o
 
 Browser verification covers two tabs editing while the API is disconnected, immediate propagation, local-only Undo/Redo, reload of both tabs, local metadata conflicts and a sender closing after losing its response. A fresh browser context verifies the resulting server body. These paths require Web Locks and BroadcastChannel; there is no unsafe unlocked fallback.
 
-Real Japanese IME/mobile menu Undo validation, local-storage failure UX verification, corruption recovery, compaction and publication remain unfinished. No public preview, inbox or administration UI is implemented here. Issue #163 is not complete.
+The browser test injects `QuotaExceededError` at the IndexedDB write boundary. It verifies that text remains editable, the storage warning appears, Markdown download preserves the exact body, and no update is sent before durable local storage succeeds. After storage recovers, retry persists the failed changes before synchronization; reload and a fresh browser context both recover the body. This simulates the storage error rather than filling the user's disk.
+
+Real Japanese IME/mobile menu Undo validation, corruption recovery, compaction and publication remain unfinished. No public preview, inbox or administration UI is implemented here. Issue #163 is not complete.
+
+### Remaining manual input verification
+
+Use two tabs of the development editor with a disposable draft. With the real Japanese IME, leave a phrase uncommitted in one tab while appending text in the other. Confirm the composition is not replaced, commit it, and check that both edits remain with the caret in a usable position. Repeat using browser-menu Undo/Redo and the mobile editing menu; Undo must remove only that tab's edit. Record OS, browser, input method, result and any untested environment. Synthetic composition and keyboard automation do not substitute for these checks.
 
 Outbound Webmention sending remains intentionally disabled. This work must never enable delivery, drain queues or replay unsent notifications. Production deployment and migration require separate authorization.

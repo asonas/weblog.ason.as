@@ -288,6 +288,45 @@ try {
   await until(async () => await recoveredTab.getByRole("textbox", { name: "本文", exact: true }).inputValue() === mergedBody);
   await recoveredTabs.close();
 
+  const storageContext = await browser.newContext({ acceptDownloads: true });
+  const storagePage = await storageContext.newPage();
+  await storagePage.goto("http://127.0.0.1:15182/draft-editor");
+  const storageBody = storagePage.getByRole("textbox", { name: "本文", exact: true });
+  await storageBody.waitFor();
+  await until(async () => await storageBody.isEnabled());
+  await storageBody.fill("容量不足になる前の本文");
+  await until(async () => (await storagePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await storagePage.evaluate(() => {
+    const original = IDBObjectStore.prototype.put;
+    globalThis.restoreDraftStorage = () => { IDBObjectStore.prototype.put = original; };
+    IDBObjectStore.prototype.put = function () { throw new DOMException("Storage quota exceeded", "QuotaExceededError"); };
+  });
+  let storageSends = 0;
+  storagePage.on("request", (request) => { if (request.url().endsWith("/updates")) storageSends++; });
+  const retainedText = "# 保存容量不足でも失わない本文\n\n日本語と `code` を退避する。\n";
+  await storageBody.fill(retainedText);
+  await until(async () => (await storagePage.getByRole("status").textContent()).includes("端末に保存できません"));
+  assert.equal(await storageBody.inputValue(), retainedText);
+  const downloadPromise = storagePage.waitForEvent("download");
+  await storagePage.getByRole("button", { name: "本文をダウンロード" }).click();
+  const stream = await (await downloadPromise).createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  assert.equal(Buffer.concat(chunks).toString("utf8"), retainedText);
+  assert.equal(storageSends, 0);
+  await storagePage.evaluate(() => globalThis.restoreDraftStorage());
+  await storagePage.getByRole("button", { name: "サーバー保存を再試行" }).click();
+  await until(async () => (await storagePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await storagePage.reload();
+  await until(async () => await storageBody.inputValue() === retainedText);
+  const storageUrl = storagePage.url();
+  await storageContext.close();
+  const storageRecoveredContext = await browser.newContext();
+  const storageRecoveredPage = await storageRecoveredContext.newPage();
+  await storageRecoveredPage.goto(storageUrl);
+  await until(async () => await storageRecoveredPage.getByRole("textbox", { name: "本文", exact: true }).inputValue() === retainedText);
+  await storageRecoveredContext.close();
+
   await body.fill("あ".repeat(174_763));
   await until(async () => (await page.getByRole("alert").textContent()).includes("512 KiB"));
   assert.equal((await body.inputValue()).length, 174_763);
@@ -296,7 +335,7 @@ try {
   const publicPages = await (await fetch("http://127.0.0.1:18082/api/pages")).json();
   assert.deepEqual(publicPages.pages, []);
   assert.deepEqual(errors, []);
-  console.log("PASS: reopen, Undo/Redo, API-offline reload/reconnect, lost response retry, deployment failure recovery, remote refresh, continuous-input save, metadata conflicts/reload/choice/send race, independent metadata merge, same-browser offline tabs/reload/conflict/flight handoff, oversized retention, public isolation");
+  console.log("PASS: reopen, Undo/Redo, API-offline reload/reconnect, lost response retry, deployment failure recovery, remote refresh, continuous-input save, metadata conflicts/reload/choice/send race, independent metadata merge, same-browser offline tabs/reload/conflict/flight handoff, storage quota warning/export/recovery, oversized retention, public isolation");
 } finally {
   await browser?.close();
   for (const child of children) child.kill("SIGTERM");

@@ -576,6 +576,7 @@ export class DraftSession extends EventTarget {
     try {
       await navigator.locks.request(`draft-sync:${this.id}`, async () => {
         if (this.isClosed || this.isComposing) return;
+        if (this.failedBase) await this.persist();
         await this.readShared();
         await this.syncLocked();
       });
