@@ -91,6 +91,22 @@ run = "npm run coverage:bluesky-oauth"
 description = "Build the Bluesky OAuth Lambda"
 run = "npm run build:bluesky-oauth"
 
+[tasks."draft-worker:lint"]
+description = "Lint the draft checkpoint worker without changes"
+run = "npm run lint:draft-worker"
+
+[tasks."draft-worker:typecheck"]
+description = "Type-check the draft checkpoint worker"
+run = "npm run typecheck:draft-worker"
+
+[tasks."draft-worker:test"]
+description = "Run the draft checkpoint worker tests"
+run = "npm run test:draft-worker"
+
+[tasks."draft-worker:build"]
+description = "Build the draft checkpoint worker Lambda"
+run = "npm run build:draft-worker"
+
 [tasks."scrapbox:format"]
 description = "Format the Scrapbox converter with Biome"
 run = "npm run format:scrapbox"
@@ -189,6 +205,10 @@ run = [
   "mise run bluesky-oauth:typecheck",
   "mise run bluesky-oauth:test",
   "mise run bluesky-oauth:build",
+  "mise run draft-worker:lint",
+  "mise run draft-worker:typecheck",
+  "mise run draft-worker:test",
+  "mise run draft-worker:build",
   "mise run scrapbox:lint",
   "mise run scrapbox:typecheck",
   "mise run scrapbox:test",

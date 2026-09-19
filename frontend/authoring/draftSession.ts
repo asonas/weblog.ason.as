@@ -1,9 +1,15 @@
 import * as Y from "yjs";
+import {
+  acceptCheckpointChunk,
+  type CheckpointChunk,
+  type CheckpointDownload,
+} from "./draftCheckpoint";
 import { mergeLocalDraft } from "./draftLocalMerge";
 
 export const DRAFT_BODY_LIMIT = 512 * 1024;
 const LOCAL_ORIGIN = "local-input";
 const REMOTE_ORIGIN = "server";
+const UPLOAD_CHUNK_BYTES = 256 * 1024;
 export type DraftMetadata = {
   title: string;
   page_type: string;
@@ -47,12 +53,18 @@ type Page = {
   through: number;
   cursor: number;
   updates: { sequence: number; digest: string; data: string }[];
+  checkpoint?: CheckpointChunk;
 };
 type Receipt = {
   update_id: string;
   digest: string;
   sequence: number;
   metadata: VersionedMetadata;
+};
+type UploadManifest = {
+  update_id: string;
+  digest: string;
+  chunks: number;
 };
 
 const DEFAULT_METADATA: DraftMetadata = {
@@ -318,13 +330,18 @@ export class DraftSession extends EventTarget {
 
   private async catchUp(allowMissing = false) {
     let through: number | undefined;
-    do {
+    let checkpoint: CheckpointDownload | undefined;
+    while (true) {
       const query = new URLSearchParams({
         protocol: "1",
         generation: "1",
         cursor: String(this.cursor),
       });
       if (through !== undefined) query.set("through", String(through));
+      if (checkpoint) {
+        query.set("checkpoint_through", String(checkpoint.through));
+        query.set("checkpoint_position", String(checkpoint.data.length));
+      }
       let page: Page;
       try {
         page = await this.request<Page>(`?${query}`);
@@ -336,12 +353,37 @@ export class DraftSession extends EventTarget {
           this.cursor === 0
         )
           return;
+        if (error instanceof DraftRequestError && error.status === 410) {
+          through = undefined;
+          checkpoint = undefined;
+          continue;
+        }
         throw error;
       }
       if (page.generation !== 1 || page.protocol !== 1)
         throw new Error("保存形式が対応していません。本文を退避してください。");
       if (this.isComposing || this.isClosed) return;
       through = page.through;
+      let appliedCheckpoint = false;
+      if (page.checkpoint) {
+        if (page.cursor !== this.cursor || page.updates.length)
+          throw new Error("チェックポイントの構成が一致しません。");
+        const accepted = await acceptCheckpointChunk(
+          checkpoint,
+          page.checkpoint,
+          this.cursor,
+          through,
+        );
+        checkpoint = accepted.download;
+        if (!accepted.binary) continue;
+        if (this.isComposing || this.isClosed) return;
+        Y.applyUpdate(this.doc, accepted.binary, REMOTE_ORIGIN);
+        this.cursor = page.checkpoint.through;
+        checkpoint = undefined;
+        appliedCheckpoint = true;
+      } else if (checkpoint) {
+        throw new Error("チェックポイントが不足しています。");
+      }
       for (const update of page.updates) {
         const binary = decode(update.data);
         if (
@@ -356,13 +398,16 @@ export class DraftSession extends EventTarget {
         this.cursor = update.sequence;
       }
       if (
-        page.cursor !== this.cursor ||
-        (this.cursor < through && page.updates.length === 0)
+        (!appliedCheckpoint && page.cursor !== this.cursor) ||
+        (this.cursor < through &&
+          page.updates.length === 0 &&
+          !appliedCheckpoint)
       )
         throw new Error("同期データが不足しています。");
       if (!this.flight) this.mergeMetadata(page.metadata);
       await this.persist();
-    } while (this.cursor < through);
+      if (this.cursor >= through) break;
+    }
     this.serverStatus = this.metadataConflicts.length
       ? "設定の競合を確認してください"
       : this.hasPendingChanges()
@@ -644,7 +689,7 @@ export class DraftSession extends EventTarget {
         this.emit();
         let receipt: Receipt;
         try {
-          receipt = await this.request<Receipt>("/updates", "POST", flight);
+          receipt = await this.uploadFlight(flight);
         } catch (error) {
           // Only an explicit metadata rejection proves that this flight was not committed.
           if (
@@ -695,6 +740,8 @@ export class DraftSession extends EventTarget {
         (error.status === 0 ||
           error.status === 408 ||
           error.status === 429 ||
+          (error.status === 404 &&
+            error.message === "Upload manifest not found") ||
           error.status >= 500);
       this.isBackgroundPaused = !isTransient;
       if (isTransient && !this.isClosed) {
@@ -713,6 +760,52 @@ export class DraftSession extends EventTarget {
         this.schedule();
       this.emit();
     }
+  }
+
+  private async uploadFlight(flight: Flight): Promise<Receipt> {
+    const binary = decode(flight.data);
+    const chunks = Math.ceil(binary.byteLength / UPLOAD_CHUNK_BYTES);
+    const started = await this.request<UploadManifest | Receipt>(
+      "/uploads",
+      "POST",
+      {
+        protocol: flight.protocol,
+        generation: flight.generation,
+        update_id: flight.update_id,
+        digest: flight.digest,
+        body_bytes: flight.body_bytes,
+        metadata: flight.metadata,
+        chunks,
+      },
+    );
+    if ("sequence" in started) return started;
+    if (
+      started.update_id !== flight.update_id ||
+      started.digest !== flight.digest ||
+      started.chunks !== chunks
+    )
+      throw new Error("アップロード応答が一致しません。本文を保持しています。");
+    for (let position = 0; position < chunks; position++) {
+      const data = binary.slice(
+        position * UPLOAD_CHUNK_BYTES,
+        (position + 1) * UPLOAD_CHUNK_BYTES,
+      );
+      await this.request(
+        `/uploads/${encodeURIComponent(flight.update_id)}/chunks/${position}`,
+        "PUT",
+        {
+          protocol: flight.protocol,
+          generation: flight.generation,
+          data: encode(data),
+          digest: await digest(data),
+        },
+      );
+    }
+    return this.request<Receipt>(
+      `/uploads/${encodeURIComponent(flight.update_id)}/commit`,
+      "POST",
+      { protocol: flight.protocol, generation: flight.generation },
+    );
   }
 
   close() {

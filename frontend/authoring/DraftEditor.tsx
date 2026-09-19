@@ -21,12 +21,14 @@ export function DraftEditor() {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const [{ id, isNew }] = useState(() => {
     const url = new URL(window.location.href);
-    const isNew = !url.searchParams.has("id");
+    const isNew =
+      !url.searchParams.has("id") || url.searchParams.get("recovery") === "1";
     const id = url.searchParams.get("id") || crypto.randomUUID();
     url.searchParams.set("id", id);
     window.history.replaceState(null, "", url);
     return { id, isNew };
   });
+  const recoveryKey = `draft-recovery:${id}`;
 
   useEffect(() => {
     let isActive = true;
@@ -37,6 +39,19 @@ export function DraftEditor() {
       isNew,
     )
       .then((value) => {
+        const recovery = sessionStorage.getItem(recoveryKey);
+        if (recovery) {
+          const parsed = JSON.parse(recovery) as {
+            body: string;
+            metadata: DraftMetadata;
+          };
+          value.setBody(parsed.body);
+          value.setMetadata(parsed.metadata);
+          sessionStorage.removeItem(recoveryKey);
+          const url = new URL(window.location.href);
+          url.searchParams.delete("recovery");
+          window.history.replaceState(null, "", url);
+        }
         opened = value;
         if (isActive) setSession(value);
         else value.close();
@@ -51,7 +66,7 @@ export function DraftEditor() {
       isActive = false;
       opened?.close();
     };
-  }, [id, isNew]);
+  }, [id, isNew, recoveryKey]);
 
   useEffect(() => {
     const field = textarea.current;
@@ -171,6 +186,19 @@ export function DraftEditor() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  function recoverAsNewDraft() {
+    if (!session) return;
+    const nextId = crypto.randomUUID();
+    sessionStorage.setItem(
+      `draft-recovery:${nextId}`,
+      JSON.stringify({
+        body: textarea.current?.value || session.body.toString(),
+        metadata: session.metadata,
+      }),
+    );
+    window.location.assign(`/draft-editor?id=${nextId}&recovery=1`);
+  }
+
   const bytes = new TextEncoder().encode(session?.body.toString() || "").length;
   return (
     <section className="draft-editor" aria-label="下書き編集">
@@ -286,6 +314,11 @@ export function DraftEditor() {
         <button type="button" disabled={!session} onClick={exportMarkdown}>
           本文をダウンロード
         </button>
+        {session?.error && (
+          <button type="button" onClick={recoverAsNewDraft}>
+            内容を新しい下書きへ復旧
+          </button>
+        )}
         <a href="/draft-editor">別の下書きを書く</a>
       </div>
     </section>

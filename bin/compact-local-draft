@@ -1,0 +1,18 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler/setup"
+require "open3"
+require_relative "../lib/weblog_authoring/draft_store"
+
+abort "Usage: ruby bin/compact-local-draft EXISTING_SQLITE_PATH ARTICLE_ID" unless ARGV.length == 2
+path, id = ARGV
+abort "Draft database does not exist" unless File.file?(path)
+root = File.expand_path("..", __dir__)
+store = WeblogAuthoring::DraftStore.sqlite(path)
+checkpoint = store.compact(id) do |job|
+  output, error, status = Open3.capture3("node", File.join(root, "node_modules/tsx/dist/cli.mjs"), File.join(root, "lambda/draft_worker/local.ts"), stdin_data: JSON.generate(job))
+  abort "Checkpoint reconstruction failed: #{error}" unless status.success?
+  JSON.parse(output)
+end
+puts JSON.generate(checkpoint ? checkpoint.slice("through", "digest", "activated_at") : { "skipped" => "Below compaction threshold" })

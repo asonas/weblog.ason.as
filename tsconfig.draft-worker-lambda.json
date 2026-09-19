@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist/draft-worker",
+    "rootDir": "lambda/draft_worker",
+    "types": ["node", "aws-lambda"]
+  },
+  "include": ["lambda/draft_worker/**/*.ts"],
+  "exclude": ["lambda/draft_worker/**/*.test.ts", "lambda/draft_worker/local.ts"]
+}

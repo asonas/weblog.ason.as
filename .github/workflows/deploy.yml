@@ -18,6 +18,7 @@ env:
   SEARCH_INDEXER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-search-indexer-production-runtime
   INBOX_SYNC_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-inbox-sync-production-runtime
   BLUESKY_OAUTH_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-bluesky-oauth-production-runtime
+  DRAFT_WORKER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-draft-worker-production-runtime
   WEBMENTION_RECEIVER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-webmention-receiver-production-runtime
   WEBMENTION_WORKER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-webmention-worker-production-runtime
   WEBMENTION_PUBLISHER_DSQL_RUNTIME_ROLE_ARN: arn:aws:iam::282782318939:role/weblog-webmention-publisher-production-runtime
@@ -32,6 +33,8 @@ env:
   MATRIX_NOTIFIER_LAMBDA_FUNCTION: weblog-matrix-notifier-production
   BLUESKY_OAUTH_ECR_REPOSITORY: weblog-bluesky-oauth-production
   BLUESKY_OAUTH_LAMBDA_FUNCTION: weblog-bluesky-oauth-production
+  DRAFT_WORKER_ECR_REPOSITORY: weblog-draft-worker-production
+  DRAFT_WORKER_LAMBDA_FUNCTION: weblog-draft-worker-production
   WEBMENTION_RECEIVER_LAMBDA_FUNCTION: weblog-webmention-receiver-production
   WEBMENTION_WORKER_LAMBDA_FUNCTION: weblog-webmention-worker-production
   WEBMENTION_PUBLISHER_LAMBDA_FUNCTION: weblog-webmention-publisher-production
@@ -111,15 +114,28 @@ jobs:
       dockerfile: Dockerfile.bluesky-oauth
       build_inputs: '[".dockerignore","Dockerfile.bluesky-oauth","package.json","package-lock.json","tsconfig.bluesky-oauth.json","lambda/bluesky_oauth"]'
 
+  build-draft-worker:
+    needs: gate
+    if: needs.gate.outputs.current == 'true'
+    uses: ./.github/workflows/build-lambda-image.yml
+    with:
+      service: draft-worker
+      target_sha: ${{ github.event.workflow_run.head_sha }}
+      repository: weblog-draft-worker-production
+      function_name: weblog-draft-worker-production
+      dockerfile: Dockerfile.draft-worker
+      build_inputs: '[".dockerignore","Dockerfile.draft-worker","package.json","package-lock.json","tsconfig.draft-worker-lambda.json","lambda/draft_worker"]'
+
   deploy:
-    needs: [gate, build-authoring, build-search, build-inbox, build-oauth]
+    needs: [gate, build-authoring, build-search, build-inbox, build-oauth, build-draft-worker]
     if: >-
       always() &&
       needs.gate.outputs.current == 'true' &&
       needs.build-authoring.result == 'success' &&
       needs.build-search.result == 'success' &&
       needs.build-inbox.result == 'success' &&
-      needs.build-oauth.result == 'success'
+      needs.build-oauth.result == 'success' &&
+      needs.build-draft-worker.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -147,6 +163,11 @@ jobs:
       OAUTH_CONTENT_HASH: ${{ needs.build-oauth.outputs.content_hash }}
       OAUTH_SOURCE_COMMIT: ${{ needs.build-oauth.outputs.source_commit }}
       OAUTH_BUILD_RUN_ID: ${{ needs.build-oauth.outputs.build_run_id }}
+      DRAFT_WORKER_DIGEST: ${{ needs.build-draft-worker.outputs.digest }}
+      DRAFT_WORKER_RELEASE_TAG: ${{ needs.build-draft-worker.outputs.release_tag }}
+      DRAFT_WORKER_CONTENT_HASH: ${{ needs.build-draft-worker.outputs.content_hash }}
+      DRAFT_WORKER_SOURCE_COMMIT: ${{ needs.build-draft-worker.outputs.source_commit }}
+      DRAFT_WORKER_BUILD_RUN_ID: ${{ needs.build-draft-worker.outputs.build_run_id }}
     steps:
       - name: Record production deploy start
         id: timing
@@ -191,12 +212,13 @@ jobs:
       - name: Detect optional Lambda infrastructure
         id: infra
         run: |
-          for service in search inbox notifier oauth receiver worker publisher cleanup; do
+          for service in search inbox notifier oauth draft receiver worker publisher cleanup; do
             case "$service" in
               search) repository="$SEARCH_INDEXER_ECR_REPOSITORY"; function="$SEARCH_INDEXER_LAMBDA_FUNCTION" ;;
               inbox) repository="$INBOX_SYNC_ECR_REPOSITORY"; function="$INBOX_SYNC_LAMBDA_FUNCTION" ;;
               notifier) repository="$INBOX_SYNC_ECR_REPOSITORY"; function="$MATRIX_NOTIFIER_LAMBDA_FUNCTION" ;;
               oauth) repository="$BLUESKY_OAUTH_ECR_REPOSITORY"; function="$BLUESKY_OAUTH_LAMBDA_FUNCTION" ;;
+              draft) repository="$DRAFT_WORKER_ECR_REPOSITORY"; function="$DRAFT_WORKER_LAMBDA_FUNCTION" ;;
               receiver) repository="$ECR_REPOSITORY"; function="$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" ;;
               worker) repository="$ECR_REPOSITORY"; function="$WEBMENTION_WORKER_LAMBDA_FUNCTION" ;;
               publisher) repository="$ECR_REPOSITORY"; function="$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" ;;
@@ -246,6 +268,7 @@ jobs:
           if [[ "${{ steps.infra.outputs.search }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$SEARCH_INDEXER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
           if [[ "${{ steps.infra.outputs.inbox }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$INBOX_SYNC_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
           if [[ "${{ steps.infra.outputs.oauth }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$BLUESKY_OAUTH_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
+          if [[ "${{ steps.infra.outputs.draft }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$DRAFT_WORKER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
           if [[ "${{ steps.infra.outputs.receiver }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$WEBMENTION_RECEIVER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
           if [[ "${{ steps.infra.outputs.worker }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$WEBMENTION_WORKER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
           if [[ "${{ steps.infra.outputs.publisher }}" == "true" ]]; then DSQL_RUNTIME_ROLE_ARN="$WEBMENTION_PUBLISHER_DSQL_RUNTIME_ROLE_ARN" bundle exec ruby bin/bootstrap-dsql; fi
@@ -315,6 +338,13 @@ jobs:
           aws lambda update-function-code --function-name "$BLUESKY_OAUTH_LAMBDA_FUNCTION" --image-uri "$image_uri"
           aws lambda wait function-updated-v2 --function-name "$BLUESKY_OAUTH_LAMBDA_FUNCTION"
 
+      - name: Deploy draft worker Lambda image
+        if: steps.current.outputs.current == 'true' && steps.infra.outputs.draft == 'true' && needs.build-draft-worker.outputs.deploy == 'true'
+        run: |
+          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${DRAFT_WORKER_ECR_REPOSITORY}@${DRAFT_WORKER_DIGEST}"
+          aws lambda update-function-code --function-name "$DRAFT_WORKER_LAMBDA_FUNCTION" --image-uri "$image_uri"
+          aws lambda wait function-updated-v2 --function-name "$DRAFT_WORKER_LAMBDA_FUNCTION"
+
       - name: Record Lambda deployment completion
         id: lambda
         if: steps.current.outputs.current == 'true'
@@ -380,6 +410,12 @@ jobs:
             --arg oauth_content_hash "$OAUTH_CONTENT_HASH" \
             --arg oauth_source_commit "$OAUTH_SOURCE_COMMIT" \
             --arg oauth_build_run_id "$OAUTH_BUILD_RUN_ID" \
+            --arg draft_worker_repository "$DRAFT_WORKER_ECR_REPOSITORY" \
+            --arg draft_worker_digest "$DRAFT_WORKER_DIGEST" \
+            --arg draft_worker_release_tag "$DRAFT_WORKER_RELEASE_TAG" \
+            --arg draft_worker_content_hash "$DRAFT_WORKER_CONTENT_HASH" \
+            --arg draft_worker_source_commit "$DRAFT_WORKER_SOURCE_COMMIT" \
+            --arg draft_worker_build_run_id "$DRAFT_WORKER_BUILD_RUN_ID" \
             'def nullable: if length == 0 then null else . end;
             {
               schema_version: 1,
@@ -395,7 +431,8 @@ jobs:
                 {service: "authoring", repository: $authoring_repository, digest: $authoring_digest, release_tag: ($authoring_release_tag | nullable), content_hash: $authoring_content_hash, source_commit: $authoring_source_commit, build_run_id: $authoring_build_run_id},
                 {service: "search-indexer", repository: $search_repository, digest: $search_digest, release_tag: ($search_release_tag | nullable), content_hash: $search_content_hash, source_commit: $search_source_commit, build_run_id: $search_build_run_id},
                 {service: "inbox-sync", repository: $inbox_repository, digest: $inbox_digest, release_tag: ($inbox_release_tag | nullable), content_hash: $inbox_content_hash, source_commit: $inbox_source_commit, build_run_id: $inbox_build_run_id},
-                {service: "bluesky-oauth", repository: $oauth_repository, digest: $oauth_digest, release_tag: ($oauth_release_tag | nullable), content_hash: $oauth_content_hash, source_commit: $oauth_source_commit, build_run_id: $oauth_build_run_id}
+                {service: "bluesky-oauth", repository: $oauth_repository, digest: $oauth_digest, release_tag: ($oauth_release_tag | nullable), content_hash: $oauth_content_hash, source_commit: $oauth_source_commit, build_run_id: $oauth_build_run_id},
+                {service: "draft-worker", repository: $draft_worker_repository, digest: $draft_worker_digest, release_tag: ($draft_worker_release_tag | nullable), content_hash: $draft_worker_content_hash, source_commit: $draft_worker_source_commit, build_run_id: $draft_worker_build_run_id}
               ]
             }' > deployment-manifest.json
           aws s3 cp deployment-manifest.json "s3://${SITE_BUCKET}/${manifest_key}" --only-show-errors \
@@ -437,4 +474,5 @@ jobs:
             echo "Search digest: \`${SEARCH_DIGEST:-not-provisioned}\`"
             echo "Inbox digest: \`${INBOX_DIGEST:-not-provisioned}\`"
             echo "OAuth digest: \`${OAUTH_DIGEST:-not-provisioned}\`"
+            echo "Draft worker digest: \`${DRAFT_WORKER_DIGEST:-not-provisioned}\`"
           } >> "$GITHUB_STEP_SUMMARY"

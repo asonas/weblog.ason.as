@@ -21,6 +21,7 @@ name: Roll back production Lambda
           - search-indexer
           - inbox-sync
           - bluesky-oauth
+          - draft-worker
 
 permissions:
   contents: read
@@ -50,6 +51,8 @@ jobs:
       MATRIX_NOTIFIER_LAMBDA_FUNCTION: weblog-matrix-notifier-production
       BLUESKY_OAUTH_ECR_REPOSITORY: weblog-bluesky-oauth-production
       BLUESKY_OAUTH_LAMBDA_FUNCTION: weblog-bluesky-oauth-production
+      DRAFT_WORKER_ECR_REPOSITORY: weblog-draft-worker-production
+      DRAFT_WORKER_LAMBDA_FUNCTION: weblog-draft-worker-production
       WEBMENTION_RECEIVER_LAMBDA_FUNCTION: weblog-webmention-receiver-production
       WEBMENTION_WORKER_LAMBDA_FUNCTION: weblog-webmention-worker-production
       WEBMENTION_PUBLISHER_LAMBDA_FUNCTION: weblog-webmention-publisher-production
@@ -83,6 +86,7 @@ jobs:
             search-indexer) expected_repository="$SEARCH_INDEXER_ECR_REPOSITORY" ;;
             inbox-sync) expected_repository="$INBOX_SYNC_ECR_REPOSITORY" ;;
             bluesky-oauth) expected_repository="$BLUESKY_OAUTH_ECR_REPOSITORY" ;;
+            draft-worker) expected_repository="$DRAFT_WORKER_ECR_REPOSITORY" ;;
           esac
           [[ "$repository" == "$expected_repository" ]]
           [[ "$digest" == sha256:* ]]
@@ -140,6 +144,9 @@ jobs:
               ;;
             bluesky-oauth)
               restore_function "$BLUESKY_OAUTH_LAMBDA_FUNCTION" false
+              ;;
+            draft-worker)
+              restore_function "$DRAFT_WORKER_LAMBDA_FUNCTION" false
               ;;
           esac
 

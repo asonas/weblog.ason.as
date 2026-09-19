@@ -433,15 +433,22 @@ module WeblogAuthoring
       if method != "GET" && !secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
         return json_response(403, error: "CSRF token mismatch")
       end
-      match = %r{\A/api/authoring/drafts/([^/]+)(/updates)?\z}.match(path)
+      match = %r{\A/api/authoring/drafts/([^/]+)(?:/(uploads)(?:/([^/]+)(?:(?:/(chunks)/(\d+))|(?:/(commit)))?)?)?\z}.match(path)
       return json_response(404, error: "Not Found") unless match
       id = match[1].to_s
-      suffix = match[2]
-      payload = case [method, suffix]
-                when ["PUT", nil] then store.create(id, parse_json(event))
-                when ["POST", "/updates"] then store.append(id, parse_json(event))
-                when ["GET", nil] then store.read(id, event["queryStringParameters"] || {})
-                else return json_response(404, error: "Not Found")
+      resource, update_id, chunks, position, commit = match.captures.drop(1)
+      payload = if method == "PUT" && resource.nil?
+                  store.create(id, parse_json(event))
+                elsif method == "POST" && resource == "uploads" && update_id.nil?
+                  store.begin_upload(id, parse_json(event))
+                elsif method == "PUT" && resource == "uploads" && update_id && chunks == "chunks"
+                  store.upload_chunk(id, update_id, position.to_s, parse_json(event))
+                elsif method == "POST" && resource == "uploads" && update_id && commit == "commit"
+                  store.commit_upload(id, update_id, parse_json(event))
+                elsif method == "GET" && resource.nil?
+                  store.read(id, event["queryStringParameters"] || {})
+                else
+                  return json_response(404, error: "Not Found")
                 end
       json_response(200, payload)
     end

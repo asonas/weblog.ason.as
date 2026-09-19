@@ -336,8 +336,16 @@ module WeblogAuthoring
       api_response { |payload| settings.draft_store.create(params.fetch("id"), payload) }
     end
 
-    post "/api/authoring/drafts/:id/updates" do
-      api_response { |payload| settings.draft_store.append(params.fetch("id"), payload) }
+    post "/api/authoring/drafts/:id/uploads" do
+      api_response { |payload| settings.draft_store.begin_upload(params.fetch("id"), payload) }
+    end
+
+    put "/api/authoring/drafts/:id/uploads/:update_id/chunks/:position" do
+      api_response { |payload| settings.draft_store.upload_chunk(params.fetch("id"), params.fetch("update_id"), params.fetch("position"), payload) }
+    end
+
+    post "/api/authoring/drafts/:id/uploads/:update_id/commit" do
+      api_response { |payload| settings.draft_store.commit_upload(params.fetch("id"), params.fetch("update_id"), payload) }
     end
 
     get "/api/authoring/drafts/:id" do

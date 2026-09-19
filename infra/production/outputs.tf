@@ -108,6 +108,21 @@ output "bluesky_oauth_secret_arn" {
   value       = aws_ssm_parameter.bluesky_oauth.arn
 }
 
+output "draft_worker_runtime_role_arn" {
+  description = "IAM role assumed by the production draft checkpoint worker."
+  value       = aws_iam_role.draft_worker_runtime.arn
+}
+
+output "draft_worker_ecr_repository_url" {
+  description = "ECR repository URL for the production draft checkpoint worker image."
+  value       = aws_ecr_repository.draft_worker.repository_url
+}
+
+output "draft_worker_lambda_function_name" {
+  description = "Name of the production draft checkpoint worker Lambda function."
+  value       = aws_lambda_function.draft_worker.function_name
+}
+
 output "authoring_api_endpoint" {
   description = "Endpoint of the production authoring API. Reads are public and mutations require an application session."
   value       = aws_apigatewayv2_api.authoring.api_endpoint

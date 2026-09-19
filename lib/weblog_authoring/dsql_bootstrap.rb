@@ -246,6 +246,85 @@ module WeblogAuthoring
         )
       SQL
       connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_articles (
+          id TEXT PRIMARY KEY,
+          generation INTEGER NOT NULL,
+          head INTEGER NOT NULL,
+          metadata TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_updates (
+          article_id TEXT NOT NULL,
+          update_id TEXT NOT NULL,
+          sequence INTEGER NOT NULL,
+          digest TEXT NOT NULL,
+          fingerprint TEXT NOT NULL,
+          receipt TEXT NOT NULL,
+          chunks INTEGER NOT NULL,
+          PRIMARY KEY (article_id, update_id)
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_chunks (
+          article_id TEXT NOT NULL,
+          update_id TEXT NOT NULL,
+          position INTEGER NOT NULL,
+          data TEXT NOT NULL,
+          PRIMARY KEY (article_id, update_id, position)
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_uploads (
+          article_id TEXT NOT NULL,
+          update_id TEXT NOT NULL,
+          digest TEXT NOT NULL,
+          fingerprint TEXT NOT NULL,
+          body_bytes INTEGER NOT NULL,
+          metadata TEXT NOT NULL,
+          chunks INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (article_id, update_id)
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_upload_chunks (
+          article_id TEXT NOT NULL,
+          update_id TEXT NOT NULL,
+          position INTEGER NOT NULL,
+          digest TEXT NOT NULL,
+          data TEXT NOT NULL,
+          PRIMARY KEY (article_id, update_id, position)
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_checkpoint_heads (
+          article_id TEXT PRIMARY KEY,
+          sequence INTEGER NOT NULL
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_checkpoints (
+          article_id TEXT NOT NULL,
+          sequence INTEGER NOT NULL,
+          digest TEXT NOT NULL,
+          chunks INTEGER NOT NULL,
+          activated_at TEXT NOT NULL,
+          PRIMARY KEY (article_id, sequence)
+        )
+      SQL
+      connection.exec(<<~SQL)
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_checkpoint_chunks (
+          article_id TEXT NOT NULL,
+          sequence INTEGER NOT NULL,
+          position INTEGER NOT NULL,
+          data TEXT NOT NULL,
+          PRIMARY KEY (article_id, sequence, position)
+        )
+      SQL
+      connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.webmention_relations (
           id TEXT PRIMARY KEY,
           source_url TEXT NOT NULL,

@@ -29,7 +29,7 @@ async function until(check) {
 
 let browser;
 try {
-  const apiLog = start(["ruby", "-S", "bundle", "exec", "ruby", "test/fixtures/drafts/server.rb"], { DRAFT_TEST_TOKEN: token });
+  const apiLog = start(["ruby", "-rbundler/setup", "test/fixtures/drafts/server.rb"], { DRAFT_TEST_TOKEN: token });
   const viteLog = start(["node", "node_modules/vite/bin/vite.js", "--port", "15182"], { AUTHORING_API_ORIGIN: "http://127.0.0.1:18082" });
   await ready("http://127.0.0.1:18082/api/draft-test-health", apiLog);
   await ready("http://127.0.0.1:15182/api/draft-test-health", viteLog);
@@ -65,7 +65,7 @@ try {
   let release;
   const held = new Promise((resolve) => { release = resolve; });
   let received = false;
-  await page.route("**/updates", async (route) => {
+  await page.route("**/uploads/*/commit", async (route) => {
     const response = await route.fetch();
     received = true;
     await held;
@@ -96,20 +96,23 @@ try {
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
 
   const sentIds = [];
-  await page.route("**/updates", async (route) => {
+  await page.route("**/uploads", async (route) => {
     sentIds.push(route.request().postDataJSON().update_id);
-    const response = await route.fetch();
-    if (sentIds.length === 1) await route.abort("failed");
-    else await route.fulfill({ response });
+    await route.continue();
   });
+  await page.route("**/uploads/*/commit", async (route) => {
+    const response = await route.fetch();
+    await route.abort("failed");
+  }, { times: 1 });
   await body.fill("応答を失っても一度だけ保存する本文");
   await until(() => sentIds.length >= 2);
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
   assert.equal(new Set(sentIds).size, 1);
-  await page.unroute("**/updates");
+  await page.unroute("**/uploads");
+  await page.unroute("**/uploads/*/commit");
 
   let failedDuringDeploy = false;
-  await page.route("**/updates", async (route) => {
+  await page.route("**/uploads/*/commit", async (route) => {
     failedDuringDeploy = true;
     await route.fulfill({ status: 502, contentType: "text/html", body: "temporarily unavailable" });
   }, { times: 1 });
@@ -118,7 +121,7 @@ try {
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
 
   let unauthorizedSends = 0;
-  await page.route("**/updates", async (route) => {
+  await page.route("**/uploads/*/commit", async (route) => {
     unauthorizedSends++;
     await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "ログインが必要です" }) });
   });
@@ -127,7 +130,7 @@ try {
   await setTimeout(2200);
   assert.equal(unauthorizedSends, 1);
   assert.equal(await body.inputValue(), "ログイン切れでも保持する本文");
-  await page.unroute("**/updates");
+  await page.unroute("**/uploads/*/commit");
   await page.getByRole("button", { name: "サーバー保存を再試行" }).click();
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
 
@@ -156,7 +159,7 @@ try {
   await remote.close();
 
   let savedDuringTyping = false;
-  await page.route("**/updates", async (route) => {
+  await page.route("**/uploads/*/commit", async (route) => {
     savedDuringTyping = true;
     await route.continue();
   }, { times: 1 });
@@ -193,7 +196,7 @@ try {
   let releaseConflict;
   const holdConflict = new Promise((resolve) => { releaseConflict = resolve; });
   let flightStarted = false;
-  await page.route("**/updates", async (route) => {
+  await page.route("**/uploads/*/commit", async (route) => {
     flightStarted = true;
     await holdConflict;
     await route.continue();
@@ -264,8 +267,11 @@ try {
   await tabB.close();
   const handoffIds = [];
   let responseLost = false;
-  await tabs.route("**/updates", async (route) => {
+  await tabs.route("**/uploads", async (route) => {
     handoffIds.push(route.request().postDataJSON().update_id);
+    await route.continue();
+  });
+  await tabs.route("**/uploads/*/commit", async (route) => {
     const response = await route.fetch();
     if (!responseLost) {
       responseLost = true;
@@ -302,7 +308,13 @@ try {
     IDBObjectStore.prototype.put = function () { throw new DOMException("Storage quota exceeded", "QuotaExceededError"); };
   });
   let storageSends = 0;
-  storagePage.on("request", (request) => { if (request.url().endsWith("/updates")) storageSends++; });
+  storagePage.on("request", (request) => {
+    if (
+      request.url().includes("/uploads/") &&
+      request.url().endsWith("/commit")
+    )
+      storageSends++;
+  });
   const retainedText = "# 保存容量不足でも失わない本文\n\n日本語と `code` を退避する。\n";
   await storageBody.fill(retainedText);
   await until(async () => (await storagePage.getByRole("status").textContent()).includes("端末に保存できません"));
@@ -327,6 +339,60 @@ try {
   await until(async () => await storageRecoveredPage.getByRole("textbox", { name: "本文", exact: true }).inputValue() === retainedText);
   await storageRecoveredContext.close();
 
+  const recoveryContext = await browser.newContext();
+  const recoveryPage = await recoveryContext.newPage();
+  await recoveryPage.goto("http://127.0.0.1:15182/draft-editor");
+  const recoveryBody = recoveryPage.getByRole("textbox", {
+    name: "本文",
+    exact: true,
+  });
+  await recoveryBody.fill("復旧前に保存された本文");
+  await until(async () =>
+    (await recoveryPage.getByRole("status").textContent()).includes(
+      "サーバーに保存済み",
+    ),
+  );
+  const previousGenerationUrl = recoveryPage.url();
+  await recoveryPage.route("**/api/authoring/drafts/**", (route) =>
+    route.abort("internetdisconnected"),
+  );
+  await recoveryBody.fill("破損を避けて新しい下書きへ復旧する本文");
+  await until(async () =>
+    (await recoveryPage.getByRole("alert").textContent()).includes("通信できません"),
+  );
+  await recoveryPage
+    .getByRole("button", { name: "内容を新しい下書きへ復旧" })
+    .click();
+  await until(async () =>
+    (await recoveryBody.inputValue()) ===
+    "破損を避けて新しい下書きへ復旧する本文",
+  );
+  assert.notEqual(recoveryPage.url(), previousGenerationUrl);
+  assert.ok(!new URL(recoveryPage.url()).searchParams.has("recovery"));
+  await recoveryPage.unroute("**/api/authoring/drafts/**");
+  await recoveryPage.evaluate(() => window.dispatchEvent(new Event("online")));
+  await until(async () =>
+    (await recoveryPage.getByRole("status").textContent()).includes(
+      "サーバーに保存済み",
+    ),
+  );
+  const recoveredGenerationUrl = recoveryPage.url();
+  const generationCheck = await browser.newContext();
+  const oldGeneration = await generationCheck.newPage();
+  await oldGeneration.goto(previousGenerationUrl);
+  await until(async () =>
+    (await oldGeneration.getByRole("textbox", { name: "本文", exact: true }).inputValue()) ===
+    "復旧前に保存された本文",
+  );
+  const newGeneration = await generationCheck.newPage();
+  await newGeneration.goto(recoveredGenerationUrl);
+  await until(async () =>
+    (await newGeneration.getByRole("textbox", { name: "本文", exact: true }).inputValue()) ===
+    "破損を避けて新しい下書きへ復旧する本文",
+  );
+  await generationCheck.close();
+  await recoveryContext.close();
+
   await body.fill("あ".repeat(174_763));
   await until(async () => (await page.getByRole("alert").textContent()).includes("512 KiB"));
   assert.equal((await body.inputValue()).length, 174_763);
@@ -335,7 +401,7 @@ try {
   const publicPages = await (await fetch("http://127.0.0.1:18082/api/pages")).json();
   assert.deepEqual(publicPages.pages, []);
   assert.deepEqual(errors, []);
-  console.log("PASS: reopen, Undo/Redo, API-offline reload/reconnect, lost response retry, deployment failure recovery, remote refresh, continuous-input save, metadata conflicts/reload/choice/send race, independent metadata merge, same-browser offline tabs/reload/conflict/flight handoff, storage quota warning/export/recovery, oversized retention, public isolation");
+  console.log("PASS: reopen, Undo/Redo, API-offline reload/reconnect, lost response retry, deployment failure recovery, remote refresh, continuous-input save, metadata conflicts/reload/choice/send race, independent metadata merge, same-browser offline tabs/reload/conflict/flight handoff, storage quota warning/export/recovery, explicit generation recovery, oversized retention, public isolation");
 } finally {
   await browser?.close();
   for (const child of children) child.kill("SIGTERM");

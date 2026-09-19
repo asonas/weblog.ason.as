@@ -6,8 +6,13 @@ module WeblogAuthoring
     end
     def create: (String, Hash[String, untyped]) -> Hash[String, untyped]
     def append: (String, Hash[String, untyped]) -> Hash[String, untyped]
+    def begin_upload: (String, Hash[String, untyped]) -> Hash[String, untyped]
+    def upload_chunk: (String, String, String | Integer, Hash[String, untyped]) -> Hash[String, untyped]
+    def commit_upload: (String, String, Hash[String, untyped]) -> Hash[String, untyped]
     def read: (String, Hash[String, untyped]) -> Hash[String, untyped]
     def checkpoint_job: (String) -> Hash[String, untyped]
+    def compact: (String) { (Hash[String, untyped]) -> Hash[String, untyped] } -> Hash[String, untyped]?
+    def cleanup_compacted: (String, ?now: Time) -> Integer
     def activate_verified_checkpoint: (String, Hash[String, untyped], expected_checkpoint: Integer) -> Hash[String, untyped]
   end
 end

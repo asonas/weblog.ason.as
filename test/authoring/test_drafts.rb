@@ -31,9 +31,9 @@ class DraftsTest < Minitest::Test
     update = { "protocol" => 1, "generation" => 1, "update_id" => "u1", "data" => "AAA=",
                "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
                "metadata" => { "title" => { "value" => "まだ下書き", "expected_revision" => 0 } }, }
-    receipt = call("POST", "/updates", update)
+    receipt = upload(update)
     assert_equal 200, receipt[:statusCode]
-    assert_equal JSON.parse(receipt[:body]), JSON.parse(call("POST", "/updates", update)[:body])
+    assert_equal JSON.parse(receipt[:body]), JSON.parse(upload(update)[:body])
 
     reopened = JSON.parse(call("GET")[:body])
     assert_equal 1, reopened.fetch("head")
@@ -44,7 +44,7 @@ class DraftsTest < Minitest::Test
     assert_empty @database.pending_webmention_outbox
 
     changed = update.merge("data" => "AAE=", "digest" => Digest::SHA256.hexdigest("\0\1"))
-    assert_equal 409, call("POST", "/updates", changed)[:statusCode]
+    assert_equal 409, upload(changed)[:statusCode]
     assert_equal 1, JSON.parse(call("GET")[:body]).fetch("head")
   end
 
@@ -61,29 +61,98 @@ class DraftsTest < Minitest::Test
     binary = (0..255).to_a.pack("C*") * 1025
     update = { "protocol" => 1, "generation" => 1, "update_id" => "chunked", "data" => Base64.strict_encode64(binary),
                "digest" => Digest::SHA256.hexdigest(binary), "body_bytes" => 0, }
-    assert_equal 200, call("POST", "/updates", update)[:statusCode]
+    assert_equal 200, upload(update)[:statusCode]
     page = JSON.parse(call("GET")[:body])
     assert_equal binary, Base64.strict_decode64(page.fetch("updates").first.fetch("data"))
     assert_equal 1, page.fetch("cursor")
   end
 
+  def test_chunked_upload_is_immutable_and_only_commits_when_complete
+    call("PUT", "", { "protocol" => 1, "generation" => 1 })
+    binary = (0..255).to_a.pack("C*") * 1_200
+    parts = binary.bytes.each_slice(WeblogAuthoring::DraftStore::TRANSPORT_CHUNK_BYTES).map { |bytes| bytes.pack("C*") }
+    manifest = { "protocol" => 1, "generation" => 1, "update_id" => "chunked-upload",
+                 "digest" => Digest::SHA256.hexdigest(binary), "body_bytes" => 0,
+                 "metadata" => {}, "chunks" => parts.length, }
+    assert_equal 200, call("POST", "/uploads", manifest)[:statusCode]
+    first = { "protocol" => 1, "generation" => 1, "data" => Base64.strict_encode64(parts[0]),
+              "digest" => Digest::SHA256.hexdigest(parts[0]), }
+    assert_equal 200, call("PUT", "/uploads/chunked-upload/chunks/0", first)[:statusCode]
+    assert_equal 409, call("POST", "/uploads/chunked-upload/commit", { "protocol" => 1, "generation" => 1 })[:statusCode]
+    assert_equal 0, JSON.parse(call("GET")[:body]).fetch("head")
+    assert_equal 200, call("PUT", "/uploads/chunked-upload/chunks/0", first)[:statusCode]
+    changed = first.merge("data" => Base64.strict_encode64("changed"), "digest" => Digest::SHA256.hexdigest("changed"))
+    assert_equal 409, call("PUT", "/uploads/chunked-upload/chunks/0", changed)[:statusCode]
+    parts.drop(1).each_with_index do |part, index|
+      chunk = { "protocol" => 1, "generation" => 1, "data" => Base64.strict_encode64(part),
+                "digest" => Digest::SHA256.hexdigest(part), }
+      assert_equal 200, call("PUT", "/uploads/chunked-upload/chunks/#{index + 1}", chunk)[:statusCode]
+    end
+    receipt = call("POST", "/uploads/chunked-upload/commit", { "protocol" => 1, "generation" => 1 })
+    assert_equal 200, receipt[:statusCode]
+    assert_equal JSON.parse(receipt[:body]), JSON.parse(call("POST", "/uploads/chunked-upload/commit", { "protocol" => 1, "generation" => 1 })[:body])
+    page = JSON.parse(call("GET")[:body])
+    assert_equal 1, page.fetch("head")
+    assert_equal binary, Base64.strict_decode64(page.fetch("updates").first.fetch("data"))
+  end
+
   def test_catchup_stays_at_its_fixed_high_water_and_metadata_conflicts_do_not_consume_a_sequence
     call("PUT", "", { "protocol" => 1, "generation" => 1 })
     update = { "protocol" => 1, "generation" => 1, "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0 }
-    assert_equal 200, call("POST", "/updates", update.merge("update_id" => "one"))[:statusCode]
-    assert_equal 200, call("POST", "/updates", update.merge("update_id" => "two"))[:statusCode]
+    assert_equal 200, upload(update.merge("update_id" => "one"))[:statusCode]
+    assert_equal 200, upload(update.merge("update_id" => "two"))[:statusCode]
     first = JSON.parse(call("GET")[:body])
     assert_equal [1, 2], first.values_at("cursor", "through")
-    assert_equal 200, call("POST", "/updates", update.merge("update_id" => "three"))[:statusCode]
+    assert_equal 200, upload(update.merge("update_id" => "three"))[:statusCode]
     next_page = JSON.parse(call("GET", query: { "cursor" => "1", "through" => "2" })[:body])
     assert_equal [2, 2], next_page.values_at("cursor", "through")
     conflict = update.merge("update_id" => "conflict", "metadata" => { "title" => { "value" => "stale", "expected_revision" => 5 } })
-    assert_equal 409, call("POST", "/updates", conflict)[:statusCode]
+    assert_equal 409, upload(conflict)[:statusCode]
     assert_equal 3, JSON.parse(call("GET")[:body]).fetch("head")
-    assert_equal 422, call("POST", "/updates", update.merge("update_id" => "large", "body_bytes" => 524_289))[:statusCode]
+    assert_equal 422, upload(update.merge("update_id" => "large", "body_bytes" => 524_289))[:statusCode]
+  end
+
+  def test_checkpoint_is_served_in_bounded_chunks_before_its_suffix
+    call("PUT", "", { "protocol" => 1, "generation" => 1 })
+    update = { "protocol" => 1, "generation" => 1, "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0 }
+    upload(update.merge("update_id" => "one"))
+    checkpoint_data = (0..255).to_a.pack("C*") * 1025
+    checkpoint = { "protocol" => 1, "generation" => 1, "article_id" => ID, "through" => 1,
+                   "data" => Base64.strict_encode64(checkpoint_data), "digest" => Digest::SHA256.hexdigest(checkpoint_data), }
+    @store.activate_verified_checkpoint(ID, checkpoint, expected_checkpoint: 0)
+    upload(update.merge("update_id" => "two"))
+
+    first = JSON.parse(call("GET")[:body])
+    assert_equal [0, 2], first.values_at("cursor", "through")
+    assert_empty first.fetch("updates")
+    assert_equal [1, 2, 0], first.fetch("checkpoint").values_at("through", "chunks", "position")
+    second = JSON.parse(call("GET", query: { "through" => "2", "checkpoint_through" => "1", "checkpoint_position" => "1" })[:body])
+    assert_equal 1, second.dig("checkpoint", "position")
+    rebuilt = [first, second].map { |page| Base64.strict_decode64(page.dig("checkpoint", "data")) }.join
+    assert_equal checkpoint_data, rebuilt
+    suffix = JSON.parse(call("GET", query: { "cursor" => "1", "through" => "2" })[:body])
+    assert_equal [2, 2], suffix.values_at("cursor", "through")
+    assert_equal "two", suffix.fetch("updates").first.fetch("update_id")
   end
 
   private
+
+  def upload(update)
+    binary = Base64.strict_decode64(update.fetch("data"))
+    parts = binary.bytes.each_slice(WeblogAuthoring::DraftStore::TRANSPORT_CHUNK_BYTES).map { |bytes| bytes.pack("C*") }
+    started = call("POST", "/uploads", update.except("data").merge("chunks" => parts.length))
+    return started unless started[:statusCode] == 200
+    parsed = JSON.parse(started[:body])
+    return started if parsed.key?("sequence")
+
+    parts.each_with_index do |part, position|
+      chunk = { "protocol" => 1, "generation" => 1, "data" => Base64.strict_encode64(part),
+                "digest" => Digest::SHA256.hexdigest(part), }
+      response = call("PUT", "/uploads/#{update.fetch("update_id")}/chunks/#{position}", chunk)
+      return response unless response[:statusCode] == 200
+    end
+    call("POST", "/uploads/#{update.fetch("update_id")}/commit", { "protocol" => 1, "generation" => 1 })
+  end
 
   def call(method, suffix = "", body = nil, authenticated: true, csrf: "csrf", query: {})
     @api.call({ "rawPath" => "/api/authoring/drafts/#{ID}#{suffix}",
