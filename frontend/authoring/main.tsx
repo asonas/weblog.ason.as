@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { CardHome, type HomePage } from "./CardHome";
@@ -348,19 +348,40 @@ function RootApp({
   initialAuth: AuthState;
 }) {
   const [auth, setAuth] = useState(initialAuth);
+  const [isLocalDraft, setIsLocalDraft] = useState(false);
+  const authentication = useRef(Promise.resolve(initialAuth));
+  const draftCsrf = useCallback(
+    async () => (await authentication.current).csrf_token,
+    [],
+  );
 
   useEffect(() => {
     let active = true;
-    void setupAuthentication()
-      .then((nextAuth) => {
-        if (active) setAuth(nextAuth);
-      })
-      .catch(() => {
-        document.documentElement.dataset.canEdit = "false";
-      });
+    const authenticate = () => {
+      authentication.current = setupAuthentication();
+      void authentication.current
+        .then((nextAuth) => {
+          if (active) {
+            setAuth(nextAuth);
+            if (nextAuth.can_edit) window.dispatchEvent(new Event("focus"));
+          }
+        })
+        .catch(() => {
+          document.documentElement.dataset.canEdit = "false";
+          if (
+            active &&
+            !navigator.onLine &&
+            new URLSearchParams(location.search).has("id")
+          )
+            setIsLocalDraft(true);
+        });
+    };
+    authenticate();
+    window.addEventListener("online", authenticate);
 
     return () => {
       active = false;
+      window.removeEventListener("online", authenticate);
     };
   }, []);
 
@@ -376,8 +397,8 @@ function RootApp({
     __DEPLOYMENT_ENVIRONMENT__ !== "production" &&
     window.location.pathname === "/draft-editor"
   ) {
-    return auth.can_edit ? (
-      <DraftEditor />
+    return auth.can_edit || isLocalDraft ? (
+      <DraftEditor csrf={draftCsrf} />
     ) : (
       <p>下書きを編集するにはログインしてください。</p>
     );

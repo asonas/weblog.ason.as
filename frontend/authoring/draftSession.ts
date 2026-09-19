@@ -196,14 +196,14 @@ export class DraftSession extends EventTarget {
 
   private constructor(
     readonly id: string,
-    private readonly csrf: () => string,
+    private readonly csrf: () => Promise<string>,
   ) {
     super();
   }
 
   static async open(
     id: string,
-    csrf: () => string,
+    csrf: () => Promise<string>,
     isNew = false,
   ): Promise<DraftSession> {
     if (
@@ -302,7 +302,7 @@ export class DraftSession extends EventTarget {
           signal: controller.signal,
           headers: {
             "Content-Type": "application/json",
-            "X-CSRF-Token": this.csrf(),
+            "X-CSRF-Token": await this.csrf(),
           },
           body: payload === undefined ? undefined : JSON.stringify(payload),
         },

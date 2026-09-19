@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { resolve, sep } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
@@ -11,6 +12,48 @@ const nestedWorktrees = `${resolve(projectRoot, ".worktrees")}${sep}`;
 export default defineConfig(({ mode }) => ({
   base: "/",
   plugins: [
+    {
+      name: "draft-offline-shell",
+      apply: "build",
+      generateBundle: { order: "post", handler(_options, bundle) {
+        if (mode === "production") return;
+        const files = Object.values(bundle).filter((file) =>
+          file.fileName === "index.html" || /\.(js|css)$/.test(file.fileName)
+        );
+        const version = createHash("sha256");
+        for (const file of files) version.update(file.type === "chunk" ? file.code : file.source);
+        const assets = files.map((file) => `/${file.fileName}`);
+        this.emitFile({
+          type: "asset",
+          fileName: "draft-offline.js",
+          source: `
+const CACHE = ${JSON.stringify(`draft-shell-${version.digest("hex")}`)};
+const ASSETS = ${JSON.stringify(assets)};
+self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
+});
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    for (const name of await caches.keys()) {
+      if (name.startsWith("draft-shell-") && name !== CACHE) await caches.delete(name);
+    }
+    await self.clients.claim();
+  })());
+});
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
+  const key = event.request.mode === "navigate" && url.pathname === "/draft-editor"
+    ? "/index.html" : ASSETS.includes(url.pathname) ? url.pathname : null;
+  if (!key) return;
+  event.respondWith((async () => {
+    const cached = await (await caches.open(CACHE)).match(key);
+    return cached || fetch(event.request);
+  })());
+});`,
+        });
+      } },
+    },
     {
       name: "reject-unsafe-page-routes",
       configureServer(server) {

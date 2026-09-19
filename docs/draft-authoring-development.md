@@ -26,7 +26,11 @@ The browser test requires installed Chrome and permission to bind loopback ports
 
 The first part of [offline recovery and conflict merging](https://github.com/asonas/weblog.ason.as/issues/163) adds automatic retries for network failures and HTTP 408/429/5xx, retaining the persisted update ID after a lost response. Requests time out after 15 seconds. Authentication, validation and conflict errors pause background retries; the explicit retry button remains available. Visible editors check for server changes every 10 seconds and on focus/reconnection. Sending starts after 1 second idle or 5 seconds of continuous input, subject to an already-running request or composition.
 
-Incoming body updates are deferred during composition. Browser coverage exercises API-disconnected reload from IndexedDB, reconnect, lost-response retry, a non-JSON 502, authentication failure, remote refresh, continuous input, synthetic composition and local-only Undo. API-disconnected reload assumes that the application shell remains available; offline asset caching is not implemented. Synthetic composition events do not establish real Japanese IME or mobile menu behavior.
+Incoming body updates are deferred during composition. Browser coverage exercises API-disconnected reload from IndexedDB, reconnect, lost-response retry, a non-JSON 502, authentication failure, remote refresh, continuous input, synthetic composition and local-only Undo. Synthetic composition events do not establish real Japanese IME or mobile menu behavior.
+
+Non-production builds also prepare a service worker scoped to `/draft-editor`. It caches the build's static HTML, JavaScript and CSS; API responses, authentication data, drafts and media are excluded. The editor reports readiness after installation. The worker serves a consistent build and waits for existing tabs to close before activating an update; it never forces a reload. Offline reopening uses the existing draft ID and IndexedDB data without granting server authorization. Reconnection fetches a fresh authentication session before subsequent synchronization. Vite's live development server does not prepare an offline shell.
+
+Run `mise exec -- npx --yes vite build --mode development` followed by `mise exec -- node test/browser/draft_offline.mjs` to verify full-network offline reload, closing/reopening the tab, local editing and reconnect recovery against an isolated backend. This test uses ports 18082 and 15183 and must not run concurrently with the other draft browser test. Production draft activation and offline-shell delivery remain part of the migration cutover.
 
 Metadata changes to independent fields merge automatically. Concurrent changes to the same field retain the local value and the current server revision, and offer an explicit local/server choice. Conflicts survive reload. A confirmed metadata rejection clears the rejected flight while retaining its unsent body updates, then fetches the current server state before asking for a choice. An ambiguous network failure never clears that flight. Browser coverage includes offline title conflicts across separate browser contexts, reload, keyboard selection, a metadata race after sending starts, and independent title/type changes.
 
@@ -36,7 +40,7 @@ Browser verification covers two tabs editing while the API is disconnected, imme
 
 The browser test injects `QuotaExceededError` at the IndexedDB write boundary. It verifies that text remains editable, the storage warning appears, Markdown download preserves the exact body, and no update is sent before durable local storage succeeds. After storage recovers, retry persists the failed changes before synchronization; reload and a fresh browser context both recover the body. This simulates the storage error rather than filling the user's disk. When synchronization is stopped by an error, an explicit recovery action copies the current Markdown and metadata into a new draft ID. The old draft and server state remain untouched, so an obsolete tab cannot write into the recovered draft. This is a recovery generation boundary, not an implicit reset or deletion.
 
-Real Japanese IME/mobile menu Undo validation and publication remain unfinished. No administration UI is implemented here. Issue #163 is not complete.
+Publication and administration remain separate implementation slices.
 
 ### Working-version preview
 
@@ -54,9 +58,11 @@ Photo insertion uses the existing public-media adoption endpoint and changes the
 
 This slice does not create draft-private assets, promote media at publication, delete unused assets or remove items from the inbox. Those existing public-media retention semantics remain unchanged. Browser coverage exercises caret insertion and Undo through the real textarea and Yjs session, successful and failed photo adoption, source synchronization, independent column scrolling and narrow-screen horizontal access. API responses are replaced only at the external service boundary.
 
-### Remaining manual input verification
+### Manual input verification
 
 Use two tabs of the development editor with a disposable draft. With the real Japanese IME, leave a phrase uncommitted in one tab while appending text in the other. Confirm the composition is not replaced, commit it, and check that both edits remain with the caret in a usable position. Repeat using browser-menu Undo/Redo and the mobile editing menu; Undo must remove only that tab's edit. Record OS, browser, input method, result and any untested environment. Synthetic composition and keyboard automation do not substitute for these checks.
+
+On 2026-09-19 the author confirmed Undo and real Japanese IME behavior, including updates arriving from another tab without disrupting composition and preservation of text and caret after cancellation. OS/browser/IME details and a separate mobile result were not supplied, so these reports do not establish coverage of every platform. The confirmation is recorded in Issue #163.
 
 ### Checkpoint reconstruction core
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 import { DraftInbox } from "./DraftInbox";
+import { DraftOfflineStatus } from "./DraftOfflineStatus";
 import { DraftPreview } from "./DraftPreview";
 import {
   DRAFT_BODY_LIMIT,
@@ -16,7 +17,7 @@ const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
   cover_image_url: "カバー画像のパス",
 };
 
-export function DraftEditor() {
+export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [session, setSession] = useState<DraftSession>();
   const [loadError, setLoadError] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -36,11 +37,7 @@ export function DraftEditor() {
   useEffect(() => {
     let isActive = true;
     let opened: DraftSession | undefined;
-    void DraftSession.open(
-      id,
-      () => document.documentElement.dataset.csrfToken || "",
-      isNew,
-    )
+    void DraftSession.open(id, csrf, isNew)
       .then((value) => {
         const recovery = sessionStorage.getItem(recoveryKey);
         if (recovery) {
@@ -69,7 +66,7 @@ export function DraftEditor() {
       isActive = false;
       opened?.close();
     };
-  }, [id, isNew, recoveryKey]);
+  }, [id, isNew, recoveryKey, csrf]);
 
   useEffect(() => {
     const field = textarea.current;
@@ -313,6 +310,7 @@ export function DraftEditor() {
           : "読み込み中"}
       </p>
       <p role="alert">{loadError || session?.error}</p>
+      <DraftOfflineStatus />
       {session?.metadataConflicts.map(({ field, local, remote, source }) => (
         <fieldset key={field} className="draft-editor__conflict">
           <legend>{FIELD_LABELS[field]}の競合</legend>
