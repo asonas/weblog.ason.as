@@ -36,7 +36,7 @@ Browser verification covers two tabs editing while the API is disconnected, imme
 
 The browser test injects `QuotaExceededError` at the IndexedDB write boundary. It verifies that text remains editable, the storage warning appears, Markdown download preserves the exact body, and no update is sent before durable local storage succeeds. After storage recovers, retry persists the failed changes before synchronization; reload and a fresh browser context both recover the body. This simulates the storage error rather than filling the user's disk. When synchronization is stopped by an error, an explicit recovery action copies the current Markdown and metadata into a new draft ID. The old draft and server state remain untouched, so an obsolete tab cannot write into the recovered draft. This is a recovery generation boundary, not an implicit reset or deletion.
 
-Real Japanese IME/mobile menu Undo validation and publication remain unfinished. No inbox or administration UI is implemented here. Issue #163 is not complete.
+Real Japanese IME/mobile menu Undo validation and publication remain unfinished. No administration UI is implemented here. Issue #163 is not complete.
 
 ### Working-version preview
 
@@ -45,6 +45,14 @@ The development draft editor displays the native Markdown textarea and a read-on
 The preview reuses `PublicArticlePresentation`, the public article class contract and the production presentation CSS. The existing React reading view also uses the shared title/cover header. The static publisher remains Ruby-owned and emits the same public classes; the preview does not introduce a second article stylesheet or a public draft document. The browser-side Markdown extensions render the current local Y.Text directly, so text, tables and highlighted code continue to update without the API. Media uses the existing URL and embed rules; an offline message distinguishes unavailable images and embeds from the still-available text preview. Preview links open their published destinations in a separate tab.
 
 The browser integration covers the public title and automatic cover placement, table and Ruby syntax rendering, side-by-side and sliding layouts, separate link navigation and offline text updates at wide and narrow viewport sizes.
+
+### Horizontal inbox
+
+The draft editor connects the existing inbox beneath the editor and preview as four horizontally arranged columns for photos, videos, Raindrop bookmarks and Bluesky posts. Each column scrolls vertically on its own; narrow screens retain access to every column through horizontal scrolling. Photo and video cards show only their media, with no title, timestamp or separate insertion control. Selecting any card inserts its Markdown at the textarea selection.
+
+Photo insertion uses the existing public-media adoption endpoint and changes the draft only after adoption succeeds. Video and external links reuse their existing public URLs. Insertions are local Yjs edits with an isolated Undo boundary. An invalid asset, failed adoption or offline selection leaves the Markdown unchanged; no offline upload queue or full-inbox cache is introduced. Refreshing photo and video columns reloads existing inbox data, while Raindrop and Bluesky columns run their existing source-specific synchronization before reloading.
+
+This slice does not create draft-private assets, promote media at publication, delete unused assets or remove items from the inbox. Those existing public-media retention semantics remain unchanged. Browser coverage exercises caret insertion and Undo through the real textarea and Yjs session, successful and failed photo adoption, source synchronization, independent column scrolling and narrow-screen horizontal access. API responses are replaced only at the external service boundary.
 
 ### Remaining manual input verification
 

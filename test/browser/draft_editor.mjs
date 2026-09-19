@@ -37,6 +37,83 @@ try {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  const inboxItems = [
+    ...Array.from({ length: 8 }, (_, index) => ({
+      id: index === 0 ? "photo-ok" : index === 1 ? "photo-fail" : `photo-${index}`,
+      source: "photo",
+      kind: "photo",
+      payload: { preview_url: `/assets/inbox/photo-${index}.webp` },
+    })),
+    {
+      id: "video-1",
+      source: "video",
+      kind: "video",
+      payload: {
+        avc: "/assets/uploads/2026/09/00000000-0000-4000-8000-000000000001.mp4",
+        width: 1280,
+        height: 720,
+      },
+    },
+    {
+      id: "raindrop-1",
+      source: "raindrop",
+      kind: "bookmark",
+      payload: {
+        url: "https://example.com/bookmark",
+        title: "読みたい記事",
+        excerpt: "あとで読むための説明",
+      },
+    },
+    {
+      id: "bluesky-1",
+      source: "bluesky",
+      kind: "post",
+      payload: {
+        canonical_url: "https://bsky.app/profile/example.test/post/123",
+        author_display_name: "書いた人",
+        text: "投稿の本文",
+      },
+    },
+  ];
+  await page.route("**/api/inbox", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: inboxItems }),
+    });
+  });
+  await page.route("**/api/inbox/adopt", async (route) => {
+    const { item_id: itemId } = route.request().postDataJSON();
+    if (itemId === "photo-fail") {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "写真を採用できませんでした" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ public_url: `/assets/uploads/2026/09/${itemId}.webp` }),
+    });
+  });
+  let inboxSyncSource;
+  await page.route("**/api/inbox/sync", async (route) => {
+    [inboxSyncSource] = route.request().postDataJSON().sources;
+    await route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: JSON.stringify({ run_id: "draft-inbox-sync", status: "queued" }),
+    });
+  });
+  await page.route("**/api/inbox/sync/draft-inbox-sync", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ id: "draft-inbox-sync", status: "succeeded" }),
+    });
+  });
   await page.goto("http://127.0.0.1:15182/draft-editor");
   await page.getByLabel("タイトル", { exact: true }).fill("保存と公開は別");
   const body = page.getByRole("textbox", { name: "本文", exact: true });
@@ -54,6 +131,46 @@ try {
   await until(async () => await reopened.getByRole("textbox", { name: "本文", exact: true }).inputValue() === "# 日本語の下書き\n\nclass User\nend\n");
   assert.equal(await reopened.getByLabel("タイトル", { exact: true }).inputValue(), "保存と公開は別");
   await other.close();
+
+  const inbox = page.getByRole("region", { name: "素材" });
+  for (const label of ["写真", "動画", "Raindrop", "Bluesky"])
+    assert.equal(await inbox.getByRole("region", { name: label }).count(), 1);
+  const photoColumn = inbox.getByRole("region", { name: "写真" });
+  assert.ok(
+    await photoColumn.locator("ol").evaluate((list) => list.scrollHeight > list.clientHeight),
+    "each inbox column must have its own vertical scroll",
+  );
+  assert.ok(!(await photoColumn.textContent()).includes("photo-ok"));
+  assert.ok(!(await photoColumn.textContent()).includes("挿入"));
+  await inbox
+    .getByRole("region", { name: "Raindrop" })
+    .getByRole("button", { name: "Raindropを再読み込み" })
+    .click();
+  await until(() => inboxSyncSource === "raindrop");
+  await inbox.getByText("素材を更新しました").waitFor();
+
+  await body.fill("前半\n\n後半");
+  await body.evaluate((field) => field.setSelectionRange(4, 4));
+  await inbox
+    .getByRole("region", { name: "Raindrop" })
+    .getByRole("button", { name: "Raindropを本文へ追加" })
+    .click();
+  assert.equal(await body.inputValue(), "前半\n\nhttps://example.com/bookmark\n\n後半");
+  await body.press("Meta+z");
+  assert.equal(await body.inputValue(), "前半\n\n後半");
+
+  await body.fill("写真の前\n\n写真の後");
+  await body.evaluate((field) => field.setSelectionRange(6, 6));
+  await photoColumn.getByRole("button", { name: "写真を本文へ追加" }).nth(0).click();
+  await until(async () => (await body.inputValue()).includes("photo-ok.webp"));
+  assert.equal(
+    await body.inputValue(),
+    "写真の前\n\n![](/assets/uploads/2026/09/photo-ok.webp)\n\n写真の後",
+  );
+  const beforeFailedAdoption = await body.inputValue();
+  await photoColumn.getByRole("button", { name: "写真を本文へ追加" }).nth(1).click();
+  await inbox.getByText("写真を採用できませんでした").waitFor();
+  assert.equal(await body.inputValue(), beforeFailedAdoption);
 
   const previewMarkdown = `## 表とコード
 
@@ -97,6 +214,12 @@ end
 
   await page.setViewportSize({ width: 700, height: 900 });
   await setTimeout(250);
+  assert.ok(
+    await inbox.locator(".draft-inbox__columns").evaluate(
+      (columns) => columns.scrollWidth > columns.clientWidth,
+    ),
+    "narrow layouts must retain horizontal access to every inbox column",
+  );
   assert.equal(await preview.isVisible(), false);
   await page.getByRole("button", { name: "プレビュー" }).click();
   await setTimeout(250);
@@ -106,6 +229,15 @@ end
   assert.equal(await preview.isVisible(), false);
   await page.context().setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+  const beforeOfflineInsert = await body.inputValue();
+  await inbox
+    .getByRole("region", { name: "Bluesky" })
+    .getByRole("button", { name: "Blueskyを本文へ追加" })
+    .click();
+  await inbox
+    .getByText("オフラインでは素材を追加できません。本文の編集は続けられます。")
+    .waitFor();
+  assert.equal(await body.inputValue(), beforeOfflineInsert);
   await page.getByRole("button", { name: "プレビュー" }).click();
   await preview
     .getByText("オフラインのため画像や埋め込みを表示できません。本文の表示は更新されています。")

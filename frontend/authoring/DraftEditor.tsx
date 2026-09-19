@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
+import { DraftInbox } from "./DraftInbox";
 import { DraftPreview } from "./DraftPreview";
 import {
   DRAFT_BODY_LIMIT,
@@ -300,6 +301,7 @@ export function DraftEditor() {
           {isPreviewOpen ? "閉じる" : "プレビュー"}
         </button>
       </div>
+      {session && <DraftInbox session={session} textarea={textarea} />}
       <p id="draft-size">
         {bytes >= DRAFT_BODY_LIMIT * 0.9
           ? `本文 ${Math.ceil(bytes / 1024)} / 512 KiB。上限を超えても本文は削除されません。`

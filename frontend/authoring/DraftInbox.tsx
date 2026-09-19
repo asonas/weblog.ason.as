@@ -1,0 +1,360 @@
+import { type RefObject, useCallback, useEffect, useState } from "react";
+import type { DraftSession } from "./draftSession";
+import { videoAssetPath } from "./Video";
+
+type InboxSource = "photo" | "video" | "bluesky" | "raindrop";
+
+type InboxItem = {
+  id: string;
+  source: InboxSource | "c4p";
+  kind: "photo" | "video" | "post" | "like" | "bookmark" | "track";
+  payload: Record<string, unknown>;
+};
+
+type InboxResponse = { items: Array<InboxItem> };
+type InboxSyncResponse = { run_id: string; status: "queued" };
+type InboxSyncStatus = {
+  status:
+    | "queued"
+    | "running"
+    | "succeeded"
+    | "completed_with_errors"
+    | "failed";
+};
+
+const COLUMNS: Array<{ source: InboxSource; label: string }> = [
+  { source: "photo", label: "写真" },
+  { source: "video", label: "動画" },
+  { source: "raindrop", label: "Raindrop" },
+  { source: "bluesky", label: "Bluesky" },
+];
+
+function payloadString(item: InboxItem, key: string): string | null {
+  const value = item.payload[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function httpUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function insertMarkdownBlock(
+  body: string,
+  start: number,
+  end: number,
+  markdown: string,
+): { body: string; caret: number } {
+  const before = body.slice(0, start);
+  const after = body.slice(end);
+  const leading =
+    before && !before.endsWith("\n\n")
+      ? before.endsWith("\n")
+        ? "\n"
+        : "\n\n"
+      : "";
+  const trailing =
+    after && !after.startsWith("\n\n")
+      ? after.startsWith("\n")
+        ? "\n"
+        : "\n\n"
+      : "";
+  const inserted = `${leading}${markdown}${trailing}`;
+  return {
+    body: `${before}${inserted}${after}`,
+    caret: before.length + leading.length + markdown.length,
+  };
+}
+
+function itemMarkdown(item: InboxItem): string | null {
+  if (item.source === "video") {
+    const avc = videoAssetPath(item.payload.avc);
+    if (!avc) return null;
+    const av1 = videoAssetPath(item.payload.av1);
+    const width = Number(item.payload.width);
+    const height = Number(item.payload.height);
+    const dimensions =
+      Number.isInteger(width) &&
+      width > 0 &&
+      Number.isInteger(height) &&
+      height > 0
+        ? ` ${width}x${height}`
+        : "";
+    return `:::video ${avc}${av1 ? ` ${av1}` : ""}${dimensions} :::`;
+  }
+  if (item.source === "raindrop" && item.kind === "bookmark")
+    return httpUrl(item.payload.url);
+  if (item.source === "bluesky") return httpUrl(item.payload.canonical_url);
+  return null;
+}
+
+async function responseJson<T>(response: Response): Promise<T> {
+  let result: unknown;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error("サーバーからの応答を読み取れませんでした");
+  }
+  if (!response.ok) {
+    const message =
+      typeof result === "object" &&
+      result !== null &&
+      "error" in result &&
+      typeof result.error === "string"
+        ? result.error
+        : "操作を完了できませんでした";
+    throw new Error(message);
+  }
+  return result as T;
+}
+
+export function DraftInbox({
+  session,
+  textarea,
+}: {
+  session: DraftSession;
+  textarea: RefObject<HTMLTextAreaElement | null>;
+}) {
+  const [items, setItems] = useState<Array<InboxItem>>([]);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const [busyItem, setBusyItem] = useState<string>();
+  const [syncingSource, setSyncingSource] = useState<InboxSource>();
+
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch("/api/inbox", {
+        headers: { Accept: "application/json" },
+      });
+      const result = await responseJson<InboxResponse>(response);
+      setItems(result.items);
+      setError("");
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "素材を読み込めませんでした",
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const sync = useCallback(
+    async (source: InboxSource) => {
+      if (syncingSource) return;
+      if (!navigator.onLine) {
+        setError("オフラインでは素材を更新できません");
+        return;
+      }
+      setSyncingSource(source);
+      setError("");
+      try {
+        if (source === "photo" || source === "video") {
+          await load();
+        } else {
+          const csrfToken = document.documentElement.dataset.csrfToken;
+          const response = await fetch("/api/inbox/sync", {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+              ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+            },
+            body: JSON.stringify({ sources: [source] }),
+          });
+          const started = await responseJson<InboxSyncResponse>(response);
+          let run: InboxSyncStatus = started;
+          while (run.status === "queued" || run.status === "running") {
+            await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+            run = await responseJson<InboxSyncStatus>(
+              await fetch(
+                `/api/inbox/sync/${encodeURIComponent(started.run_id)}`,
+                { headers: { Accept: "application/json" } },
+              ),
+            );
+          }
+          await load();
+          if (run.status === "failed")
+            throw new Error("素材を更新できませんでした");
+          setStatus(
+            run.status === "completed_with_errors"
+              ? "一部の素材を更新できませんでした"
+              : "素材を更新しました",
+          );
+        }
+      } catch (cause) {
+        setError(
+          cause instanceof Error ? cause.message : "素材を更新できませんでした",
+        );
+      } finally {
+        setSyncingSource(undefined);
+      }
+    },
+    [load, syncingSource],
+  );
+
+  const insert = useCallback(
+    async (item: InboxItem) => {
+      const field = textarea.current;
+      if (!field || busyItem) return;
+      if (!navigator.onLine) {
+        setError(
+          "オフラインでは素材を追加できません。本文の編集は続けられます。",
+        );
+        return;
+      }
+
+      setBusyItem(item.id);
+      setError("");
+      try {
+        let markdown = itemMarkdown(item);
+        if (item.source === "photo" && item.kind === "photo") {
+          const csrfToken = document.documentElement.dataset.csrfToken;
+          const response = await fetch("/api/inbox/adopt", {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+              ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+            },
+            body: JSON.stringify({ item_id: item.id }),
+          });
+          const result = await responseJson<{ public_url: string }>(response);
+          markdown = result.public_url.startsWith("/assets/uploads/")
+            ? `![](${result.public_url})`
+            : null;
+        }
+        if (!markdown)
+          throw new Error("素材のURLが不正なため追加できませんでした");
+
+        const next = insertMarkdownBlock(
+          field.value,
+          field.selectionStart,
+          field.selectionEnd,
+          markdown,
+        );
+        session.undo.stopCapturing();
+        session.setBody(next.body);
+        session.undo.stopCapturing();
+        requestAnimationFrame(() => {
+          field.focus();
+          field.setSelectionRange(next.caret, next.caret);
+        });
+        setStatus("素材を本文へ追加しました");
+      } catch (cause) {
+        setError(
+          cause instanceof Error ? cause.message : "素材を追加できませんでした",
+        );
+      } finally {
+        setBusyItem(undefined);
+      }
+    },
+    [busyItem, session, textarea],
+  );
+
+  return (
+    <section className="draft-inbox" aria-label="素材">
+      <div className="draft-inbox__columns">
+        {COLUMNS.map(({ source, label }) => {
+          const columnItems = items.filter((item) => item.source === source);
+          return (
+            <section
+              className="draft-inbox__column"
+              aria-label={label}
+              key={source}
+            >
+              <header>
+                <h2>{label}</h2>
+                <button
+                  type="button"
+                  onClick={() => void sync(source)}
+                  aria-label={`${label}を再読み込み`}
+                  disabled={Boolean(syncingSource)}
+                >
+                  再読み込み
+                </button>
+              </header>
+              {columnItems.length === 0 ? (
+                <p className="draft-inbox__empty">素材はありません</p>
+              ) : (
+                <ol>
+                  {columnItems.map((item) => {
+                    const photo = payloadString(item, "preview_url");
+                    const thumbnail =
+                      source === "raindrop"
+                        ? payloadString(item, "cover")
+                        : source === "bluesky"
+                          ? payloadString(item, "thumbnail_url")
+                          : null;
+                    const title =
+                      source === "raindrop"
+                        ? payloadString(item, "title")
+                        : source === "bluesky"
+                          ? payloadString(item, "author_display_name") ||
+                            payloadString(item, "author_handle")
+                          : null;
+                    const excerpt =
+                      source === "raindrop"
+                        ? payloadString(item, "excerpt")
+                        : source === "bluesky"
+                          ? payloadString(item, "text")
+                          : null;
+                    const video = videoAssetPath(item.payload.avc);
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          className={`draft-inbox__item draft-inbox__item--${source}`}
+                          aria-label={`${label}を本文へ追加`}
+                          disabled={Boolean(busyItem)}
+                          onClick={() => void insert(item)}
+                        >
+                          {source === "photo" && photo && (
+                            <img src={photo} alt="" loading="lazy" />
+                          )}
+                          {source === "video" && video && (
+                            <video
+                              src={`${video}#t=0.001`}
+                              preload="metadata"
+                              muted
+                              playsInline
+                            />
+                          )}
+                          {(source === "raindrop" || source === "bluesky") && (
+                            <span className="draft-inbox__details">
+                              {thumbnail && (
+                                <img src={thumbnail} alt="" loading="lazy" />
+                              )}
+                              <span>
+                                {title && <strong>{title}</strong>}
+                                {excerpt && <span>{excerpt}</span>}
+                              </span>
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </section>
+          );
+        })}
+      </div>
+      <p className="draft-inbox__status" aria-live="polite">
+        {status}
+      </p>
+      <p className="draft-inbox__error" aria-live="assertive">
+        {error}
+      </p>
+    </section>
+  );
+}
