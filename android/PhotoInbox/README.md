@@ -4,25 +4,53 @@
 
 ## 必要環境
 
-- Android StudioまたはJDK 17
-- Android SDK 35
+- mise
 - Android 8.0（API 26）以降の端末
+
+Windowsにmiseがない場合は、WinGetでインストールしてPowerShellを開き直します。
+
+```powershell
+winget install --id jdx.mise --exact
+```
+
+次にリポジトリのルートで以下を実行します。Temurin JDK 17、Android
+SDK Command-line Tools、SDK 35、Build Tools 34.0.0、Platform Toolsが
+インストールされます。
+
+```powershell
+mise run setup:android
+```
 
 ## 開発
 
-Android Studioでこのディレクトリを開くか、次のコマンドでビルドします。
+Windowsではリポジトリのルートから次のコマンドでビルドします。
+
+```powershell
+mise run android:build
+```
+
+生成したAPKは`android/PhotoInbox/app/build/outputs/apk/debug/app-debug.apk`に
+あります。
+
+Android Studioでこのディレクトリを開く場合も、Gradle JDKにはJDK 17を
+指定してください。miseを使わずに直接ビルドする場合は次のコマンドを使えます。
 
 ```sh
 ./gradlew assembleDebug
 ```
 
-Windowsでは `gradlew.bat assembleDebug` を実行します。生成したAPKは
-`app/build/outputs/apk/debug/app-debug.apk` にあります。
+Windowsでは`gradlew.bat assembleDebug`を実行します。
 
 ## テスト
 
 ```sh
 ./gradlew test lint
+```
+
+Windowsではリポジトリのルートから次を実行できます。
+
+```powershell
+mise run android:test
 ```
 
 ## 実機での利用
