@@ -2,10 +2,10 @@
 ruby = "4.0.6"
 node = "24"
 aws-cli = "latest"
-"github:sorah/mairu" = "latest"
+"github:sorah/mairu" = { version = "latest", os = ["linux", "macos"] }
 terraform = "1.15.9"
 tflint = "0.64.0"
-xcodegen = "2.46.0"
+xcodegen = { version = "2.46.0", os = ["macos"] }
 
 [tasks.setup]
 description = "Install Ruby and Node.js dependencies"
@@ -175,6 +175,26 @@ run = [
   "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xcodebuild test -project ios/PhotoInbox/PhotoInbox.xcodeproj -scheme PhotoInbox -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0,arch=arm64' -derivedDataPath /tmp/weblog-photo-inbox-derived-data -resultBundlePath /tmp/weblog-photo-inbox.xcresult -enableCodeCoverage YES CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES",
   "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xccov view --report --files-for-target PhotoInbox.app /tmp/weblog-photo-inbox.xcresult",
 ]
+
+[task_templates.android]
+dir = "android/PhotoInbox"
+tools = { java = "temurin-17", android-sdk = "23.0" }
+
+[tasks."setup:android"]
+extends = "android"
+description = "Install Android SDK packages for PhotoInbox"
+dir = "{{ config_root }}"
+run = 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-android.ps1'
+
+[tasks."android:build"]
+extends = "android"
+description = "Build the PhotoInbox debug APK on Windows"
+run = ".\\gradlew.bat assembleDebug"
+
+[tasks."android:test"]
+extends = "android"
+description = "Run PhotoInbox unit tests and lint on Windows"
+run = ".\\gradlew.bat test lint"
 
 [tasks."check:portable"]
 description = "Run repository checks that work on Linux and macOS"
