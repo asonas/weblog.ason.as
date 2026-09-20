@@ -256,7 +256,7 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: var(--image-overlay-eased);
+  background: var(--image-header-eased), var(--image-overlay-eased);
 }
 .card-home .cover-journal__lead {
   max-inline-size: 1200px;

@@ -1,5 +1,13 @@
 :root {
   --image-overlay-ink: 0.19 0.025 200;
+  --image-header-eased: linear-gradient(
+    180deg,
+    oklch(var(--image-overlay-ink) / 0.64) 0%,
+    oklch(var(--image-overlay-ink) / 0.5) 8%,
+    oklch(var(--image-overlay-ink) / 0.29) 16%,
+    oklch(var(--image-overlay-ink) / 0.1) 26%,
+    oklch(var(--image-overlay-ink) / 0) 38%
+  );
   --image-overlay-eased: linear-gradient(
     180deg,
     oklch(var(--image-overlay-ink) / 0) 0%,
@@ -1355,7 +1363,7 @@ html[data-view="webmention-moderation"] .page-shell {
 .article-reading-header--covered::after {
   position: absolute;
   inset: 0;
-  background: var(--image-overlay-eased);
+  background: var(--image-header-eased), var(--image-overlay-eased);
   content: "";
 }
 
