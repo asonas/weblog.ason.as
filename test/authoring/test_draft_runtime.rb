@@ -7,6 +7,25 @@ require "weblog_authoring/development_database"
 require "weblog_authoring/lambda_session"
 
 class DraftRuntimeTest < Minitest::Test
+  class SearchProcess
+    def build(workdir:, corpus_dir:)
+      path = File.join(workdir, "index.sqlite3")
+      db = SQLite3::Database.new(path)
+      db.execute("CREATE TABLE documents (id INTEGER PRIMARY KEY, collection TEXT, path TEXT, active INTEGER, hash TEXT)")
+      db.execute("CREATE TABLE content (hash TEXT PRIMARY KEY, doc TEXT)")
+      db.execute("CREATE VIRTUAL TABLE documents_fts USING fts5(path, title, body)")
+      Dir.children(corpus_dir).sort.each_with_index do |name, index|
+        body = File.read(File.join(corpus_dir, name))
+        hash = Digest::SHA256.hexdigest(body)
+        db.execute("INSERT INTO documents VALUES (?, 'weblog', ?, 1, ?)", [index + 1, name, hash])
+        db.execute("INSERT INTO content VALUES (?, ?)", [hash, body])
+        db.execute("INSERT INTO documents_fts(rowid, path, title, body) VALUES (?, ?, ?, ?)", [index + 1, name, body.lines.first, body])
+      end
+      db.close
+      path
+    end
+  end
+
   def test_cutover_preserves_readers_then_publishes_asynchronously_without_legacy_writes_or_sending
     Dir.mktmpdir("draft-runtime") do |directory|
       root = Pathname(directory)
@@ -25,7 +44,7 @@ class DraftRuntimeTest < Minitest::Test
       client = Aws::Lambda::Client.new(stub_responses: true)
       client.stub_responses(:invoke, status_code: 202)
       publication = WeblogAuthoring::DraftPublication.local(store:)
-      runtime = WeblogAuthoring::DraftRuntime.new(store:, database:, publication:, s3_client: objects, bucket: "site", site_url: "https://example.com", lambda_client: client, worker_function: "fixture-worker")
+      runtime = WeblogAuthoring::DraftRuntime.new(store:, database:, publication:, s3_client: objects, bucket: "site", site_url: "https://example.com", lambda_client: client, worker_function: "fixture-worker", search_runner: SearchProcess.new)
       codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
       cookie = codec.issue(kind: "session", attributes: { "github_user_id" => 630_181, "csrf_token" => "csrf" }, ttl: 3600)
       api = runtime.api({ database:, session_codec: codec, allowed_github_user_id: 630_181 })
