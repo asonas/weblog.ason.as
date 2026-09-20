@@ -22,7 +22,7 @@ module WeblogAuthoring
       needle = query.to_s.downcase
       articles = rows.filter_map do |row|
         metadata = row.fetch("metadata").transform_values { |field| field.fetch("value") }
-        next unless [metadata.fetch("title"), row["public_route"]].compact.any? { |value| value.downcase.include?(needle) }
+        next unless [metadata.fetch("title"), DraftStore.working_route(metadata), row["public_route"]].compact.any? { |value| value.downcase.include?(needle) }
         state = "draft"
         error = nil
         if row["public_hash"]

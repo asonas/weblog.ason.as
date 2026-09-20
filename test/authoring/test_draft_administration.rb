@@ -86,7 +86,7 @@ class DraftAdministrationTest < Minitest::Test
   def test_renamed_unpublished_diary_does_not_capture_the_original_date
     first = @admin.daily("2026-09-20").fetch("id")
     @store.append(first, { "protocol" => 1, "generation" => 1, "update_id" => "rename-date", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
-      "metadata" => { "title" => { "value" => "2026-09-21", "expected_revision" => 0 } }, })
+      "metadata" => { "page_date" => { "value" => "2026-09-21", "expected_revision" => 0 } }, })
     second = @admin.daily("2026-09-20").fetch("id")
     refute_equal first, second
     assert_equal "2026-09-20", @store.read(second, {}).dig("metadata", "title", "value")

@@ -28,7 +28,11 @@ module WeblogAuthoring
     CHECKPOINT_LIMIT = 16 * 1024 * 1024
     CHUNK_BYTES = 128 * 1024
     TRANSPORT_CHUNK_BYTES = 256 * 1024
-    DEFAULT_METADATA = { "title" => "", "page_type" => "named", "cover_mode" => "auto", "cover_image_url" => nil }.freeze
+    DEFAULT_METADATA = { "title" => "", "page_type" => "named", "page_date" => "", "cover_mode" => "auto", "cover_image_url" => nil }.freeze
+
+    def self.working_route(metadata)
+      metadata["page_type"] == "date" && !metadata["page_date"].to_s.empty? ? metadata.fetch("page_date") : metadata.fetch("title")
+    end
 
     def self.sqlite(path)
       require "sqlite3"
@@ -106,22 +110,22 @@ module WeblogAuthoring
           loop do
             rows = db.query("SELECT id, metadata FROM #{db.prefix}draft_articles WHERE id > $1 ORDER BY id LIMIT 25", [cursor])
             found = rows.find do |row|
-              metadata = JSON.parse(row.fetch("metadata"))
-              metadata.dig("title", "value") == date && metadata.dig("page_type", "value") == "date"
+              metadata = JSON.parse(row.fetch("metadata")).transform_values { |field| field.fetch("value") }
+              metadata["page_type"] == "date" && self.class.working_route(metadata) == date
             end
             break if found || rows.length < 25
             cursor = rows.last.fetch("id")
           end
           next found.fetch("id") if found
-          metadata = DEFAULT_METADATA.merge("title" => date, "page_type" => "date").transform_values { |value| { "value" => value, "revision" => 0 } }
+          metadata = DEFAULT_METADATA.merge("title" => date, "page_type" => "date", "page_date" => date).transform_values { |value| { "value" => value, "revision" => 0 } }
           now = Time.now.utc.iso8601(6)
           attempt = 0
           loop do
             hex = Digest::SHA256.hexdigest("draft-diary:#{date}:#{attempt}")[0, 32]
             id = [hex[0, 8], hex[8, 4], hex[12, 4], hex[16, 4], hex[20, 12]].join("-")
             db.query("INSERT INTO #{db.prefix}draft_articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING", [id, JSON.generate(metadata), now])
-            stored = document(db, id).fetch("metadata")
-            break id if stored.dig("title", "value") == date && stored.dig("page_type", "value") == "date"
+            stored = document(db, id).fetch("metadata").transform_values { |field| field.fetch("value") }
+            break id if stored["page_type"] == "date" && self.class.working_route(stored) == date
             # A previous daily draft may have been renamed before publication.
             attempt += 1
           end
@@ -227,8 +231,8 @@ module WeblogAuthoring
           end
 
           metadata = merge_metadata(current.fetch("metadata"), changes)
-          if changes.key?("title") && db.query("SELECT active_id FROM #{db.prefix}draft_publication_heads WHERE article_id = $1 AND active_id IS NOT NULL", [id]).any?
-            reserve_working_route(db, id, metadata.fetch("title").fetch("value"))
+          if (changes.keys & %w[title page_type page_date]).any? && db.query("SELECT active_id FROM #{db.prefix}draft_publication_heads WHERE article_id = $1 AND active_id IS NOT NULL", [id]).any?
+            reserve_working_route(db, id, self.class.working_route(metadata.transform_values { |field| field.fetch("value") }))
           end
           sequence = current.fetch("head") + 1
           now = Time.now.utc.iso8601(6)
@@ -468,7 +472,7 @@ module WeblogAuthoring
     end
 
     def validate_scope!(id, payload)
-      raise Error, "Invalid draft ID" unless /\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/.match?(id)
+      raise Error, "Invalid draft ID" unless /\A(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\z/.match?(id)
       raise Error.new("Unsupported document version", 409) unless payload["generation"] == 1 && payload["protocol"] == 1
     end
 
@@ -476,7 +480,7 @@ module WeblogAuthoring
       row = db.query("SELECT * FROM #{db.prefix}draft_articles WHERE id = $1", [id]).first
       raise Error.new("Draft not found", 404) unless row
       { "id" => id, "generation" => row.fetch("generation").to_i, "protocol" => 1, "head" => row.fetch("head").to_i,
-        "metadata" => JSON.parse(row.fetch("metadata")), "created_at" => row.fetch("created_at"), "updated_at" => row.fetch("updated_at"), }
+        "metadata" => DEFAULT_METADATA.transform_values { |value| { "value" => value, "revision" => 0 } }.merge(JSON.parse(row.fetch("metadata"))), "created_at" => row.fetch("created_at"), "updated_at" => row.fetch("updated_at"), }
     end
 
     def merge_metadata(current, changes)

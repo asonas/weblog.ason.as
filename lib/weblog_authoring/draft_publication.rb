@@ -107,11 +107,13 @@ module WeblogAuthoring
       metadata = job.fetch("metadata").transform_values { |field| field.fetch("value") }
       metadata["title"] = metadata.fetch("title").strip
       metadata["cover_image_url"] = nil unless metadata.fetch("cover_mode") == "explicit"
-      route = WeblogAuthoring.validate_page_name(metadata.fetch("title"))
+      route = WeblogAuthoring.validate_page_name(DraftStore.working_route(metadata))
       raise DraftStore::Error, "このURLはシステムが使用しています。" if %w[draft-editor published].include?(route.split("/").first)
       raise DraftStore::Error, "日記の日付はYYYY-MM-DDで指定してください。" if metadata.fetch("page_type") == "date" && !WeblogAuthoring::DATE_NAME.match?(route)
       Date.iso8601(route) if metadata.fetch("page_type") == "date"
-      hash = Digest::SHA256.hexdigest(JSON.generate([body, *metadata.values_at("title", "page_type", "cover_mode", "cover_image_url")]))
+      content = [body, *metadata.values_at("title", "page_type", "cover_mode", "cover_image_url")]
+      content << metadata["page_date"] if metadata["page_type"] == "date" && !metadata["page_date"].to_s.empty?
+      hash = Digest::SHA256.hexdigest(JSON.generate(content))
       { "body" => body, "metadata" => metadata, "route" => route, "content_hash" => hash,
         "through" => job.fetch("through"), "metadata_revisions" => job.fetch("metadata").transform_values { |field| field.fetch("revision") }, }
     rescue ArgumentError => error

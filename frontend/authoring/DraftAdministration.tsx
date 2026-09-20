@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type DraftMetadata,
+  draftRoute,
   type LocalDraftSummary,
   readLocalDraftSummaries,
 } from "./draftSession";
@@ -174,8 +175,9 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
           row.metadata.title,
           row.local?.metadata.title,
           row.public_route,
-          `${window.location.origin}/${row.public_route || row.metadata.title}`,
-          `${window.location.origin}/${encodeURIComponent(row.public_route || row.metadata.title)}`,
+          draftRoute(row.local?.metadata || row.metadata),
+          `${window.location.origin}/${row.public_route || draftRoute(row.metadata)}`,
+          `${window.location.origin}/${encodeURIComponent(row.public_route || draftRoute(row.metadata))}`,
         ].some((value) =>
           value?.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
         ),
@@ -330,7 +332,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                     : row.metadata.title || "無題"}
                 </strong>
                 <span className="draft-admin-route">
-                  /{row.public_route || row.metadata.title}
+                  /{row.public_route || draftRoute(row.metadata)}
                 </span>
                 <span>
                   {row.localOnly ? "端末に保存した記事" : STATES[row.state]}

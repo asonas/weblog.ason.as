@@ -35,7 +35,9 @@ module WeblogAuthoring
         source = publication_snapshot(reference.fetch("article_id"), reference.fetch("version_id"))
         body = WeblogAuthoring.replace_wiki_links(source.fetch("body"), old_name: impact.fetch("from"), new_name: impact.fetch("to"))
         metadata = source.fetch("metadata")
-        hash = Digest::SHA256.hexdigest(JSON.generate([body, *metadata.values_at("title", "page_type", "cover_mode", "cover_image_url")]))
+        content = [body, *metadata.values_at("title", "page_type", "cover_mode", "cover_image_url")]
+        content << metadata["page_date"] if metadata["page_type"] == "date" && !metadata["page_date"].to_s.empty?
+        hash = Digest::SHA256.hexdigest(JSON.generate(content))
         replacement = SecureRandom.uuid
         # Bodies commit individually; acceptance and activation only touch pointers.
         @connect.call do |db|

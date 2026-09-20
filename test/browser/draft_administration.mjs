@@ -26,7 +26,7 @@ async function until(check) {
 }
 let browser;
 try {
-  const apiLog = start(["ruby", "-rbundler/setup", "test/fixtures/drafts/server.rb"], { DRAFT_TEST_TOKEN: token });
+  const apiLog = start(["ruby", "-rbundler/setup", "test/fixtures/drafts/server.rb"], { DRAFT_TEST_TOKEN: token, DRAFT_TEST_LEGACY_DIARY: "1" });
   const viteLog = start(["node", "node_modules/vite/bin/vite.js", "--port", "15182"], { AUTHORING_API_ORIGIN: "http://127.0.0.1:18082" });
   await ready("http://127.0.0.1:18082/api/draft-test-health", apiLog);
   await ready("http://127.0.0.1:15182/api/draft-test-health", viteLog);
@@ -38,8 +38,15 @@ try {
   await page.goto("http://127.0.0.1:15182/authoring/articles");
   await page.getByRole("button", { name: "今日の日記を書く", exact: true }).click();
   await page.getByRole("textbox", { name: "本文", exact: true }).fill("今日の日記の本文");
+  await page.getByText("記事とカバーの設定", { exact: true }).click();
+  const diaryDate = await page.getByLabel("日記の日付（URL）", { exact: true }).inputValue();
+  await page.getByLabel("タイトル", { exact: true }).fill("日付とは別の日記タイトル");
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
   const diary = page.url();
+  await page.reload();
+  await page.getByText("記事とカバーの設定", { exact: true }).click();
+  assert.equal(await page.getByLabel("日記の日付（URL）", { exact: true }).inputValue(), diaryDate);
+  assert.equal(await page.getByLabel("タイトル", { exact: true }).inputValue(), "日付とは別の日記タイトル");
   await page.getByRole("link", { name: "記事一覧", exact: true }).click();
   await page.getByRole("button", { name: "今日の日記を書く", exact: true }).click();
   await page.getByRole("textbox", { name: "本文", exact: true }).waitFor();
@@ -116,6 +123,14 @@ try {
   await detail.getByText("この公開処理は失効しました。エディタで内容を再確認してください。").waitFor();
   assert.ok(!(await detail.textContent()).includes("処理中"));
   assert.equal(await detail.getByRole("button", { name: "公開処理を再試行" }).count(), 0);
+  await page.unroute("**/api/authoring/drafts/**");
+  await page.goto(diary);
+  await page.getByRole("button", { name: "公開", exact: true }).click();
+  await page.getByRole("button", { name: "この内容で公開", exact: true }).click();
+  await until(async () => (await page.getByRole("status").textContent()).includes("公開が完了しました"));
+  const publishedDiary = await fetch(`http://127.0.0.1:18082/${diaryDate}`);
+  assert.equal(publishedDiary.status, 200);
+  assert.ok((await publishedDiary.text()).includes("日付とは別の日記タイトル"));
   assert.deepEqual(errors, []);
   console.log("PASS: daily reuse, create/search/reopen, publication retry, restored published content, wide/narrow layout, local pending summary");
 } finally {

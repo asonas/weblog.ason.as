@@ -101,7 +101,11 @@ export function DraftPreview({ body, metadata }: DraftPreviewProps) {
       <PublicArticlePresentation
         className="draft-preview__article"
         coverImageUrl={resolvedCoverImageUrl}
-        title={metadata.title || "無題"}
+        title={
+          metadata.title.trim() ||
+          (metadata.page_type === "date" && metadata.page_date) ||
+          "無題"
+        }
       >
         <EditorContent editor={editor} />
       </PublicArticlePresentation>

@@ -14,6 +14,7 @@ import "./draftEditor.css";
 const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
   title: "タイトル",
   page_type: "記事種別",
+  page_date: "日記の日付（URL）",
   cover_mode: "カバー",
   cover_image_url: "カバー画像のパス",
 };
@@ -310,6 +311,25 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           <option value="named">記事</option>
           <option value="date">日記</option>
         </select>
+        {session?.metadata.page_type === "date" && (
+          <>
+            <label htmlFor="draft-date">日記の日付（URL）</label>
+            <input
+              id="draft-date"
+              type="date"
+              disabled={session.isPublishing}
+              value={
+                session.metadata.page_date ||
+                (/^\d{4}-\d{2}-\d{2}$/.test(session.metadata.title)
+                  ? session.metadata.title
+                  : "")
+              }
+              onChange={(event) =>
+                session.setMetadata({ page_date: event.target.value })
+              }
+            />
+          </>
+        )}
         <label htmlFor="draft-cover-mode">カバー</label>
         <select
           id="draft-cover-mode"

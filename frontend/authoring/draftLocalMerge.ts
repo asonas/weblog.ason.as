@@ -4,6 +4,7 @@ import type { DraftMetadata, SavedDraft } from "./draftSession";
 const FIELDS: (keyof DraftMetadata)[] = [
   "title",
   "page_type",
+  "page_date",
   "cover_mode",
   "cover_image_url",
 ];

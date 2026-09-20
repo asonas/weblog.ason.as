@@ -114,7 +114,12 @@ try {
       body: JSON.stringify({ id: "draft-inbox-sync", status: "succeeded" }),
     });
   });
-  await page.goto("http://127.0.0.1:15182/draft-editor");
+  const legacyId = "dc802ad0b89946aeb6b7623c2ba7bc79";
+  const created = await page.request.put(`http://127.0.0.1:15182/api/authoring/drafts/${legacyId}`, {
+    data: { protocol: 1, generation: 1 },
+  });
+  assert.equal(created.status(), 200);
+  await page.goto(`http://127.0.0.1:15182/draft-editor?id=${legacyId}`);
   await page.getByLabel("タイトル", { exact: true }).fill("保存と公開は別");
   const body = page.getByRole("textbox", { name: "本文", exact: true });
   await body.fill("# 日本語の下書き\n\nclass User\nend\n");

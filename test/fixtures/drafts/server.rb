@@ -22,6 +22,15 @@ Dir.mktmpdir("draft-browser-test") do |root|
   app = WeblogAuthoring::DevelopmentApp.application(
     root:, oauth_client: nil, inbox_sources: {}, drafts_enabled: true, draft_search_runner: search_runner
   )
+  if ENV["DRAFT_TEST_LEGACY_DIARY"] == "1"
+    id = "dc802ad0b89946aeb6b7623c2ba7bc79"
+    scope = { "protocol" => 1, "generation" => 1 }
+    store = WeblogAuthoring::DraftStore.sqlite(File.join(root, "data/development/drafts.sqlite3"))
+    store.create(id, scope)
+    store.append(id, scope.merge("update_id" => "legacy-diary", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
+                                "metadata" => { "title" => { "value" => Time.now.getlocal("+09:00").strftime("%Y-%m-%d"), "expected_revision" => 0 },
+                                                "page_type" => { "value" => "date", "expected_revision" => 0 }, }))
+  end
   token = ENV.fetch("DRAFT_TEST_TOKEN")
   isolated_app = lambda do |env|
     if env["PATH_INFO"] == "/api/draft-test-health"

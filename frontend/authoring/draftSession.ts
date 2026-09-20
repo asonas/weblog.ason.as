@@ -13,10 +13,16 @@ const UPLOAD_CHUNK_BYTES = 256 * 1024;
 export type DraftMetadata = {
   title: string;
   page_type: string;
+  page_date: string;
   cover_mode: string;
   cover_image_url: string | null;
 };
 type Field = keyof DraftMetadata;
+export function draftRoute(metadata: DraftMetadata): string {
+  return metadata.page_type === "date" && metadata.page_date
+    ? metadata.page_date
+    : metadata.title;
+}
 type VersionedMetadata = Record<
   Field,
   { value: string | null; revision: number }
@@ -105,15 +111,23 @@ type PublicationJob = {
 const DEFAULT_METADATA: DraftMetadata = {
   title: "",
   page_type: "named",
+  page_date: "",
   cover_mode: "auto",
   cover_image_url: null,
 };
-const FIELDS: Field[] = ["title", "page_type", "cover_mode", "cover_image_url"];
+const FIELDS: Field[] = [
+  "title",
+  "page_type",
+  "page_date",
+  "cover_mode",
+  "cover_image_url",
+];
 
 function initialServerMetadata(): VersionedMetadata {
   return {
     title: { value: "", revision: 0 },
     page_type: { value: "named", revision: 0 },
+    page_date: { value: "", revision: 0 },
     cover_mode: { value: "auto", revision: 0 },
     cover_image_url: { value: null, revision: 0 },
   };
@@ -165,10 +179,18 @@ function localRecord(
     let result: SavedDraft | undefined;
     request.onsuccess = () => {
       try {
+        const stored: SavedDraft | undefined = request.result;
+        if (stored) {
+          stored.metadata = { ...DEFAULT_METADATA, ...stored.metadata };
+          stored.serverMetadata = {
+            ...initialServerMetadata(),
+            ...stored.serverMetadata,
+          };
+        }
         result =
-          value && base && request.result
-            ? mergeLocalDraft(base, value, request.result)
-            : value || request.result;
+          value && base && stored
+            ? mergeLocalDraft(base, value, stored)
+            : value || stored;
         if (value) store.put(result, id);
       } catch (error) {
         transaction.abort();
@@ -229,6 +251,10 @@ export async function readLocalDraftSummaries(): Promise<LocalDraftSummary[]> {
               saved.metadata.cover_mode === "explicit"
                 ? saved.metadata.cover_image_url
                 : null,
+              ...(saved.metadata.page_type === "date" &&
+              saved.metadata.page_date
+                ? [saved.metadata.page_date]
+                : []),
             ]),
           );
           summaries.push(
@@ -320,7 +346,9 @@ export class DraftSession extends EventTarget {
     isNew = false,
   ): Promise<DraftSession> {
     if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)
+      !/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(
+        id,
+      )
     ) {
       throw new Error("下書きのIDが不正です。");
     }
@@ -538,6 +566,7 @@ export class DraftSession extends EventTarget {
   }
 
   private mergeMetadata(incoming: VersionedMetadata) {
+    incoming = { ...initialServerMetadata(), ...incoming };
     for (const field of FIELDS) {
       const remote = incoming[field];
       const base = this.serverMetadata[field];
@@ -643,6 +672,15 @@ export class DraftSession extends EventTarget {
 
   setMetadata(values: Partial<DraftMetadata>) {
     if (this.isPublishing) return;
+    if (
+      values.title !== undefined &&
+      this.metadata.page_type === "date" &&
+      !this.metadata.page_date &&
+      /^\d{4}-\d{2}-\d{2}$/.test(this.metadata.title)
+    ) {
+      // Older drafts stored the diary date only in the title.
+      values = { page_date: this.metadata.title, ...values };
+    }
     this.metadata = { ...this.metadata, ...values };
     this.changed();
   }
@@ -775,6 +813,9 @@ export class DraftSession extends EventTarget {
           this.metadata.cover_mode === "explicit"
             ? this.metadata.cover_image_url
             : null,
+          ...(this.metadata.page_type === "date" && this.metadata.page_date
+            ? [this.metadata.page_date]
+            : []),
         ]),
       ),
     );
@@ -1016,6 +1057,7 @@ export class DraftSession extends EventTarget {
           receipt.digest !== flight.digest
         )
           throw new Error("保存応答が一致しません。本文を保持しています。");
+        receipt.metadata = { ...initialServerMetadata(), ...receipt.metadata };
         this.pending = this.pending.filter(
           (item) => !flight.included.includes(item.id),
         );

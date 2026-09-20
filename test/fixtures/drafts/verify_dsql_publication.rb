@@ -54,9 +54,9 @@ begin
   check("concurrent daily creation opens one working article") { daily_results.uniq.length == 1 }
   check("administration lists persisted metadata without publishing") { administration.list.fetch("articles").length == 2 && administration.list.fetch("articles").all? { |article| article.fetch("state") == "draft" } }
   original_daily = daily_results.first.fetch("id")
-  store.append(original_daily, scope.merge("update_id" => "rename-daily", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0, "metadata" => { "title" => { "value" => "2026-09-21", "expected_revision" => 0 } }))
+  store.append(original_daily, scope.merge("update_id" => "rename-daily", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0, "metadata" => { "page_date" => { "value" => "2026-09-21", "expected_revision" => 0 } }))
   replacement_daily = 4.times.map { Thread.new { administration.daily("2026-09-20") } }.map(&:value)
-  check("renamed diary is preserved while concurrent creation opens one replacement") { replacement_daily.uniq.length == 1 && replacement_daily.first.fetch("id") != original_daily && store.read(original_daily, {}).dig("metadata", "title", "value") == "2026-09-21" }
+  check("renamed diary is preserved while concurrent creation opens one replacement") { replacement_daily.uniq.length == 1 && replacement_daily.first.fetch("id") != original_daily && store.read(original_daily, {}).dig("metadata", "page_date", "value") == "2026-09-21" }
   request = publication.prepare(id).merge("request_id" => "same-request")
   results = 4.times.map { Thread.new { publication.accept(id, request) } }.map(&:value)
   check("concurrent retries share one immutable version") { results.uniq.length == 1 }

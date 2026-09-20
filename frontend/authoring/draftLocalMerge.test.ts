@@ -12,12 +12,14 @@ function initial(): SavedDraft {
     metadata: {
       title: "",
       page_type: "named",
+      page_date: "",
       cover_mode: "auto",
       cover_image_url: null,
     },
     serverMetadata: {
       title: { value: "", revision: 0 },
       page_type: { value: "named", revision: 0 },
+      page_date: { value: "", revision: 0 },
       cover_mode: { value: "auto", revision: 0 },
       cover_image_url: { value: null, revision: 0 },
     },

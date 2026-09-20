@@ -56,6 +56,19 @@ class DraftsTest < Minitest::Test
     assert_equal 404, call("PUT", "", { "protocol" => 1, "generation" => 1 })[:statusCode]
   end
 
+  def test_legacy_article_identity_survives_draft_storage_and_reopening
+    @article_id = "dc802ad0b89946aeb6b7623c2ba7bc79"
+    assert_equal 200, call("PUT", "", { "protocol" => 1, "generation" => 1 })[:statusCode]
+    update = { "protocol" => 1, "generation" => 1, "update_id" => "legacy-edit", "data" => "AAA=",
+               "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
+               "metadata" => { "title" => { "value" => "移行した記事", "expected_revision" => 0 } }, }
+    assert_equal 200, upload(update)[:statusCode]
+    reopened = JSON.parse(call("GET")[:body])
+    assert_equal @article_id, reopened.fetch("id")
+    assert_equal "移行した記事", reopened.dig("metadata", "title", "value")
+    assert_equal 1, reopened.fetch("head")
+  end
+
   def test_complete_binary_update_survives_storage_chunk_boundaries
     call("PUT", "", { "protocol" => 1, "generation" => 1 })
     binary = (0..255).to_a.pack("C*") * 1025
@@ -155,7 +168,7 @@ class DraftsTest < Minitest::Test
   end
 
   def call(method, suffix = "", body = nil, authenticated: true, csrf: "csrf", query: {})
-    @api.call({ "rawPath" => "/api/authoring/drafts/#{ID}#{suffix}",
+    @api.call({ "rawPath" => "/api/authoring/drafts/#{@article_id || ID}#{suffix}",
                 "requestContext" => { "http" => { "method" => method } },
                 "headers" => { "content-type" => "application/json", "x-csrf-token" => csrf },
                 "cookies" => authenticated ? ["weblog_authoring_session=#{@cookie}"] : [],
