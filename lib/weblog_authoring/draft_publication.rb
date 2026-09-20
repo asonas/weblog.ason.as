@@ -43,6 +43,12 @@ module WeblogAuthoring
         "article_state" => state, "rename" => @store.rename_impact(id, verified.fetch("route")), }
     end
 
+    # Listing must compare the same normalized content as publication, without
+    # calculating a rename batch or accepting a publication.
+    def working_content_hash(id)
+      verified_content(id).slice("content_hash", "through")
+    end
+
     def accept(id, request)
       request = request.slice("protocol", "generation", "head", "metadata_revisions", "content_hash", "request_id", "rename")
       raise DraftStore::Error, "Invalid publication ID" unless request["request_id"].is_a?(String) && /\A[a-zA-Z0-9-]{1,80}\z/.match?(request["request_id"])

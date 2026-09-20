@@ -1,0 +1,214 @@
+body:has(.draft-admin) .site-header {
+  display: none;
+}
+body:has(.draft-admin) .page-shell {
+  max-width: none;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+}
+.draft-admin {
+  max-width: 1600px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 220px minmax(300px, 1fr) 300px;
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.draft-admin * {
+  box-sizing: border-box;
+}
+.draft-admin button,
+.draft-admin input,
+.draft-admin a {
+  font: inherit;
+}
+.draft-admin button,
+.draft-admin a {
+  touch-action: manipulation;
+}
+.draft-admin button {
+  min-height: 44px;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--separator);
+  border-radius: 6px;
+  color: inherit;
+}
+.draft-admin button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.draft-admin :focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.draft-admin-rail,
+.draft-admin-detail {
+  padding: 24px 20px;
+}
+.draft-admin-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  border-right: 1px solid var(--separator);
+}
+.draft-admin-brand {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+.draft-admin .draft-admin-primary,
+.draft-admin-edit {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+.draft-admin-rail nav {
+  display: grid;
+  gap: 6px;
+}
+.draft-admin-rail nav button {
+  display: flex;
+  justify-content: space-between;
+  text-align: left;
+  border-color: transparent;
+}
+.draft-admin-rail nav button[aria-pressed="true"] {
+  background: var(--quiet-fill);
+  font-weight: 700;
+}
+.draft-admin-ledger {
+  padding: 24px;
+  min-width: 0;
+}
+.draft-admin-search {
+  width: 100%;
+  min-height: 56px;
+  padding: 14px 18px;
+  border: 1px solid var(--separator);
+  border-radius: 8px;
+  color: inherit;
+  background: var(--surface);
+}
+.draft-admin-count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0;
+}
+.draft-admin-count button {
+  border: 0;
+}
+.draft-admin-rows {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.draft-admin-rows li {
+  border-top: 1px solid var(--separator);
+}
+.draft-admin-rows button {
+  width: 100%;
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  padding: 16px 12px;
+  overflow-wrap: anywhere;
+}
+.draft-admin-rows button[aria-pressed="true"] {
+  background: var(--quiet-fill);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.draft-admin-rows strong {
+  font-size: 17px;
+}
+.draft-admin-route,
+.draft-admin-rows small,
+.draft-admin-hint {
+  color: var(--muted-ink);
+  font-size: 13px;
+}
+.draft-admin-detail {
+  border-left: 1px solid var(--separator);
+  overflow-wrap: anywhere;
+}
+.draft-admin-detail h1 {
+  font-size: 22px;
+  line-height: 1.4;
+  margin: 0 0 14px;
+}
+.draft-admin-detail dl {
+  display: grid;
+  gap: 4px;
+  margin: 24px 0;
+}
+.draft-admin-detail dt {
+  font-size: 13px;
+  color: var(--muted-ink);
+}
+.draft-admin-detail dd {
+  margin: 0 0 12px;
+}
+.draft-admin-detail a,
+.draft-admin-detail button {
+  display: block;
+  margin-top: 14px;
+}
+.draft-admin-edit {
+  text-align: center;
+  padding: 12px;
+  border-radius: 6px;
+  text-decoration: none;
+}
+.draft-admin [role="alert"] {
+  color: #923c30;
+}
+@media (max-width: 1050px) {
+  .draft-admin {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+  .draft-admin-detail {
+    grid-column: 2;
+    border: 0;
+    border-top: 1px solid var(--separator);
+  }
+  .draft-admin-rail {
+    grid-row: span 2;
+  }
+}
+@media (max-width: 640px) {
+  .draft-admin {
+    display: block;
+  }
+  .draft-admin-rail {
+    border: 0;
+    padding: 16px;
+    gap: 12px;
+  }
+  .draft-admin-rail nav {
+    display: flex;
+    overflow-x: auto;
+    gap: 4px;
+    padding-bottom: 4px;
+  }
+  .draft-admin-rail nav button {
+    flex: 0 0 auto;
+    gap: 12px;
+  }
+  .draft-admin-ledger,
+  .draft-admin-detail {
+    padding: 16px;
+  }
+  .draft-admin-rows {
+    max-height: 45dvh;
+    overflow-y: auto;
+  }
+}

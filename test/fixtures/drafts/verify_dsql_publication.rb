@@ -49,6 +49,10 @@ begin
     store.append(id, scope.merge(update).merge("update_id" => "initial-#{index}", "body_bytes" => 12, "metadata" => metadata))
   end
   publication = WeblogAuthoring::DraftPublication.local(store:)
+  administration = WeblogAuthoring::DraftAdministration.new(store:, publication:)
+  daily_results = 4.times.map { Thread.new { administration.daily("2026-09-20") } }.map(&:value)
+  check("concurrent daily creation opens one working article") { daily_results.uniq.length == 1 }
+  check("administration lists persisted metadata without publishing") { administration.list.fetch("articles").length == 2 && administration.list.fetch("articles").all? { |article| article.fetch("state") == "draft" } }
   request = publication.prepare(id).merge("request_id" => "same-request")
   results = 4.times.map { Thread.new { publication.accept(id, request) } }.map(&:value)
   check("concurrent retries share one immutable version") { results.uniq.length == 1 }
@@ -59,10 +63,12 @@ begin
   check("confirmed persisted Y.Text is active") { active.fetch("body") == "残す" }
   check("identical content is a no-op") { publication.accept(id, publication.prepare(id).merge("request_id" => "identical")).fetch("status") == "unchanged" }
   check("no-op retains publication timestamps") { store.published_snapshot(id) == active }
+  check("administration compares the active normalized hash") { administration.list(query: "DSQL公開の確認").fetch("articles").first.fetch("state") == "public" }
   change = scope.merge("update_id" => "cover-change", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 6,
     "metadata" => { "cover_mode" => { "value" => "none", "expected_revision" => 0 } })
   stale = publication.prepare(id).merge("request_id" => "stale")
   store.append(id, change)
+  check("administration distinguishes unpublished changes") { administration.list(query: "DSQL公開の確認").fetch("articles").first.fetch("state") == "unpublished_changes" }
   begin
     publication.accept(id, stale)
     raise "Stale content published"

@@ -1,4 +1,9 @@
 module WeblogAuthoring
+  class DraftAdministration
+    def initialize: (store: DraftStore, publication: DraftPublication) -> void
+    def list: (?query: String, ?cursor: String) -> Hash[String, untyped]
+    def daily: (untyped) -> Hash[String, untyped]
+  end
   class DraftPublication
     def prepare: (String) -> Hash[String, untyped]
     def accept: (String, Hash[String, untyped]) -> Hash[String, untyped]

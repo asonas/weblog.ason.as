@@ -38,6 +38,7 @@ require_relative "performance_telemetry"
 require_relative "draft_store"
 require_relative "draft_publisher"
 require_relative "draft_jobs"
+require_relative "draft_administration"
 
 module WeblogAuthoring
   class DevelopmentRequestLog
@@ -114,7 +115,7 @@ module WeblogAuthoring
 
     before do
       validate_loopback_host!
-      if request.path_info.start_with?("/api/authoring/drafts/")
+      if request.path_info == "/api/authoring/drafts" || request.path_info.start_with?("/api/authoring/drafts/")
         headers "Cache-Control" => "private, no-store"
         halt 404 unless settings.draft_store
         require_authenticated! if settings.authentication_required
@@ -355,6 +356,14 @@ module WeblogAuthoring
       object.body.read
     rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
       halt 404
+    end
+
+    get "/api/authoring/drafts" do
+      json_response(DraftAdministration.new(store: settings.draft_store, publication: settings.draft_publication).list(query: params.fetch("q", ""), cursor: params.fetch("cursor", "")))
+    end
+
+    post "/api/authoring/drafts/daily" do
+      api_response { |payload| DraftAdministration.new(store: settings.draft_store, publication: settings.draft_publication).daily(payload["date"]) }
     end
 
     put "/api/authoring/drafts/:id" do

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { CardHome, type HomePage } from "./CardHome";
+import { DraftAdministration } from "./DraftAdministration";
 import { DraftEditor } from "./DraftEditor";
 import { DesignSystemPage } from "./designSystem";
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
@@ -371,7 +372,8 @@ function RootApp({
           if (
             active &&
             !navigator.onLine &&
-            new URLSearchParams(location.search).has("id")
+            (new URLSearchParams(location.search).has("id") ||
+              location.pathname === "/authoring/articles")
           )
             setIsLocalDraft(true);
         });
@@ -391,6 +393,16 @@ function RootApp({
         <HeaderSearch />
         <SearchPage />
       </>
+    );
+  }
+  if (
+    __DEPLOYMENT_ENVIRONMENT__ !== "production" &&
+    window.location.pathname === "/authoring/articles"
+  ) {
+    return auth.can_edit || isLocalDraft ? (
+      <DraftAdministration csrf={draftCsrf} />
+    ) : (
+      <p>記事を管理するにはログインしてください。</p>
     );
   }
   if (

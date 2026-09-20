@@ -40,7 +40,11 @@ Terminal obsolete jobs and stage logs expire after about 30 days. Active/latest 
 
 ## Local use
 
-Run the backend with `AUTHORING_DRAFTS_ENABLED=1 mise exec -- ruby -S bundle exec ruby bin/authoring`, then the frontend with `mise exec -- npm run dev`. Open `/draft-editor`. Its URL receives a stable draft ID; keep that URL to reopen the draft until the administration list is implemented.
+Run the backend with `AUTHORING_DRAFTS_ENABLED=1 mise exec -- ruby -S bundle exec ruby bin/authoring`, then the frontend with `mise exec -- npm run dev`. Open `/authoring/articles` to find working articles or create today's diary and other articles. `/draft-editor?id=<id>` reopens the same working article; its bottom action returns to the list.
+
+The administration list is development-only, like the draft editor. Its authenticated, non-cacheable API reads 25 metadata rows per page. Published articles are compared with the trusted worker's normalized content hash, not update timestamps. Returning the working content to the active published content therefore clears unpublished changes. Listing does not accept a publication or calculate rename batches. The browser reads IndexedDB summaries without starting background draft sessions; local-only records and unsent changes remain visible separately from server state. Counts are partial until all pages finish, and refresh failures retain a warning. Publication confirmation remains in the editor, while retry resumes the existing publication job and its derived outputs.
+
+`MISE_ACTIVATE_AGGRESSIVE=true mise exec -- node test/browser/draft_administration.mjs` verifies create/find/reopen/publish navigation, daily reuse, output retry, returning to the published content, local pending changes and wide/narrow layouts with isolated real data.
 
 The development backend stores drafts separately in `data/development/drafts.sqlite3`. It inherits the existing loopback-only development authentication configuration. When GitHub authentication is configured, draft reads require login and writes also require CSRF verification. Without OAuth configuration, only the explicitly enabled loopback development instance allows unauthenticated access. The Lambda API requires authentication for all draft operations and defaults to disabled unless a store is injected. No production handler, route, infrastructure or sender configuration is enabled here.
 

@@ -182,6 +182,51 @@ function localRecord(
   });
 }
 
+export type LocalDraftSummary = {
+  id: string;
+  metadata: DraftMetadata;
+  cursor: number;
+  pending: boolean;
+};
+
+// Read persisted summaries without starting synchronization or opening editors.
+export async function readLocalDraftSummaries(): Promise<LocalDraftSummary[]> {
+  const db = await openLocalDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction("drafts", "readonly");
+      const request = transaction.objectStore("drafts").openCursor();
+      const summaries: LocalDraftSummary[] = [];
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        const saved: SavedDraft = cursor.value;
+        summaries.push({
+          id: String(cursor.key),
+          metadata: saved.metadata,
+          cursor: saved.cursor,
+          pending: Boolean(
+            saved.pending.length ||
+              saved.flight ||
+              Object.keys(saved.conflicts || {}).length ||
+              Object.keys(saved.tabConflicts || {}).length ||
+              Object.entries(saved.metadata).some(
+                ([key, value]) =>
+                  saved.serverMetadata[key as Field]?.value !== value,
+              ),
+          ),
+        });
+        cursor.continue();
+      };
+      transaction.oncomplete = () => resolve(summaries);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
 class DraftRequestError extends Error {
   constructor(
     message: string,

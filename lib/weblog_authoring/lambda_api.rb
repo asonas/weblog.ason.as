@@ -29,6 +29,7 @@ require_relative "search_index"
 require_relative "draft_store"
 require_relative "draft_publisher"
 require_relative "draft_jobs"
+require_relative "draft_administration"
 
 module WeblogAuthoring
   class LambdaApi
@@ -150,7 +151,7 @@ module WeblogAuthoring
 
       method = event.dig("requestContext", "http", "method").to_s
       path = event.fetch("rawPath", "")
-      return draft_response(event, method, path) if path.start_with?("/api/authoring/drafts/")
+      return draft_response(event, method, path) if path == "/api/authoring/drafts" || path.start_with?("/api/authoring/drafts/")
       outputs = @draft_outputs
       if method == "GET" && path == "/feed.xml" && outputs
         return { statusCode: 200, headers: { "content-type" => "application/atom+xml; charset=utf-8", "cache-control" => "public, max-age=300" }, body: outputs.feed }
@@ -460,6 +461,18 @@ module WeblogAuthoring
       return json_response(403, error: "Editing is not allowed") unless allowed_session?(session)
       if method != "GET" && !secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
         return json_response(403, error: "CSRF token mismatch")
+      end
+      if path == "/api/authoring/drafts" || path == "/api/authoring/drafts/daily"
+        service = @draft_publication
+        return json_response(404, error: "Not Found") unless service
+        administration = DraftAdministration.new(store:, publication: service)
+        if method == "GET" && path == "/api/authoring/drafts"
+          query = event["queryStringParameters"] || {}
+          return json_response(200, administration.list(query: query.fetch("q", ""), cursor: query.fetch("cursor", "")))
+        elsif method == "POST" && path == "/api/authoring/drafts/daily"
+          return json_response(200, administration.daily(parse_json(event)["date"]))
+        end
+        return json_response(404, error: "Not Found")
       end
       publication = %r{\A/api/authoring/drafts/([^/]+)/publications(?:/([^/]+)(?:/(run))?)?\z}.match(path)
       if publication
@@ -1424,7 +1437,7 @@ module WeblogAuthoring
       method = event.dig("requestContext", "http", "method").to_s
       path = event.fetch("rawPath", "")
       return response if method.empty?
-      draft_response = path.start_with?("/api/authoring/drafts/")
+      draft_response = path == "/api/authoring/drafts" || path.start_with?("/api/authoring/drafts/")
       authentication_response = draft_response || path.start_with?("/api/auth/") || path == "/api/inbox/sources/bluesky/callback"
       return response unless authentication_response || !%w[GET HEAD OPTIONS].include?(method)
 

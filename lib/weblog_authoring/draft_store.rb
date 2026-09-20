@@ -88,6 +88,41 @@ module WeblogAuthoring
       append_data(id, payload, data)
     end
 
+    def administration_page(cursor = "")
+      @connect.call do |db|
+        db.query("SELECT a.id, a.head, a.metadata, a.created_at, a.updated_at, h.latest_id, v.route AS public_route, v.content_hash AS public_hash FROM #{db.prefix}draft_articles a LEFT JOIN #{db.prefix}draft_publication_heads h ON h.article_id = a.id LEFT JOIN #{db.prefix}draft_published_versions v ON v.id = h.active_id WHERE a.id > $1 ORDER BY a.id LIMIT 25", [cursor]).map do |row|
+          row.merge("head" => row.fetch("head").to_i, "metadata" => JSON.parse(row.fetch("metadata")))
+        end
+      end
+    end
+
+    def daily_draft(date)
+      @connect.call do |db|
+        db.transaction do
+          owner = db.query("SELECT article_id FROM #{db.prefix}draft_publication_routes WHERE route = $1", [date]).first
+          next owner.fetch("article_id") if owner
+          cursor = ""
+          found = nil
+          loop do
+            rows = db.query("SELECT id, metadata FROM #{db.prefix}draft_articles WHERE id > $1 ORDER BY id LIMIT 25", [cursor])
+            found = rows.find do |row|
+              metadata = JSON.parse(row.fetch("metadata"))
+              metadata.dig("title", "value") == date && metadata.dig("page_type", "value") == "date"
+            end
+            break if found || rows.length < 25
+            cursor = rows.last.fetch("id")
+          end
+          next found.fetch("id") if found
+          hex = Digest::SHA256.hexdigest("draft-diary:#{date}")[0, 32]
+          id = [hex[0, 8], hex[8, 4], hex[12, 4], hex[16, 4], hex[20, 12]].join("-")
+          metadata = DEFAULT_METADATA.merge("title" => date, "page_type" => "date").transform_values { |value| { "value" => value, "revision" => 0 } }
+          now = Time.now.utc.iso8601(6)
+          db.query("INSERT INTO #{db.prefix}draft_articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING", [id, JSON.generate(metadata), now])
+          id
+        end
+      end
+    end
+
     def begin_upload(id, payload)
       validate_scope!(id, payload)
       update_id, digest, body_bytes, changes = validate_update_manifest(payload)

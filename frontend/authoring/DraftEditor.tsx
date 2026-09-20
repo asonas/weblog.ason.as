@@ -443,6 +443,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           </button>
         )}
         <a href="/draft-editor">別の下書きを書く</a>
+        <a href="/authoring/articles">記事一覧</a>
       </div>
     </section>
   );

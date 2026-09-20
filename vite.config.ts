@@ -76,6 +76,7 @@ self.addEventListener("fetch", (event) => {
           }
 
           const route = rawPathname.slice(1).replace(/\/$/, "");
+          if (mode !== "production" && rawPathname === "/authoring/articles") return next();
           const isEditorRoute = /^\/editor\/[^/]+\/?$/.test(rawPathname);
           if ((!isEditorRoute && route.includes("/")) || /[<>\\]/.test(pathname)) {
             response.statusCode = 404;
