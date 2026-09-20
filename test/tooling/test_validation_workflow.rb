@@ -27,15 +27,11 @@ class ValidationWorkflowTest < Minitest::Test
     assert_equal 7, upload.fetch("with").fetch("retention-days")
   end
 
-  def test_ios_job_runs_only_for_relevant_changes
+  def test_ios_checks_are_owned_by_xcode_cloud
     jobs = WORKFLOW.fetch("jobs")
-    detection = jobs.fetch("changes").fetch("steps").find { |step| step["id"] == "detect" }
-    ios = jobs.fetch("ios")
-
-    assert_includes detection.fetch("run"), "ios/PhotoInbox mise.toml .github/workflows/validation.yml"
-    assert_equal "needs.changes.outputs.ios == 'true'", ios.fetch("if")
-    assert_equal "xcode-27", ios.fetch("runs-on")
-    assert_includes ios.fetch("steps").filter_map { |step| step["run"] }, "mise run check:ios"
+    refute jobs.key?("ios")
+    refute jobs.key?("changes")
+    refute_includes File.read(WORKFLOW_PATH), "mise run check:ios"
   end
 
   def test_actions_are_pinned_and_workflow_has_no_production_credentials
