@@ -34,7 +34,7 @@ class ValidationWorkflowTest < Minitest::Test
 
     assert_includes detection.fetch("run"), "ios/PhotoInbox mise.toml .github/workflows/validation.yml"
     assert_equal "needs.changes.outputs.ios == 'true'", ios.fetch("if")
-    assert_equal "macos-26", ios.fetch("runs-on")
+    assert_equal "xcode-27", ios.fetch("runs-on")
     assert_includes ios.fetch("steps").filter_map { |step| step["run"] }, "mise run check:ios"
   end
 
