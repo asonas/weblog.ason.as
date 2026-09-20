@@ -283,7 +283,20 @@ export function DraftInbox({
                   aria-label={`${label}を再読み込み`}
                   disabled={Boolean(syncingSource)}
                 >
-                  再読み込み
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    {/* Regen Icons, MIT: ./regen-icons-LICENSE.txt */}
+                    <path d="M17.66 17.66A8 8 0 1 1 12 4M12 4Q17 4 19.5 8.5M14 9L19 9A1 1 0 0 0 20 8L20 3" />
+                  </svg>
                 </button>
               </header>
               {columnItems.length === 0 ? (

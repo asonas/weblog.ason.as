@@ -31,7 +31,7 @@ const LINKS = [
 export function DraftNavigation() {
   return (
     <nav className="draft-navigation" aria-label="執筆メニュー">
-      {LINKS.map((link) => (
+      {[LINKS[2], LINKS[3], LINKS[0], LINKS[1]].map((link) => (
         <a
           href={link.href}
           key={link.href}
@@ -52,14 +52,7 @@ export function DraftNavigation() {
           <span>{link.label}</span>
         </a>
       ))}
-      <a
-        className="draft-navigation__license"
-        href={licenseUrl}
-        target="_blank"
-        rel="noreferrer"
-      >
-        Icons
-      </a>
+      <link rel="license" href={licenseUrl} />
     </nav>
   );
 }

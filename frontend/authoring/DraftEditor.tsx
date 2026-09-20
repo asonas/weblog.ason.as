@@ -3,7 +3,6 @@ import * as Y from "yjs";
 import { DraftCoverSettings } from "./DraftCoverSettings";
 import { DraftInbox } from "./DraftInbox";
 import { DraftNavigation } from "./DraftNavigation";
-import { DraftOfflineStatus } from "./DraftOfflineStatus";
 import { DraftPreview } from "./DraftPreview";
 import {
   DRAFT_BODY_LIMIT,
@@ -23,7 +22,11 @@ const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
 
 export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [session, setSession] = useState<DraftSession>();
-  const [inboxHeight, setInboxHeight] = useState(320);
+  const [editorWidth, setEditorWidth] = useState(608);
+  const workspace = useRef<HTMLDivElement>(null);
+  const [inboxHeight, setInboxHeight] = useState(() =>
+    Math.round(window.innerHeight / 3),
+  );
   const [loadError, setLoadError] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [confirmation, setConfirmation] = useState<PublicationConfirmation>();
@@ -273,7 +276,25 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             })
           }
         />
+        <div className="draft-editor__save-actions">
+          <button
+            type="button"
+            disabled={!session}
+            onClick={() => void session?.sync()}
+          >
+            サーバー保存を再試行
+          </button>
+          <button type="button" disabled={!session} onClick={exportMarkdown}>
+            本文をダウンロード
+          </button>
+          {session?.error && (
+            <button type="button" onClick={recoverAsNewDraft}>
+              内容を新しい下書きへ復旧
+            </button>
+          )}
+        </div>
         <button
+          className="draft-editor__publish"
           type="button"
           disabled={!session || session.isPublishing}
           onClick={() =>
@@ -360,27 +381,6 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             </div>
           </fieldset>
         ))}
-        <details className="draft-editor__recovery">
-          <summary>保存と復旧</summary>
-          <DraftOfflineStatus />
-          <div className="draft-editor__actions">
-            <button
-              type="button"
-              disabled={!session}
-              onClick={() => void session?.sync()}
-            >
-              サーバー保存を再試行
-            </button>
-            <button type="button" disabled={!session} onClick={exportMarkdown}>
-              本文をダウンロード
-            </button>
-            {session?.error && (
-              <button type="button" onClick={recoverAsNewDraft}>
-                内容を新しい下書きへ復旧
-              </button>
-            )}
-          </div>
-        </details>
       </div>
       {confirmation && (
         <section aria-label="公開内容の確認">
@@ -418,7 +418,13 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           </button>
         </section>
       )}
-      <div className="draft-editor__workspace">
+      <div
+        className="draft-editor__workspace"
+        ref={workspace}
+        style={{
+          gridTemplateColumns: `minmax(16rem, ${editorWidth}px) 12px minmax(16rem, 1fr)`,
+        }}
+      >
         <div className="draft-editor__source">
           <textarea
             ref={textarea}
@@ -429,6 +435,50 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             spellCheck={false}
           />
         </div>
+        {/* biome-ignore lint/a11y/useSemanticElements: A focusable separator implements the adjustable split pane. */}
+        <div
+          className="draft-editor__resize"
+          role="separator"
+          tabIndex={0}
+          aria-label="エディタの幅"
+          aria-orientation="vertical"
+          aria-valuemin={256}
+          aria-valuemax={Math.max(
+            256,
+            (workspace.current?.clientWidth || 1132) - 268,
+          )}
+          aria-valuenow={editorWidth}
+          onPointerDown={(event) =>
+            event.currentTarget.setPointerCapture(event.pointerId)
+          }
+          onPointerMove={(event) => {
+            if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+            const rect = workspace.current?.getBoundingClientRect();
+            if (rect)
+              setEditorWidth(
+                Math.max(
+                  256,
+                  Math.min(rect.width - 268, event.clientX - rect.left),
+                ),
+              );
+          }}
+          onPointerUp={(event) =>
+            event.currentTarget.releasePointerCapture(event.pointerId)
+          }
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            setEditorWidth((width) =>
+              Math.max(
+                256,
+                Math.min(
+                  (workspace.current?.clientWidth || 1132) - 268,
+                  width + (event.key === "ArrowRight" ? 24 : -24),
+                ),
+              ),
+            );
+          }}
+        />
         <aside
           id="draft-preview"
           className={`draft-preview${isPreviewOpen ? " is-open" : ""}`}

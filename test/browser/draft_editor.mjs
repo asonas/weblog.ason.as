@@ -247,6 +247,16 @@ end
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.screenshot({ path: "/tmp/weblog-draft-workspace-wide.png" });
   const wideSource = await page.locator(".draft-editor__source").boundingBox();
+  const widthHandle = page.getByRole("separator", { name: "エディタの幅" });
+  await widthHandle.focus();
+  await page.keyboard.press("ArrowRight");
+  assert.ok((await page.locator(".draft-editor__source").boundingBox()).width > wideSource.width);
+  const handleBox = await widthHandle.boundingBox();
+  await page.mouse.move(handleBox.x + 6, handleBox.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + 66, handleBox.y + 40);
+  await page.mouse.up();
+  assert.ok((await page.locator(".draft-editor__source").boundingBox()).width > wideSource.width + 40);
   const widePreview = await preview.boundingBox();
   assert.ok(wideSource && widePreview && widePreview.x >= wideSource.x + wideSource.width - 1);
   const popupPromise = page.waitForEvent("popup");
@@ -264,6 +274,10 @@ end
     "narrow layouts must retain horizontal access to every inbox column",
   );
   assert.equal(await preview.isVisible(), false);
+  const pullBox = await page.getByRole("button", { name: "プレビュー" }).boundingBox();
+  const workspaceBox = await page.locator(".draft-editor__workspace").boundingBox();
+  assert.ok(Math.abs(pullBox.x + pullBox.width - workspaceBox.x - workspaceBox.width) < 2);
+  assert.ok(Math.abs(pullBox.y + pullBox.height / 2 - workspaceBox.y - workspaceBox.height / 2) < 2);
   await page.getByRole("button", { name: "プレビュー" }).click();
   await setTimeout(250);
   assert.equal(await preview.isVisible(), true);
@@ -372,9 +386,7 @@ end
   assert.equal(unauthorizedSends, 1);
   assert.equal(await body.inputValue(), "ログイン切れでも保持する本文");
   await page.unroute("**/uploads/*/commit");
-  await page.getByText("保存と復旧", { exact: true }).click();
   await page.getByRole("button", { name: "サーバー保存を再試行" }).click();
-  await page.getByText("保存と復旧", { exact: true }).click();
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
 
   const remote = await browser.newContext();
@@ -564,7 +576,6 @@ end
   await until(async () => (await storagePage.getByRole("status").textContent()).includes("端末に保存できません"));
   assert.equal(await storageBody.inputValue(), retainedText);
   const downloadPromise = storagePage.waitForEvent("download");
-  await storagePage.getByText("保存と復旧", { exact: true }).click();
   await storagePage.getByRole("button", { name: "本文をダウンロード" }).click();
   const stream = await (await downloadPromise).createReadStream();
   const chunks = [];
@@ -605,7 +616,6 @@ end
   await until(async () =>
     (await recoveryPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("通信できません"),
   );
-  await recoveryPage.getByText("保存と復旧", { exact: true }).click();
   await recoveryPage
     .getByRole("button", { name: "内容を新しい下書きへ復旧" })
     .click();

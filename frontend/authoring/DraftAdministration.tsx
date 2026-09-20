@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DraftNavigation } from "./DraftNavigation";
 import {
   type DraftMetadata,
   draftRoute,
   type LocalDraftSummary,
   readLocalDraftSummaries,
 } from "./draftSession";
+import "./draftEditor.css";
 import "./draftAdministration.css";
 
 type Article = {
@@ -265,19 +267,9 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
 
   return (
     <div className="draft-admin">
-      <aside className="draft-admin-rail" aria-label="記事の操作">
-        <a className="draft-admin-brand" href="/">
-          weblog.ason.as
-        </a>
-        <button
-          className="draft-admin-primary"
-          type="button"
-          disabled={busy}
-          onClick={() => void create(true)}
-        >
-          今日の日記を書く
-        </button>
-        <nav aria-label="記事の状態">
+      <DraftNavigation />
+      <section className="draft-admin-ledger" aria-label="記事一覧">
+        <nav className="draft-admin-filters" aria-label="記事の状態">
           {FILTERS.map(([value, label]) => (
             <button
               key={value}
@@ -290,15 +282,6 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
             </button>
           ))}
         </nav>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void create(false)}
-        >
-          日記以外の記事を書く
-        </button>
-      </aside>
-      <section className="draft-admin-ledger" aria-label="記事一覧">
         <input
           className="draft-admin-search"
           type="search"
