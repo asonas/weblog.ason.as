@@ -9,9 +9,10 @@ ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
 require "aurora_dsql_pg"
 require_relative "../../../lib/weblog_authoring/draft_publication"
 require_relative "../../../lib/weblog_authoring/lambda_api"
+require_relative "../../../lib/weblog_authoring/draft_migration"
 
 SCHEMA = "draft_publish_verify_#{SecureRandom.hex(6)}"
-TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes draft_publication_clock draft_publication_stages draft_output_heads draft_html_outputs draft_route_reservations draft_redirects draft_rename_batches draft_rename_members].freeze
+TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes draft_publication_clock draft_publication_stages draft_output_heads draft_html_outputs draft_route_reservations draft_redirects draft_rename_batches draft_rename_members draft_migration_state draft_migration_articles draft_atom_ids].freeze
 $stdout.sync = true
 
 module IsolatedPublicationSchema
@@ -39,6 +40,24 @@ begin
   puts "Created isolated schema: #{SCHEMA}"
   store = WeblogAuthoring::DraftStore.postgres(pool)
   store.setup!
+  imported_id = "dc802ad0b89946aeb6b7623c2ba7bc79"
+  migration_source = { "format" => 1, "site_url" => "https://example.com", "articles" => [{
+    "id" => imported_id, "page_type" => "date", "route" => "2026-08-01", "title" => "DSQL移行検証",
+    "body" => "旧本文\r\n", "cover_mode" => "none", "cover_image_url" => nil,
+    "created_at" => "2026-08-01T01:02:03Z", "updated_at" => "2026-08-02T04:05:06Z", "published_at" => "2026-08-01T02:03:04Z",
+  }], }
+  migration = WeblogAuthoring::DraftMigration.new(store:)
+  migration.import(migration_source)
+  imported = store.published_snapshot(imported_id)
+  migration.import(migration_source)
+  check("migration rerun preserves the original version, dates and Atom identity") { imported == store.published_snapshot(imported_id) && imported.fetch("updated_at") == "2026-08-02T04:05:06Z" && imported.fetch("atom_id") == "https://example.com/2026-08-01" }
+  store.seal_migration
+  begin
+    migration.import(migration_source)
+    raise "Sealed migration accepted another import"
+  rescue WeblogAuthoring::DraftStore::Error => error
+    check("sealed migration rejects reimport") { error.status == 409 }
+  end
   id = SecureRandom.uuid
   scope = { "protocol" => 1, "generation" => 1 }
   store.create(id, scope)
@@ -52,7 +71,8 @@ begin
   administration = WeblogAuthoring::DraftAdministration.new(store:, publication:)
   daily_results = 4.times.map { Thread.new { administration.daily("2026-09-20") } }.map(&:value)
   check("concurrent daily creation opens one working article") { daily_results.uniq.length == 1 }
-  check("administration lists persisted metadata without publishing") { administration.list.fetch("articles").length == 2 && administration.list.fetch("articles").all? { |article| article.fetch("state") == "draft" } }
+  new_articles = administration.list.fetch("articles").reject { |article| article.fetch("id") == imported_id }
+  check("administration lists persisted metadata without publishing") { new_articles.length == 2 && new_articles.all? { |article| article.fetch("state") == "draft" } }
   original_daily = daily_results.first.fetch("id")
   store.append(original_daily, scope.merge("update_id" => "rename-daily", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0, "metadata" => { "page_date" => { "value" => "2026-09-21", "expected_revision" => 0 } }))
   replacement_daily = 4.times.map { Thread.new { administration.daily("2026-09-20") } }.map(&:value)

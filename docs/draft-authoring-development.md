@@ -149,3 +149,5 @@ The internal worker connects directly to DSQL with IAM, enumerates draft IDs, ca
 The Lambda container build, ECR repository, runtime role, rollback metadata and deployment workflow are wired, but no resource was applied or image deployed by this implementation. The hourly rule remains disabled until a separately authorized migration and activation. No checkpoint activation route was added to the public API. An untrusted caller must never be allowed to supply results to the internal activation method or compaction block.
 
 Outbound Webmention sending remains intentionally disabled. This work must never enable delivery, drain queues or replay unsent notifications. Production deployment and migration require separate authorization.
+
+For the isolated legacy-data copying tool and its recovery boundaries, see [Draft migration rehearsal](draft-migration-rehearsal.md). That tool does not activate production authoring or reader routes.

@@ -123,7 +123,8 @@ module WeblogAuthoring
     def snapshot_from(db, id, version_id)
       row = db.query("SELECT * FROM #{db.prefix}draft_published_versions WHERE article_id = $1 AND id = $2", [id, version_id]).first
       raise DraftStore::Error.new("Published version not found", 404) unless row
-      row.merge("metadata" => JSON.parse(row.fetch("metadata")))
+      identity = db.query("SELECT atom_id FROM #{db.prefix}draft_atom_ids WHERE article_id = $1", [id]).first || {}
+      row.merge("metadata" => JSON.parse(row.fetch("metadata"))).merge(identity)
     end
   end
 end
