@@ -3,9 +3,9 @@ module WeblogAuthoring
   class HomeTimeline
     PAGE_SIZE: Integer
     KEY_PATTERN: Regexp
-    @database: _PageRepository
+    @database: _PageRepository | DraftReader
     def self.key: (PageDocument) -> String
-    def initialize: (_PageRepository) -> void
+    def initialize: (_PageRepository | DraftReader) -> void
     def window: (untyped) -> Hash[String, untyped]
     private
     def cursor: (PageDocument) -> timeline_cursor

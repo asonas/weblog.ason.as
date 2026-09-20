@@ -1,0 +1,12 @@
+module WeblogAuthoring
+  class DraftReader
+    def initialize: (store: DraftStore, database: untyped) -> void
+    def list_diary_routes: () -> Array[String]
+    def list_timeline_pages: (limit: Integer, ?before: timeline_cursor?, ?after: timeline_cursor?, ?month: String?) -> Array[PageDocument]
+    def list_pages: (?limit: Integer?, ?before: page_cursor?, ?after: page_cursor?, ?kind: String?, ?timings: Hash[String, Float]?) -> Array[PageDocument]
+    def find: (String, ?timings: Hash[String, Float]?) -> PageDocument?
+    def find_route: (String) -> PageDocument?
+    def find_image_dimensions: (String) -> untyped
+    def approved_webmentions_for_page: (String) -> untyped
+  end
+end

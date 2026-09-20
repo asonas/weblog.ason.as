@@ -30,6 +30,7 @@ require_relative "draft_store"
 require_relative "draft_publisher"
 require_relative "draft_jobs"
 require_relative "draft_administration"
+require_relative "draft_reader"
 
 module WeblogAuthoring
   class LambdaApi
@@ -62,7 +63,7 @@ module WeblogAuthoring
     EMBED_CACHE_TTL = 7 * 24 * 60 * 60
     EMBED_FALLBACK_CACHE_TTL = 5 * 60
 
-    def initialize(database:, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
+    def initialize(database:, reader_database: nil, oauth: nil, session_codec: nil, redirect_uri: nil, frontend_url: nil,
                    allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
                    development_asset_bucket: nil, site_bucket: nil, search_queue_url: nil, sqs_client: nil, logger: $stderr,
                    search_index: nil, lambda_client: nil, inbox_sync_function_name: nil,
@@ -76,6 +77,8 @@ module WeblogAuthoring
       @draft_jobs = draft_jobs
       @draft_outputs = draft_outputs
       @database = database
+      @published_reader = reader_database
+      @reader_database = reader_database || database
       @oauth = oauth
       @session_codec = session_codec
       @redirect_uri = redirect_uri
@@ -220,8 +223,8 @@ module WeblogAuthoring
       return new_editor_response(event) if method == "GET" && path == "/api/editor/new"
       if method == "GET" && page_id_path?(path)
         id = event.dig("pathParameters", "id")
-        page = DraftPublisher.page(@draft_store&.published_snapshot(id))
-        return page_response(page || @database.find(id), event:)
+        page = @published_reader ? @reader_database.find(id) : DraftPublisher.page(@draft_store&.published_snapshot(id)) || @database.find(id)
+        return page_response(page, event:)
       end
       return route_response(event) if method == "GET" && route_path?(path)
       return save_response(event, status: 201) if method == "POST" && path == "/api/authoring/pages"
@@ -359,7 +362,7 @@ module WeblogAuthoring
     def page_window(query, timings: {})
       if query["kind"] == "timeline"
         begin
-          window = measure(timings, "db") { HomeTimeline.new(@database).window(query) }
+          window = measure(timings, "db") { HomeTimeline.new(@reader_database).window(query) }
         rescue ArgumentError => error
           raise InputError, error.message
         end
@@ -373,7 +376,7 @@ module WeblogAuthoring
       before ||= month_boundary(query["month"]) if query["month"]
       raise InputError, "beforeとafterは同時に指定できません" if before && after
 
-      pages = measure(timings, "db") { @database.list_pages(limit: 31, before:, after:, kind:) }
+      pages = measure(timings, "db") { @reader_database.list_pages(limit: 31, before:, after:, kind:) }
       has_more = pages.length > 30
       pages = pages.first(30)
       {
@@ -389,13 +392,13 @@ module WeblogAuthoring
       return false if pages.empty? && before.nil?
 
       cursor = pages.empty? ? before : page_cursor(pages.first, kind:)
-      @database.list_pages(limit: 1, after: cursor, kind:).any?
+      @reader_database.list_pages(limit: 1, after: cursor, kind:).any?
     end
 
     def older_pages?(pages, kind:)
       return false if pages.empty?
 
-      @database.list_pages(limit: 1, before: page_cursor(pages.last, kind:), kind:).any?
+      @reader_database.list_pages(limit: 1, before: page_cursor(pages.last, kind:), kind:).any?
     end
 
     def page_cursor(page, kind:)
@@ -426,20 +429,20 @@ module WeblogAuthoring
 
     def tags_response(event)
       timings = {} # @type var timings: Hash[String, Float]
-      pages = @database.list_pages(timings:)
+      pages = @reader_database.list_pages(timings:)
       tags = measure(timings, "tag_scan") { recent_tags(pages) }
       timed_json_response(event, timings, { "tags" => tags })
     end
 
     def archive_response(event)
       timings = {} # @type var timings: Hash[String, Float]
-      pages = @database.list_pages(timings:)
+      pages = @reader_database.list_pages(timings:)
       archive = measure(timings, "archive_scan") { archive_years(pages) }
       timed_json_response(event, timings, { "archive" => archive })
     end
 
     def page_names_response(event)
-      entries = WeblogAuthoring.page_name_entries(@database.list_pages)
+      entries = WeblogAuthoring.page_name_entries(@reader_database.list_pages)
       conditional_json_response(
         event,
         "names" => entries.map { |entry| entry.fetch("name") },
@@ -516,7 +519,7 @@ module WeblogAuthoring
     def daily_editor_response(event)
       date = Time.now.getlocal(TOKYO_OFFSET).to_date # steep:ignore ArgumentTypeMismatch
       title = date.iso8601
-      page = @database.find_route(title)
+      page = @reader_database.find_route(title)
       return page_response(page, event:) unless page.nil?
 
       links = [
@@ -985,14 +988,14 @@ module WeblogAuthoring
 
     def diary_navigation_response(event)
       route = event.dig("queryStringParameters", "route").to_s
-      conditional_json_response(event, DiaryNavigation.new(@database).neighbors(route))
+      conditional_json_response(event, DiaryNavigation.new(@reader_database).neighbors(route))
     end
 
     def related_pages_response(event)
       timings = {} # @type var timings: Hash[String, Float]
       query = event.fetch("queryStringParameters", EMPTY_HASH).to_h # @type var query: Hash[String, untyped]
       # @type var page: PageDocument?
-      page = query["excluding_id"].to_s.empty? ? nil : @database.find(query["excluding_id"], timings:)
+      page = query["excluding_id"].to_s.empty? ? nil : @reader_database.find(query["excluding_id"], timings:)
       result = related_page_result(
         query.fetch("route", ""),
         page&.body || query.fetch("body", ""),
@@ -1088,7 +1091,7 @@ module WeblogAuthoring
       destination = resolution["redirect"]
       return { statusCode: 301, headers: { "location" => "/api/routes/#{WeblogAuthoring.encoded_route(destination)}", "cache-control" => "no-cache" }, body: "" } if destination
       page = DraftPublisher.page(resolution["snapshot"])
-      page ||= @database.find_route(route)
+      page ||= @reader_database.find_route(route)
       return page_response(page, event:) unless page.nil?
 
       response = json_response(200, editor_json(title: route, name: route, body: "", linked_pages_has_more: true))
@@ -1152,6 +1155,7 @@ module WeblogAuthoring
     end
 
     def line_updated_at(page)
+      return Array.new(page.body.split("\n", -1).length, page.updated_at.iso8601(9)) if @published_reader
       metadata = @database.scrapbox_line_metadata(page.id)
       return Array.new(page.body.split("\n", -1).length, page.updated_at.iso8601(9)) if metadata.empty?
 
@@ -1161,7 +1165,7 @@ module WeblogAuthoring
     end
 
     def related_page_result(route, body, excluding_id: nil, offset: 0, timings: {})
-      pages = @database.list_pages(timings:)
+      pages = @reader_database.list_pages(timings:)
       outgoing_names, outgoing_urls = measure(timings, "related_input") do
         [WeblogAuthoring.extract_wiki_links(body.to_s).map(&:name).uniq,
          WeblogAuthoring.extract_external_urls(body.to_s),]

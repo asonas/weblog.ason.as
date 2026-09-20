@@ -69,6 +69,23 @@ The migration code has no S3, SQS, deployment or Webmention sender client. Gener
 HTML, feed and search must be repaired and checked before any production reader
 switch. This local tool does not yet perform that switch or its pre-reopen rollback.
 
+## Published reader preparation
+
+`DraftReader` reads article bodies and metadata exclusively from active published
+snapshots. Its list windows, timeline, tags, related pages and diary navigation do
+not read working versions or fall back to legacy articles. Image dimensions and
+approved incoming Webmentions still come from the existing auxiliary database.
+
+Inject this reader as `LambdaApi`'s `reader_database` and as `DraftPublisher`'s
+`database` when assembling an isolated cutover rehearsal. The API then returns
+404 for unpublished IDs, including IDs also present in the legacy database.
+Unknown routes retain the existing empty link-hub response. Old Scrapbox line
+timestamps are not attached to a newly published body.
+
+This injection is not a cutover gate: it does not stop either writer, configure
+Atom/search jobs, or activate the production factory. Those must be connected and
+verified together before production activation. The default factory is unchanged.
+
 ## Verification
 
 `test/authoring/test_draft_migration.rb` covers preservation, Atom IDs after rename,
@@ -79,6 +96,10 @@ initialization/rerun/sealing in a randomly named isolated DSQL schema. Its 24-ta
 allowlist includes the three migration/identity tables; cleanup checks that no
 unexpected table is present and confirms the schema is gone. Running that external
 DDL requires the separately approved isolated-test scope.
+
+`test/authoring/test_draft_reader.rb` exercises the opt-in reader APIs, published
+HTML repair, pagination and diary navigation with real SQLite stores, including
+conflicting legacy content and unpublished metadata changes.
 
 These checks do not demonstrate a production drain, maintenance gate, complete
 reader/schedule cutover, real-device IME/mobile behavior, or production visual parity.
