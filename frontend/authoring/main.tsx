@@ -422,7 +422,10 @@ function RootApp({
     window.location.pathname === "/draft-editor"
   ) {
     return auth.can_edit || isLocalDraft ? (
-      <DraftEditor csrf={draftCsrf} />
+      <>
+        <HeaderSearch />
+        <DraftEditor csrf={draftCsrf} />
+      </>
     ) : (
       <p>下書きを編集するにはログインしてください。</p>
     );

@@ -256,7 +256,7 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(180deg, rgb(5 29 34 / 30%), rgb(5 29 34 / 86%));
+  background: var(--image-overlay-eased);
 }
 .card-home .cover-journal__lead {
   max-inline-size: 1200px;

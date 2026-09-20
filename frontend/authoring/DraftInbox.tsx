@@ -124,7 +124,6 @@ export function DraftInbox({
 }) {
   const [items, setItems] = useState<Array<InboxItem>>([]);
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
   const [busyItem, setBusyItem] = useState<string>();
   const [syncingSource, setSyncingSource] = useState<InboxSource>();
 
@@ -184,11 +183,8 @@ export function DraftInbox({
           await load();
           if (run.status === "failed")
             throw new Error("素材を更新できませんでした");
-          setStatus(
-            run.status === "completed_with_errors"
-              ? "一部の素材を更新できませんでした"
-              : "素材を更新しました",
-          );
+          if (run.status === "completed_with_errors")
+            setError("一部の素材を更新できませんでした");
         }
       } catch (cause) {
         setError(
@@ -252,7 +248,6 @@ export function DraftInbox({
           field.focus();
           field.setSelectionRange(next.caret, next.caret);
         });
-        setStatus("素材を本文へ追加しました");
       } catch (cause) {
         setError(
           cause instanceof Error ? cause.message : "素材を追加できませんでした",
@@ -276,7 +271,12 @@ export function DraftInbox({
               key={source}
             >
               <header>
-                <h2>{label}</h2>
+                <h2>
+                  {label}{" "}
+                  <span className="draft-inbox__count">
+                    {columnItems.length}
+                  </span>
+                </h2>
                 <button
                   type="button"
                   onClick={() => void sync(source)}
@@ -289,7 +289,11 @@ export function DraftInbox({
               {columnItems.length === 0 ? (
                 <p className="draft-inbox__empty">素材はありません</p>
               ) : (
-                <ol>
+                <ol
+                  className={
+                    source === "photo" ? "draft-inbox__photos" : undefined
+                  }
+                >
                   {columnItems.map((item) => {
                     const photo = payloadString(item, "preview_url");
                     const thumbnail =
@@ -353,12 +357,11 @@ export function DraftInbox({
           );
         })}
       </div>
-      <p className="draft-inbox__status" aria-live="polite">
-        {status}
-      </p>
-      <p className="draft-inbox__error" aria-live="assertive">
-        {error}
-      </p>
+      {error && (
+        <p className="draft-inbox__error" role="alert">
+          {error}
+        </p>
+      )}
     </section>
   );
 }

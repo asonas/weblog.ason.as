@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
+import { DraftCoverSettings } from "./DraftCoverSettings";
 import { DraftInbox } from "./DraftInbox";
+import { DraftNavigation } from "./DraftNavigation";
 import { DraftOfflineStatus } from "./DraftOfflineStatus";
 import { DraftPreview } from "./DraftPreview";
 import {
@@ -21,6 +23,7 @@ const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
 
 export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [session, setSession] = useState<DraftSession>();
+  const [inboxHeight, setInboxHeight] = useState(320);
   const [loadError, setLoadError] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [confirmation, setConfirmation] = useState<PublicationConfirmation>();
@@ -37,6 +40,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     return { id, isNew };
   });
   const recoveryKey = `draft-recovery:${id}`;
+  useEffect(() => {
+    document.documentElement.dataset.draftWorkspace = "true";
+    return () => {
+      delete document.documentElement.dataset.draftWorkspace;
+    };
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -232,6 +241,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const bytes = new TextEncoder().encode(session?.body.toString() || "").length;
   return (
     <section className="draft-editor" aria-label="下書き編集">
+      <DraftNavigation />
       <div className="draft-editor__titlebar">
         <label className="visually-hidden" htmlFor="draft-title">
           タイトル
@@ -242,7 +252,25 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           value={session?.metadata.title || ""}
           disabled={!session || session.isPublishing}
           onChange={(event) =>
-            session?.setMetadata({ title: event.target.value })
+            session?.setMetadata({
+              title: event.target.value,
+              ...(session.metadata.page_type !== "date" ||
+              (session.metadata.page_date &&
+                session.metadata.title === session.metadata.page_date)
+                ? {
+                    page_type: /^\d{4}-\d{2}-\d{2}$/.test(
+                      event.target.value.trim(),
+                    )
+                      ? "date"
+                      : "named",
+                    page_date: /^\d{4}-\d{2}-\d{2}$/.test(
+                      event.target.value.trim(),
+                    )
+                      ? event.target.value.trim()
+                      : "",
+                  }
+                : {}),
+            })
           }
         />
         <button
@@ -260,6 +288,99 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
               ? "公開内容を確認中"
               : "公開"}
         </button>
+      </div>
+      <div className="draft-editor__status">
+        {session && <DraftCoverSettings session={session} />}
+        {session?.metadata.page_type === "date" && (
+          <label className="draft-editor__date">
+            日付URL
+            <input
+              type="date"
+              aria-label="日記の日付（URL）"
+              value={
+                session.metadata.page_date ||
+                (/^\d{4}-\d{2}-\d{2}$/.test(session.metadata.title)
+                  ? session.metadata.title
+                  : "")
+              }
+              disabled={session.isPublishing}
+              onChange={(event) =>
+                session.setMetadata({ page_date: event.target.value })
+              }
+            />
+          </label>
+        )}
+        <p id="draft-size">
+          {bytes >= DRAFT_BODY_LIMIT * 0.9
+            ? `本文 ${Math.ceil(bytes / 1024)} / 512 KiB。上限を超えても本文は削除されません。`
+            : ""}
+        </p>
+        <p role="status">
+          {session
+            ? `${session.localStatus} · ${session.serverStatus}${session.publicationStatus ? ` · ${session.publicationStatus}` : ""}`
+            : "読み込み中"}
+        </p>
+        <p role="alert">{loadError || publicationError || session?.error}</p>
+        {session?.pendingOutputs && (
+          <button
+            type="button"
+            disabled={session.isRetryingOutputs}
+            onClick={() => void session.retryOutputs()}
+          >
+            {session.isRetryingOutputs
+              ? "公開後の更新を再試行中"
+              : "公開後の更新を再試行"}
+          </button>
+        )}
+
+        {session?.metadataConflicts.map(({ field, local, remote, source }) => (
+          <fieldset key={field} className="draft-editor__conflict">
+            <legend>{FIELD_LABELS[field]}の競合</legend>
+            <p>
+              別の編集で同じ項目が変更されました。残す値を選んでください。本文と未送信の変更は端末に保持しています。
+            </p>
+            <p>この端末: {local || "（未設定）"}</p>
+            <p>
+              {source === "tab" ? "別タブ" : "サーバー"}:{" "}
+              {remote || "（未設定）"}
+            </p>
+            <div className="draft-editor__actions">
+              <button
+                type="button"
+                onClick={() => session.resolveMetadata(field, "local")}
+              >
+                この端末の値を使う
+              </button>
+              <button
+                type="button"
+                onClick={() => session.resolveMetadata(field, "remote")}
+              >
+                {source === "tab" ? "別タブの値を使う" : "サーバーの値を使う"}
+              </button>
+            </div>
+          </fieldset>
+        ))}
+        <details className="draft-editor__recovery">
+          <summary>保存と復旧</summary>
+          <DraftOfflineStatus />
+          <div className="draft-editor__actions">
+            <button
+              type="button"
+              disabled={!session}
+              onClick={() => void session?.sync()}
+            >
+              サーバー保存を再試行
+            </button>
+            <button type="button" disabled={!session} onClick={exportMarkdown}>
+              本文をダウンロード
+            </button>
+            {session?.error && (
+              <button type="button" onClick={recoverAsNewDraft}>
+                内容を新しい下書きへ復旧
+              </button>
+            )}
+          </div>
+        </details>
       </div>
       {confirmation && (
         <section aria-label="公開内容の確認">
@@ -297,72 +418,6 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           </button>
         </section>
       )}
-      <details>
-        <summary>記事とカバーの設定</summary>
-        <label htmlFor="draft-type">記事種別</label>
-        <select
-          id="draft-type"
-          value={session?.metadata.page_type || "named"}
-          disabled={!session || session.isPublishing}
-          onChange={(event) =>
-            session?.setMetadata({ page_type: event.target.value })
-          }
-        >
-          <option value="named">記事</option>
-          <option value="date">日記</option>
-        </select>
-        {session?.metadata.page_type === "date" && (
-          <>
-            <label htmlFor="draft-date">日記の日付（URL）</label>
-            <input
-              id="draft-date"
-              type="date"
-              disabled={session.isPublishing}
-              value={
-                session.metadata.page_date ||
-                (/^\d{4}-\d{2}-\d{2}$/.test(session.metadata.title)
-                  ? session.metadata.title
-                  : "")
-              }
-              onChange={(event) =>
-                session.setMetadata({ page_date: event.target.value })
-              }
-            />
-          </>
-        )}
-        <label htmlFor="draft-cover-mode">カバー</label>
-        <select
-          id="draft-cover-mode"
-          value={session?.metadata.cover_mode || "auto"}
-          disabled={!session || session.isPublishing}
-          onChange={(event) =>
-            session?.setMetadata({
-              cover_mode: event.target.value,
-              cover_image_url:
-                event.target.value === "explicit"
-                  ? session.metadata.cover_image_url || ""
-                  : null,
-            })
-          }
-        >
-          <option value="auto">自動</option>
-          <option value="none">なし</option>
-          <option value="explicit">指定</option>
-        </select>
-        {session?.metadata.cover_mode === "explicit" && (
-          <>
-            <label htmlFor="draft-cover">カバー画像のパス</label>
-            <input
-              id="draft-cover"
-              disabled={session.isPublishing}
-              value={session.metadata.cover_image_url || ""}
-              onChange={(event) =>
-                session.setMetadata({ cover_image_url: event.target.value })
-              }
-            />
-          </>
-        )}
-      </details>
       <div className="draft-editor__workspace">
         <div className="draft-editor__source">
           <textarea
@@ -396,75 +451,62 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           {isPreviewOpen ? "閉じる" : "プレビュー"}
         </button>
       </div>
-      {session && <DraftInbox session={session} textarea={textarea} />}
-      <p id="draft-size">
-        {bytes >= DRAFT_BODY_LIMIT * 0.9
-          ? `本文 ${Math.ceil(bytes / 1024)} / 512 KiB。上限を超えても本文は削除されません。`
-          : ""}
-      </p>
-      <p role="status">
-        {session
-          ? `${session.localStatus} · ${session.serverStatus}${session.publicationStatus ? ` · ${session.publicationStatus}` : ""}`
-          : "読み込み中"}
-      </p>
-      <p role="alert">{loadError || publicationError || session?.error}</p>
-      {session?.pendingOutputs && (
-        <button
-          type="button"
-          disabled={session.isRetryingOutputs}
-          onClick={() => void session.retryOutputs()}
+      {session && (
+        <div
+          className="draft-editor__inbox"
+          style={{ height: `min(${inboxHeight}px, 55dvh)` }}
         >
-          {session.isRetryingOutputs
-            ? "公開後の更新を再試行中"
-            : "公開後の更新を再試行"}
-        </button>
-      )}
-      <DraftOfflineStatus />
-      {session?.metadataConflicts.map(({ field, local, remote, source }) => (
-        <fieldset key={field} className="draft-editor__conflict">
-          <legend>{FIELD_LABELS[field]}の競合</legend>
-          <p>
-            別の編集で同じ項目が変更されました。残す値を選んでください。本文と未送信の変更は端末に保持しています。
-          </p>
-          <p>この端末: {local || "（未設定）"}</p>
-          <p>
-            {source === "tab" ? "別タブ" : "サーバー"}: {remote || "（未設定）"}
-          </p>
-          <div className="draft-editor__actions">
-            <button
-              type="button"
-              onClick={() => session.resolveMetadata(field, "local")}
-            >
-              この端末の値を使う
-            </button>
-            <button
-              type="button"
-              onClick={() => session.resolveMetadata(field, "remote")}
-            >
-              {source === "tab" ? "別タブの値を使う" : "サーバーの値を使う"}
-            </button>
+          {/* biome-ignore lint/a11y/useSemanticElements: A focusable splitter controls pane size; it is not a document thematic break. */}
+          <div
+            className="draft-inbox__resize"
+            role="separator"
+            tabIndex={0}
+            aria-label="インボックスの高さ"
+            aria-orientation="horizontal"
+            aria-valuemin={160}
+            aria-valuemax={Math.max(160, Math.round(window.innerHeight * 0.55))}
+            aria-valuenow={Math.min(
+              inboxHeight,
+              Math.max(160, Math.round(window.innerHeight * 0.55)),
+            )}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+              event.preventDefault();
+              setInboxHeight((height) =>
+                Math.max(
+                  160,
+                  Math.min(
+                    window.innerHeight * 0.55,
+                    height + (event.key === "ArrowUp" ? 24 : -24),
+                  ),
+                ),
+              );
+            }}
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              event.preventDefault();
+            }}
+            onPointerMove={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId))
+                setInboxHeight(
+                  Math.max(
+                    160,
+                    Math.min(
+                      window.innerHeight * 0.55,
+                      window.innerHeight - event.clientY,
+                    ),
+                  ),
+                );
+            }}
+            onPointerUp={(event) =>
+              event.currentTarget.releasePointerCapture(event.pointerId)
+            }
+          >
+            <span />
           </div>
-        </fieldset>
-      ))}
-      <div className="draft-editor__actions">
-        <button
-          type="button"
-          disabled={!session}
-          onClick={() => void session?.sync()}
-        >
-          サーバー保存を再試行
-        </button>
-        <button type="button" disabled={!session} onClick={exportMarkdown}>
-          本文をダウンロード
-        </button>
-        {session?.error && (
-          <button type="button" onClick={recoverAsNewDraft}>
-            内容を新しい下書きへ復旧
-          </button>
-        )}
-        <a href="/draft-editor">別の下書きを書く</a>
-        <a href="/authoring/articles">記事一覧</a>
-      </div>
+          <DraftInbox session={session} textarea={textarea} />
+        </div>
+      )}
     </section>
   );
 }

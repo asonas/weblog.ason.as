@@ -38,13 +38,11 @@ try {
   await page.goto("http://127.0.0.1:15182/authoring/articles");
   await page.getByRole("button", { name: "今日の日記を書く", exact: true }).click();
   await page.getByRole("textbox", { name: "本文", exact: true }).fill("今日の日記の本文");
-  await page.getByText("記事とカバーの設定", { exact: true }).click();
   const diaryDate = await page.getByLabel("日記の日付（URL）", { exact: true }).inputValue();
   await page.getByLabel("タイトル", { exact: true }).fill("日付とは別の日記タイトル");
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
   const diary = page.url();
   await page.reload();
-  await page.getByText("記事とカバーの設定", { exact: true }).click();
   assert.equal(await page.getByLabel("日記の日付（URL）", { exact: true }).inputValue(), diaryDate);
   assert.equal(await page.getByLabel("タイトル", { exact: true }).inputValue(), "日付とは別の日記タイトル");
   await page.getByRole("link", { name: "記事一覧", exact: true }).click();

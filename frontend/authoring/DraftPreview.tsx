@@ -1,7 +1,7 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DraftMetadata } from "./draftSession";
-import { autoCoverImageUrl, EDITOR_EXTENSIONS } from "./editor";
+import { autoCoverImageUrl, EDITOR_EXTENSIONS, LineUpdateRail } from "./editor";
 import { markdownForEditor } from "./markdown";
 import { PublicArticlePresentation } from "./PublicArticlePresentation";
 
@@ -36,7 +36,18 @@ type DraftPreviewProps = {
 
 export function DraftPreview({ body, metadata }: DraftPreviewProps) {
   const root = useRef<HTMLDivElement>(null);
+  const navigation = useRef<HTMLDivElement>(null);
   const isOnline = useOnlineStatus();
+  useEffect(() => {
+    const header = document.querySelector<HTMLElement>("body > .site-header");
+    const host = navigation.current;
+    if (!header || !host) return;
+    const next = header.nextSibling;
+    host.append(header);
+    return () => {
+      document.body.insertBefore(header, next);
+    };
+  }, []);
   const resolvedCoverImageUrl = useMemo(
     () => coverImageUrl(body, metadata),
     [body, metadata],
@@ -98,6 +109,7 @@ export function DraftPreview({ body, metadata }: DraftPreviewProps) {
 
   return (
     <div ref={root} className="draft-preview__document">
+      <div ref={navigation} />
       <PublicArticlePresentation
         className="draft-preview__article"
         coverImageUrl={resolvedCoverImageUrl}
@@ -107,7 +119,15 @@ export function DraftPreview({ body, metadata }: DraftPreviewProps) {
           "無題"
         }
       >
-        <EditorContent editor={editor} />
+        <div className="editor-shell">
+          <LineUpdateRail
+            body={body}
+            editor={editor}
+            updates={[]}
+            includesTitle={false}
+          />
+          <EditorContent editor={editor} />
+        </div>
       </PublicArticlePresentation>
       {!isOnline && MEDIA_PATTERN.test(body) && (
         <p className="draft-preview__offline-media" role="status">

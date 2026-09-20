@@ -35,6 +35,10 @@ try {
   await ready("http://127.0.0.1:15182/api/draft-test-health", viteLog);
   browser = await chromium.launch({ channel: "chrome", headless: true });
   const page = await browser.newPage();
+  await page.route(/\/assets\/.*\.webp$/, (route) => route.fulfill({
+    path: "test/fixtures/article_comparison/assets/rubykaigi-follow-up.webp",
+    contentType: "image/webp",
+  }));
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const inboxItems = [
@@ -152,7 +156,7 @@ try {
     .getByRole("button", { name: "Raindropを再読み込み" })
     .click();
   await until(() => inboxSyncSource === "raindrop");
-  await inbox.getByText("素材を更新しました").waitFor();
+  await until(async () => await inbox.getByRole("button", { name: "Raindropを再読み込み" }).isEnabled());
 
   await body.fill("前半\n\n後半");
   await body.evaluate((field) => field.setSelectionRange(4, 4));
@@ -177,6 +181,16 @@ try {
   await inbox.getByText("写真を採用できませんでした").waitFor();
   assert.equal(await body.inputValue(), beforeFailedAdoption);
 
+  await page.getByLabel("タイトル", { exact: true }).fill("2026-09-20");
+  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  const diaryDocument = await (await page.request.get(new URL("/api/authoring/drafts/" + legacyId, page.url()).href)).json();
+  assert.equal(diaryDocument.metadata.page_type.value, "date");
+  assert.equal(diaryDocument.metadata.page_date.value, "2026-09-20");
+  await page.getByLabel("タイトル", { exact: true }).fill("日記ではない記事");
+  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  const namedDocument = await (await page.request.get(new URL("/api/authoring/drafts/" + legacyId, page.url()).href)).json();
+  assert.equal(namedDocument.metadata.page_type.value, "named");
+  await page.setViewportSize({ width: 1600, height: 1000 });
   const previewMarkdown = `## 表とコード
 
 | 時刻 | 事象 |
@@ -208,6 +222,30 @@ end
       .locator(".article-reading-header img")
       .getAttribute("src"))?.endsWith("/assets/photo.webp"),
   );
+  assert.equal(await page.locator("body > .site-header").count(), 0);
+  assert.equal(await preview.getByRole("link", { name: "weblog.ason.as", exact: true }).count(), 1);
+  assert.ok(await preview.locator(".line-update-rail__segment").count() > 0);
+  assert.equal(await page.getByLabel("記事種別", { exact: true }).count(), 0);
+  const firstPhoto = await photoColumn.getByRole("button", { name: "写真を本文へ追加" }).nth(0).boundingBox();
+  const secondPhoto = await photoColumn.getByRole("button", { name: "写真を本文へ追加" }).nth(1).boundingBox();
+  assert.ok(firstPhoto && secondPhoto && Math.abs(firstPhoto.y - secondPhoto.y) < 2, "two photos are visible in the first row");
+  const dock = page.locator(".draft-editor__inbox");
+  const beforeResize = await dock.boundingBox();
+  const splitter = page.getByRole("separator", { name: "インボックスの高さ" });
+  await splitter.focus();
+  await splitter.press("ArrowUp");
+  const afterKeyboardResize = await dock.boundingBox();
+  assert.ok(afterKeyboardResize.height > beforeResize.height);
+  const handle = await splitter.boundingBox();
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2, handle.y - 30);
+  await page.mouse.up();
+  const afterDragResize = await dock.boundingBox();
+  assert.ok(afterDragResize.height > afterKeyboardResize.height);
+  assert.ok(Math.abs(afterDragResize.y + afterDragResize.height - page.viewportSize().height) < 2, "inbox reaches the viewport bottom");
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.screenshot({ path: "/tmp/weblog-draft-workspace-wide.png" });
   const wideSource = await page.locator(".draft-editor__source").boundingBox();
   const widePreview = await preview.boundingBox();
   assert.ok(wideSource && widePreview && widePreview.x >= wideSource.x + wideSource.width - 1);
@@ -229,6 +267,7 @@ end
   await page.getByRole("button", { name: "プレビュー" }).click();
   await setTimeout(250);
   assert.equal(await preview.isVisible(), true);
+  await page.screenshot({ path: "/tmp/weblog-draft-workspace-narrow.png" });
   await page.getByRole("button", { name: "閉じる" }).click();
   await setTimeout(250);
   assert.equal(await preview.isVisible(), false);
@@ -328,12 +367,14 @@ end
     await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "ログインが必要です" }) });
   });
   await body.fill("ログイン切れでも保持する本文");
-  await until(async () => (await page.getByRole("alert").textContent()).includes("ログインが必要"));
+  await until(async () => (await page.locator(".draft-editor__status > [role=alert]").textContent()).includes("ログインが必要"));
   await setTimeout(2200);
   assert.equal(unauthorizedSends, 1);
   assert.equal(await body.inputValue(), "ログイン切れでも保持する本文");
   await page.unroute("**/uploads/*/commit");
+  await page.getByText("保存と復旧", { exact: true }).click();
   await page.getByRole("button", { name: "サーバー保存を再試行" }).click();
+  await page.getByText("保存と復旧", { exact: true }).click();
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
 
   const remote = await browser.newContext();
@@ -415,14 +456,15 @@ end
 
   await page.route("**/api/authoring/drafts/**", (route) => route.abort("internetdisconnected"));
   await page.getByLabel("タイトル", { exact: true }).fill("別項目の変更とは競合しないタイトル");
-  await competingPage.getByText("記事とカバーの設定", { exact: true }).click();
-  await competingPage.getByLabel("記事種別", { exact: true }).selectOption("date");
+  await competingPage.getByRole("button", { name: "カバー：自動", exact: true }).click();
+  await competingPage.getByRole("radio", { name: "なし", exact: false }).check();
+  await competingPage.getByRole("button", { name: "カバー設定を閉じる" }).click();
   await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
   await page.unroute("**/api/authoring/drafts/**");
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
   assert.equal(await conflict.count(), 0);
-  assert.equal(await page.getByLabel("記事種別", { exact: true }).inputValue(), "date");
+  assert.equal(await page.getByRole("button", { name: "カバー：なし", exact: true }).count(), 1);
   await competingPage.reload();
   await until(async () => await competingPage.getByLabel("タイトル", { exact: true }).inputValue() === "別項目の変更とは競合しないタイトル");
   await competing.close();
@@ -522,6 +564,7 @@ end
   await until(async () => (await storagePage.getByRole("status").textContent()).includes("端末に保存できません"));
   assert.equal(await storageBody.inputValue(), retainedText);
   const downloadPromise = storagePage.waitForEvent("download");
+  await storagePage.getByText("保存と復旧", { exact: true }).click();
   await storagePage.getByRole("button", { name: "本文をダウンロード" }).click();
   const stream = await (await downloadPromise).createReadStream();
   const chunks = [];
@@ -560,8 +603,9 @@ end
   );
   await recoveryBody.fill("破損を避けて新しい下書きへ復旧する本文");
   await until(async () =>
-    (await recoveryPage.getByRole("alert").textContent()).includes("通信できません"),
+    (await recoveryPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("通信できません"),
   );
+  await recoveryPage.getByText("保存と復旧", { exact: true }).click();
   await recoveryPage
     .getByRole("button", { name: "内容を新しい下書きへ復旧" })
     .click();
@@ -596,7 +640,7 @@ end
   await recoveryContext.close();
 
   await body.fill("あ".repeat(174_763));
-  await until(async () => (await page.getByRole("alert").textContent()).includes("512 KiB"));
+  await until(async () => (await page.locator(".draft-editor__status > [role=alert]").textContent()).includes("512 KiB"));
   assert.equal((await body.inputValue()).length, 174_763);
   await page.reload();
   await until(async () => (await body.inputValue()).length === 174_763);
@@ -626,7 +670,7 @@ end
     } else await route.continue();
   });
   await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).click();
-  await until(async () => (await publicationPage.getByRole("alert").textContent()).includes("通信できません"));
+  await until(async () => (await publicationPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("通信できません"));
   await publicationPage.reload();
   let dispatchPolls = 0;
   await publicationPage.route("**/publications/*/run", async (route) => {
@@ -665,11 +709,11 @@ end
   await concurrentBody.fill("別のタブで追記した内容");
   await until(async () => (await concurrentPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
   await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).click();
-  await until(async () => (await publicationPage.getByRole("alert").textContent()).includes("再確認してください"));
+  await until(async () => (await publicationPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("再確認してください"));
   assert.ok(!(await (await fetch(readerUrl)).text()).includes("別のタブで追記した内容"));
   await publicationPage.getByRole("button", { name: "公開", exact: true }).click();
   await until(async () => (await publicationBody.inputValue()) === "別のタブで追記した内容");
-  await until(async () => (await publicationPage.getByRole("alert").textContent()).includes("合流しました"));
+  await until(async () => (await publicationPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("合流しました"));
   await publicationPage.getByRole("button", { name: "公開", exact: true }).click();
   await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).click();
   await until(async () => (await publicationPage.getByRole("status").textContent()).includes("公開が完了しました"));

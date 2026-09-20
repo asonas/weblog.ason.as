@@ -746,14 +746,16 @@ function blockLineRects(block: HTMLElement): Array<DOMRect> {
   });
 }
 
-function LineUpdateRail({
+export function LineUpdateRail({
   body,
   editor,
   updates,
+  includesTitle = true,
 }: {
   body: string;
   editor: Editor | null;
   updates: Array<string | null>;
+  includesTitle?: boolean;
 }) {
   const [markers, setMarkers] = useState<Array<LineUpdateMarker>>([]);
 
@@ -768,7 +770,7 @@ function LineUpdateRail({
 
       const shellRect = shell.getBoundingClientRect();
       const blocks = Array.from(editorElement.children).slice(
-        1,
+        includesTitle ? 1 : 0,
       ) as Array<HTMLElement>;
       const visibleUpdates = lines.flatMap((line, index) =>
         isVisibleLine(line) ? [updates[index] || null] : [],
@@ -810,7 +812,7 @@ function LineUpdateRail({
     const observer = new ResizeObserver(measure);
     observer.observe(editor.view.dom);
     return () => observer.disconnect();
-  }, [body, editor, updates]);
+  }, [body, editor, updates, includesTitle]);
 
   return (
     <div className="line-update-rail" aria-hidden="true">
