@@ -100,4 +100,14 @@ run "dynamic_api_caching_disabled" {
     condition     = one(aws_cloudfront_distribution.weblog.default_cache_behavior[0].function_association).function_arn == aws_cloudfront_function.site_routes.arn
     error_message = "App routes must be rewritten before looking up static objects"
   }
+
+  assert {
+    condition     = strcontains(aws_cloudfront_function.site_routes.code, "uri === \"/authoring/articles\"")
+    error_message = "The article administration route must serve the app shell"
+  }
+
+  assert {
+    condition     = strcontains(aws_cloudfront_function.site_routes.code, "uri === \"/draft-editor\"")
+    error_message = "The draft editor route must serve the app shell"
+  }
 }
