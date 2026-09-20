@@ -71,6 +71,10 @@ switch. This local tool does not yet perform that switch or its pre-reopen rollb
 
 ## Published reader preparation
 
+The opt-in admission state machine and pre-/post-reopen boundaries are described
+in [Draft cutover control rehearsal](draft-cutover-control.md). It is not wired to
+production and does not replace operational drain evidence.
+
 `DraftReader` reads article bodies and metadata exclusively from active published
 snapshots. Its list windows, timeline, tags, related pages and diary navigation do
 not read working versions or fall back to legacy articles. Image dimensions and
@@ -92,8 +96,9 @@ verified together before production activation. The default factory is unchanged
 repair without republication, partial import resume, invalid-input rejection,
 source/destination protection through the actual command, and post-edit/reopen
 reimport refusal. `test/fixtures/drafts/verify_dsql_publication.rb` also verifies
-initialization/rerun/sealing in a randomly named isolated DSQL schema. Its 24-table
-allowlist includes the three migration/identity tables; cleanup checks that no
+initialization/rerun/sealing in a randomly named isolated DSQL schema. Its 26-table
+allowlist includes the three migration/identity tables and two cutover-control
+tables; cleanup checks that no
 unexpected table is present and confirms the schema is gone. Running that external
 DDL requires the separately approved isolated-test scope.
 

@@ -12,7 +12,7 @@ require_relative "../../../lib/weblog_authoring/lambda_api"
 require_relative "../../../lib/weblog_authoring/draft_migration"
 
 SCHEMA = "draft_publish_verify_#{SecureRandom.hex(6)}"
-TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes draft_publication_clock draft_publication_stages draft_output_heads draft_html_outputs draft_route_reservations draft_redirects draft_rename_batches draft_rename_members draft_migration_state draft_migration_articles draft_atom_ids].freeze
+TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes draft_publication_clock draft_publication_stages draft_output_heads draft_html_outputs draft_route_reservations draft_redirects draft_rename_batches draft_rename_members draft_migration_state draft_migration_articles draft_atom_ids draft_cutover_state draft_cutover_operations].freeze
 $stdout.sync = true
 
 module IsolatedPublicationSchema
@@ -47,11 +47,51 @@ begin
     "created_at" => "2026-08-01T01:02:03Z", "updated_at" => "2026-08-02T04:05:06Z", "published_at" => "2026-08-01T02:03:04Z",
   }], }
   migration = WeblogAuthoring::DraftMigration.new(store:)
-  migration.import(migration_source)
+  migration_result = migration.import(migration_source)
   imported = store.published_snapshot(imported_id)
   migration.import(migration_source)
   check("migration rerun preserves the original version, dates and Atom identity") { imported == store.published_snapshot(imported_id) && imported.fetch("updated_at") == "2026-08-02T04:05:06Z" && imported.fetch("atom_id") == "https://example.com/2026-08-01" }
-  store.seal_migration
+  store.setup_cutover!
+  admission_read = Queue.new
+  continue_admission = Queue.new
+  admission = Thread.new do
+    Thread.current[:after_publication_query] = lambda do |sql|
+      if sql.include?("SELECT * FROM #{SCHEMA}.draft_cutover_state")
+        Thread.current[:after_publication_query] = nil
+        admission_read << true
+        continue_admission.pop
+      end
+    end
+    store.with_cutover_operation("legacy_write") { "incorrectly_admitted" }
+  rescue WeblogAuthoring::DraftStore::CutoverError => error
+    error.code
+  end
+  begin
+    Timeout.timeout(20) { admission_read.pop }
+    store.transition_cutover(expected: "legacy", to: "draining")
+  ensure
+    continue_admission << true
+  end
+  denied = Timeout.timeout(20) { admission.value }
+  check("OCC rejects stale writer admission after maintenance starts") { denied == "authoring_maintenance" && store.cutover_status.fetch("operations").empty? }
+  store.transition_cutover(expected: "draining", to: "frozen", evidence: { "legacy_writers_retired" => true, "legacy_generators_paused" => true, "pending_legacy_publications" => 0, "record" => "isolated fixture" })
+  store.transition_cutover(expected: "frozen", to: "preparing", evidence: { "source_preserved" => true, "fingerprint" => migration_result.fetch("fingerprint"), "record" => "isolated fixture" })
+  store.transition_cutover(expected: "preparing", to: "verifying", evidence: { "published_outputs_ready" => true, "legacy_generators_paused" => true, "record" => "isolated fixture" })
+  store.transition_cutover(expected: "verifying", to: "open", evidence: { "reader_outputs_verified" => true, "legacy_generators_paused" => true, "record" => "isolated fixture" })
+  check("reopening admits only the draft protocol") do
+    begin
+      store.with_cutover_operation("legacy_write") { raise "Legacy write admitted" }
+    rescue WeblogAuthoring::DraftStore::CutoverError => error
+      error.code == "upgrade_required" && store.with_cutover_operation("draft_write") { |phase| phase } == "open"
+    end
+  end
+  store.transition_cutover(expected: "open", to: "paused")
+  begin
+    store.transition_cutover(expected: "paused", to: "legacy", evidence: { "legacy_state_verified" => true, "record" => "isolated fixture" })
+    raise "Reopened editing rolled back to legacy"
+  rescue WeblogAuthoring::DraftStore::Error => error
+    check("post-reopen maintenance retains the imported version and prevents rollback") { error.status == 409 && store.published_snapshot(imported_id) == imported }
+  end
   begin
     migration.import(migration_source)
     raise "Sealed migration accepted another import"

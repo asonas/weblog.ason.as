@@ -9,6 +9,7 @@ require_relative "draft_publications"
 require_relative "draft_output_store"
 require_relative "draft_renames"
 require_relative "draft_migration_store"
+require_relative "draft_cutover_store"
 
 module WeblogAuthoring
   class DraftStore
@@ -16,12 +17,26 @@ module WeblogAuthoring
     include DraftOutputStore
     include DraftRenames
     include DraftMigrationStore
+    include DraftCutoverStore
     class Error < StandardError
       attr_reader :status
 
       def initialize(message, status = 422)
         super(message)
         @status = status
+      end
+    end
+
+    class CutoverError < Error
+      attr_reader :code
+
+      def initialize(code)
+        @code = code
+        if code == "upgrade_required"
+          super("この編集画面からは保存できません。編集中の内容を退避して、新しい編集画面を開いてください。", 409)
+        else
+          super("保存・公開を一時停止しています。編集中の内容を保持してお待ちください。", 503)
+        end
       end
     end
 
