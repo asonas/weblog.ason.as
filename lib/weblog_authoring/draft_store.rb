@@ -113,12 +113,18 @@ module WeblogAuthoring
             cursor = rows.last.fetch("id")
           end
           next found.fetch("id") if found
-          hex = Digest::SHA256.hexdigest("draft-diary:#{date}")[0, 32]
-          id = [hex[0, 8], hex[8, 4], hex[12, 4], hex[16, 4], hex[20, 12]].join("-")
           metadata = DEFAULT_METADATA.merge("title" => date, "page_type" => "date").transform_values { |value| { "value" => value, "revision" => 0 } }
           now = Time.now.utc.iso8601(6)
-          db.query("INSERT INTO #{db.prefix}draft_articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING", [id, JSON.generate(metadata), now])
-          id
+          attempt = 0
+          loop do
+            hex = Digest::SHA256.hexdigest("draft-diary:#{date}:#{attempt}")[0, 32]
+            id = [hex[0, 8], hex[8, 4], hex[12, 4], hex[16, 4], hex[20, 12]].join("-")
+            db.query("INSERT INTO #{db.prefix}draft_articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING", [id, JSON.generate(metadata), now])
+            stored = document(db, id).fetch("metadata")
+            break id if stored.dig("title", "value") == date && stored.dig("page_type", "value") == "date"
+            # A previous daily draft may have been renamed before publication.
+            attempt += 1
+          end
         end
       end
     end

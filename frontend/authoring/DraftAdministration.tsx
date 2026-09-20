@@ -12,6 +12,7 @@ type Article = {
   metadata: DraftMetadata;
   updated_at: string;
   public_route: string | null;
+  public_hash: string | null;
   state: "draft" | "public" | "unpublished_changes" | "unknown";
   state_error?: string;
   publication: {
@@ -46,6 +47,7 @@ function needsAttention(row: Row) {
     row.state === "unknown" ||
     Boolean(row.state_error) ||
     row.publication?.status === "needs_attention" ||
+    row.publication?.status === "superseded" ||
     row.publication?.stages.some((stage) =>
       ["needs_attention", "retry_wait"].includes(stage.status),
     )
@@ -139,8 +141,10 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
   const rows: Row[] = articles.map((row) => ({
     ...row,
     state:
-      row.state === "public" && byId.get(row.id)?.pending
-        ? "unpublished_changes"
+      row.public_hash && byId.get(row.id)?.pending
+        ? byId.get(row.id)?.contentHash === row.public_hash
+          ? "public"
+          : "unpublished_changes"
         : row.state,
     local: byId.get(row.id),
   }));
@@ -153,6 +157,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
         head: 0,
         updated_at: "",
         public_route: null,
+        public_hash: null,
         state: available ? "draft" : "unknown",
         publication: null,
         local: saved,
@@ -372,7 +377,9 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                     ? "公開ページを反映済み"
                     : selected.publication.status === "needs_attention"
                       ? "公開ページの反映に失敗"
-                      : "公開処理中"}
+                      : selected.publication.status === "superseded"
+                        ? "この公開処理は失効しました。エディタで内容を再確認してください。"
+                        : "公開処理中"}
               </dd>
             </dl>
             {selected.publication?.stages.map((stage) => (
@@ -384,7 +391,9 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                     ? "再試行待ち"
                     : stage.status === "needs_attention"
                       ? "要確認"
-                      : "処理中"}
+                      : stage.status === "superseded"
+                        ? "失効済み"
+                        : "処理中"}
                 {stage.error && ` — ${stage.error}`}
               </p>
             ))}
@@ -403,6 +412,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
               プレビューと公開の確認はエディタで行います。
             </p>
             {selected.publication &&
+              selected.publication.status !== "superseded" &&
               (needsAttention(selected) ||
                 selected.publication.status === "accepted") && (
                 <button

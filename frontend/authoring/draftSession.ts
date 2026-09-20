@@ -187,6 +187,7 @@ export type LocalDraftSummary = {
   metadata: DraftMetadata;
   cursor: number;
   pending: boolean;
+  contentHash: string;
 };
 
 // Read persisted summaries without starting synchronization or opening editors.
@@ -196,12 +197,12 @@ export async function readLocalDraftSummaries(): Promise<LocalDraftSummary[]> {
     return await new Promise((resolve, reject) => {
       const transaction = db.transaction("drafts", "readonly");
       const request = transaction.objectStore("drafts").openCursor();
-      const summaries: LocalDraftSummary[] = [];
+      const summaries: Promise<LocalDraftSummary>[] = [];
       request.onsuccess = () => {
         const cursor = request.result;
         if (!cursor) return;
         const saved: SavedDraft = cursor.value;
-        summaries.push({
+        const summary = {
           id: String(cursor.key),
           metadata: saved.metadata,
           cursor: saved.cursor,
@@ -215,10 +216,37 @@ export async function readLocalDraftSummaries(): Promise<LocalDraftSummary[]> {
                   saved.serverMetadata[key as Field]?.value !== value,
               ),
           ),
-        });
+        };
+        const doc = new Y.Doc();
+        try {
+          Y.applyUpdate(doc, saved.state);
+          const content = new TextEncoder().encode(
+            JSON.stringify([
+              doc.getText("body").toString().replaceAll("\r\n", "\n"),
+              saved.metadata.title.trim(),
+              saved.metadata.page_type,
+              saved.metadata.cover_mode,
+              saved.metadata.cover_mode === "explicit"
+                ? saved.metadata.cover_image_url
+                : null,
+            ]),
+          );
+          summaries.push(
+            digest(content).then((contentHash) => ({
+              ...summary,
+              contentHash,
+            })),
+          );
+        } catch (error) {
+          transaction.abort();
+          reject(error);
+          return;
+        } finally {
+          doc.destroy();
+        }
         cursor.continue();
       };
-      transaction.oncomplete = () => resolve(summaries);
+      transaction.oncomplete = () => resolve(Promise.all(summaries));
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);
     });

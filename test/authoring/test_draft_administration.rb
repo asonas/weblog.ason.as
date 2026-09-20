@@ -83,6 +83,17 @@ class DraftAdministrationTest < Minitest::Test
     assert_equal 1, @admin.list.fetch("articles").length
   end
 
+  def test_renamed_unpublished_diary_does_not_capture_the_original_date
+    first = @admin.daily("2026-09-20").fetch("id")
+    @store.append(first, { "protocol" => 1, "generation" => 1, "update_id" => "rename-date", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
+      "metadata" => { "title" => { "value" => "2026-09-21", "expected_revision" => 0 } }, })
+    second = @admin.daily("2026-09-20").fetch("id")
+    refute_equal first, second
+    assert_equal "2026-09-20", @store.read(second, {}).dig("metadata", "title", "value")
+    assert_equal first, @admin.daily("2026-09-21").fetch("id")
+    assert_equal second, @admin.daily("2026-09-20").fetch("id")
+  end
+
   private
 
   def change_cover(id, value, revision)

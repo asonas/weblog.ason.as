@@ -92,11 +92,30 @@ try {
   await context.setOffline(true);
   await body.fill("端末にだけ保存した本文");
   await until(async () => (await page.getByRole("status").textContent()).includes("端末に保存済み"));
-  await context.setOffline(false);
   await page.route("**/api/authoring/drafts/**", route => route.abort());
+  await context.setOffline(false);
   await page.getByRole("link", { name: "記事一覧", exact: true }).click();
   await search.fill("管理画面");
   await until(async () => (await detail.textContent()).includes("未送信の変更あり"));
+  await detail.getByRole("link", { name: "編集・公開内容を確認" }).click();
+  await body.fill("検索と再開を確認する本文");
+  await until(async () => (await page.getByRole("status").textContent()).includes("端末に保存済み"));
+  await page.getByRole("link", { name: "記事一覧", exact: true }).click();
+  await search.fill("管理画面");
+  await until(async () => (await detail.textContent()).includes("未送信の変更あり"));
+  assert.ok((await detail.textContent()).includes("公開中"), "local content equal to the published hash stays public despite pending CRDT updates");
+  await page.route("**/api/authoring/drafts?*", async route => {
+    const response = await route.fetch();
+    const data = await response.json();
+    const row = data.articles.find(row => row.id === new URL(article).searchParams.get("id"));
+    row.publication.status = "superseded";
+    for (const stage of row.publication.stages) stage.status = "superseded";
+    await route.fulfill({ response, json: data });
+  });
+  await page.getByRole("button", { name: "再読み込み", exact: true }).click();
+  await detail.getByText("この公開処理は失効しました。エディタで内容を再確認してください。").waitFor();
+  assert.ok(!(await detail.textContent()).includes("処理中"));
+  assert.equal(await detail.getByRole("button", { name: "公開処理を再試行" }).count(), 0);
   assert.deepEqual(errors, []);
   console.log("PASS: daily reuse, create/search/reopen, publication retry, restored published content, wide/narrow layout, local pending summary");
 } finally {
