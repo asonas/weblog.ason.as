@@ -1,9 +1,10 @@
 # Draft cutover control rehearsal
 
-This is an isolated control-plane implementation for #172, not a production
-activation procedure. The production Lambda factory, direct workers, CloudFront
-and EventBridge configuration are not connected to this control yet. Do not treat
-passing these tests as evidence that production writers have stopped.
+This is the control plane for #172. Production API/worker factories and opt-in
+Terraform routing are connected, but all activation flags default to false.
+Nothing in this document authorizes deployment or changes to production data.
+Use the separately approved [production runbook](draft-cutover-runbook.md).
+Passing tests is not evidence that production writers have stopped.
 
 ## Phase boundaries
 
@@ -24,7 +25,7 @@ migration and changes the phase in the same transaction; import cannot overwrite
 new editing even if a later repair requires maintenance.
 
 `DraftStore#setup_cutover!` explicitly creates two control tables in addition to
-the existing 24 migration/publication tables. Normal `setup!` does not initialize
+the existing 25 draft/migration/publication tables. Normal `setup!` does not initialize
 them. `cutover_status` returns the phase, operator evidence, migration fingerprint
 and in-flight operation receipts. No public endpoint can change the phase.
 
@@ -32,8 +33,8 @@ and in-flight operation receipts. No public endpoint can change the phase.
 
 `DraftCutoverApi` receives two fully assembled APIs, `legacy` and `published`, plus
 their shared control store. The published API must use `DraftReader`, the draft
-publisher, outputs and jobs. The wrapper does not construct or validate those
-dependencies and is not a replacement for the production factory wiring.
+publisher, outputs and jobs. `DraftRuntime` assembles those dependencies for the
+API and publication worker.
 
 The wrapper registers legacy save/rename, draft mutations and scheduled publication
 before invoking their API. Registration and transitions touch the same control row,
@@ -101,15 +102,15 @@ writes or resets the migration seal.
 in-flight draining, writer rejection, reader continuity, pre-open rollback,
 atomic opening/sealing and post-open retention. These tests change no cloud resources.
 The separately authorized `test/fixtures/drafts/verify_dsql_publication.rb` uses
-26 tables in a randomly named verification schema, including both control tables.
+27 tables in a randomly named verification schema, including both control tables.
 It exercises stale admission against a concurrent maintenance transition with
 actual DSQL OCC retries, opening/sealing and rejection of post-open rollback.
 It checks the table allowlist before removing the isolated schema. This does not
 measure production traffic or prove that deployed workers use this control.
 
-Remaining before #172 completion: connect every production API/worker path to the
-control, replace the legacy schedules without activating production, verify real
-pending-work evidence, rehearse article/Atom/search/repair together, and complete
-the production resource/cost/approval checklist. Real-device IME/mobile and visual
-verification gaps must also be reported. Production deployment, data migration,
-Terraform apply and outbound queue replay require separate authorization.
+`test/authoring/test_draft_runtime.rb` rehearses the assembled runtime: preserved
+legacy HTML/feed, pre-open rollback, published HTML/Atom/search, asynchronous
+dispatch/polling, rejected legacy writes, retained unsent outbox and post-open
+retention. Lambda invocation is substituted at the AWS boundary; SQLite, Yjs,
+QMD and generated artifacts are real. See the runbook for deployment-only gaps,
+resource/cost evidence and explicit activation approvals.

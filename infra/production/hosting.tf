@@ -150,7 +150,7 @@ resource "aws_cloudfront_function" "site_routes" {
   runtime = "cloudfront-js-2.0"
   comment = "Serve the app shell only for authoring and search routes"
   publish = true
-  code    = file("${path.module}/site_routes.js")
+  code    = var.draft_reader_routing_enabled ? "function handler(event) { return event.request; }" : file("${path.module}/site_routes.js")
 }
 
 resource "aws_cloudfront_distribution" "weblog" {
@@ -180,12 +180,13 @@ resource "aws_cloudfront_distribution" "weblog" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "site"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+    target_origin_id         = var.draft_reader_routing_enabled ? "authoring-api" : "site"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = var.draft_reader_routing_enabled ? data.aws_cloudfront_cache_policy.caching_disabled.id : data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id = var.draft_reader_routing_enabled ? data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id : null
 
     function_association {
       event_type   = "viewer-request"
@@ -202,6 +203,19 @@ resource "aws_cloudfront_distribution" "weblog" {
     compress                 = true
     cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
+  }
+
+  dynamic "ordered_cache_behavior" {
+    for_each = var.draft_reader_routing_enabled ? toset(["/assets/*", "/static/*", "/draft-offline.js", "/favicon.ico", "/robots.txt", "/manifest.webmanifest"]) : toset([])
+    content {
+      path_pattern           = ordered_cache_behavior.value
+      target_origin_id       = "site"
+      viewer_protocol_policy = "redirect-to-https"
+      allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+      cached_methods         = ["GET", "HEAD"]
+      compress               = true
+      cache_policy_id        = ordered_cache_behavior.value == "/draft-offline.js" ? data.aws_cloudfront_cache_policy.caching_disabled.id : data.aws_cloudfront_cache_policy.caching_optimized.id
+    }
   }
 
   ordered_cache_behavior {

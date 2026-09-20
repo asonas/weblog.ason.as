@@ -628,11 +628,26 @@ end
   await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).click();
   await until(async () => (await publicationPage.getByRole("alert").textContent()).includes("通信できません"));
   await publicationPage.reload();
+  let dispatchPolls = 0;
+  await publicationPage.route("**/publications/*/run", async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    await route.fulfill({ response, json: { ...result, dispatch: { id: "browser-dispatch", status: "queued" } } });
+  });
+  await publicationPage.route("**/publications/*?dispatch_id=browser-dispatch", async (route) => {
+    dispatchPolls++;
+    const response = await route.fetch();
+    const result = await response.json();
+    await route.fulfill({ response, json: { ...result, dispatch: { id: "browser-dispatch", status: dispatchPolls < 2 ? "running" : "completed" } } });
+  });
   await fetch("http://127.0.0.1:18082/api/draft-test-search-failure", { method: "POST", headers: { "X-Draft-Test-Token": token } });
   await publicationPage.getByRole("button", { name: "公開を再試行", exact: true }).click();
   await until(async () => (await publicationPage.getByRole("status").textContent()).includes("公開が完了しました"));
+  assert.ok(dispatchPolls >= 2, "Publication waits for asynchronous worker completion");
   assert.ok((await (await fetch(readerUrl)).text()).includes("読者向けの内容"));
   assert.ok((await (await fetch("http://127.0.0.1:18082/feed.xml")).text()).includes(`urn:uuid:${publicationId}`));
+  await publicationPage.unroute("**/publications/*/run");
+  await publicationPage.unroute("**/publications/*?dispatch_id=browser-dispatch");
   await publicationPage.getByRole("button", { name: "公開後の更新を再試行", exact: true }).click();
   await until(async () => (await publicationPage.getByRole("status").textContent()).includes("公開後の更新が完了しました"));
   assert.equal((await fetch(`http://127.0.0.1:18082/api/search?q=${encodeURIComponent("読者")}`)).status, 200);

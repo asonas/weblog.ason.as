@@ -93,6 +93,11 @@ export type PublicationConfirmation = {
 type PublicationRequest = PublicationConfirmation & { request_id: string };
 type PublicationJob = {
   id: string;
+  dispatch?: {
+    id: string;
+    status: "queued" | "running" | "completed" | "failed";
+    error?: string;
+  };
   status:
     | "accepted"
     | "unchanged"
@@ -907,11 +912,7 @@ export class DraftSession extends EventTarget {
           : "公開を受け付けました。HTMLを配置中";
       this.emit();
       if (accepted.status !== "unchanged") {
-        const job = await this.request<PublicationJob>(
-          `/publications/${accepted.id}/run`,
-          "POST",
-          {},
-        );
+        const job = await this.runPublication(accepted.id);
         if (job.status !== "completed" && job.status !== "superseded")
           throw new Error(job.error || "公開処理を再試行してください。");
         this.publicationStatus =
@@ -954,11 +955,7 @@ export class DraftSession extends EventTarget {
     this.isRetryingOutputs = true;
     this.emit();
     try {
-      const job = await this.request<PublicationJob>(
-        `/publications/${this.pendingOutputs}/run`,
-        "POST",
-        {},
-      );
+      const job = await this.runPublication(this.pendingOutputs);
       if (
         job.stages?.some(
           (stage) => !["completed", "superseded"].includes(stage.status),
@@ -979,6 +976,36 @@ export class DraftSession extends EventTarget {
       this.isRetryingOutputs = false;
       this.emit();
     }
+  }
+
+  private async runPublication(versionId: string) {
+    let job = await this.request<PublicationJob>(
+      `/publications/${versionId}/run`,
+      "POST",
+      {},
+    );
+    const dispatchId = job.dispatch?.id;
+    if (!dispatchId) return job;
+    const deadline = Date.now() + 300_000;
+    while (
+      job.dispatch?.status === "queued" ||
+      job.dispatch?.status === "running"
+    ) {
+      if (Date.now() >= deadline)
+        throw new Error(
+          "公開処理は継続中です。しばらくしてから結果を再確認してください。",
+        );
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      job = await this.request<PublicationJob>(
+        `/publications/${versionId}?dispatch_id=${encodeURIComponent(dispatchId)}`,
+        "GET",
+      );
+    }
+    if (job.dispatch?.status !== "completed")
+      throw new Error(
+        job.dispatch?.error || "公開結果を確認できません。再試行してください。",
+      );
+    return job;
   }
 
   private async syncLocked() {

@@ -31,7 +31,7 @@ try {
     if (req.url === "/api/auth/session") {
       if (slowAuthentication) await setTimeout(1500);
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ authenticated: true, authentication_required: true, can_edit: true, login: "fixture", csrf_token: csrfToken }));
+      res.end(JSON.stringify({ authenticated: true, authentication_required: true, can_edit: true, draft_authoring: true, login: "fixture", csrf_token: csrfToken }));
       return;
     }
     if (req.url.startsWith("/api/authoring/drafts/") && req.method !== "GET" && req.headers["x-csrf-token"] !== csrfToken) {

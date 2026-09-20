@@ -31,7 +31,13 @@ export const handler: Handler<
     throw new Error("Unsupported draft maintenance event");
   const host = process.env.DSQL_HOST;
   if (!host) throw new Error("Draft worker environment is incomplete");
-  return maintainDraftCheckpoints(
-    DsqlDraftCheckpointRepository.forEnvironment(host, process.env.AWS_REGION),
+  const repository = DsqlDraftCheckpointRepository.forEnvironment(
+    host,
+    process.env.AWS_REGION,
+  );
+  if (process.env.DRAFT_CUTOVER_ENABLED !== "true")
+    throw new Error("Draft maintenance is not activated");
+  return repository.withCutoverMaintenance(() =>
+    maintainDraftCheckpoints(repository),
   );
 };

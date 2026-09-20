@@ -9,7 +9,13 @@ module WeblogAuthoring
       require "sqlite3"
       database = SQLite3::Database.new(path.to_s, readonly: true)
       database.results_as_hash = true
-      articles = database.execute("SELECT id, page_type, name, page_date, title, status, body, cover_mode, cover_image_url, created_at, updated_at, published_at FROM pages ORDER BY id").map do |row|
+      export_rows(database.execute("SELECT id, page_type, name, page_date, title, status, body, cover_mode, cover_image_url, created_at, updated_at, published_at FROM pages ORDER BY id"), site_url:)
+    ensure
+      database&.close
+    end
+
+    def self.export_rows(rows, site_url:)
+      articles = rows.map do |row|
         raise DraftStore::Error, "Unpublished legacy article requires an explicit migration decision" unless row.fetch("status") == "published"
         named = row.fetch("page_type") == "named"
         { "id" => row.fetch("id"), "page_type" => row.fetch("page_type"), "route" => named ? row.fetch("name") : row.fetch("page_date"),
@@ -21,8 +27,6 @@ module WeblogAuthoring
       manifest = { "format" => 1, "site_url" => site_url, "articles" => articles }
       new(store: nil).prepare(manifest)
       manifest
-    ensure
-      database&.close
     end
 
     def initialize(store:)
@@ -83,7 +87,7 @@ module WeblogAuthoring
       raise DraftStore::Error, "Invalid migration title" unless title.is_a?(String) && title.bytesize <= 4096
       raise DraftStore::Error, "Invalid migration body" unless body.is_a?(String) && body.valid_encoding? && body.bytesize <= DraftStore::BODY_LIMIT
       raise DraftStore::Error, "Migration route would change" unless WeblogAuthoring.validate_page_name(route) == route
-      raise DraftStore::Error, "Migration route is reserved" if %w[draft-editor published].include?(route.split("/").first)
+      raise DraftStore::Error, "Migration route is reserved" if %w[draft-editor draft-offline.js published].include?(route.split("/").first)
       if type == "date"
         raise DraftStore::Error, "Invalid diary route" unless WeblogAuthoring::DATE_NAME.match?(route)
         Date.iso8601(route)

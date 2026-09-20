@@ -19,7 +19,7 @@ module WeblogAuthoring
     end
 
     def with_cutover_operation(kind)
-      raise DraftStore::Error, "Unknown cutover operation" unless %w[legacy_write draft_write publication].include?(kind)
+      raise DraftStore::Error, "Unknown cutover operation" unless %w[legacy_write draft_write publication legacy_publication draft_publication migration].include?(kind)
       token = SecureRandom.uuid
       phase = @connect.call do |db|
         db.transaction do
@@ -31,6 +31,9 @@ module WeblogAuthoring
                     when "legacy_write" then current == "legacy"
                     when "draft_write" then current == "open"
                     when "publication" then %w[legacy draining preparing verifying open].include?(current)
+                    when "legacy_publication" then %w[legacy draining].include?(current)
+                    when "draft_publication" then %w[preparing verifying open].include?(current)
+                    when "migration" then current == "frozen"
                     end
           raise DraftStore::CutoverError.new("authoring_maintenance") unless allowed
           db.query("UPDATE #{db.prefix}draft_cutover_state SET phase = phase WHERE id = 1")

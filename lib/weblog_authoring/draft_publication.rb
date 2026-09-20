@@ -108,7 +108,7 @@ module WeblogAuthoring
       metadata["title"] = metadata.fetch("title").strip
       metadata["cover_image_url"] = nil unless metadata.fetch("cover_mode") == "explicit"
       route = WeblogAuthoring.validate_page_name(DraftStore.working_route(metadata))
-      raise DraftStore::Error, "このURLはシステムが使用しています。" if %w[draft-editor published].include?(route.split("/").first)
+      raise DraftStore::Error, "このURLはシステムが使用しています。" if %w[draft-editor draft-offline.js published].include?(route.split("/").first)
       raise DraftStore::Error, "日記の日付はYYYY-MM-DDで指定してください。" if metadata.fetch("page_type") == "date" && !WeblogAuthoring::DATE_NAME.match?(route)
       Date.iso8601(route) if metadata.fetch("page_type") == "date"
       content = [body, *metadata.values_at("title", "page_type", "cover_mode", "cover_image_url")]

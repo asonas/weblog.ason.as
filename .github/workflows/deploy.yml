@@ -362,6 +362,8 @@ jobs:
             --content-type 'text/javascript; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
           aws s3 cp dist/site/static/authoring/app.css "s3://${SITE_BUCKET}/static/authoring/app.css" --only-show-errors \
             --content-type 'text/css; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
+          aws s3 cp dist/site/draft-offline.js "s3://${SITE_BUCKET}/draft-offline.js" --only-show-errors \
+            --content-type 'text/javascript; charset=utf-8' --cache-control 'no-cache'
       - name: Publish site HTML
         if: steps.current.outputs.current == 'true'
         run: |

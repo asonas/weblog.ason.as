@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { DsqlSigner } from "@aws-sdk/dsql-signer";
 import { Client, type QueryResultRow } from "pg";
 
@@ -77,6 +77,43 @@ export class DsqlDraftCheckpointRepository
       );
       return result.rows.map((row) => row.id);
     });
+  }
+
+  async withCutoverMaintenance<T>(work: () => Promise<T>): Promise<T> {
+    const token = randomUUID();
+    await this.run(async (db) => {
+      await db.query("BEGIN");
+      try {
+        const row = (
+          await db.query<{ phase: string }>(
+            `SELECT phase FROM ${this.prefix}draft_cutover_state WHERE id = 1`,
+          )
+        ).rows[0];
+        if (row?.phase !== "open")
+          throw new Error("Draft maintenance is paused");
+        await db.query(
+          `UPDATE ${this.prefix}draft_cutover_state SET phase = phase WHERE id = 1`,
+        );
+        await db.query(
+          `INSERT INTO ${this.prefix}draft_cutover_operations (id, kind, phase, started_at) VALUES ($1, 'draft_maintenance', 'open', $2)`,
+          [token, new Date().toISOString()],
+        );
+        await db.query("COMMIT");
+      } catch (error) {
+        await db.query("ROLLBACK");
+        throw error;
+      }
+    });
+    try {
+      return await work();
+    } finally {
+      await this.run((db) =>
+        db.query(
+          `DELETE FROM ${this.prefix}draft_cutover_operations WHERE id = $1`,
+          [token],
+        ),
+      );
+    }
   }
 
   async loadJob(articleId: string): Promise<DraftCheckpointJob> {

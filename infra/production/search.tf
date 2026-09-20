@@ -23,6 +23,7 @@ resource "aws_cloudwatch_event_rule" "search_index_nightly" {
   name                = "weblog-search-index-nightly-production"
   description         = "Recover any missed weblog search index updates"
   schedule_expression = "cron(0 18 * * ? *)"
+  state               = var.legacy_generators_paused ? "DISABLED" : "ENABLED"
 }
 
 resource "aws_cloudwatch_event_target" "search_index_nightly" {
@@ -143,23 +144,24 @@ resource "aws_iam_role_policy" "search_index_read" {
 }
 
 resource "aws_lambda_function" "search_indexer" {
-  function_name = "weblog-search-indexer-production"
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.search_indexer.repository_url}:bootstrap"
-  role          = aws_iam_role.search_indexer_runtime.arn
-  architectures = ["arm64"]
-  memory_size   = 1024
-  timeout       = 300
+  function_name                  = "weblog-search-indexer-production"
+  package_type                   = "Image"
+  image_uri                      = "${aws_ecr_repository.search_indexer.repository_url}:bootstrap"
+  role                           = aws_iam_role.search_indexer_runtime.arn
+  architectures                  = ["arm64"]
+  memory_size                    = 1024
+  timeout                        = 300
+  reserved_concurrent_executions = var.draft_cutover_enabled ? 1 : -1
 
   ephemeral_storage {
     size = 1024
   }
 
   environment {
-    variables = {
+    variables = merge(local.draft_runtime_environment, {
       DSQL_HOST   = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
       SITE_BUCKET = aws_s3_bucket.site.id
-    }
+    })
   }
 
   depends_on = [
@@ -176,4 +178,5 @@ resource "aws_lambda_event_source_mapping" "search_indexer" {
   event_source_arn = aws_sqs_queue.search_index.arn
   function_name    = aws_lambda_function.search_indexer.arn
   batch_size       = 1
+  enabled          = !var.legacy_generators_paused
 }

@@ -188,39 +188,51 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
     );
   const selected = visible.find((row) => row.id === selectedId) || visible[0];
 
-  async function create(daily: boolean) {
-    setBusy(true);
-    setError("");
-    try {
-      const now = new Date();
-      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      const id = crypto.randomUUID();
-      const response = await fetch(
-        daily ? "/api/authoring/drafts/daily" : `/api/authoring/drafts/${id}`,
-        {
-          method: daily ? "POST" : "PUT",
-          headers: {
-            "content-type": "application/json",
-            "x-csrf-token": await csrf(),
+  const create = useCallback(
+    async (daily: boolean) => {
+      setBusy(true);
+      setError("");
+      try {
+        const now = new Date();
+        const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        const id = crypto.randomUUID();
+        const response = await fetch(
+          daily ? "/api/authoring/drafts/daily" : `/api/authoring/drafts/${id}`,
+          {
+            method: daily ? "POST" : "PUT",
+            headers: {
+              "content-type": "application/json",
+              "x-csrf-token": await csrf(),
+            },
+            body: JSON.stringify(
+              daily ? { date } : { protocol: 1, generation: 1 },
+            ),
           },
-          body: JSON.stringify(
-            daily ? { date } : { protocol: 1, generation: 1 },
-          ),
-        },
-      );
-      if (!response.ok)
-        throw new Error(
-          "下書きを作成できません。オンライン状態で再試行してください。",
         );
-      const created: { id: string } = await response.json();
-      window.location.assign(
-        `/draft-editor?id=${encodeURIComponent(created.id)}`,
-      );
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "作成できません。");
-      setBusy(false);
-    }
-  }
+        if (!response.ok)
+          throw new Error(
+            "下書きを作成できません。オンライン状態で再試行してください。",
+          );
+        const created: { id: string } = await response.json();
+        window.location.assign(
+          `/draft-editor?id=${encodeURIComponent(created.id)}`,
+        );
+      } catch (failure) {
+        setError(
+          failure instanceof Error ? failure.message : "作成できません。",
+        );
+        setBusy(false);
+      }
+    },
+    [csrf],
+  );
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("daily") !== "1") return;
+    url.searchParams.delete("daily");
+    window.history.replaceState(null, "", url);
+    void create(true);
+  }, [create]);
   async function retry(row: Row) {
     if (!row.publication) return;
     setBusy(true);

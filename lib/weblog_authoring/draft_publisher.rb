@@ -7,9 +7,9 @@ require_relative "webmention_site_publisher"
 
 module WeblogAuthoring
   class DraftPublisher
-    def self.s3(publication:, database:, s3_client:, site_bucket:, site_url:)
+    def self.s3(publication:, database:, s3_client:, site_bucket:, site_url:, shell_key: "index.html")
       read = ->(key) { s3_client.get_object(bucket: site_bucket, key:).body.read }
-      new(publication:, database:, site_url:, shell: -> { read.call("index.html") }, read:) do |key, html|
+      new(publication:, database:, site_url:, shell: -> { read.call(shell_key) }, read:) do |key, html|
         s3_client.put_object(bucket: site_bucket, key:, body: html, content_type: "text/html; charset=utf-8", cache_control: "public, max-age=31536000, immutable", if_none_match: "*")
       rescue Aws::S3::Errors::PreconditionFailed
         # A previous attempt placed this version before its activation was recorded.
@@ -39,7 +39,7 @@ module WeblogAuthoring
       @place = place
       @read = read
       @site_url = site_url.delete_suffix("/")
-      @renderer = WebmentionSitePublisher.new(database:, s3_client: nil, site_bucket: nil, sqs_client: nil, delivery_queue_url: nil, sender_enabled: false)
+      @renderer = WebmentionSitePublisher.new(database:, s3_client: nil, site_bucket: nil, sqs_client: nil, delivery_queue_url: nil, sender_enabled: false, draft_authoring: true)
     end
 
     def read(snapshot)

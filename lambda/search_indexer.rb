@@ -11,7 +11,14 @@ module WeblogAuthoring
     module_function
 
     def call(event:, context:) # rubocop:disable Lint/UnusedMethodArgument
-      result = indexer.call
+      if ENV.fetch("DRAFT_CUTOVER_ENABLED", "false") == "true"
+        require "weblog_authoring/draft_runtime"
+        runtime = (@draft_runtime ||= DraftRuntime.for_environment)
+        result = event["operation"] ? runtime.work(event) : runtime.legacy_work { indexer.call }
+      else
+        raise "Draft cutover is not enabled" if event["operation"]
+        result = indexer.call
+      end
       puts(JSON.generate(result.merge("event" => "search_index_completed")))
       result
     end

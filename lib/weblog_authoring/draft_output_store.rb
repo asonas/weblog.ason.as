@@ -27,10 +27,12 @@ module WeblogAuthoring
       snapshots = []
       cursor = ""
       loop do
-        ids = @connect.call { |db| db.query("SELECT article_id FROM #{db.prefix}draft_publication_heads WHERE active_id IS NOT NULL AND article_id > $1 ORDER BY article_id LIMIT 100", [cursor]).map { |row| row.fetch("article_id") } }
-        break if ids.empty?
-        ids.each { |id| snapshots << published_snapshot(id) }
-        cursor = ids.last
+        page = @connect.call do |db|
+          db.query("SELECT v.*, h.published_at, h.updated_at, a.atom_id FROM #{db.prefix}draft_publication_heads h JOIN #{db.prefix}draft_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id LEFT JOIN #{db.prefix}draft_atom_ids a ON a.article_id = h.article_id WHERE h.article_id > $1 ORDER BY h.article_id LIMIT 100", [cursor])
+        end
+        break if page.empty?
+        snapshots.concat(page.map { |row| row.merge("metadata" => JSON.parse(row.fetch("metadata"))).reject { |key, value| key == "atom_id" && value.nil? } })
+        cursor = page.last.fetch("article_id")
       end
       raise DraftStore::Error.new("公開版が更新されたため生成を再試行します。", 409) unless before == publication_revision
       { "revision" => before, "snapshots" => snapshots }

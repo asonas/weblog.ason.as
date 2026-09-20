@@ -16,7 +16,6 @@ export default defineConfig(({ mode }) => ({
       name: "draft-offline-shell",
       apply: "build",
       generateBundle: { order: "post", handler(_options, bundle) {
-        if (mode === "production") return;
         const files = Object.values(bundle).filter((file) =>
           file.fileName === "index.html" || /\.(js|css)$/.test(file.fileName)
         );

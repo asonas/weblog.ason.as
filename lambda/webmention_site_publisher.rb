@@ -13,7 +13,12 @@ module WeblogAuthoring
 
     def call(event:, context:)
       _context = context
-      publisher.call(event)
+      if ENV.fetch("DRAFT_CUTOVER_ENABLED", "false") == "true"
+        require "weblog_authoring/draft_runtime"
+        (@draft_runtime ||= DraftRuntime.for_environment).legacy_work { publisher.call(event) }
+      else
+        publisher.call(event)
+      end
     end
 
     def publisher
@@ -23,7 +28,7 @@ module WeblogAuthoring
         sqs_client: Aws::SQS::Client.new,
         site_bucket: ENV.fetch("SITE_BUCKET"),
         delivery_queue_url: ENV.fetch("WEBMENTION_QUEUE_URL"),
-        sender_enabled: ENV.fetch("WEBMENTION_SENDER_ENABLED", "false") == "true"
+        sender_enabled: ENV.fetch("DRAFT_CUTOVER_ENABLED", "false") != "true" && ENV.fetch("WEBMENTION_SENDER_ENABLED", "false") == "true"
       )
     end
   end

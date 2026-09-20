@@ -22,6 +22,7 @@ type AuthState = {
   can_edit: boolean;
   login: string | null;
   csrf_token: string;
+  draft_authoring?: boolean;
 };
 
 const DEFAULT_AUTH_STATE: AuthState = {
@@ -41,6 +42,11 @@ async function setupAuthentication(): Promise<AuthState> {
     .querySelectorAll<HTMLElement>("#new-page-action, #daily-page-action")
     .forEach((action) => {
       action.hidden = !auth.can_edit;
+      if (auth.draft_authoring && action instanceof HTMLAnchorElement)
+        action.href =
+          action.id === "daily-page-action"
+            ? "/authoring/articles?daily=1"
+            : "/authoring/articles";
     });
   const webmentionsAction = document.querySelector<HTMLElement>(
     "#webmentions-action",
@@ -311,7 +317,7 @@ export function App({
 
   const viewMode = editorViewMode({
     bootstrap,
-    canEdit: auth.can_edit,
+    canEdit: auth.can_edit && !auth.draft_authoring,
     pathname: window.location.pathname,
     search: window.location.search,
   });
@@ -319,9 +325,11 @@ export function App({
   const isTodaysDiary =
     bootstrap.page_type === "date" && bootstrap.date === tokyoDate(new Date());
   const readingHref = `/${encodeURIComponent(route)}${isTodaysDiary ? "?view=reading" : ""}`;
-  const editingHref = isTodaysDiary
-    ? `/${encodeURIComponent(route)}`
-    : `/editor/${encodeURIComponent(bootstrap.page_id)}`;
+  const editingHref = auth.draft_authoring
+    ? `/draft-editor?id=${encodeURIComponent(bootstrap.page_id)}`
+    : isTodaysDiary
+      ? `/${encodeURIComponent(route)}`
+      : `/editor/${encodeURIComponent(bootstrap.page_id)}`;
 
   return (
     <>
@@ -396,7 +404,9 @@ function RootApp({
     );
   }
   if (
-    __DEPLOYMENT_ENVIRONMENT__ !== "production" &&
+    (__DEPLOYMENT_ENVIRONMENT__ !== "production" ||
+      auth.draft_authoring ||
+      isLocalDraft) &&
     window.location.pathname === "/authoring/articles"
   ) {
     return auth.can_edit || isLocalDraft ? (
@@ -406,7 +416,9 @@ function RootApp({
     );
   }
   if (
-    __DEPLOYMENT_ENVIRONMENT__ !== "production" &&
+    (__DEPLOYMENT_ENVIRONMENT__ !== "production" ||
+      auth.draft_authoring ||
+      isLocalDraft) &&
     window.location.pathname === "/draft-editor"
   ) {
     return auth.can_edit || isLocalDraft ? (

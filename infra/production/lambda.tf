@@ -8,7 +8,7 @@ resource "aws_lambda_function" "authoring" {
   timeout       = 15
 
   environment {
-    variables = {
+    variables = merge(local.draft_runtime_environment, {
       DSQL_HOST                          = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
       FRONTEND_URL                       = "https://weblog.ason.as"
       GITHUB_ALLOWED_USER_ID             = "630181"
@@ -26,7 +26,7 @@ resource "aws_lambda_function" "authoring" {
       WEBMENTION_QUEUE_ARN               = aws_sqs_queue.webmention.arn
       WEBMENTION_PUBLISH_DEAD_LETTER_ARN = aws_sqs_queue.webmention_publish_dead_letter.arn
       WEBMENTION_PUBLISH_QUEUE_ARN       = aws_sqs_queue.webmention_publish.arn
-    }
+    })
   }
 
   depends_on = [

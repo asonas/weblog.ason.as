@@ -282,6 +282,7 @@ module WeblogAuthoring
         "authenticated" => !session.nil?,
         "authentication_required" => true,
         "can_edit" => can_edit,
+        "draft_authoring" => !@draft_store.nil?,
         "login" => session&.fetch("login", nil),
         "csrf_token" => can_edit && session ? session.fetch("csrf_token", "").to_s : ""
       )
@@ -492,7 +493,10 @@ module WeblogAuthoring
           jobs = @draft_jobs
           return json_response(200, jobs ? jobs.run(id, version_id, retry_now: true) : publisher.run(id, version_id))
         elsif method == "GET" && version_id && action.nil?
-          return json_response(200, store.publication_job(id, version_id).merge("stages" => store.publication_stages(id, version_id)))
+          job = store.publication_job(id, version_id).merge("stages" => store.publication_stages(id, version_id))
+          dispatch_id = event.dig("queryStringParameters", "dispatch_id")
+          job["dispatch"] = store.publication_dispatch(id, version_id, dispatch_id) if dispatch_id
+          return json_response(200, job)
         end
         return json_response(404, error: "Not Found")
       end

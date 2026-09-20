@@ -20,6 +20,11 @@ module WeblogAuthoring
     def repair: () -> Hash[String, untyped]
   end
 
+  class RemoteDraftJobs
+    def run: (String, String, ?retry_now: bool) -> Hash[String, untyped]
+    def repair: () -> Hash[String, untyped]
+  end
+
   class DraftOutputs
     def feed: () -> String
     def search: (query: String, limit: Integer) -> untyped

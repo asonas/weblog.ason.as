@@ -29,6 +29,9 @@ async function connect() {
 const setup = await connect();
 try {
   await setup.query(`CREATE SCHEMA ${schema}`);
+  await setup.query(`CREATE TABLE ${schema}.draft_cutover_state (id INTEGER PRIMARY KEY, phase TEXT NOT NULL)`);
+  await setup.query(`CREATE TABLE ${schema}.draft_cutover_operations (id TEXT PRIMARY KEY, kind TEXT NOT NULL, phase TEXT NOT NULL, started_at TEXT NOT NULL)`);
+  await setup.query(`INSERT INTO ${schema}.draft_cutover_state (id, phase) VALUES (1, 'frozen')`);
   await setup.query(
     `CREATE TABLE ${schema}.draft_articles (id TEXT PRIMARY KEY, generation INTEGER NOT NULL, head INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   );
@@ -89,7 +92,15 @@ try {
     connect,
     `${schema}.`,
   );
-  const compacted = await maintainDraftCheckpoints(repository);
+  await assert.rejects(repository.withCutoverMaintenance(() => maintainDraftCheckpoints(repository)), /paused/);
+  await setup.query(`UPDATE ${schema}.draft_cutover_state SET phase = 'open' WHERE id = 1`);
+  const compacted = await repository.withCutoverMaintenance(async () => {
+    const active = await setup.query(`SELECT kind FROM ${schema}.draft_cutover_operations`);
+    assert.equal(active.rows[0]?.kind, "draft_maintenance");
+    return maintainDraftCheckpoints(repository);
+  });
+  const settled = await setup.query(`SELECT id FROM ${schema}.draft_cutover_operations`);
+  assert.equal(settled.rows.length, 0);
   assert.equal(compacted.activated, 1);
   const pointer = await setup.query<{ sequence: number }>(
     `SELECT sequence FROM ${schema}.draft_checkpoint_heads WHERE article_id = $1`,

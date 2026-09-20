@@ -22,6 +22,10 @@ module WeblogAuthoring
         body: JSON.generate("code" => error.code, "error" => error.message), }
     end
 
+    def backfill_inbox_thumbnails(limit: 100)
+      @legacy.backfill_inbox_thumbnails(limit:)
+    end
+
     private
 
     def api_for(phase, publication: false)

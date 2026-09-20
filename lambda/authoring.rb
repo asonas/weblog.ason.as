@@ -63,7 +63,7 @@ module WeblogAuthoring
         lambda_client_instance = nil
         lambda_client = -> { lambda_client_instance ||= Aws::Lambda::Client.new }
         instance = measure(timings, "object_graph") do
-          LambdaApi.new(
+          options = {
             database:, s3_client:, asset_bucket: ENV.fetch("ASSET_BUCKET"),
             development_asset_bucket: ENV["DEVELOPMENT_ASSET_BUCKET"], site_bucket: ENV.fetch("SITE_BUCKET"),
             sqs_client:, search_queue_url: ENV["SEARCH_INDEX_QUEUE_URL"], lambda_client:,
@@ -81,8 +81,14 @@ module WeblogAuthoring
                                    client_secret: secrets.fetch("github_client_secret")),
             session_codec: LambdaSession.new(secret: secrets.fetch("session_secret")),
             redirect_uri: ENV.fetch("GITHUB_REDIRECT_URI"), frontend_url: ENV.fetch("FRONTEND_URL"),
-            allowed_github_user_id: Integer(ENV.fetch("GITHUB_ALLOWED_USER_ID"), 10)
-          )
+            allowed_github_user_id: Integer(ENV.fetch("GITHUB_ALLOWED_USER_ID"), 10),
+          }
+          if ENV.fetch("DRAFT_CUTOVER_ENABLED", "false") == "true"
+            require "weblog_authoring/draft_runtime"
+            DraftRuntime.for_environment.api(options)
+          else
+            LambdaApi.new(**options)
+          end
         end
         timings["api_total"] = elapsed_ms(api_started_at)
         parts = timings.reject { |name, _duration| name == "api_total" }.values.sum

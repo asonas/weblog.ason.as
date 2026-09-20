@@ -1,5 +1,6 @@
 module WeblogAuthoring
   class DraftStore
+    def publication_dispatch: (String, String, String) -> Hash[String, untyped]
     def published_redirect: (String) -> String?
     def resolve_published_route: (String) -> Hash[String, untyped]
     class Error < StandardError

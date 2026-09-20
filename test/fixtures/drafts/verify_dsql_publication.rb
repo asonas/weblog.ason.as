@@ -12,7 +12,7 @@ require_relative "../../../lib/weblog_authoring/lambda_api"
 require_relative "../../../lib/weblog_authoring/draft_migration"
 
 SCHEMA = "draft_publish_verify_#{SecureRandom.hex(6)}"
-TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes draft_publication_clock draft_publication_stages draft_output_heads draft_html_outputs draft_route_reservations draft_redirects draft_rename_batches draft_rename_members draft_migration_state draft_migration_articles draft_atom_ids draft_cutover_state draft_cutover_operations].freeze
+TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes draft_publication_clock draft_publication_stages draft_output_heads draft_html_outputs draft_route_reservations draft_redirects draft_rename_batches draft_rename_members draft_migration_state draft_migration_articles draft_atom_ids draft_cutover_state draft_cutover_operations draft_dispatches].freeze
 $stdout.sync = true
 
 module IsolatedPublicationSchema
@@ -49,6 +49,11 @@ begin
   migration = WeblogAuthoring::DraftMigration.new(store:)
   migration_result = migration.import(migration_source)
   imported = store.published_snapshot(imported_id)
+  check("batched collection preserves imported metadata and identity") { store.published_collection.fetch("snapshots").first == imported }
+  dispatch = store.queue_publication_dispatch(imported_id, imported.fetch("id"))
+  store.start_publication_dispatch(dispatch.fetch("id"))
+  store.finish_publication_dispatch(dispatch.fetch("id"))
+  check("asynchronous dispatch completion is durable and redelivery is harmless") { store.publication_dispatch(imported_id, imported.fetch("id"), dispatch.fetch("id")).fetch("status") == "completed" && store.start_publication_dispatch(dispatch.fetch("id")).nil? }
   migration.import(migration_source)
   check("migration rerun preserves the original version, dates and Atom identity") { imported == store.published_snapshot(imported_id) && imported.fetch("updated_at") == "2026-08-02T04:05:06Z" && imported.fetch("atom_id") == "https://example.com/2026-08-01" }
   store.setup_cutover!

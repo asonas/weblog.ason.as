@@ -10,6 +10,7 @@ require_relative "draft_output_store"
 require_relative "draft_renames"
 require_relative "draft_migration_store"
 require_relative "draft_cutover_store"
+require_relative "draft_dispatches"
 
 module WeblogAuthoring
   class DraftStore
@@ -18,6 +19,7 @@ module WeblogAuthoring
     include DraftRenames
     include DraftMigrationStore
     include DraftCutoverStore
+    include DraftDispatches
     class Error < StandardError
       attr_reader :status
 
@@ -79,6 +81,7 @@ module WeblogAuthoring
         setup_outputs(db)
         setup_renames(db)
         setup_migration(db)
+        setup_dispatches(db)
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_articles (id TEXT PRIMARY KEY, generation INTEGER NOT NULL, head INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_updates (article_id TEXT NOT NULL, update_id TEXT NOT NULL, sequence INTEGER NOT NULL, digest TEXT NOT NULL, fingerprint TEXT NOT NULL, receipt TEXT NOT NULL, chunks INTEGER NOT NULL, PRIMARY KEY (article_id, update_id))")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_chunks (article_id TEXT NOT NULL, update_id TEXT NOT NULL, position INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (article_id, update_id, position))")

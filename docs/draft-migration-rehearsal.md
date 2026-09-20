@@ -72,8 +72,9 @@ switch. This local tool does not yet perform that switch or its pre-reopen rollb
 ## Published reader preparation
 
 The opt-in admission state machine and pre-/post-reopen boundaries are described
-in [Draft cutover control rehearsal](draft-cutover-control.md). It is not wired to
-production and does not replace operational drain evidence.
+in [Draft cutover control rehearsal](draft-cutover-control.md). Its opt-in runtime
+wiring remains disabled and does not replace operational drain evidence. The
+[production runbook](draft-cutover-runbook.md) covers activation approvals.
 
 `DraftReader` reads article bodies and metadata exclusively from active published
 snapshots. Its list windows, timeline, tags, related pages and diary navigation do
@@ -86,9 +87,9 @@ Inject this reader as `LambdaApi`'s `reader_database` and as `DraftPublisher`'s
 Unknown routes retain the existing empty link-hub response. Old Scrapbox line
 timestamps are not attached to a newly published body.
 
-This injection is not a cutover gate: it does not stop either writer, configure
-Atom/search jobs, or activate the production factory. Those must be connected and
-verified together before production activation. The default factory is unchanged.
+This injection alone is not a cutover gate. `DraftRuntime` connects the reader,
+Atom/search jobs and admission wrapper when explicitly enabled. The default
+factory remains legacy; verify the complete staged procedure before activation.
 
 ## Verification
 
@@ -96,7 +97,7 @@ verified together before production activation. The default factory is unchanged
 repair without republication, partial import resume, invalid-input rejection,
 source/destination protection through the actual command, and post-edit/reopen
 reimport refusal. `test/fixtures/drafts/verify_dsql_publication.rb` also verifies
-initialization/rerun/sealing in a randomly named isolated DSQL schema. Its 26-table
+initialization/rerun/sealing in a randomly named isolated DSQL schema. Its 27-table
 allowlist includes the three migration/identity tables and two cutover-control
 tables; cleanup checks that no
 unexpected table is present and confirms the schema is gone. Running that external

@@ -342,12 +342,12 @@ resource "aws_lambda_function" "webmention_publisher" {
   }
 
   environment {
-    variables = {
+    variables = merge(local.draft_runtime_environment, {
       DSQL_HOST                 = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
       SITE_BUCKET               = aws_s3_bucket.site.id
       WEBMENTION_QUEUE_URL      = aws_sqs_queue.webmention.url
-      WEBMENTION_SENDER_ENABLED = tostring(var.webmention_sender_enabled)
-    }
+      WEBMENTION_SENDER_ENABLED = tostring(var.webmention_sender_enabled && !var.draft_cutover_enabled)
+    })
   }
 
   depends_on = [
@@ -364,7 +364,7 @@ resource "aws_lambda_event_source_mapping" "webmention_publisher" {
   event_source_arn = aws_sqs_queue.webmention_publish.arn
   function_name    = aws_lambda_function.webmention_publisher.arn
   batch_size       = 1
-  enabled          = var.webmention_publisher_enabled
+  enabled          = var.webmention_publisher_enabled && !var.legacy_generators_paused
 }
 
 resource "aws_cloudwatch_log_group" "webmention_publisher" {
@@ -375,7 +375,7 @@ resource "aws_cloudwatch_log_group" "webmention_publisher" {
 resource "aws_cloudwatch_event_rule" "webmention_outbox_dispatch" {
   name                = "weblog-webmention-outbox-dispatch-production"
   schedule_expression = "rate(5 minutes)"
-  state               = var.webmention_publisher_enabled ? "ENABLED" : "DISABLED"
+  state               = var.webmention_publisher_enabled && !var.legacy_generators_paused ? "ENABLED" : "DISABLED"
 }
 
 resource "aws_cloudwatch_event_target" "webmention_outbox_dispatch" {
