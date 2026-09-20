@@ -76,7 +76,6 @@ try {
   assert.equal(page.url(), article);
   await fetch("http://127.0.0.1:18082/api/draft-test-search-failure", { method: "POST", headers: { "X-Draft-Test-Token": token } });
   await page.getByRole("button", { name: "公開", exact: true }).click();
-  await page.getByRole("button", { name: "この内容で公開", exact: true }).click();
   await until(async () => (await page.getByRole("status").textContent()).includes("公開が完了しました"));
   await page.getByRole("link", { name: "記事一覧", exact: true }).click();
   await search.fill("管理画面");
@@ -131,7 +130,6 @@ try {
   await page.unroute("**/api/authoring/drafts/**");
   await page.goto(diary);
   await page.getByRole("button", { name: "公開", exact: true }).click();
-  await page.getByRole("button", { name: "この内容で公開", exact: true }).click();
   await until(async () => (await page.getByRole("status").textContent()).includes("公開が完了しました"));
   const publishedDiary = await fetch(`http://127.0.0.1:18082/${diaryDate}`);
   assert.equal(publishedDiary.status, 200);

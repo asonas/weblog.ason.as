@@ -8,7 +8,6 @@ import {
   DRAFT_BODY_LIMIT,
   type DraftMetadata,
   DraftSession,
-  type PublicationConfirmation,
 } from "./draftSession";
 import "./draftEditor.css";
 
@@ -29,7 +28,6 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   );
   const [loadError, setLoadError] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [confirmation, setConfirmation] = useState<PublicationConfirmation>();
   const [publicationError, setPublicationError] = useState("");
   const [, refresh] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -202,25 +200,14 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  async function preparePublication() {
-    if (!session) return;
-    setPublicationError("");
-    try {
-      setConfirmation(await session.preparePublication());
-    } catch (error) {
-      setPublicationError(
-        error instanceof Error ? error.message : "公開の準備に失敗しました",
-      );
-    }
-  }
-
   async function publish() {
-    if (!session) return;
-    const confirmed = confirmation;
-    setConfirmation(undefined);
+    if (!session || session.isPublishing) return;
     setPublicationError("");
     try {
-      await session.publish(confirmed);
+      const prepared = session.pendingPublication
+        ? undefined
+        : await session.preparePublication();
+      await session.publish(prepared);
     } catch (error) {
       setPublicationError(
         error instanceof Error ? error.message : "公開に失敗しました",
@@ -297,16 +284,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           className="draft-editor__publish"
           type="button"
           disabled={!session || session.isPublishing}
-          onClick={() =>
-            void (session?.pendingPublication
-              ? publish()
-              : preparePublication())
-          }
+          onClick={() => void publish()}
         >
-          {session?.pendingPublication
-            ? "公開を再試行"
-            : session?.isPublishing
-              ? "公開内容を確認中"
+          {session?.isPublishing
+            ? "公開中"
+            : session?.pendingPublication
+              ? "公開を再試行"
               : "公開"}
         </button>
       </div>
@@ -382,42 +365,6 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           </fieldset>
         ))}
       </div>
-      {confirmation && (
-        <section aria-label="公開内容の確認">
-          <p>本文・タイトル・カバーを確認しましたか。この版を公開します。</p>
-          {confirmation.rename && (
-            <div>
-              <p>
-                URLを「{confirmation.rename.from}」から「
-                {confirmation.rename.to}」へ変更します。
-                旧URLは新URLへ転送されます。
-              </p>
-              <p>
-                参照元{confirmation.rename.references.length}
-                件の公開版のリンクも更新します。
-                参照元で編集中の下書きは変更・公開しません。
-              </p>
-              <ul>
-                {confirmation.rename.references.map((reference) => (
-                  <li key={reference.article_id}>{reference.title}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <button type="button" onClick={() => void publish()}>
-            この内容で公開
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setConfirmation(undefined);
-              session?.cancelPublication();
-            }}
-          >
-            キャンセル
-          </button>
-        </section>
-      )}
       <div
         className="draft-editor__workspace"
         ref={workspace}

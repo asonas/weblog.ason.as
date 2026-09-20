@@ -661,16 +661,9 @@ end
   await publicationPage.getByLabel("タイトル", { exact: true }).fill("確認して公開する記事");
   const publicationBody = publicationPage.getByRole("textbox", { name: "本文", exact: true });
   await publicationBody.fill("# 公開する本文\n\n読者向けの内容");
-  await publicationPage.getByRole("button", { name: "公開", exact: true }).click();
-  await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).waitFor();
-  assert.equal(await publicationBody.isDisabled(), true);
   const publicationId = new URL(publicationPage.url()).searchParams.get("id");
   const readerUrl = `http://127.0.0.1:18082/api/pages/${publicationId}`;
   assert.equal((await fetch(readerUrl)).status, 404);
-  await publicationPage.getByRole("button", { name: "キャンセル", exact: true }).click();
-  assert.equal(await publicationBody.isDisabled(), false);
-  assert.equal(await publicationBody.inputValue(), "# 公開する本文\n\n読者向けの内容");
-  await publicationPage.getByRole("button", { name: "公開", exact: true }).click();
   let lostPublicationResponse = false;
   await publicationPage.route("**/publications", async (route) => {
     if (!lostPublicationResponse) {
@@ -679,7 +672,8 @@ end
       await route.abort("failed");
     } else await route.continue();
   });
-  await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).click();
+  await publicationPage.getByRole("button", { name: "公開", exact: true }).click();
+  assert.equal(await publicationPage.getByRole("region", { name: "公開内容の確認" }).count(), 0);
   await until(async () => (await publicationPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("通信できません"));
   await publicationPage.reload();
   let dispatchPolls = 0;
@@ -709,8 +703,17 @@ end
   await until(async () => (await publicationPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
   assert.ok(!(await (await fetch(readerUrl)).text()).includes("まだ見せない追記"));
   assert.ok((await (await fetch(`http://127.0.0.1:18082/${encodeURIComponent("確認して公開する記事")}`)).text()).includes("読者向けの内容"));
+  let requestStarted = false;
+  let releasePublication;
+  const publicationGate = new Promise(resolve => { releasePublication = resolve; });
+  await publicationPage.route("**/publications", async route => {
+    requestStarted = true;
+    await publicationGate;
+    await route.continue();
+  });
   await publicationPage.getByRole("button", { name: "公開", exact: true }).click();
-  await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).waitFor();
+  await until(async () => requestStarted);
+  assert.equal(await publicationBody.isDisabled(), true);
   const concurrentContext = await browser.newContext();
   const concurrentPage = await concurrentContext.newPage();
   await concurrentPage.goto(publicationPage.url());
@@ -718,14 +721,13 @@ end
   await until(async () => (await concurrentBody.inputValue()) === "まだ見せない追記");
   await concurrentBody.fill("別のタブで追記した内容");
   await until(async () => (await concurrentPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
-  await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).click();
+  releasePublication();
   await until(async () => (await publicationPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("再確認してください"));
   assert.ok(!(await (await fetch(readerUrl)).text()).includes("別のタブで追記した内容"));
+  await publicationPage.unroute("**/publications");
   await publicationPage.getByRole("button", { name: "公開", exact: true }).click();
-  await until(async () => (await publicationBody.inputValue()) === "別のタブで追記した内容");
   await until(async () => (await publicationPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("合流しました"));
   await publicationPage.getByRole("button", { name: "公開", exact: true }).click();
-  await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).click();
   await until(async () => (await publicationPage.getByRole("status").textContent()).includes("公開が完了しました"));
   assert.ok((await (await fetch(readerUrl)).text()).includes("別のタブで追記した内容"));
   await concurrentContext.close();
@@ -735,17 +737,12 @@ end
   const referenceBody = referencePage.getByRole("textbox", { name: "本文", exact: true });
   await referenceBody.fill("公開リンク [[確認して公開する記事]]");
   await referencePage.getByRole("button", { name: "公開", exact: true }).click();
-  await referencePage.getByRole("button", { name: "この内容で公開", exact: true }).click();
   await until(async () => (await referencePage.getByRole("status").textContent()).includes("公開が完了しました"));
   const referenceId = new URL(referencePage.url()).searchParams.get("id");
   await referenceBody.fill("非公開で編集中の参照元");
   await until(async () => (await referencePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
   await publicationPage.getByLabel("タイトル", { exact: true }).fill("名前変更した記事");
   await publicationPage.getByRole("button", { name: "公開", exact: true }).click();
-  const renameConfirmation = publicationPage.getByRole("region", { name: "公開内容の確認" });
-  await renameConfirmation.getByText("名前変更の参照元", { exact: true }).waitFor();
-  assert.ok((await renameConfirmation.textContent()).includes("参照元1件"));
-  await publicationPage.getByRole("button", { name: "この内容で公開", exact: true }).click();
   await until(async () => (await publicationPage.getByRole("status").textContent()).includes("公開が完了しました"));
   const oldRouteUrl = `http://127.0.0.1:18082/${encodeURIComponent("確認して公開する記事")}`;
   await until(async () => (await fetch(oldRouteUrl, { redirect: "manual" })).status === 301);
