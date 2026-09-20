@@ -14,7 +14,7 @@ winget install --id jdx.mise --exact
 ```
 
 次にリポジトリのルートで以下を実行します。Temurin JDK 17、Android
-SDK Command-line Tools、SDK 35、Build Tools 34.0.0、Platform Toolsが
+SDK Command-line Tools、SDK 35、Build Tools 36.0.0、Platform Toolsが
 インストールされます。
 
 ```powershell
