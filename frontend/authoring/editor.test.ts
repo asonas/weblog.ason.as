@@ -895,6 +895,195 @@ function minimalEditorFetch(input: RequestInfo | URL): Promise<Response> {
   return Promise.reject(new Error(`unexpected request: ${url}`));
 }
 
+for (const operation of ["save", "rename"])
+  test(`retains and exports current edits when legacy ${operation} requires an upgrade`, async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const originalFetch = globalThis.fetch;
+    const originalCreateUrl = URL.createObjectURL;
+    const originalRevokeUrl = URL.revokeObjectURL;
+    const originalClick = window.HTMLAnchorElement.prototype.click;
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+    const downloads: Blob[] = [];
+    let writes = 0;
+    globalThis.fetch = async (input) => {
+      if (
+        String(input).startsWith("/api/authoring/pages") ||
+        String(input) === "/api/rename"
+      ) {
+        writes += 1;
+        return new Response(
+          JSON.stringify({ code: "upgrade_required", error: "old writer" }),
+          { status: 409 },
+        );
+      }
+      return minimalEditorFetch(input);
+    };
+    URL.createObjectURL = (blob) => {
+      downloads.push(blob as Blob);
+      return "blob:preserved";
+    };
+    URL.revokeObjectURL = () => {};
+    window.HTMLAnchorElement.prototype.click = () => {};
+    try {
+      await act(async () =>
+        root.render(
+          createElement(AuthoringEditor, {
+            bootstrap: minimalEditorBootstrap(),
+          }),
+        ),
+      );
+      const element = container.querySelector<HTMLElement>(".ProseMirror");
+      assert.ok(element);
+      const editor = (element as HTMLElement & { editor: Editor }).editor;
+      await act(async () => {
+        editor.commands.setContent(
+          operation === "rename"
+            ? "renamed\n\n未保存の本文"
+            : "current\n\n未保存の本文",
+          { contentType: "markdown" },
+        );
+        if (operation === "rename")
+          editor.view.dom.dispatchEvent(new window.FocusEvent("blur"));
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      });
+      assert.match(container.textContent || "", /保存方式が切り替わりました/);
+      await act(async () => {
+        editor.commands.setContent(
+          operation === "rename"
+            ? "renamed again\n\n通知の後にも追記"
+            : "current\n\n通知の後にも追記",
+          { contentType: "markdown" },
+        );
+        editor.view.dom.dispatchEvent(new window.FocusEvent("blur"));
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      });
+      const download = Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Markdownをダウンロード",
+      );
+      assert.ok(download);
+      await act(async () => download.click());
+      assert.equal(
+        await downloads[0].text(),
+        operation === "rename"
+          ? "# renamed again\n\n通知の後にも追記"
+          : "# current\n\n通知の後にも追記",
+      );
+      assert.equal(
+        editor.getMarkdown(),
+        operation === "rename"
+          ? "renamed again\n\n通知の後にも追記"
+          : "current\n\n通知の後にも追記",
+      );
+      assert.equal(writes, 1);
+      const beforeUnload = new window.Event("beforeunload", {
+        cancelable: true,
+      });
+      window.dispatchEvent(beforeUnload);
+      assert.equal(beforeUnload.defaultPrevented, true);
+      assert.equal(window.location.pathname, "/current");
+    } finally {
+      await act(async () => root.unmount());
+      globalThis.fetch = originalFetch;
+      URL.createObjectURL = originalCreateUrl;
+      URL.revokeObjectURL = originalRevokeUrl;
+      window.HTMLAnchorElement.prototype.click = originalClick;
+      window.confirm = originalConfirm;
+      container.remove();
+    }
+  });
+
+test("distinguishes transient failure from maintenance and retries only on request during maintenance", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const originalFetch = globalThis.fetch;
+  const bodies: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    if (String(input).startsWith("/api/authoring/pages")) {
+      bodies.push(JSON.parse(String(init?.body)).body);
+      if (bodies.length === 1)
+        return new Response("temporary upstream failure", { status: 502 });
+      if (bodies.length === 2)
+        return new Response(
+          JSON.stringify({
+            code: "authoring_maintenance",
+            error: "maintenance",
+          }),
+          { status: 503 },
+        );
+      return new Response(
+        JSON.stringify({
+          id: "page-id",
+          page_type: "named",
+          name: "current",
+          updated_at: "2026-09-20T00:00:00Z",
+        }),
+      );
+    }
+    return minimalEditorFetch(input);
+  };
+  try {
+    await act(async () =>
+      root.render(
+        createElement(AuthoringEditor, { bootstrap: minimalEditorBootstrap() }),
+      ),
+    );
+    const element = container.querySelector<HTMLElement>(".ProseMirror");
+    assert.ok(element);
+    const editor = (element as HTMLElement & { editor: Editor }).editor;
+    await act(async () => {
+      editor.commands.setContent("current\n\n一時的な失敗", {
+        contentType: "markdown",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    assert.equal(
+      container.querySelector('[aria-label="未保存の内容を保護"]'),
+      null,
+    );
+    await act(async () => {
+      editor.commands.setContent("current\n\nメンテナンス中の本文", {
+        contentType: "markdown",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    assert.match(container.textContent || "", /メンテナンス中/);
+    await act(async () => {
+      editor.commands.setContent("current\n\n停止中の追記も保持", {
+        contentType: "markdown",
+      });
+      editor.view.dom.dispatchEvent(new window.FocusEvent("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    assert.equal(bodies.length, 2);
+    const retry = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "保存を再試行",
+    );
+    assert.ok(retry);
+    await act(async () => {
+      retry.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.deepEqual(bodies, [
+      "一時的な失敗",
+      "メンテナンス中の本文",
+      "停止中の追記も保持",
+    ]);
+    assert.equal(
+      container.querySelector('[aria-label="未保存の内容を保護"]'),
+      null,
+    );
+    assert.equal(editor.getMarkdown(), "current\n\n停止中の追記も保持");
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    container.remove();
+  }
+});
+
 test("keeps the authoring React tree out of each editor input", async () => {
   const container = document.createElement("div");
   document.body.append(container);

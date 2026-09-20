@@ -64,6 +64,8 @@ The browser test requires installed Chrome and permission to bind loopback ports
 
 ## Delivery boundaries
 
+Before any production cutover, deliver the [legacy editor protection and tab-preservation procedure](legacy-editor-cutover-preparation.md). That preparation leaves legacy backend writes enabled and does not authorize deployment or migration.
+
 The first part of [offline recovery and conflict merging](https://github.com/asonas/weblog.ason.as/issues/163) adds automatic retries for network failures and HTTP 408/429/5xx, retaining the persisted update ID after a lost response. Requests time out after 15 seconds. Authentication, validation and conflict errors pause background retries; the explicit retry button remains available. Visible editors check for server changes every 10 seconds and on focus/reconnection. Sending starts after 1 second idle or 5 seconds of continuous input, subject to an already-running request or composition.
 
 Incoming body updates are deferred during composition. Browser coverage exercises API-disconnected reload from IndexedDB, reconnect, lost-response retry, a non-JSON 502, authentication failure, remote refresh, continuous input, synthetic composition and local-only Undo. Synthetic composition events do not establish real Japanese IME or mobile menu behavior.

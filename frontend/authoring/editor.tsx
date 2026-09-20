@@ -627,6 +627,7 @@ type MaterialTab = "photo" | "video" | "bluesky" | "raindrop";
 
 type ApiError = Error & {
   fields?: Record<string, string[]>;
+  code?: "upgrade_required" | "authoring_maintenance";
 };
 
 type JsonObject = Record<string, unknown>;
@@ -1708,6 +1709,11 @@ async function requestJson<T>(
     if (isJsonObject(result.errors)) {
       error.fields = result.errors as Record<string, string[]>;
     }
+    if (
+      result.code === "upgrade_required" ||
+      result.code === "authoring_maintenance"
+    )
+      error.code = result.code;
     throw error;
   }
 
@@ -1805,6 +1811,8 @@ export function AuthoringEditor({
   );
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
+  const [saveRejection, setSaveRejection] = useState<ApiError["code"]>();
+  const saveRejectionRef = useRef<ApiError["code"]>(undefined);
   const [uploadingImages, setUploadingImages] = useState(false);
   const videoAbortRef = useRef<AbortController | null>(null);
   useEffect(() => () => videoAbortRef.current?.abort(), []);
@@ -1876,7 +1884,19 @@ export function AuthoringEditor({
     dirtyRef.current = value;
   }, []);
 
+  const retainRejectedSave = useCallback((error: ApiError) => {
+    if (!error.code) return;
+    saveRejectionRef.current = error.code;
+    setSaveRejection(error.code);
+    pendingSaveRef.current = false;
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  }, []);
+
   const savePage = useCallback(async () => {
+    if (saveRejectionRef.current) return;
     if (!draftRef.current.pageId && !draftRef.current.title.trim()) return;
     if (isUnpersistedRouteRef.current && !draftRef.current.body.trim()) return;
     if (savingRef.current) {
@@ -1956,6 +1976,7 @@ export function AuthoringEditor({
         pendingSaveRef.current = true;
     } catch (error) {
       const apiError = error as ApiError;
+      retainRejectedSave(apiError);
       const nextErrors = apiError.fields || { form: [apiError.message] };
       setErrors(nextErrors);
       setStatus(apiError.message);
@@ -1976,9 +1997,10 @@ export function AuthoringEditor({
         window.setTimeout(() => void savePage(), 0);
       }
     }
-  }, [setDirtyState]);
+  }, [setDirtyState, retainRejectedSave]);
 
   const scheduleSave = useCallback(() => {
+    if (saveRejectionRef.current) return;
     if (saveTimerRef.current !== null)
       window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
@@ -2031,7 +2053,7 @@ export function AuthoringEditor({
 
   const handleEditorBlur = useCallback(
     async (currentEditor: Editor) => {
-      if (!canEdit) return;
+      if (!canEdit || saveRejectionRef.current) return;
       const current = draftRef.current;
       if (!current.pageId) {
         if (current.title.trim()) void savePage();
@@ -2109,6 +2131,7 @@ export function AuthoringEditor({
         setDirtyState(editVersionRef.current !== savedVersion);
       } catch (error) {
         const apiError = error as ApiError;
+        retainRejectedSave(apiError);
         setErrors(apiError.fields || { title: [apiError.message] });
         setStatus(apiError.message);
         setDirtyState(true);
@@ -2117,7 +2140,14 @@ export function AuthoringEditor({
         setSaving(false);
       }
     },
-    [canEdit, savePage, scheduleSave, setDirtyState, updateDraft],
+    [
+      canEdit,
+      savePage,
+      scheduleSave,
+      setDirtyState,
+      updateDraft,
+      retainRejectedSave,
+    ],
   );
 
   const loadMoreLinkedPages = useCallback(async () => {
@@ -2293,6 +2323,7 @@ export function AuthoringEditor({
   }, [editor, wikiLinkQueryState, wikiLinkSuggestions.length]);
 
   const refreshPage = useCallback(async () => {
+    if (saveRejectionRef.current) return;
     const pageId = draftRef.current.pageId;
     if (!editor || !pageId || document.hidden || refreshingPageRef.current)
       return;
@@ -3168,7 +3199,9 @@ export function AuthoringEditor({
             onClick={(event) => {
               if (
                 event.target instanceof Element &&
-                event.target.closest(".editor-shell__actions")
+                event.target.closest(
+                  ".editor-shell__actions, .legacy-save-rejection",
+                )
               )
                 return;
               if (!editor || editor.view.dom.contains(event.target as Node))
@@ -3191,6 +3224,60 @@ export function AuthoringEditor({
                 {imageUploadStatus}
               </p>
             )}
+            {saveRejection && (
+              <section
+                className="legacy-save-rejection"
+                aria-label="未保存の内容を保護"
+              >
+                <p role="alert">
+                  {saveRejection === "upgrade_required"
+                    ? "保存方式が切り替わりました。このタブからは保存できません。"
+                    : "メンテナンス中のため、自動保存を停止しています。"}
+                </p>
+                <p>
+                  未保存の内容はこのタブに残っています。閉じたり再読み込みしたりする前にMarkdownをダウンロードし、内容を確認してください。
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = draftRef.current;
+                    const url = URL.createObjectURL(
+                      new Blob([`# ${current.title}\n\n${current.body}`], {
+                        type: "text/markdown;charset=utf-8",
+                      }),
+                    );
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = `${(current.title || "未保存の記事").replace(/[\\/:*?"<>|]/g, "_")}.md`;
+                    link.click();
+                    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  }}
+                >
+                  Markdownをダウンロード
+                </button>
+                {saveRejection === "authoring_maintenance" ? (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      saveRejectionRef.current = undefined;
+                      setSaveRejection(undefined);
+                      if (editor) void handleEditorBlur(editor);
+                    }}
+                  >
+                    保存を再試行
+                  </button>
+                ) : (
+                  <a
+                    href={window.location.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    保存した内容を確認してから新しいタブで開く
+                  </a>
+                )}
+              </section>
+            )}
             <div
               className="wysiwyg-editor"
               aria-busy={saving}
@@ -3198,7 +3285,7 @@ export function AuthoringEditor({
             >
               <EditorContent editor={editor} />
             </div>
-            {editorErrors.length > 0 && (
+            {!saveRejection && editorErrors.length > 0 && (
               <p className="input-error" role="alert">
                 {editorErrors.join(" ")}
               </p>
