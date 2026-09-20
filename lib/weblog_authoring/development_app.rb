@@ -844,6 +844,7 @@ module WeblogAuthoring
         "authenticated" => !user.nil?,
         "authentication_required" => settings.authentication_required,
         "can_edit" => !settings.authentication_required || !user.nil?,
+        "draft_authoring" => !settings.draft_store.nil?,
         "login" => user&.fetch("login", nil),
         "csrf_token" => csrf_token,
       }
