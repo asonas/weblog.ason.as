@@ -6,6 +6,7 @@ import { CardHome, type HomePage } from "./CardHome";
 import { DraftAdministration } from "./DraftAdministration";
 import { DraftEditor } from "./DraftEditor";
 import { DesignSystemPage } from "./designSystem";
+import { resolveDraftRoute } from "./draftRoute";
 import { AuthoringEditor, type EditorBootstrap } from "./editor";
 import { HomeCardsSkeleton } from "./HomeCards";
 import { HomeTags } from "./HomeTags";
@@ -357,6 +358,9 @@ function RootApp({
   initialAuth: AuthState;
 }) {
   const [auth, setAuth] = useState(initialAuth);
+  const [authenticationPending, setAuthenticationPending] = useState(
+    __DEPLOYMENT_ENVIRONMENT__ === "production",
+  );
   const [isLocalDraft, setIsLocalDraft] = useState(false);
   const authentication = useRef(Promise.resolve(initialAuth));
   const draftCsrf = useCallback(
@@ -372,18 +376,21 @@ function RootApp({
         .then((nextAuth) => {
           if (active) {
             setAuth(nextAuth);
+            setAuthenticationPending(false);
             if (nextAuth.can_edit) window.dispatchEvent(new Event("focus"));
           }
         })
         .catch(() => {
           document.documentElement.dataset.canEdit = "false";
-          if (
-            active &&
-            !navigator.onLine &&
-            (new URLSearchParams(location.search).has("id") ||
-              location.pathname === "/authoring/articles")
-          )
-            setIsLocalDraft(true);
+          if (active) {
+            setAuthenticationPending(false);
+            if (
+              !navigator.onLine &&
+              (new URLSearchParams(location.search).has("id") ||
+                location.pathname === "/authoring/articles")
+            )
+              setIsLocalDraft(true);
+          }
         });
     };
     authenticate();
@@ -403,24 +410,28 @@ function RootApp({
       </>
     );
   }
-  if (
-    (__DEPLOYMENT_ENVIRONMENT__ !== "production" ||
-      auth.draft_authoring ||
-      isLocalDraft) &&
-    window.location.pathname === "/authoring/articles"
-  ) {
+  const draftRoute = resolveDraftRoute(window.location.pathname, {
+    deploymentEnvironment: __DEPLOYMENT_ENVIRONMENT__,
+    authenticationPending,
+    draftAuthoring: Boolean(auth.draft_authoring),
+    localDraft: isLocalDraft,
+  });
+  if (draftRoute?.kind === "administration") {
+    if (draftRoute.state === "pending")
+      return <p className="loading-state">記事を読み込んでいます</p>;
+    if (draftRoute.state === "unavailable")
+      return <p>記事を管理するにはログインしてください。</p>;
     return auth.can_edit || isLocalDraft ? (
       <DraftAdministration csrf={draftCsrf} />
     ) : (
       <p>記事を管理するにはログインしてください。</p>
     );
   }
-  if (
-    (__DEPLOYMENT_ENVIRONMENT__ !== "production" ||
-      auth.draft_authoring ||
-      isLocalDraft) &&
-    window.location.pathname === "/draft-editor"
-  ) {
+  if (draftRoute?.kind === "editor") {
+    if (draftRoute.state === "pending")
+      return <p className="loading-state">下書きを読み込んでいます</p>;
+    if (draftRoute.state === "unavailable")
+      return <p>下書きを編集するにはログインしてください。</p>;
     return auth.can_edit || isLocalDraft ? (
       <>
         <HeaderSearch />
