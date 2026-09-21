@@ -85,7 +85,11 @@ data "aws_iam_policy_document" "search_indexer_runtime" {
     condition {
       test     = "StringLike"
       variable = "s3:prefix"
-      values   = ["search/*"]
+      values = [
+        "published/*",
+        "published-outputs/*",
+        "search/*",
+      ]
     }
   }
 
