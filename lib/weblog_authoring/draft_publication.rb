@@ -7,10 +7,18 @@ require_relative "names"
 module WeblogAuthoring
   class DraftPublication
     def self.remote(store:, lambda_client:, function_name:)
-      new(store:) do |job|
-        response = lambda_client.invoke(function_name:, invocation_type: "RequestResponse", payload: JSON.generate("operation" => "publication", "article_id" => job.fetch("article_id")))
+      invoke = lambda do |payload|
+        response = lambda_client.invoke(function_name:, invocation_type: "RequestResponse", payload: JSON.generate(payload))
         raise DraftStore::Error.new("公開版の復元に失敗しました。", 503) if response.function_error
         JSON.parse(response.payload.read)
+      rescue Aws::Lambda::Errors::ServiceError
+        raise DraftStore::Error.new("公開版の復元に失敗しました。", 503)
+      end
+      reconstruct_many = lambda do |jobs|
+        invoke.call("operation" => "publication_batch", "article_ids" => jobs.map { |job| job.fetch("article_id") })
+      end
+      new(store:, reconstruct_many:) do |job|
+        invoke.call("operation" => "publication", "article_id" => job.fetch("article_id"))
       end
     end
 
@@ -23,9 +31,10 @@ module WeblogAuthoring
       end
     end
 
-    def initialize(store:, &reconstruct)
+    def initialize(store:, reconstruct_many: nil, &reconstruct)
       @store = store
       @reconstruct = reconstruct
+      @reconstruct_many = reconstruct_many
     end
 
     def prepare(id)
@@ -47,6 +56,14 @@ module WeblogAuthoring
     # calculating a rename batch or accepting a publication.
     def working_content_hash(id)
       verified_content(id).slice("content_hash", "through")
+    end
+
+    def working_content_hashes(ids)
+      return ids.to_h { |id| [id, working_content_hash(id)] } unless @reconstruct_many
+      jobs = ids.map { |id| reconstruction_job(id) }
+      results = @reconstruct_many.call(jobs)
+      raise DraftStore::Error.new("公開版の復元に失敗しました。", 503) unless results.is_a?(Array) && results.length == jobs.length
+      jobs.zip(results).to_h { |job, result| [job.fetch("article_id"), verified_result(job, result).slice("content_hash", "through")] }
     end
 
     def accept(id, request)
@@ -88,6 +105,11 @@ module WeblogAuthoring
     private
 
     def verified_content(id)
+      job = reconstruction_job(id)
+      verified_result(job, @reconstruct.call(job))
+    end
+
+    def reconstruction_job(id)
       job = @store.checkpoint_job(id)
       cursor = job.fetch("expected_checkpoint")
       updates = []
@@ -99,7 +121,11 @@ module WeblogAuthoring
         updates.concat(page.fetch("updates"))
         cursor = page.fetch("cursor")
       end
-      result = @reconstruct.call(job.merge("updates" => updates))
+      job.merge("updates" => updates)
+    end
+
+    def verified_result(job, result)
+      id = job.fetch("article_id")
       unless result.fetch("article_id") == id && result.fetch("protocol") == job.fetch("protocol") && result.fetch("generation") == job.fetch("generation") && result.fetch("through") == job.fetch("through")
         raise DraftStore::Error.new("復元した版が一致しません。", 409)
       end

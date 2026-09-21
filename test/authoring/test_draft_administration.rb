@@ -52,6 +52,38 @@ class DraftAdministrationTest < Minitest::Test
     assert_nil filtered.fetch("cursor")
   end
 
+  def test_listing_batches_published_content_reconstruction
+    ids = 2.times.map do |index|
+      result = @admin.daily("2026-09-#{20 + index}")
+      id = result.fetch("id")
+      accepted = @publication.accept(id, @publication.prepare(id).merge("request_id" => "publish-#{index}"))
+      @publication.complete(id, accepted.fetch("id")) { "#{id}.html" }
+      id
+    end
+    calls = []
+    @publication.define_singleton_method(:working_content_hashes) do |requested|
+      calls << requested
+      requested.to_h { |id| [id, working_content_hash(id)] }
+    end
+
+    rows = @admin.list.fetch("articles")
+
+    assert_equal [ids.reverse], calls
+    assert_equal %w[public public], (rows.map { |row| row.fetch("state") })
+  end
+
+  def test_listing_remains_available_when_reconstruction_is_throttled
+    id = @admin.daily("2026-09-20").fetch("id")
+    accepted = @publication.accept(id, @publication.prepare(id).merge("request_id" => "publish"))
+    @publication.complete(id, accepted.fetch("id")) { "daily.html" }
+    @publication.define_singleton_method(:working_content_hashes) { |_ids| raise WeblogAuthoring::DraftStore::Error.new("公開版の復元に失敗しました。", 503) }
+
+    row = @admin.list.fetch("articles").first
+
+    assert_equal "unknown", row.fetch("state")
+    assert_equal "公開版の復元に失敗しました。", row.fetch("state_error")
+  end
+
   def test_listing_rejects_an_invalid_cursor
     assert_raises(WeblogAuthoring::DraftStore::Error) { @admin.list(cursor: "not-a-cursor") }
   end

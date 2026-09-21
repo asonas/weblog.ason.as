@@ -4,24 +4,41 @@ import { reconstructDraft } from "./reconstruct.js";
 import { DsqlDraftCheckpointRepository } from "./repository.js";
 
 export const handler: Handler<
-  ScheduledEvent | { operation: "publication"; article_id: string }
+  | ScheduledEvent
+  | { operation: "publication"; article_id: string }
+  | { operation: "publication_batch"; article_ids: string[] }
 > = async (event) => {
-  if ("operation" in event && event.operation === "publication") {
+  if (
+    "operation" in event &&
+    (event.operation === "publication" ||
+      event.operation === "publication_batch")
+  ) {
     const host = process.env.DSQL_HOST;
     if (!host) throw new Error("Draft worker environment is incomplete");
-    const job = await DsqlDraftCheckpointRepository.forEnvironment(
+    const repository = DsqlDraftCheckpointRepository.forEnvironment(
       host,
       process.env.AWS_REGION,
-    ).loadJob(event.article_id);
-    const result = reconstructDraft(job);
-    return {
-      article_id: event.article_id,
-      protocol: result.protocol,
-      generation: result.generation,
-      through: result.through,
-      markdown: result.markdown,
-      markdownDigest: result.markdownDigest,
+    );
+    const reconstruct = async (articleId: string) => {
+      const result = reconstructDraft(await repository.loadJob(articleId));
+      return {
+        article_id: articleId,
+        protocol: result.protocol,
+        generation: result.generation,
+        through: result.through,
+        markdown: result.markdown,
+        markdownDigest: result.markdownDigest,
+      };
     };
+    if (event.operation === "publication_batch") {
+      if (event.article_ids.length > 25)
+        throw new Error("Publication batch exceeds limit");
+      const results = [];
+      for (const articleId of event.article_ids)
+        results.push(await reconstruct(articleId));
+      return results;
+    }
+    return reconstruct(event.article_id);
   }
   if (
     !("source" in event) ||

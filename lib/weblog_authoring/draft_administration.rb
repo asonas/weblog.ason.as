@@ -25,10 +25,15 @@ module WeblogAuthoring
       has_more = false
       loop do
         rows = @store.administration_page(page_cursor)
-        rows.first(25).each do |row|
+        candidates = rows.first(25).filter_map do |row|
           last_scanned = row
-          article = article_row(row, needle)
-          articles << article if article
+          metadata = row.fetch("metadata").transform_values { |field| field.fetch("value") }
+          [row, metadata] if [metadata.fetch("title"), DraftStore.working_route(metadata), row["public_route"]].compact.any? { |value| value.downcase.include?(needle) }
+        end
+        published_ids = candidates.filter_map { |row, _metadata| row.fetch("id") if row["public_hash"] }
+        working = working_content_hashes(published_ids)
+        candidates.each do |row, metadata|
+          articles << article_row(row, metadata, working[row.fetch("id")])
           break if articles.length == 25
         end
         has_more = rows.length > 25
@@ -40,24 +45,31 @@ module WeblogAuthoring
 
     private
 
-    def article_row(row, needle)
-      metadata = row.fetch("metadata").transform_values { |field| field.fetch("value") }
-      return unless [metadata.fetch("title"), DraftStore.working_route(metadata), row["public_route"]].compact.any? { |value| value.downcase.include?(needle) }
+    def article_row(row, metadata, working)
       state = "draft"
-      error = nil
+      error = working.is_a?(DraftStore::Error) ? working.message : nil
       if row["public_hash"]
-        begin
-          working = @publication.working_content_hash(row.fetch("id"))
-          raise DraftStore::Error.new("一覧の取得中に更新されました。再読み込みしてください。", 409) unless working.fetch("through") == row.fetch("head")
-          state = working.fetch("content_hash") == row.fetch("public_hash") ? "public" : "unpublished_changes"
-        rescue DraftStore::Error => failure
-          state = failure.status == 422 ? "unpublished_changes" : "unknown"
-          error = failure.message
+        if error
+          state = "unknown"
+        else
+          begin
+            raise DraftStore::Error.new("一覧の取得中に更新されました。再読み込みしてください。", 409) unless working.fetch("through") == row.fetch("head")
+            state = working.fetch("content_hash") == row.fetch("public_hash") ? "public" : "unpublished_changes"
+          rescue DraftStore::Error => failure
+            state = failure.status == 422 ? "unpublished_changes" : "unknown"
+            error = failure.message
+          end
         end
       end
       publication = row["latest_id"] && @store.publication_job(row.fetch("id"), row.fetch("latest_id"))
       publication = publication.merge("stages" => @store.publication_stages(row.fetch("id"), row.fetch("latest_id"))) if publication
       row.slice("id", "head", "created_at", "updated_at", "public_route", "public_hash").merge("metadata" => metadata, "state" => state, "state_error" => error, "publication" => publication)
+    end
+
+    def working_content_hashes(ids)
+      @publication.working_content_hashes(ids)
+    rescue DraftStore::Error => failure
+      ids.to_h { |id| [id, failure] }
     end
 
     def decode_cursor(cursor)
