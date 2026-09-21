@@ -47,8 +47,10 @@ Stopping admission does not cancel requests already running. A transition out of
 draining, frozen, preparing, verifying or paused requires zero registered operations. Normal
 returns and exceptions release receipts. A process crash can leave a receipt; it
 has no automatic TTL. Preserve it, establish that the exact invocation/process is
-no longer running and inspect partial writes/publication before planning explicit
-recovery. There is intentionally no force-clear or automatic rollback command.
+no longer running and inspect partial writes/publication before explicit recovery.
+The operator command can remove only a named `draft_publication` receipt in
+`preparing`, with evidence that the invocation ended and partial state was
+preserved. There is no general force-clear, automatic expiry or automatic rollback.
 
 During maintenance both write protocols return 503 `authoring_maintenance`.
 Once editing has opened, legacy writes return 409 `upgrade_required`, including

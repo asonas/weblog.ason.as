@@ -77,7 +77,9 @@ inventory command work.
 7. Enter `preparing`, which leaves readers on legacy. Generate HTML/Atom/search
    with the new worker. Verify every active snapshot's HTML object/digest and the
    output heads' revision/digest, including search retrieval. A worker timeout or
-   retained operation receipt is a stop condition, not permission to discard it.
+   retained operation receipt is a stop condition. Preserve the partial output,
+   prove that the exact invocation has ended and use the bounded recovery command;
+   never delete or broadly clear receipts.
    Measure full-corpus first-build duration in this window; isolated fixture
    results do not prove all 843 articles finish within Lambda's 300 seconds.
    If the bound is exceeded, preserve partial output and plan bounded recovery
@@ -130,6 +132,7 @@ transition --host HOST --confirm-host HOST --from legacy --to draining --evidenc
 export --host HOST --snapshot NEW_SOURCE.json --site-url https://weblog.ason.as
 import --host HOST --confirm-host HOST --snapshot NEW_SOURCE.json --fingerprint SHA256 --evidence EVIDENCE.json
 transition --host HOST --confirm-host HOST --from frozen --to preparing --evidence EVIDENCE.json
+recover --host HOST --confirm-host HOST --operation-id RECEIPT --evidence EVIDENCE.json
 ```
 
 `export`/`import` require frozen admission and register a migration operation so
@@ -137,6 +140,15 @@ phase transitions cannot race them. Read the result of each step; never chain th
 whole cutover unattended. A malformed/unsupported source stops import. No command
 overwrites an export or clears migration/control state. An interrupted import can
 be rerun only with the same preserved input and unmodified destination.
+
+`recover` removes only the named `draft_publication` receipt while the cutover is
+in `preparing`. Its evidence must contain `operation_ended: true`,
+`partial_state_preserved: true`, a nonempty Lambda `request_id` and a nonempty
+`record`. Confirm the matching END/timeout log and preserve the partial stage and
+output inventory before running it. Other operation kinds and phases cannot be
+recovered with this command. Repair processes at most 50 articles per invocation;
+repeat it until it returns `completed`, then verify that no receipt or unfinished
+publication stage remains.
 
 New repair is the `{"operation":"draft_repair"}` event for the search-indexer
 Lambda, not the legacy search SQS queue. Scheduled hourly repair uses the same

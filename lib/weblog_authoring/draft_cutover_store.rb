@@ -87,6 +87,25 @@ module WeblogAuthoring
       cutover_status
     end
 
+    def recover_cutover_operation(id:, evidence:)
+      @connect.call do |db|
+        db.transaction do
+          current = cutover_state(db)
+          operation = db.query("SELECT * FROM #{db.prefix}draft_cutover_operations WHERE id = $1", [id]).first
+          unless operation && operation.fetch("kind") == "draft_publication" && operation.fetch("phase") == "preparing" && current.fetch("phase") == "preparing"
+            raise DraftStore::Error.new("Only a retained preparing publication receipt can be recovered", 409)
+          end
+          require_cutover_evidence(evidence, "operation_ended" => true, "partial_state_preserved" => true)
+          unless evidence["request_id"].is_a?(String) && !evidence.fetch("request_id").strip.empty?
+            raise DraftStore::Error.new("Record the ended Lambda request before recovering its receipt", 409)
+          end
+          db.query("UPDATE #{db.prefix}draft_cutover_state SET phase = phase WHERE id = 1")
+          db.query("DELETE FROM #{db.prefix}draft_cutover_operations WHERE id = $1", [id])
+        end
+      end
+      cutover_status
+    end
+
     private
 
     def cutover_state(db)

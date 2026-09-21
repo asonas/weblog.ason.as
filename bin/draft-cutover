@@ -11,16 +11,16 @@ require_relative "../lib/weblog_authoring/draft_migration"
 command = ARGV.shift
 options = {}
 parser = OptionParser.new do |arguments|
-  arguments.banner = "Usage: draft-cutover status|initialize|export|import|transition --host HOST [options]"
-  %w[host confirm-host snapshot site-url fingerprint from to evidence].each do |key|
+  arguments.banner = "Usage: draft-cutover status|initialize|export|import|transition|recover --host HOST [options]"
+  %w[host confirm-host snapshot site-url fingerprint from to evidence operation-id].each do |key|
     arguments.on("--#{key} VALUE") { |value| options[key] = value }
   end
 end
 parser.parse!
-raise OptionParser::InvalidArgument, parser.banner unless %w[status initialize export import transition].include?(command) && ARGV.empty?
+raise OptionParser::InvalidArgument, parser.banner unless %w[status initialize export import transition recover].include?(command) && ARGV.empty?
 host = options.fetch("host")
 raise "Expected an explicit Aurora DSQL hostname" unless /\A[a-z0-9]+\.dsql\.[a-z0-9-]+\.on\.aws\z/.match?(host)
-mutating = %w[initialize import transition].include?(command)
+mutating = %w[initialize import transition recover].include?(command)
 if mutating
   raise "Confirm the exact host before changing its draft tables" unless options["confirm-host"] == host
   evidence = JSON.parse(File.read(options.fetch("evidence")))
@@ -44,6 +44,8 @@ result = case command
            store.cutover_status
          when "transition"
            store.transition_cutover(expected: options.fetch("from"), to: options.fetch("to"), evidence:)
+         when "recover"
+           store.recover_cutover_operation(id: options.fetch("operation-id"), evidence:)
          when "export", "import"
            store.with_cutover_operation("migration") do
              state = store.cutover_status

@@ -4,6 +4,8 @@ require_relative "draft_outputs"
 
 module WeblogAuthoring
   class DraftJobs
+    REPAIR_BATCH_SIZE = 50
+
     def initialize(store:, publisher:, outputs:, clock: Time.method(:now))
       @store = store
       @publisher = publisher
@@ -51,6 +53,7 @@ module WeblogAuthoring
         true
       end
       results = []
+      limited = false
       @store.publication_repair_jobs.each do |head|
         id = head.fetch("article_id")
         versions = [head.fetch("latest_id"), head["active_id"]].compact.uniq
@@ -64,12 +67,24 @@ module WeblogAuthoring
             repair_html = true
           end
           next unless unfinished || repair_html || (active && repair_outputs)
+          if results.length >= REPAIR_BATCH_SIZE
+            limited = true
+            break
+          end
           results << run(id, version)
           repair_outputs = false if active
         end
+        break if limited
       end
       @store.cleanup_publication_stages(now: @clock.call)
-      { "status" => results.any? { |job| job.fetch("stages").any? { |stage| %w[needs_attention retry_wait].include?(stage.fetch("status")) } } ? "needs_attention" : "completed", "jobs" => results }
+      status = if results.any? { |job| job.fetch("stages").any? { |stage| %w[needs_attention retry_wait].include?(stage.fetch("status")) } }
+                 "needs_attention"
+               elsif limited
+                 "partial"
+               else
+                 "completed"
+               end
+      { "status" => status, "processed" => results.length, "jobs" => results }
     end
 
     private

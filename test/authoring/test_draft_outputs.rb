@@ -32,6 +32,32 @@ class DraftOutputsTest < Minitest::Test
     end
   end
 
+  def test_repair_processes_a_bounded_batch
+    processed = Set.new
+    heads = 51.times.map { |index| { "article_id" => index.to_s, "latest_id" => "version-#{index}", "active_id" => nil } }
+    store = Object.new
+    store.define_singleton_method(:publication_repair_jobs) { heads }
+    store.define_singleton_method(:publication_stages) do |id, _version|
+      processed.include?(id) ? %w[html atom search].map { |stage| { "stage" => stage, "status" => "completed" } } : []
+    end
+    store.define_singleton_method(:cleanup_publication_stages) { |now:| now }
+    outputs = Object.new
+    outputs.define_singleton_method(:current?) { |_stage| true }
+    jobs = Class.new(WeblogAuthoring::DraftJobs) do
+      define_method(:run) do |id, _version|
+        processed << id
+        { "stages" => [] }
+      end
+    end.new(store:, publisher: Object.new, outputs:)
+
+    first = jobs.repair
+    second = jobs.repair
+
+    assert_equal ["partial", 50], first.values_at("status", "processed")
+    assert_equal ["completed", 1], second.values_at("status", "processed")
+    assert_equal 51, processed.length
+  end
+
   def test_repair_finds_corrupt_output_even_when_all_stages_are_completed
     version = @publication.accept(@id, @publication.prepare(@id).merge("request_id" => "publish")).fetch("id")
     @jobs.run(@id, version)

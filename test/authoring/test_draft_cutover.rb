@@ -51,6 +51,29 @@ class DraftCutoverTest < Minitest::Test
     writer&.join
   end
 
+  def test_recovery_removes_only_the_verified_stale_publication_receipt
+    @store.transition_cutover(expected: "legacy", to: "draining")
+    @store.transition_cutover(expected: "draining", to: "frozen", evidence: {
+      "legacy_writers_retired" => true, "legacy_generators_paused" => true, "pending_legacy_publications" => 0, "record" => "fixture drain evidence",
+    })
+    source = { "format" => 1, "site_url" => "https://example.com", "articles" => [] }
+    migration = WeblogAuthoring::DraftMigration.new(store: @store).import(source)
+    @store.transition_cutover(expected: "frozen", to: "preparing", evidence: {
+      "source_preserved" => true, "fingerprint" => migration.fetch("fingerprint"), "record" => "fixture source",
+    })
+    database = SQLite3::Database.new(@root.join("drafts.sqlite3"))
+    database.execute("INSERT INTO draft_cutover_operations VALUES (?, 'draft_publication', 'preparing', ?)", ["stale", Time.now.utc.iso8601(6)])
+    database.execute("INSERT INTO draft_cutover_operations VALUES (?, 'draft_publication', 'preparing', ?)", ["other", Time.now.utc.iso8601(6)])
+    evidence = { "record" => "request ended", "operation_ended" => true, "partial_state_preserved" => true, "request_id" => "request-1" }
+
+    assert_raises(WeblogAuthoring::DraftStore::Error) { @store.recover_cutover_operation(id: "stale", evidence: evidence.except("operation_ended")) }
+    status = @store.recover_cutover_operation(id: "stale", evidence:)
+
+    assert_equal ["other"], (status.fetch("operations").map { |operation| operation.fetch("id") })
+  ensure
+    database&.close
+  end
+
   def test_rollback_is_allowed_before_reopening_but_new_work_is_retained_after_reopening
     freeze_legacy
     source = { "format" => 1, "site_url" => "https://example.com", "articles" => [{
