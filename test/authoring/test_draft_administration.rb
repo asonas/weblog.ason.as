@@ -39,7 +39,7 @@ class DraftAdministrationTest < Minitest::Test
     assert_equal first, @admin.daily("2026-09-20")
   end
 
-  def test_listing_is_bounded_and_search_can_continue_past_an_empty_page
+  def test_listing_is_bounded_and_search_scans_later_pages
     26.times { |index| @admin.daily((Date.new(2026, 1, 1) + index).iso8601) }
     first = @admin.list
     assert_equal 25, first.fetch("articles").length
@@ -48,8 +48,12 @@ class DraftAdministrationTest < Minitest::Test
     assert_nil last.fetch("cursor")
     title = last.fetch("articles").first.dig("metadata", "title")
     filtered = @admin.list(query: title)
-    assert_empty filtered.fetch("articles")
-    assert_equal title, @admin.list(query: title, cursor: filtered.fetch("cursor")).fetch("articles").first.dig("metadata", "title")
+    assert_equal title, filtered.fetch("articles").first.dig("metadata", "title")
+    assert_nil filtered.fetch("cursor")
+  end
+
+  def test_listing_rejects_an_invalid_cursor
+    assert_raises(WeblogAuthoring::DraftStore::Error) { @admin.list(cursor: "not-a-cursor") }
   end
 
   def test_daily_reuses_an_existing_date_article_and_rejects_invalid_dates

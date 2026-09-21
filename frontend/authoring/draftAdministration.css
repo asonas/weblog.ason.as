@@ -124,6 +124,10 @@ body:has(.draft-admin) .page-shell {
 .draft-admin-rows strong {
   font-size: 17px;
 }
+.draft-admin .draft-admin-more {
+  width: 100%;
+  margin-top: 16px;
+}
 .draft-admin-route,
 .draft-admin-rows small,
 .draft-admin-hint {

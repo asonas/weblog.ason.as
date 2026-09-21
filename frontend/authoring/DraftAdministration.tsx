@@ -45,6 +45,7 @@ const STAGES: Record<string, string> = {
   atom: "フィード",
   search: "検索",
 };
+type ArticlePage = { articles: Article[]; cursor: string | null };
 function needsAttention(row: Row) {
   return (
     row.state === "unknown" ||
@@ -69,63 +70,81 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [local, setLocal] = useState<LocalDraftSummary[]>([]);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [available, setAvailable] = useState(false);
   const [error, setError] = useState("");
   const [localError, setLocalError] = useState("");
   const [busy, setBusy] = useState(false);
   const request = useRef<AbortController | null>(null);
 
-  const reload = useCallback(async () => {
-    request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    setLoading(true);
-    setError("");
-    setAvailable(false);
-    void readLocalDraftSummaries()
-      .then((value) => {
-        if (!controller.signal.aborted) {
-          setLocal(value);
-          setLocalError("");
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted)
-          setLocalError(
-            "この端末の保存領域を読めません。サーバー上の記事のみ表示します。",
-          );
-      });
-    try {
-      let cursor = "";
-      const all: Article[] = [];
-      do {
-        const response = await fetch(
-          `/api/authoring/drafts?cursor=${encodeURIComponent(cursor)}`,
-          { signal: controller.signal },
-        );
+  const load = useCallback(
+    async (nextCursor: string | null = null) => {
+      const isReload = nextCursor === null;
+      request.current?.abort();
+      const controller = new AbortController();
+      request.current = controller;
+      if (isReload) {
+        setLoading(true);
+        setLoadingMore(false);
+      } else setLoadingMore(true);
+      setError("");
+      if (isReload) setAvailable(false);
+      if (isReload)
+        void readLocalDraftSummaries()
+          .then((value) => {
+            if (!controller.signal.aborted) {
+              setLocal(value);
+              setLocalError("");
+            }
+          })
+          .catch(() => {
+            if (!controller.signal.aborted)
+              setLocalError(
+                "この端末の保存領域を読めません。サーバー上の記事のみ表示します。",
+              );
+          });
+      try {
+        const params = new URLSearchParams({ q: debouncedQuery });
+        if (nextCursor) params.set("cursor", nextCursor);
+        const response = await fetch(`/api/authoring/drafts?${params}`, {
+          signal: controller.signal,
+        });
         if (!response.ok)
           throw new Error(
             "サーバーの記事一覧を取得できません。通信やログイン状態を確認してください。",
           );
-        const page: { articles: Article[]; cursor: string | null } =
-          await response.json();
-        all.push(...page.articles);
-        cursor = page.cursor || "";
-        setArticles([...all]);
-      } while (cursor);
-      setAvailable(true);
-    } catch (failure) {
-      if (!controller.signal.aborted)
-        setError(
-          failure instanceof Error ? failure.message : "一覧を取得できません。",
+        const page: ArticlePage = await response.json();
+        setArticles((current) =>
+          isReload ? page.articles : [...current, ...page.articles],
         );
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
-  }, []);
+        setCursor(page.cursor);
+        setAvailable(true);
+      } catch (failure) {
+        if (!controller.signal.aborted)
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : "一覧を取得できません。",
+          );
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      }
+    },
+    [debouncedQuery],
+  );
+  const reload = useCallback(() => load(), [load]);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedQuery(query), 250);
+    return () => window.clearTimeout(timeout);
+  }, [query]);
   useEffect(() => {
     void reload();
     const refresh = () => {
@@ -152,20 +171,21 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
     local: byId.get(row.id),
   }));
   const remoteIds = new Set(articles.map((row) => row.id));
-  for (const saved of local)
-    if (!remoteIds.has(saved.id))
-      rows.push({
-        id: saved.id,
-        metadata: saved.metadata,
-        head: 0,
-        updated_at: "",
-        public_route: null,
-        public_hash: null,
-        state: available ? "draft" : "unknown",
-        publication: null,
-        local: saved,
-        localOnly: true,
-      });
+  if (cursor === null && (!available || debouncedQuery === ""))
+    for (const saved of local)
+      if (!remoteIds.has(saved.id))
+        rows.push({
+          id: saved.id,
+          metadata: saved.metadata,
+          head: 0,
+          updated_at: "",
+          public_route: null,
+          public_hash: null,
+          state: available ? "draft" : "unknown",
+          publication: null,
+          local: saved,
+          localOnly: true,
+        });
   const matches = (row: Row, value: Filter) =>
     value === "all" ||
     (value === "attention" ? needsAttention(row) : row.state === value);
@@ -278,7 +298,6 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
               onClick={() => setFilter(value)}
             >
               {label}
-              <span>{rows.filter((row) => matches(row, value)).length}</span>
             </button>
           ))}
         </nav>
@@ -294,7 +313,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
           <span role="status">
             {loading
               ? "記事を読み込み中…"
-              : `${visible.length}件${available ? "" : "（取得済み分）"}`}
+              : `${visible.length}件を表示${cursor ? "・続きあり" : ""}${available ? "" : "（取得済み分）"}`}
           </span>
           <button
             type="button"
@@ -345,6 +364,16 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
             </li>
           ))}
         </ul>
+        {cursor && (
+          <button
+            className="draft-admin-more"
+            type="button"
+            disabled={loadingMore || busy}
+            onClick={() => void load(cursor)}
+          >
+            {loadingMore ? "読み込み中…" : "さらに読み込む"}
+          </button>
+        )}
       </section>
       <section className="draft-admin-detail" aria-label="選択した記事">
         {selected ? (

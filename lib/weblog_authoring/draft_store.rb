@@ -113,9 +113,16 @@ module WeblogAuthoring
       append_data(id, payload, data)
     end
 
-    def administration_page(cursor = "")
+    def administration_page(cursor = nil)
       @connect.call do |db|
-        db.query("SELECT a.id, a.head, a.metadata, a.created_at, a.updated_at, h.latest_id, v.route AS public_route, v.content_hash AS public_hash FROM #{db.prefix}draft_articles a LEFT JOIN #{db.prefix}draft_publication_heads h ON h.article_id = a.id LEFT JOIN #{db.prefix}draft_published_versions v ON v.id = h.active_id WHERE a.id > $1 ORDER BY a.id LIMIT 25", [cursor]).map do |row|
+        sql = "SELECT a.id, a.head, a.metadata, a.created_at, a.updated_at, h.latest_id, v.route AS public_route, v.content_hash AS public_hash FROM #{db.prefix}draft_articles a LEFT JOIN #{db.prefix}draft_publication_heads h ON h.article_id = a.id LEFT JOIN #{db.prefix}draft_published_versions v ON v.id = h.active_id"
+        params = []
+        if cursor
+          sql += " WHERE a.updated_at < $1 OR (a.updated_at = $1 AND a.id > $2)"
+          params = [cursor.fetch("updated_at"), cursor.fetch("id")]
+        end
+        sql += " ORDER BY a.updated_at DESC, a.id LIMIT 26"
+        db.query(sql, params).map do |row|
           row.merge("head" => row.fetch("head").to_i, "metadata" => JSON.parse(row.fetch("metadata")))
         end
       end

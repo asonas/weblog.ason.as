@@ -35,7 +35,32 @@ try {
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
+  let listRequests = 0;
+  await page.route("**/api/authoring/drafts?*", async route => {
+    listRequests += 1;
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    const article = {
+      id: cursor ? "pagination-second" : "pagination-first",
+      head: 0,
+      metadata: { title: cursor ? "2件目" : "1件目", page_type: "named", page_date: "", cover_mode: "auto", cover_image_url: null },
+      updated_at: cursor ? "2026-09-19T00:00:00Z" : "2026-09-20T00:00:00Z",
+      public_route: null,
+      public_hash: null,
+      state: "draft",
+      publication: null,
+    };
+    await route.fulfill({ json: { articles: [article], cursor: cursor ? null : "next-page" } });
+  });
   await page.goto("http://127.0.0.1:15182/authoring/articles");
+  const ledger = page.getByRole("region", { name: "記事一覧", exact: true });
+  await page.getByRole("button", { name: "さらに読み込む" }).waitFor();
+  assert.equal(listRequests, 1);
+  assert.equal(await ledger.locator("li").count(), 1);
+  await page.getByRole("button", { name: "さらに読み込む" }).click();
+  await until(async () => await ledger.locator("li").count() === 2);
+  assert.equal(listRequests, 2);
+  await page.unroute("**/api/authoring/drafts?*");
+  await page.reload();
   const menu = page.getByRole("navigation", { name: "執筆メニュー" });
   await menu.waitFor();
   assert.deepEqual(await menu.locator("a").allTextContents(), ["記事", "ホーム", "新規", "今日"]);
@@ -67,7 +92,6 @@ try {
   await page.getByRole("link", { name: "記事一覧", exact: true }).click();
   const search = page.getByRole("searchbox", { name: "タイトルまたはURLで検索" });
   await search.fill("管理画面");
-  const ledger = page.getByRole("region", { name: "記事一覧", exact: true });
   const detail = page.getByRole("region", { name: "選択した記事", exact: true });
   await until(async () => await ledger.locator("li").count() === 1);
   await page.screenshot({ path: "/tmp/weblog-170-wide.png" });
