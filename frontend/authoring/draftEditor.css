@@ -168,7 +168,7 @@ html[data-draft-workspace="true"] body {
   tab-size: 2;
 }
 
-.draft-wiki-link-suggestions {
+.wiki-link-suggestions.draft-wiki-link-suggestions {
   max-inline-size: calc(100% - 2rem);
   transform: none;
 }

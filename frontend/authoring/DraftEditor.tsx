@@ -83,7 +83,8 @@ function caretPosition(field: HTMLTextAreaElement): CSSProperties {
         field.clientHeight - 8,
         marker.offsetTop -
           field.scrollTop +
-          Number.parseFloat(style.lineHeight),
+          Number.parseFloat(style.lineHeight) +
+          8,
       ),
     ),
   };
@@ -297,8 +298,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       field.selectionStart,
       field.selectionEnd,
     );
+    const isSameQuery =
+      query?.from === wikiLinkQuery?.from &&
+      query?.to === wikiLinkQuery?.to &&
+      query?.value === wikiLinkQuery?.value;
     setWikiLinkQuery(query);
-    setActiveWikiLinkSuggestion(0);
+    if (!isSameQuery) setActiveWikiLinkSuggestion(0);
     setWikiLinkSuggestionStyle(query ? caretPosition(field) : undefined);
     setPreviewBlockIndex(
       markdownBlockIndexAt(field.value, field.selectionStart),
@@ -355,13 +360,11 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     } else if (event.key === "Enter") {
       event.preventDefault();
       acceptWikiLinkSuggestion(wikiLinkSuggestions[activeWikiLinkSuggestion]);
-    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    } else if (event.key === "Tab") {
       event.preventDefault();
       setActiveWikiLinkSuggestion(
         (current) =>
-          (current +
-            (event.key === "ArrowUp" ? -1 : 1) +
-            wikiLinkSuggestions.length) %
+          (current + (event.shiftKey ? -1 : 1) + wikiLinkSuggestions.length) %
           wikiLinkSuggestions.length,
       );
     }
@@ -578,7 +581,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             onKeyUp={(event) => {
               if (
                 wikiLinkSuggestions.length === 0 ||
-                !["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(event.key)
+                !["Tab", "Enter", "Escape"].includes(event.key)
               )
                 updateCursorContext();
             }}

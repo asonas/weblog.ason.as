@@ -155,6 +155,43 @@ try {
     await wikiSuggestions.getByRole("option").allTextContents(),
     ["公開先", "公開予定"],
   );
+  const bodyBox = await body.boundingBox();
+  const suggestionBox = await wikiSuggestions.boundingBox();
+  const bodyMetrics = await body.evaluate((field) => {
+    const style = getComputedStyle(field);
+    return {
+      lineHeight: Number.parseFloat(style.lineHeight),
+      paddingTop: Number.parseFloat(style.paddingTop),
+    };
+  });
+  assert.ok(bodyBox && suggestionBox);
+  assert.ok(
+    suggestionBox.y >=
+      bodyBox.y + bodyMetrics.paddingTop + bodyMetrics.lineHeight + 6,
+    `Wiki link suggestions must leave space below the caret line: ${JSON.stringify({ bodyBox, suggestionBox, bodyMetrics })}`,
+  );
+  await body.press("Tab");
+  assert.equal(await body.inputValue(), "[[公");
+  assert.equal(await body.evaluate((field) => field === document.activeElement), true);
+  assert.equal(
+    await wikiSuggestions.getByRole("option").nth(1).getAttribute("aria-selected"),
+    "true",
+  );
+  await body.press("Shift+Tab");
+  assert.equal(
+    await wikiSuggestions.getByRole("option").first().getAttribute("aria-selected"),
+    "true",
+  );
+  await body.fill("前の行\n[[公");
+  await wikiSuggestions.waitFor();
+  await body.press("ArrowUp");
+  assert.ok(
+    (await body.evaluate((field) => field.selectionStart)) <
+      "前の行\n[[公".indexOf("[["),
+    "Arrow keys must retain native textarea cursor movement",
+  );
+  await body.fill("[[公");
+  await wikiSuggestions.waitFor();
   await body.press("Enter");
   assert.equal(await body.inputValue(), "[[公開先]]");
   await body.fill("リンクにする");
