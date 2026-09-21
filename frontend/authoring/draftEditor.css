@@ -146,6 +146,7 @@ html[data-draft-workspace="true"] body {
 }
 
 .draft-editor__source {
+  position: relative;
   min-inline-size: 0;
   min-block-size: 0;
 }
@@ -159,12 +160,17 @@ html[data-draft-workspace="true"] body {
   padding: var(--space-4) var(--space-6);
   background: var(--canvas);
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    monospace;
+    "Source Han Code JP", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
   font-size: 0.95rem;
   font-weight: 400;
   line-height: 1.5;
   tab-size: 2;
+}
+
+.draft-wiki-link-suggestions {
+  max-inline-size: calc(100% - 2rem);
+  transform: none;
 }
 
 .draft-preview {

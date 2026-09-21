@@ -6,7 +6,7 @@ import { markdownForEditor } from "./markdown";
 import { PublicArticlePresentation } from "./PublicArticlePresentation";
 
 const MEDIA_PATTERN =
-  /!\[[^\]]*\]\(|:::video |https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|speakerdeck\.com|bsky\.app)\//;
+  /!\[[^\]]*\]\(|:::video |https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|speakerdeck\.com|bsky\.app|x\.com|twitter\.com)\//;
 
 function coverImageUrl(body: string, metadata: DraftMetadata): string | null {
   if (metadata.cover_mode === "none") return null;
@@ -32,9 +32,16 @@ function useOnlineStatus(): boolean {
 type DraftPreviewProps = {
   body: string;
   metadata: DraftMetadata;
+  pageNames: Array<string>;
+  sourceBlockIndex: number;
 };
 
-export function DraftPreview({ body, metadata }: DraftPreviewProps) {
+export function DraftPreview({
+  body,
+  metadata,
+  pageNames,
+  sourceBlockIndex,
+}: DraftPreviewProps) {
   const root = useRef<HTMLDivElement>(null);
   const navigation = useRef<HTMLDivElement>(null);
   const isOnline = useOnlineStatus();
@@ -74,6 +81,41 @@ export function DraftPreview({ body, metadata }: DraftPreviewProps) {
     });
   }, [body, editor]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: body replacement updates the editor DOM before link state is applied.
+  useEffect(() => {
+    const container = root.current;
+    if (!container) return;
+    const names = new Set(pageNames);
+    const wikiLinkNames = new Set(
+      Array.from(body.matchAll(/\[\[([^[\]\n]+)\]\]/g), (match) =>
+        match[1].trim(),
+      ),
+    );
+    for (const link of container.querySelectorAll<HTMLAnchorElement>(
+      '.public-article-body a[href^="/"]',
+    )) {
+      const name = decodeURIComponent(link.pathname.slice(1));
+      if (!wikiLinkNames.has(name)) continue;
+      link.classList.add("wiki-link");
+      link.classList.toggle("wiki-link--existing", names.has(name));
+      link.classList.toggle("wiki-link--missing", !names.has(name));
+    }
+  }, [body, editor, pageNames]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: body replacement updates block geometry before scroll synchronization.
+  useEffect(() => {
+    const container = root.current;
+    const scroller = container?.closest<HTMLElement>(".draft-preview");
+    const blocks = container?.querySelectorAll<HTMLElement>(
+      ".public-article-body > *",
+    );
+    if (!container || !scroller || !blocks || blocks.length === 0) return;
+    const target = blocks[Math.min(sourceBlockIndex, blocks.length - 1)];
+    const scrollerRect = scroller.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    scroller.scrollTop += targetRect.top - scrollerRect.top - 24;
+  }, [body, editor, sourceBlockIndex]);
+
   useEffect(() => {
     const container = root.current;
     if (!container) return;
@@ -82,7 +124,7 @@ export function DraftPreview({ body, metadata }: DraftPreviewProps) {
       if (!(media instanceof HTMLElement)) return;
       media
         .closest<HTMLElement>(
-          ".article-image, .article-video, .youtube-player, .speakerdeck-player, .bluesky-player",
+          ".article-image, .article-video, .youtube-player, .speakerdeck-player, .bluesky-player, .x-post",
         )
         ?.setAttribute(
           "data-media-state",

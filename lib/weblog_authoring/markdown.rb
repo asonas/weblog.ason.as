@@ -111,7 +111,7 @@ module WeblogAuthoring
         route = wiki_route_for(name, mode)
 
         token = "#{WIKI_SENTINEL_PREFIX}#{index}"
-        wiki_targets[token] = { "route" => route, "label" => name }
+        wiki_targets[token] = { "route" => route, "label" => name, "exists" => @pages_by_name.key?(name) }
         replacements << [link.start, link.end, "[#{escape_markdown_link_label(name)}](#{token})"]
       end
 
@@ -217,6 +217,7 @@ module WeblogAuthoring
 
       def convert_p(el, indent)
         standalone_url = standalone_url(el)
+        embed_url = explicit_embed_url(standalone_url)
         video = /\A:::video (\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4)(?: (\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4))?(?: ([1-9]\d{0,4})x([1-9]\d{0,4}))? :::\z/.match(standalone_url.to_s)
         if video
           avc, av1, width, height = video.captures
@@ -227,17 +228,23 @@ module WeblogAuthoring
 
           return %(#{" " * indent}#{player}\n)
         end
-        youtube_id = youtube_video_id(standalone_url) if standalone_url
-        bluesky_post = bluesky_post_identity(standalone_url) if standalone_url
+        media_url = embed_url || standalone_url
+        youtube_id = youtube_video_id(media_url) if media_url
+        bluesky_post = bluesky_post_identity(media_url) if media_url
+        x_post = x_post_identity(media_url) if media_url
         if el.options[:transparent]
           inner(el, indent)
-        elsif standalone_url && youtube_id
-          youtube_player_html(youtube_id, standalone_url, indent)
-        elsif standalone_url && bluesky_post
-          bluesky_player_html(bluesky_post, standalone_url, indent)
-        elsif standalone_url && EmbedMetadataFetcher::SPEAKER_DECK_URL.match?(standalone_url)
-          url = CGI.escapeHTML(standalone_url)
+        elsif media_url && youtube_id
+          youtube_player_html(youtube_id, media_url, indent)
+        elsif media_url && bluesky_post
+          bluesky_player_html(bluesky_post, media_url, indent)
+        elsif media_url && x_post
+          x_post_html(x_post, media_url, indent)
+        elsif media_url && EmbedMetadataFetcher::SPEAKER_DECK_URL.match?(media_url)
+          url = CGI.escapeHTML(media_url)
           %(#{" " * indent}<div class="speakerdeck-player" data-speakerdeck-player="#{url}"><a href="#{url}" target="_blank" rel="noreferrer">#{url}</a></div>\n)
+        elsif embed_url
+          embed_card_html(embed_url, indent)
         else
           format_as_block_html("p", el.attr, inner(el, indent), indent)
         end
@@ -247,7 +254,8 @@ module WeblogAuthoring
         href = el.attr["href"].to_s
         target = self.class.context.fetch(:wiki_targets, {})[href]
         if target
-          attributes = { "href" => target.fetch("route") }
+          state = target.fetch("exists") ? "existing" : "missing"
+          attributes = { "href" => target.fetch("route"), "class" => "wiki-link wiki-link--#{state}" }
           if self.class.context[:mode] == "local"
             attributes["target"] = "_blank"
             attributes["rel"] = MarkdownRenderer::INTERNAL_REL
@@ -351,6 +359,24 @@ module WeblogAuthoring
 
       private
 
+      def explicit_embed_url(value)
+        match = value.to_s.match(/\A\[embed:(https?:\/\/[^\s\]]+)\]\z/)
+        return nil unless match
+
+        url = URI.parse(match[1])
+        return nil unless %w[http https].include?(url.scheme) && url.host && url.userinfo.nil?
+
+        url.to_s
+      rescue URI::InvalidURIError
+        nil
+      end
+
+      def embed_card_html(url, indent)
+        escaped_url = CGI.escapeHTML(url)
+        spaces = " " * indent
+        %(#{spaces}<a class="embed-card embed-card--loading" data-embed-url="#{escaped_url}" href="#{escaped_url}" target="_blank" rel="noopener noreferrer"><span class="embed-card__url">#{escaped_url}</span></a>\n)
+      end
+
       def standalone_url(element)
         return nil unless element.children.one?
 
@@ -409,6 +435,25 @@ module WeblogAuthoring
         src = "https://embed.bsky.app/embed/#{did}/app.bsky.feed.post/#{rkey}"
         escaped_url = CGI.escapeHTML(url)
         %(#{spaces}<div class="bluesky-player"><iframe src="#{src}" title="Bluesky投稿" loading="lazy"></iframe><a href="#{escaped_url}" target="_blank" rel="noreferrer">#{escaped_url}</a></div>\n)
+      end
+
+      def x_post_identity(raw_url)
+        return nil if raw_url.nil? || raw_url.empty?
+
+        url = URI.parse(raw_url)
+        hostname = url.host.to_s.downcase.sub(/\Awww\./, "")
+        return nil unless url.scheme == "https" && %w[x.com twitter.com].include?(hostname)
+
+        match = url.path.match(%r{\A/[A-Za-z0-9_]+/status/(\d+)/?\z})
+        match && match[1]
+      rescue URI::InvalidURIError
+        nil
+      end
+
+      def x_post_html(post_id, url, indent)
+        spaces = " " * indent
+        escaped_url = CGI.escapeHTML(url)
+        %(#{spaces}<div class="x-post" data-x-post-id="#{post_id}" data-x-post-url="#{escaped_url}"><a href="#{escaped_url}" target="_blank" rel="noopener noreferrer">#{escaped_url}</a></div>\n)
       end
 
       def safe_html_element?(el)

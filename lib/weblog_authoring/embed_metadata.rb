@@ -94,19 +94,28 @@ module WeblogAuthoring
       http.read_timeout = TIMEOUT
       request = Net::HTTP::Get.new(uri.request_uri)
       body = +""
-      response = http.start do |client|
-        client.request(request) do |incoming|
-          if incoming["content-length"].to_i > MAX_BYTES
-            raise FetchError, "レスポンスが大きすぎます"
+      response = catch(:metadata_complete) do
+        http.start do |client|
+          client.request(request) do |incoming|
+            content_type = incoming["content-type"].to_s.split(";", 2).first.downcase
+            if !HTML_CONTENT_TYPES.include?(content_type) && incoming["content-length"].to_i > MAX_BYTES
+              raise FetchError, "レスポンスが大きすぎます"
+            end
+            incoming.read_body do |chunk|
+              body << chunk
+              head_end = body.downcase.index("</head>") if HTML_CONTENT_TYPES.include?(content_type)
+              if head_end
+                body = body.byteslice(0, head_end + "</head>".bytesize)
+                throw :metadata_complete, incoming
+              end
+              raise FetchError, "レスポンスが大きすぎます" if body.bytesize > MAX_BYTES
+            end
+            incoming
           end
-          incoming.read_body do |chunk|
-            body << chunk
-            raise FetchError, "レスポンスが大きすぎます" if body.bytesize > MAX_BYTES
-          end
-          incoming
         end
       end
       response.body = body
+      response.instance_variable_set(:@read, true)
       response
     end
 

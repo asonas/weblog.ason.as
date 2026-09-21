@@ -86,6 +86,13 @@ try {
       body: JSON.stringify({ items: inboxItems }),
     });
   });
+  await page.route("**/api/page-names", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ names: ["公開先", "公開予定", "別の記事"] }),
+    });
+  });
   await page.route("**/api/inbox/adopt", async (route) => {
     const { item_id: itemId } = route.request().postDataJSON();
     if (itemId === "photo-fail") {
@@ -140,6 +147,20 @@ try {
   await until(async () => await reopened.getByRole("textbox", { name: "本文", exact: true }).inputValue() === "# 日本語の下書き\n\nclass User\nend\n");
   assert.equal(await reopened.getByLabel("タイトル", { exact: true }).inputValue(), "保存と公開は別");
   await other.close();
+
+  await body.fill("[[公");
+  const wikiSuggestions = page.getByRole("listbox", { name: "Wikiリンク候補" });
+  await wikiSuggestions.waitFor();
+  assert.deepEqual(
+    await wikiSuggestions.getByRole("option").allTextContents(),
+    ["公開先", "公開予定"],
+  );
+  await body.press("Enter");
+  assert.equal(await body.inputValue(), "[[公開先]]");
+  await body.fill("リンクにする");
+  await body.selectText();
+  await body.press("Meta+k");
+  assert.equal(await body.inputValue(), "[[リンクにする]]");
 
   const inbox = page.getByRole("region", { name: "素材" });
   for (const label of ["写真", "動画", "Raindrop", "Bluesky"])
@@ -204,7 +225,9 @@ end
 
 ![カバー](/assets/photo.webp)
 
-[[公開先]]`;
+[[公開先]]
+
+[[まだないページ]]`;
   await page.getByLabel("タイトル", { exact: true }).fill("作業版の表示確認");
   await body.fill(previewMarkdown);
   const preview = page.getByLabel("作業版の表示");
@@ -225,6 +248,25 @@ end
   assert.equal(await page.locator("body > .site-header").count(), 0);
   assert.equal(await preview.getByRole("link", { name: "weblog.ason.as", exact: true }).count(), 1);
   assert.ok(await preview.locator(".line-update-rail__segment").count() > 0);
+  assert.equal(
+    await preview.getByRole("link", { name: "公開先" }).getAttribute("class"),
+    "wiki-link wiki-link--existing",
+  );
+  assert.equal(
+    await preview.getByRole("link", { name: "まだないページ" }).getAttribute("class"),
+    "wiki-link wiki-link--missing",
+  );
+  const scrollingMarkdown = Array.from(
+    { length: 30 },
+    (_, index) => `段落 ${index + 1}`,
+  ).join("\n\n");
+  await body.fill(scrollingMarkdown);
+  await body.evaluate((field) => {
+    field.setSelectionRange(field.value.length, field.value.length);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  });
+  await until(async () => (await preview.evaluate((element) => element.scrollTop)) > 0);
+  await body.fill(previewMarkdown);
   assert.equal(await page.getByLabel("記事種別", { exact: true }).count(), 0);
   const firstPhoto = await photoColumn.getByRole("button", { name: "写真を本文へ追加" }).nth(0).boundingBox();
   const secondPhoto = await photoColumn.getByRole("button", { name: "写真を本文へ追加" }).nth(1).boundingBox();

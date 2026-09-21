@@ -1,14 +1,28 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as Y from "yjs";
 import { DraftCoverSettings } from "./DraftCoverSettings";
 import { DraftInbox } from "./DraftInbox";
 import { DraftNavigation } from "./DraftNavigation";
 import { DraftPreview } from "./DraftPreview";
 import {
+  markdownBlockIndexAt,
+  textareaWikiLinkQuery,
+  type WikiLinkQuery,
+  wrapTextareaSelectionInWikiLink,
+} from "./draftMarkdown";
+import {
   DRAFT_BODY_LIMIT,
   type DraftMetadata,
   DraftSession,
 } from "./draftSession";
+import { prefetchEmbedMetadata } from "./EmbedCard";
 import "./draftEditor.css";
 
 const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
@@ -18,6 +32,64 @@ const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
   cover_mode: "カバー",
   cover_image_url: "カバー画像のパス",
 };
+
+type WikiLinkSuggestionsResponse = {
+  names: Array<string>;
+};
+
+function caretPosition(field: HTMLTextAreaElement): CSSProperties {
+  const mirror = document.createElement("div");
+  const style = getComputedStyle(field);
+  for (const property of [
+    "boxSizing",
+    "fontFamily",
+    "fontSize",
+    "fontStyle",
+    "fontWeight",
+    "letterSpacing",
+    "lineHeight",
+    "paddingBlock",
+    "paddingInline",
+    "tabSize",
+    "whiteSpace",
+    "wordBreak",
+    "overflowWrap",
+  ]) {
+    mirror.style.setProperty(
+      property.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`),
+      style.getPropertyValue(
+        property.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`),
+      ),
+    );
+  }
+  mirror.style.position = "fixed";
+  mirror.style.visibility = "hidden";
+  mirror.style.inlineSize = `${field.clientWidth}px`;
+  mirror.style.whiteSpace = "pre-wrap";
+  mirror.style.overflowWrap = "break-word";
+  mirror.textContent = field.value.slice(0, field.selectionStart);
+  const marker = document.createElement("span");
+  marker.textContent = "\u200b";
+  mirror.append(marker);
+  document.body.append(mirror);
+  const result = {
+    left: Math.min(
+      field.clientWidth - 24,
+      marker.offsetLeft - field.scrollLeft,
+    ),
+    top: Math.max(
+      8,
+      Math.min(
+        field.clientHeight - 8,
+        marker.offsetTop -
+          field.scrollTop +
+          Number.parseFloat(style.lineHeight),
+      ),
+    ),
+  };
+  mirror.remove();
+  return result;
+}
 
 export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [session, setSession] = useState<DraftSession>();
@@ -29,6 +101,14 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [loadError, setLoadError] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [publicationError, setPublicationError] = useState("");
+  const [wikiLinkNames, setWikiLinkNames] = useState<Array<string>>([]);
+  const [wikiLinkQuery, setWikiLinkQuery] = useState<WikiLinkQuery | null>(
+    null,
+  );
+  const [activeWikiLinkSuggestion, setActiveWikiLinkSuggestion] = useState(0);
+  const [wikiLinkSuggestionStyle, setWikiLinkSuggestionStyle] =
+    useState<CSSProperties>();
+  const [previewBlockIndex, setPreviewBlockIndex] = useState(0);
   const [, refresh] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const [{ id, isNew }] = useState(() => {
@@ -81,6 +161,18 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       opened?.close();
     };
   }, [id, isNew, recoveryKey, csrf]);
+
+  useEffect(() => {
+    if (!session) return;
+    void fetch("/api/page-names", { credentials: "same-origin" })
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error("Wikiリンク候補を取得できませんでした");
+        return (await response.json()) as WikiLinkSuggestionsResponse;
+      })
+      .then((response) => setWikiLinkNames(response.names))
+      .catch(() => setWikiLinkNames([]));
+  }, [session]);
 
   useEffect(() => {
     const field = textarea.current;
@@ -187,6 +279,94 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     };
   }, [session]);
 
+  const wikiLinkSuggestions = useMemo(
+    () =>
+      wikiLinkQuery
+        ? wikiLinkNames
+            .filter((name) => name.startsWith(wikiLinkQuery.value))
+            .slice(0, 7)
+        : [],
+    [wikiLinkNames, wikiLinkQuery],
+  );
+
+  function updateCursorContext() {
+    const field = textarea.current;
+    if (!field) return;
+    const query = textareaWikiLinkQuery(
+      field.value,
+      field.selectionStart,
+      field.selectionEnd,
+    );
+    setWikiLinkQuery(query);
+    setActiveWikiLinkSuggestion(0);
+    setWikiLinkSuggestionStyle(query ? caretPosition(field) : undefined);
+    setPreviewBlockIndex(
+      markdownBlockIndexAt(field.value, field.selectionStart),
+    );
+  }
+
+  function acceptWikiLinkSuggestion(name: string) {
+    const field = textarea.current;
+    if (!field || !session || !wikiLinkQuery) return;
+    field.setRangeText(
+      `${name}]]`,
+      wikiLinkQuery.from,
+      wikiLinkQuery.to,
+      "end",
+    );
+    session.setBody(field.value);
+    setWikiLinkQuery(null);
+    setWikiLinkSuggestionStyle(undefined);
+    field.focus();
+  }
+
+  function handleWikiLinkSuggestionKeyDown(
+    event: ReactKeyboardEvent<HTMLTextAreaElement>,
+  ) {
+    if (event.nativeEvent.isComposing) return;
+    const field = textarea.current;
+    if (
+      field &&
+      (event.metaKey || event.ctrlKey) &&
+      !event.altKey &&
+      !event.shiftKey &&
+      event.key.toLowerCase() === "k"
+    ) {
+      const edit = wrapTextareaSelectionInWikiLink(
+        field.value,
+        field.selectionStart,
+        field.selectionEnd,
+      );
+      if (!edit || !session) return;
+      event.preventDefault();
+      field.value = edit.value;
+      field.setSelectionRange(edit.selectionStart, edit.selectionEnd);
+      session.setBody(edit.value);
+      setPreviewBlockIndex(
+        markdownBlockIndexAt(edit.value, edit.selectionStart),
+      );
+      return;
+    }
+    if (wikiLinkSuggestions.length === 0) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setWikiLinkQuery(null);
+      setWikiLinkSuggestionStyle(undefined);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      acceptWikiLinkSuggestion(wikiLinkSuggestions[activeWikiLinkSuggestion]);
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveWikiLinkSuggestion(
+        (current) =>
+          (current +
+            (event.key === "ArrowUp" ? -1 : 1) +
+            wikiLinkSuggestions.length) %
+          wikiLinkSuggestions.length,
+      );
+    }
+  }
+
   function exportMarkdown() {
     const blob = new Blob(
       [textarea.current?.value || session?.body.toString() || ""],
@@ -204,6 +384,9 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     if (!session || session.isPublishing) return;
     setPublicationError("");
     try {
+      await prefetchEmbedMetadata(
+        textarea.current?.value || session.body.toString(),
+      );
       const prepared = session.pendingPublication
         ? undefined
         : await session.preparePublication();
@@ -380,7 +563,53 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             aria-invalid={bytes > DRAFT_BODY_LIMIT}
             disabled={!session || session.isPublishing}
             spellCheck={false}
+            aria-controls={
+              wikiLinkSuggestions.length > 0
+                ? "draft-wiki-link-suggestions"
+                : undefined
+            }
+            aria-activedescendant={
+              wikiLinkSuggestions.length > 0
+                ? `draft-wiki-link-suggestion-${activeWikiLinkSuggestion}`
+                : undefined
+            }
+            onInput={updateCursorContext}
+            onClick={updateCursorContext}
+            onKeyUp={(event) => {
+              if (
+                wikiLinkSuggestions.length === 0 ||
+                !["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(event.key)
+              )
+                updateCursorContext();
+            }}
+            onSelect={updateCursorContext}
+            onKeyDown={handleWikiLinkSuggestionKeyDown}
           />
+          {wikiLinkSuggestionStyle && wikiLinkSuggestions.length > 0 && (
+            <div
+              className="wiki-link-suggestions draft-wiki-link-suggestions"
+              id="draft-wiki-link-suggestions"
+              role="listbox"
+              aria-label="Wikiリンク候補"
+              style={wikiLinkSuggestionStyle}
+            >
+              {wikiLinkSuggestions.map((name, index) => (
+                <button
+                  className="wiki-link-suggestions__option"
+                  id={`draft-wiki-link-suggestion-${index}`}
+                  type="button"
+                  role="option"
+                  tabIndex={-1}
+                  aria-selected={index === activeWikiLinkSuggestion}
+                  key={name}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => acceptWikiLinkSuggestion(name)}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {/* biome-ignore lint/a11y/useSemanticElements: A focusable separator implements the adjustable split pane. */}
         <div
@@ -435,6 +664,8 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             <DraftPreview
               body={session.body.toString()}
               metadata={session.metadata}
+              pageNames={wikiLinkNames}
+              sourceBlockIndex={previewBlockIndex}
             />
           )}
         </aside>

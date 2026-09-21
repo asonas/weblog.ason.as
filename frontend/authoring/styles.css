@@ -1428,20 +1428,32 @@ html[data-universe="on"] .linked-pages {
 }
 
 .embed-card {
-  display: flex;
-  min-block-size: 8rem;
-  flex-direction: column;
+  display: grid;
+  min-block-size: 7.5rem;
+  grid-template-columns: 1fr;
   overflow: hidden;
-  border-radius: 0.65rem;
-  background: var(--card-surface);
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--ink) 6%, transparent);
+  margin-block: 1.25rem;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--ink) 8%, transparent),
+    0 0.35rem 1rem color-mix(in oklch, var(--ink) 5%, transparent);
   color: var(--ink);
   text-decoration: none;
-  transition: box-shadow 120ms ease;
+  transition-property: box-shadow, translate;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
 }
 
 .embed-card:hover {
-  box-shadow: 0 0 0 1px var(--accent);
+  translate: 0 -1px;
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--accent) 70%, transparent),
+    0 0.5rem 1.25rem color-mix(in oklch, var(--ink) 8%, transparent);
+}
+
+.embed-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .embed-card__content {
@@ -1464,6 +1476,7 @@ html[data-universe="on"] .linked-pages {
 }
 
 .embed-card__content strong {
+  font-weight: 700;
   line-height: 1.35;
 }
 
@@ -1479,10 +1492,12 @@ html[data-universe="on"] .linked-pages {
 
 .embed-card img {
   inline-size: 100%;
-  block-size: 9rem;
-  flex: 0 0 9rem;
+  block-size: clamp(10rem, 28vw, 16rem);
+  min-block-size: 10rem;
   object-fit: cover;
   order: -1;
+  outline: 1px solid oklch(0 0 0 / 0.1);
+  outline-offset: -1px;
 }
 
 .embed-card--loading {
@@ -1499,6 +1514,20 @@ html[data-universe="on"] .linked-pages {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.embed-card[data-embed-state="failed"] {
+  min-block-size: auto;
+}
+
+.x-post {
+  min-block-size: 4rem;
+  margin-block: 1.25rem;
+}
+
+.x-post > iframe,
+.x-post > twitter-widget {
+  margin-inline: auto;
 }
 
 .linked-pages .page-card-list {
@@ -2620,6 +2649,19 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
   cursor: pointer;
 }
 
+.ProseMirror a.wiki-link--existing {
+  color: oklch(0.42 0.105 190);
+}
+
+.ProseMirror a.wiki-link--missing {
+  color: var(--muted-ink);
+  text-decoration-style: dotted;
+}
+
+.ProseMirror a.wiki-link:visited {
+  color: oklch(0.45 0.11 310);
+}
+
 .wiki-link-suggestions {
   position: absolute;
   z-index: 10;
@@ -3170,7 +3212,8 @@ td {
 
   .embed-card img {
     block-size: 10rem;
-    flex-basis: 10rem;
+    min-block-size: 10rem;
+    order: -1;
   }
 
   .home-intro {

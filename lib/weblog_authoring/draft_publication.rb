@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "open3"
+require "pathname"
 require_relative "draft_store"
 require_relative "names"
 
@@ -24,11 +25,20 @@ module WeblogAuthoring
 
     def self.local(store:)
       root = File.expand_path("../..", __dir__)
+      tsx = resolve_local_dependency(root, "node_modules/tsx/dist/cli.mjs")
       new(store:) do |job|
-        output, error, status = Open3.capture3("node", File.join(root, "node_modules/tsx/dist/cli.mjs"), File.join(root, "lambda/draft_worker/local.ts"), stdin_data: JSON.generate(job))
+        output, error, status = Open3.capture3("node", tsx, File.join(root, "lambda/draft_worker/local.ts"), stdin_data: JSON.generate(job))
         raise DraftStore::Error.new("公開版の復元に失敗しました: #{error[0, 200]}", 503) unless status.success?
         JSON.parse(output)
       end
+    end
+
+    def self.resolve_local_dependency(root, relative_path)
+      Pathname(root).expand_path.ascend do |directory|
+        candidate = directory.join(relative_path)
+        return candidate.to_s if candidate.file?
+      end
+      File.join(root, relative_path)
     end
 
     def initialize(store:, reconstruct_many: nil, &reconstruct)

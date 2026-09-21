@@ -274,7 +274,7 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
-  block-size: 2.3em;
+  max-block-size: 2.3em;
   flex-shrink: 0;
 }
 .card-home .cover-journal__lead > strong a:hover {

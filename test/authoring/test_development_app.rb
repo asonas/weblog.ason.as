@@ -9,6 +9,18 @@ require "rack/mock"
 class TestDevelopmentApp < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-08-21T12:00:00+09:00")
 
+  def test_worktrees_share_the_canonical_development_data_root
+    Dir.mktmpdir("development-root") do |directory|
+      root = Pathname(directory)
+      worktree = root.join(".worktrees/feature")
+      FileUtils.mkdir_p(worktree)
+      worktree.join(".git").write("gitdir: #{root}/.git/worktrees/feature\n")
+
+      assert_equal root, WeblogAuthoring::DevelopmentApp.shared_development_root(worktree)
+      assert_equal root, WeblogAuthoring::DevelopmentApp.shared_development_root(root)
+    end
+  end
+
   def test_public_diary_navigation_skips_ordinary_articles
     %w[2026-09-07 2026-09-10 2026-09-11].each do |name|
       json_request("POST", "/api/authoring/pages", page_type: "named", name:, body: "本文 [[日記]]")

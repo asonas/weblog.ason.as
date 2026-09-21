@@ -43,6 +43,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { DiaryNavigation } from "./DiaryNavigation";
+import { EmbedCard } from "./EmbedCard";
 import { GeneratedCover } from "./GeneratedCover";
 import { MarkdownClipboard } from "./MarkdownClipboard";
 import { markdownForEditor, markdownForSource } from "./markdown";
@@ -53,6 +54,7 @@ import { SpeakerDeckPlayer } from "./speakerDeck";
 import { UniverseGraph } from "./UniverseGraph";
 import { Video, videoAssetPath } from "./Video";
 import { createVideoUploadCard, VideoUploadCards } from "./VideoUploadCard";
+import { XPost } from "./XPost";
 
 declare global {
   interface Window {
@@ -1547,9 +1549,11 @@ export const EDITOR_EXTENSIONS = [
   SelectableImage.configure({ allowBase64: false }),
   Video,
   VideoUploadCards,
+  EmbedCard,
   YouTubePlayer,
   BlueskyPlayer,
   SpeakerDeckPlayer,
+  XPost,
   TableKit,
   Markdown.configure({ indentation: { style: "space", size: 2 } }),
   MarkdownClipboard,

@@ -57,8 +57,16 @@ class TestMarkdown < Minitest::Test
     assert_includes rendered.html, 'class="language-ruby highlighter-rouge"'
     assert_includes rendered.html, '<span class="nb">puts</span>'
     assert_includes rendered.html, 'href="/page-a"'
+    assert_includes rendered.html, 'class="wiki-link wiki-link--existing"'
     assert_includes rendered.html, 'target="_blank"'
     assert_includes rendered.html, 'rel="noopener noreferrer"'
+  end
+
+  def test_marks_missing_wiki_links_separately
+    rendered = WeblogAuthoring::MarkdownRenderer.new.render("[[missing]]", mode: "public")
+
+    assert_includes rendered.html, 'href="/missing"'
+    assert_includes rendered.html, 'class="wiki-link wiki-link--missing"'
   end
 
   def test_unknown_code_language_falls_back_to_escaped_code_block
@@ -102,6 +110,40 @@ class TestMarkdown < Minitest::Test
     ["See #{url}", "`#{url}`", "https://speakerdeck.com.evil.example/asonas/module-synths-end"].each do |body|
       refute_includes renderer.render(body, mode: "public").html, "data-speakerdeck-player"
     end
+  end
+
+  def test_explicit_embed_tag_renders_a_metadata_card_placeholder
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+    url = "https://listen.style/p/juneboku-life/ep218"
+
+    rendered = renderer.render("[embed:#{url}]\n", mode: "public")
+
+    assert_includes rendered.html, 'class="embed-card embed-card--loading"'
+    assert_includes rendered.html, %(data-embed-url="#{url}")
+    assert_includes rendered.html, %(href="#{url}")
+    assert_includes rendered.html, %(>#{url}</span>)
+  end
+
+  def test_standalone_x_url_renders_an_official_post_placeholder
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+    url = "https://x.com/juneboku/status/2100598719246999748"
+
+    rendered = renderer.render("#{url}\n", mode: "public")
+
+    assert_includes rendered.html, 'class="x-post"'
+    assert_includes rendered.html, 'data-x-post-id="2100598719246999748"'
+    assert_includes rendered.html, %(data-x-post-url="#{url}")
+    refute_includes rendered.html, "embed-card"
+  end
+
+  def test_embed_tag_is_only_recognized_as_a_standalone_http_url
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+
+    inline = renderer.render("本文 [embed:https://example.com] 続き\n", mode: "public")
+    unsafe = renderer.render("[embed:javascript:alert(1)]\n", mode: "public")
+
+    refute_includes inline.html, "data-embed-url"
+    refute_includes unsafe.html, "data-embed-url"
   end
 
   def test_standalone_bluesky_post_url_renders_as_an_official_embed

@@ -593,9 +593,11 @@ module WeblogAuthoring
                          session_secret: nil, inbox_sources: default_inbox_sources,
                          drafts_enabled: ENV["AUTHORING_DRAFTS_ENABLED"] == "1", draft_search_runner: SearchIndexer::QmdRunner.new)
       root_path = Pathname(root).expand_path
-      session_secret ||= development_session_secret(root_path)
+      development_root = shared_development_root(root_path)
+      development_data = development_root.join("data/development")
+      session_secret ||= development_session_secret(development_root)
       database = DevelopmentDatabase.new(
-        root_path.join("data/development/authoring.sqlite3"),
+        development_data.join("authoring.sqlite3"),
         content_dir: root_path.join("content"),
         clock:
       )
@@ -604,19 +606,19 @@ module WeblogAuthoring
       app = Class.new(self)
       app.set :root_path, root_path
       app.set :database, database
-      draft_store = drafts_enabled ? DraftStore.sqlite(root_path.join("data/development/drafts.sqlite3")) : nil
+      draft_store = drafts_enabled ? DraftStore.sqlite(development_data.join("drafts.sqlite3")) : nil
       draft_store&.setup!
       app.set :draft_store, draft_store
       if draft_store
         publication = DraftPublication.local(store: draft_store)
         app.set :draft_publication, publication
         publisher = DraftPublisher.local(publication:, database:,
-          root: root_path.join("data/development/publications"),
+          root: development_data.join("publications"),
           shell: -> { ROOT.join("index.html").read }, site_url: FRONTEND_ORIGIN)
         app.set :draft_publisher, publisher
         outputs = DraftOutputs.new(store: draft_store,
-          s3_client: LocalPublicationObjects.new(root_path.join("data/development/publication-outputs")),
-          bucket: "site", site_url: FRONTEND_ORIGIN, cache_dir: root_path.join("data/development/published-search").to_s, search_runner: draft_search_runner)
+          s3_client: LocalPublicationObjects.new(development_data.join("publication-outputs")),
+          bucket: "site", site_url: FRONTEND_ORIGIN, cache_dir: development_data.join("published-search").to_s, search_runner: draft_search_runner)
         app.set :draft_outputs, outputs
         app.set :draft_jobs, DraftJobs.new(store: draft_store, publisher:, outputs:)
       end
@@ -640,6 +642,15 @@ module WeblogAuthoring
       )
       reloader = Rack::Reloader.new(session_app, 0)
       DevelopmentRequestLog.new(reloader, root_path.join("log/authoring-development.log"))
+    end
+
+    def self.shared_development_root(root_path)
+      git_file = root_path.join(".git")
+      return root_path unless git_file.file?
+
+      git_dir = Pathname(git_file.read.delete_prefix("gitdir:").strip).expand_path(root_path)
+      match = git_dir.to_s.match(%r{\A(.+)/\.git/worktrees/[^/]+\z})
+      match ? Pathname(match[1]) : root_path
     end
 
     def self.development_session_secret(root_path)

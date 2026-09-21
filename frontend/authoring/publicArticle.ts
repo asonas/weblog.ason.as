@@ -1,4 +1,6 @@
+import { hydrateEmbedCard } from "./EmbedCard";
 import { installMobileArticleSheet } from "./mobileArticleSheet";
+import { hydrateXPost } from "./XPost";
 
 function watchMedia(
   media: HTMLImageElement | HTMLIFrameElement | HTMLVideoElement,
@@ -111,6 +113,20 @@ export function enhancePublicArticle(root: HTMLElement) {
   )) {
     pending.set(embed, () => {
       void loadSpeakerDeck(embed);
+    });
+  }
+  for (const embed of root.querySelectorAll<HTMLElement>(
+    ".embed-card[data-embed-url]",
+  )) {
+    pending.set(embed, () => {
+      void hydrateEmbedCard(embed);
+    });
+  }
+  for (const post of root.querySelectorAll<HTMLElement>(
+    ".x-post[data-x-post-id]",
+  )) {
+    pending.set(post, () => {
+      void hydrateXPost(post);
     });
   }
   if (!("IntersectionObserver" in window)) {

@@ -108,7 +108,7 @@ export function installMobileArticleSheet() {
         const textBody = body.cloneNode(true) as HTMLElement;
         textBody
           .querySelectorAll(
-            "script, style, iframe, video, audio, figure, .speakerdeck-player, .youtube-player, .bluesky-player",
+            "script, style, iframe, video, audio, figure, .speakerdeck-player, .youtube-player, .bluesky-player, .x-post",
           )
           .forEach((element) => {
             element.remove();
