@@ -17,12 +17,17 @@ export function DraftCoverSettings({ session }: { session: DraftSession }) {
   return (
     <>
       <button
+        className="draft-editor__icon-button"
         type="button"
         popoverTarget="draft-cover-settings"
         disabled={session.isPublishing}
+        title={`カバー設定（${modes.find((mode) => mode.value === metadata.cover_mode)?.label}）`}
+        aria-label="カバー設定"
       >
-        カバー：
-        {modes.find((mode) => mode.value === metadata.cover_mode)?.label}
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M8.8 2.8h2.4l.5 1.9a6 6 0 0 1 1.2.7l1.9-.5L16 7l-1.4 1.4a6 6 0 0 1 0 1.3L16 11l-1.2 2.1-1.9-.5a6 6 0 0 1-1.2.7l-.5 1.9H8.8l-.5-1.9a6 6 0 0 1-1.2-.7l-1.9.5L4 11l1.4-1.3a6 6 0 0 1 0-1.3L4 7l1.2-2.1 1.9.5a6 6 0 0 1 1.2-.7z" />
+          <circle cx="10" cy="9" r="2.2" />
+        </svg>
       </button>
       <div
         id="draft-cover-settings"

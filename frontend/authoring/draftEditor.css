@@ -3,6 +3,7 @@ html[data-draft-workspace="true"] .page-shell {
 }
 html[data-draft-workspace="true"] body {
   overflow: hidden;
+  background: oklch(1 0 0);
 }
 .draft-editor {
   padding-inline-start: 4.5rem;
@@ -11,6 +12,7 @@ html[data-draft-workspace="true"] body {
   min-block-size: 0;
   flex-direction: column;
   overflow: hidden;
+  background: oklch(1 0 0);
 }
 .draft-editor__titlebar,
 .draft-editor__toolbar,
@@ -19,6 +21,7 @@ html[data-draft-workspace="true"] body {
 }
 .draft-editor__titlebar {
   padding-block-start: var(--space-2);
+  background: oklch(1 0 0);
 }
 .draft-editor__toolbar {
   display: flex;
@@ -35,18 +38,10 @@ html[data-draft-workspace="true"] body {
   align-items: center;
   padding-block: var(--space-2);
   font-size: var(--text-meta);
+  background: oklch(1 0 0);
 }
 .draft-editor__status > p:empty {
   display: none;
-}
-.draft-editor__date {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.draft-editor__date input {
-  width: auto;
-  padding: 0.25rem;
 }
 .draft-editor__status > [role="alert"]:not(:empty) {
   flex-basis: 100%;
@@ -58,6 +53,58 @@ html[data-draft-workspace="true"] body {
   gap: var(--space-2);
   padding-inline-end: var(--space-3);
   border-inline-end: 1px solid var(--separator);
+}
+.draft-editor .draft-editor__icon-button {
+  display: grid;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  padding: 0;
+  place-items: center;
+}
+.draft-editor__icon-button svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+.draft-editor__controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.draft-editor__sync-status {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+}
+.draft-editor__status-icon {
+  display: grid;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  place-items: center;
+}
+.draft-editor__status-icon svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+.draft-editor__status-icon[data-tone="success"] {
+  color: oklch(0.46 0.13 150);
+}
+.draft-editor__status-icon[data-tone="pending"] {
+  color: oklch(0.58 0.13 85);
+}
+.draft-editor__status-icon[data-tone="error"] {
+  color: var(--danger, oklch(0.48 0.18 30));
 }
 .draft-editor .draft-editor__publish {
   background: var(--accent);
@@ -81,7 +128,7 @@ html[data-draft-workspace="true"] body {
   min-block-size: 0;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
+  background: oklch(1 0 0);
   padding-block-end: env(safe-area-inset-bottom);
 }
 .draft-inbox__resize {
@@ -158,7 +205,7 @@ html[data-draft-workspace="true"] body {
   resize: none;
   border: 0;
   padding: var(--space-4) var(--space-6);
-  background: var(--canvas);
+  background: oklch(1 0 0);
   font-family:
     "Source Han Code JP", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", monospace;
@@ -240,12 +287,13 @@ html[data-draft-workspace="true"] body {
   block-size: 100%;
   overflow: hidden;
   border-inline-end: 1px solid var(--separator);
-  background: var(--surface);
+  background: oklch(1 0 0);
   scroll-snap-align: start;
 }
 
 .draft-inbox__column > header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-block-size: 2.5rem;
   align-items: center;
   justify-content: space-between;
@@ -259,7 +307,7 @@ html[data-draft-workspace="true"] body {
   font-size: var(--text-ui);
 }
 
-.draft-inbox__column header button {
+.draft-inbox__reload {
   display: grid;
   place-items: center;
   min-inline-size: 2.5rem;
@@ -295,9 +343,10 @@ html[data-draft-workspace="true"] body {
   min-block-size: 2.75rem;
   padding: 0;
   overflow: hidden;
-  border-color: var(--separator);
-  border-radius: var(--radius-control);
-  background: var(--quiet-fill);
+  border-color: oklch(0.78 0 0);
+  border-radius: 0;
+  background: #fff;
+  color: #000;
   text-align: start;
 }
 
@@ -336,17 +385,25 @@ html[data-draft-workspace="true"] body {
   padding: var(--space-2);
 }
 
-.draft-inbox__details strong,
-.draft-inbox__details span {
+.draft-inbox__item-title,
+.draft-inbox__item-excerpt {
+  display: -webkit-box;
+  min-inline-size: 0;
   overflow: hidden;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
   text-overflow: ellipsis;
 }
 
-.draft-inbox__details span {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+.draft-inbox__item-title {
+  -webkit-line-clamp: 2;
+  line-height: 1.35;
+}
+
+.draft-inbox__item-excerpt {
+  -webkit-line-clamp: 2;
   font-size: var(--text-meta);
+  line-height: 1.4;
 }
 
 .draft-inbox__error {
@@ -389,6 +446,9 @@ html[data-draft-workspace="true"] body {
   }
   .draft-editor .draft-editor__titlebar input {
     flex-basis: 100%;
+  }
+  .draft-editor__controls {
+    inline-size: 100%;
   }
   .draft-editor__save-actions {
     margin-inline-start: auto;
@@ -470,37 +530,52 @@ html[data-draft-workspace="true"] body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--separator);
 }
 .draft-cover-settings h2 {
   font-size: 1.1rem;
   margin: 0;
 }
 .draft-cover-settings fieldset {
+  display: grid;
+  gap: var(--space-1);
   border: 0;
-  padding: var(--space-3) 0;
+  padding: var(--space-3) 0 0;
   margin: 0;
 }
 .draft-cover-settings fieldset label {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: var(--space-3);
-  padding-block: var(--space-2);
+  gap: var(--space-2);
+  min-inline-size: 0;
+  padding: var(--space-2);
   cursor: pointer;
 }
+.draft-cover-settings fieldset label:hover {
+  background: oklch(0.96 0 0);
+}
 .draft-cover-settings input[type="radio"] {
+  width: 1.1rem;
   inline-size: 1.1rem;
   block-size: 1.1rem;
+  padding: 0;
   accent-color: var(--accent);
+}
+.draft-cover-settings fieldset label > span {
+  min-inline-size: 0;
 }
 .draft-cover-settings small {
   display: block;
+  margin-block-start: 0.125rem;
   color: var(--muted-ink);
 }
 .draft-cover-settings__image {
   width: 100%;
   max-height: 10rem;
   object-fit: cover;
-  margin-block-start: var(--space-3);
+  margin-block-start: var(--space-4);
 }
 html[data-draft-workspace="true"] .draft-preview__document .site-header {
   position: absolute;

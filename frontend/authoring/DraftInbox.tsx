@@ -22,11 +22,16 @@ type InboxSyncStatus = {
     | "failed";
 };
 
-const COLUMNS: Array<{ source: InboxSource; label: string }> = [
+const COLUMNS: Array<{
+  source: InboxSource;
+  kind?: InboxItem["kind"];
+  label: string;
+}> = [
   { source: "photo", label: "写真" },
   { source: "video", label: "動画" },
   { source: "raindrop", label: "Raindrop" },
-  { source: "bluesky", label: "Bluesky" },
+  { source: "bluesky", kind: "post", label: "Bsky（自分の投稿）" },
+  { source: "bluesky", kind: "like", label: "Bsky（いいね）" },
 ];
 
 function payloadString(item: InboxItem, key: string): string | null {
@@ -262,13 +267,15 @@ export function DraftInbox({
   return (
     <section className="draft-inbox" aria-label="素材">
       <div className="draft-inbox__columns">
-        {COLUMNS.map(({ source, label }) => {
-          const columnItems = items.filter((item) => item.source === source);
+        {COLUMNS.map(({ source, kind, label }) => {
+          const columnItems = items.filter(
+            (item) => item.source === source && (!kind || item.kind === kind),
+          );
           return (
             <section
               className="draft-inbox__column"
               aria-label={label}
-              key={source}
+              key={`${source}-${kind || "all"}`}
             >
               <header>
                 <h2>
@@ -278,6 +285,7 @@ export function DraftInbox({
                   </span>
                 </h2>
                 <button
+                  className="draft-inbox__reload"
                   type="button"
                   onClick={() => void sync(source)}
                   aria-label={`${label}を再読み込み`}
@@ -355,8 +363,16 @@ export function DraftInbox({
                                 <img src={thumbnail} alt="" loading="lazy" />
                               )}
                               <span>
-                                {title && <strong>{title}</strong>}
-                                {excerpt && <span>{excerpt}</span>}
+                                {title && (
+                                  <strong className="draft-inbox__item-title">
+                                    {title}
+                                  </strong>
+                                )}
+                                {excerpt && (
+                                  <span className="draft-inbox__item-excerpt">
+                                    {excerpt}
+                                  </span>
+                                )}
                               </span>
                             </span>
                           )}

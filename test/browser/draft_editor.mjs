@@ -64,7 +64,7 @@ try {
       kind: "bookmark",
       payload: {
         url: "https://example.com/bookmark",
-        title: "読みたい記事",
+        title: "とても長いタイトルでもカードの本文へめり込まず読みやすく表示される記事",
         excerpt: "あとで読むための説明",
       },
     },
@@ -76,6 +76,16 @@ try {
         canonical_url: "https://bsky.app/profile/example.test/post/123",
         author_display_name: "書いた人",
         text: "投稿の本文",
+      },
+    },
+    {
+      id: "bluesky-like-1",
+      source: "bluesky",
+      kind: "like",
+      payload: {
+        canonical_url: "https://bsky.app/profile/liked.example/post/456",
+        author_display_name: "いいねした相手",
+        text: "いいねした投稿の本文",
       },
     },
   ];
@@ -200,8 +210,69 @@ try {
   assert.equal(await body.inputValue(), "[[リンクにする]]");
 
   const inbox = page.getByRole("region", { name: "素材" });
-  for (const label of ["写真", "動画", "Raindrop", "Bluesky"])
+  for (const label of [
+    "写真",
+    "動画",
+    "Raindrop",
+    "Bsky（自分の投稿）",
+    "Bsky（いいね）",
+  ])
     assert.equal(await inbox.getByRole("region", { name: label }).count(), 1);
+  const blueskyPosts = inbox.getByRole("region", {
+    name: "Bsky（自分の投稿）",
+  });
+  const blueskyLikes = inbox.getByRole("region", { name: "Bsky（いいね）" });
+  assert.equal(await blueskyPosts.getByText("投稿の本文", { exact: true }).count(), 1);
+  assert.equal(await blueskyPosts.getByText("いいねした投稿の本文").count(), 0);
+  assert.equal(await blueskyLikes.getByText("投稿の本文", { exact: true }).count(), 0);
+  assert.equal(await blueskyLikes.getByText("いいねした投稿の本文").count(), 1);
+  const raindropCard = inbox
+    .getByRole("region", { name: "Raindrop" })
+    .getByRole("button", { name: "Raindropを本文へ追加" });
+  assert.equal(
+    await raindropCard.evaluate((card) => {
+      const title = card.querySelector("strong");
+      const excerpt = card.querySelector("strong + span");
+      if (!title || !excerpt) return false;
+      return title.getBoundingClientRect().bottom <= excerpt.getBoundingClientRect().top;
+    }),
+    true,
+  );
+  assert.equal(
+    await raindropCard.evaluate(
+      (card) => getComputedStyle(card).backgroundColor === "rgb(255, 255, 255)",
+    ),
+    true,
+  );
+  assert.equal(await page.getByLabel("日記の日付（URL）").count(), 0);
+  const coverButton = page.getByRole("button", { name: "カバー設定", exact: true });
+  const downloadButton = page.getByRole("button", { name: "本文をダウンロード" });
+  const [coverBox, downloadBox] = await Promise.all([
+    coverButton.boundingBox(),
+    downloadButton.boundingBox(),
+  ]);
+  assert.ok(coverBox && downloadBox);
+  assert.ok(coverBox.x < downloadBox.x && Math.abs(coverBox.y - downloadBox.y) < 4);
+  assert.equal(
+    await page.getByRole("button", { name: "サーバー保存を再試行" }).count(),
+    0,
+  );
+  assert.equal(
+    await page.locator(".draft-editor__sync-status [title='端末に保存済み']").count(),
+    1,
+  );
+  assert.equal(
+    await page
+      .locator(".draft-editor__status-icon[data-kind='device'][data-tone='success']")
+      .count(),
+    1,
+  );
+  assert.equal(
+    await page
+      .locator(".draft-editor__status-icon[data-kind='server'][data-tone='pending']")
+      .count(),
+    1,
+  );
   const photoColumn = inbox.getByRole("region", { name: "写真" });
   assert.ok(
     await photoColumn.locator("ol").evaluate((list) => list.scrollHeight > list.clientHeight),
@@ -368,8 +439,8 @@ end
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));
   const beforeOfflineInsert = await body.inputValue();
   await inbox
-    .getByRole("region", { name: "Bluesky" })
-    .getByRole("button", { name: "Blueskyを本文へ追加" })
+    .getByRole("region", { name: "Bsky（自分の投稿）" })
+    .getByRole("button", { name: "Bsky（自分の投稿）を本文へ追加" })
     .click();
   await inbox
     .getByText("オフラインでは素材を追加できません。本文の編集は続けられます。")
@@ -547,7 +618,7 @@ end
 
   await page.route("**/api/authoring/drafts/**", (route) => route.abort("internetdisconnected"));
   await page.getByLabel("タイトル", { exact: true }).fill("別項目の変更とは競合しないタイトル");
-  await competingPage.getByRole("button", { name: "カバー：自動", exact: true }).click();
+  await competingPage.getByRole("button", { name: "カバー設定", exact: true }).click();
   await competingPage.getByRole("radio", { name: "なし", exact: false }).check();
   await competingPage.getByRole("button", { name: "カバー設定を閉じる" }).click();
   await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
@@ -555,7 +626,7 @@ end
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
   assert.equal(await conflict.count(), 0);
-  assert.equal(await page.getByRole("button", { name: "カバー：なし", exact: true }).count(), 1);
+  assert.equal(await page.locator("button[title='カバー設定（なし）']").count(), 1);
   await competingPage.reload();
   await until(async () => await competingPage.getByLabel("タイトル", { exact: true }).inputValue() === "別項目の変更とは競合しないタイトル");
   await competing.close();

@@ -92,6 +92,41 @@ function caretPosition(field: HTMLTextAreaElement): CSSProperties {
   return result;
 }
 
+function draftStatusTone(status: string): "success" | "pending" | "error" {
+  if (/できません|失敗|競合|確認できません/.test(status)) return "error";
+  if (/保存済み|完了しました/.test(status)) return "success";
+  return "pending";
+}
+
+function DraftStatusIcon({
+  kind,
+  status,
+}: {
+  kind: "device" | "server" | "publication";
+  status: string;
+}) {
+  const tone = draftStatusTone(status);
+  return (
+    <span
+      className="draft-editor__status-icon"
+      data-kind={kind}
+      data-tone={tone}
+      title={status}
+    >
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        {kind === "device" ? (
+          <path d="M4 4.5h12v8H4zM2.5 15.5h15M7.5 12.5v3m5-3v3" />
+        ) : kind === "server" ? (
+          <path d="M4 3.5h12v5H4zM4 11.5h12v5H4zM7 6h.1M7 14h.1M10 6h4M10 14h4" />
+        ) : (
+          <path d="M10 16V5m0 0L6.5 8.5M10 5l3.5 3.5M4 12.5v4h12v-4" />
+        )}
+      </svg>
+      <span className="visually-hidden">{status}</span>
+    </span>
+  );
+}
+
 export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [session, setSession] = useState<DraftSession>();
   const [editorWidth, setEditorWidth] = useState(608);
@@ -449,66 +484,67 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             })
           }
         />
-        <div className="draft-editor__save-actions">
-          <button
-            type="button"
-            disabled={!session}
-            onClick={() => void session?.sync()}
-          >
-            サーバー保存を再試行
-          </button>
-          <button type="button" disabled={!session} onClick={exportMarkdown}>
-            本文をダウンロード
-          </button>
-          {session?.error && (
-            <button type="button" onClick={recoverAsNewDraft}>
-              内容を新しい下書きへ復旧
+        <div className="draft-editor__controls">
+          {session && <DraftCoverSettings session={session} />}
+          <div className="draft-editor__sync-status" role="status">
+            {session ? (
+              <>
+                <DraftStatusIcon kind="device" status={session.localStatus} />
+                <DraftStatusIcon kind="server" status={session.serverStatus} />
+                {session.publicationStatus && (
+                  <DraftStatusIcon
+                    kind="publication"
+                    status={session.publicationStatus}
+                  />
+                )}
+              </>
+            ) : (
+              <DraftStatusIcon kind="device" status="読み込み中" />
+            )}
+          </div>
+          <div className="draft-editor__save-actions">
+            {session?.error && (
+              <button type="button" onClick={() => void session.sync()}>
+                サーバー保存を再試行
+              </button>
+            )}
+            <button
+              className="draft-editor__icon-button"
+              type="button"
+              disabled={!session}
+              title="本文をダウンロード"
+              aria-label="本文をダウンロード"
+              onClick={exportMarkdown}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M10 3.5v9m0 0L6.5 9M10 12.5 13.5 9M4 15.5h12" />
+              </svg>
             </button>
-          )}
+            {session?.error && (
+              <button type="button" onClick={recoverAsNewDraft}>
+                内容を新しい下書きへ復旧
+              </button>
+            )}
+          </div>
+          <button
+            className="draft-editor__publish"
+            type="button"
+            disabled={!session || session.isPublishing}
+            onClick={() => void publish()}
+          >
+            {session?.isPublishing
+              ? "公開中"
+              : session?.pendingPublication
+                ? "公開を再試行"
+                : "公開"}
+          </button>
         </div>
-        <button
-          className="draft-editor__publish"
-          type="button"
-          disabled={!session || session.isPublishing}
-          onClick={() => void publish()}
-        >
-          {session?.isPublishing
-            ? "公開中"
-            : session?.pendingPublication
-              ? "公開を再試行"
-              : "公開"}
-        </button>
       </div>
       <div className="draft-editor__status">
-        {session && <DraftCoverSettings session={session} />}
-        {session?.metadata.page_type === "date" && (
-          <label className="draft-editor__date">
-            日付URL
-            <input
-              type="date"
-              aria-label="日記の日付（URL）"
-              value={
-                session.metadata.page_date ||
-                (/^\d{4}-\d{2}-\d{2}$/.test(session.metadata.title)
-                  ? session.metadata.title
-                  : "")
-              }
-              disabled={session.isPublishing}
-              onChange={(event) =>
-                session.setMetadata({ page_date: event.target.value })
-              }
-            />
-          </label>
-        )}
         <p id="draft-size">
           {bytes >= DRAFT_BODY_LIMIT * 0.9
             ? `本文 ${Math.ceil(bytes / 1024)} / 512 KiB。上限を超えても本文は削除されません。`
             : ""}
-        </p>
-        <p role="status">
-          {session
-            ? `${session.localStatus} · ${session.serverStatus}${session.publicationStatus ? ` · ${session.publicationStatus}` : ""}`
-            : "読み込み中"}
         </p>
         <p role="alert">{loadError || publicationError || session?.error}</p>
         {session?.pendingOutputs && (
