@@ -15,6 +15,7 @@
   --authoring-status-pending: #c08532;
   --authoring-status-error: #cf2d56;
   --authoring-nav-selected: #34785c;
+  --authoring-diary-action: #34785c;
   --authoring-input-border: #84847e;
   --canvas: var(--authoring-parchment);
   --surface: var(--authoring-parchment);

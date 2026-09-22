@@ -64,6 +64,12 @@ try {
   const menu = page.getByRole("navigation", { name: "執筆メニュー" });
   await menu.waitFor();
   assert.deepEqual(await menu.locator("a").allTextContents(), ["日記を書く", "記事を書く", "記事の管理", "Webmention", "ホーム"]);
+  const diaryAction = menu.getByRole("link", { name: "今日の日記を書く" });
+  await diaryAction.hover();
+  assert.deepEqual(await diaryAction.evaluate(element => {
+    const style = getComputedStyle(element);
+    return [style.backgroundColor, style.color];
+  }), ["rgb(52, 120, 92)", "rgb(247, 247, 244)"]);
   await menu.getByRole("link", { name: "Webmentionを管理" }).click();
   await page.getByRole("heading", { name: "Webmention", exact: true }).waitFor();
   assert.deepEqual(await menu.locator("a").allTextContents(), ["日記を書く", "記事を書く", "記事の管理", "Webmention", "ホーム"]);

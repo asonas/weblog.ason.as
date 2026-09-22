@@ -416,9 +416,15 @@ body:has(.draft-admin) .page-shell {
 :is(.draft-admin, .draft-editor, .webmention-administration)
   .draft-navigation--expanded
   a[data-action="new"] {
-  background: var(--ink);
-  color: var(--surface);
+  background: var(--quiet-fill);
+  color: var(--ink);
   margin-block-end: 1rem;
+}
+:is(.draft-admin, .draft-editor, .webmention-administration)
+  .draft-navigation--expanded
+  a[data-action="diary"] {
+  background: var(--authoring-diary-action);
+  color: var(--surface);
 }
 :is(.draft-admin, .draft-editor, .webmention-administration)
   .draft-navigation--expanded
@@ -429,7 +435,7 @@ body:has(.draft-admin) .page-shell {
 }
 :is(.draft-admin, .draft-editor, .webmention-administration)
   .draft-navigation--expanded
-  a:hover:not([data-action="new"]) {
+  a:hover:not([data-action="new"], [data-action="diary"]) {
   background: var(--quiet-fill);
 }
 :is(.draft-admin, .draft-editor, .webmention-administration)

@@ -71,6 +71,8 @@ Webmention       タイトル        …       2       日時     日時        
 
 Webmentionは公開サイト用ヘッダーを表示せず、記事一覧と同じ見出し・余白・状態タブを使う。
 
+共通サイドバーの「日記を書く」はForest背景とParchment文字の主操作。「記事を書く」はLinen背景とInk文字の補助操作にする。
+
 ## アイコンと操作
 
 Regen Iconsを使い、出典と `regen-icons-LICENSE.txt` を保持する。24pxグリッド、currentColor、同じ線幅を使う。アイコンだけの操作には名前を付ける。
