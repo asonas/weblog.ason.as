@@ -9,6 +9,12 @@ require "rack/mock"
 class TestDevelopmentApp < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-08-21T12:00:00+09:00")
 
+  def test_lists_webmentions_for_the_local_administration
+    status, _headers, body = request("GET", "/api/webmentions")
+    assert_equal 200, status, body
+    assert_equal({ "mentions" => [], "failures" => [], "delivery_failures" => [] }, JSON.parse(body))
+  end
+
   def test_worktrees_share_the_canonical_development_data_root
     Dir.mktmpdir("development-root") do |directory|
       root = Pathname(directory)

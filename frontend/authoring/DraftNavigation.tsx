@@ -39,26 +39,14 @@ const LINKS = [
   },
 ];
 
-export function DraftNavigation({
-  editing = false,
-  expanded = false,
-}: {
-  editing?: boolean;
-  expanded?: boolean;
-}) {
-  const links = editing
-    ? [LINKS[2]]
-    : expanded
-      ? [LINKS[0], LINKS[2], LINKS[3], LINKS[1], LINKS[4]]
-      : [LINKS[2], LINKS[3], LINKS[4], LINKS[0], LINKS[1]];
+export function DraftNavigation() {
+  const links = [LINKS[0], LINKS[2], LINKS[3], LINKS[1], LINKS[4]];
   return (
     <nav
-      className={`draft-navigation${expanded ? " draft-navigation--expanded" : ""}`}
+      className="draft-navigation draft-navigation--expanded"
       aria-label="執筆メニュー"
     >
-      {expanded && (
-        <span className="draft-navigation__brand">weblog.ason.as</span>
-      )}
+      <span className="draft-navigation__brand">weblog.ason.as</span>
       {links.map((link) => {
         const content = (
           <>
@@ -73,21 +61,7 @@ export function DraftNavigation({
             >
               <path d={link.path} />
             </svg>
-            <span>
-              {editing && link.key === "articles" ? (
-                "記事一覧へ"
-              ) : expanded && link.key === "articles" ? (
-                "記事の管理"
-              ) : link.key === "webmentions" && !expanded ? (
-                <>
-                  Web
-                  <wbr />
-                  mention
-                </>
-              ) : (
-                link.label
-              )}
-            </span>
+            <span>{link.key === "articles" ? "記事の管理" : link.label}</span>
           </>
         );
         return (
@@ -103,8 +77,8 @@ export function DraftNavigation({
                 : undefined
             }
             key={link.href}
-            aria-label={editing ? "記事一覧に戻る" : link.name}
-            title={editing ? "記事一覧に戻る" : link.name}
+            aria-label={link.name}
+            title={link.name}
           >
             {content}
           </a>

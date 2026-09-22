@@ -621,7 +621,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const bytes = new TextEncoder().encode(session?.body.toString() || "").length;
   return (
     <section className="draft-editor" aria-label="下書き編集">
-      <DraftNavigation editing />
+      <DraftNavigation />
       <div className="draft-editor__titlebar">
         <label className="visually-hidden" htmlFor="draft-title">
           タイトル

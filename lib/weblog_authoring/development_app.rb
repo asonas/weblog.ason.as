@@ -384,7 +384,7 @@ module WeblogAuthoring
 
     get "/api/webmentions" do
       require_authenticated! if settings.authentication_required
-      json_response("mentions" => settings.database.list_webmentions, "failures" => settings.database.list_webmention_failures, "delivery_failures" => settings.database.list_webmention_delivery_failures)
+      json_response({ "mentions" => settings.database.list_webmentions, "failures" => settings.database.list_webmention_failures, "delivery_failures" => settings.database.list_webmention_delivery_failures })
     end
 
     patch "/api/authoring/webmentions/:id" do

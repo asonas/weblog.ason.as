@@ -303,7 +303,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
       <a className="draft-admin-skip" href="#draft-admin-ledger">
         記事一覧へ移動
       </a>
-      <DraftNavigation expanded />
+      <DraftNavigation />
       <section
         id="draft-admin-ledger"
         className="draft-admin-ledger"

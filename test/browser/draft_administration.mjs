@@ -66,16 +66,28 @@ try {
   assert.deepEqual(await menu.locator("a").allTextContents(), ["記事を書く", "記事の管理", "Webmention", "日記を書く", "ホーム"]);
   await menu.getByRole("link", { name: "Webmentionを管理" }).click();
   await page.getByRole("heading", { name: "Webmention", exact: true }).waitFor();
+  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事を書く", "記事の管理", "Webmention", "日記を書く", "ホーム"]);
+  assert.equal(await menu.evaluate(element => element.getBoundingClientRect().width), 224);
+  assert.equal(await page.locator("body > .site-header").isVisible(), false);
+  const mentionTabs = page.getByRole("navigation", { name: "Webmentionの状態" });
+  await mentionTabs.getByRole("button", { name: /承認済み/ }).click();
+  await page.getByRole("region", { name: "承認済み", exact: true }).waitFor();
+  await until(async () => !(await page.getByRole("status").count()));
+  assert.equal(await page.getByRole("alert").count(), 0, (await page.getByRole("alert").allTextContents()).join(" "));
+  await page.screenshot({ path: "/tmp/weblog-webmention-admin-unified.png", fullPage: true });
+  assert.equal(await page.locator(".page-shell").evaluate(element => getComputedStyle(element).padding), "0px");
+  await page.setViewportSize({ width: 320, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: "/tmp/weblog-webmention-admin-mobile.png", fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 960 });
   await page.getByRole("navigation", { name: "執筆メニュー" }).getByRole("link", { name: "記事一覧", exact: true }).click();
   await menu.waitFor();
   const filters = page.getByRole("navigation", { name: "記事の状態" });
   assert.ok(await filters.evaluate((element) => Boolean(element.closest(".draft-admin-ledger"))));
   await page.screenshot({ path: "/tmp/weblog-draft-admin-tabs.png" });
   await page.getByRole("link", { name: "今日の日記を書く", exact: true }).click();
-  await page
-    .getByRole("link", { name: "記事一覧に戻る", exact: true })
-    .waitFor();
-  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事一覧へ"]);
+  await page.getByLabel("タイトル", { exact: true }).waitFor();
+  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事を書く", "記事の管理", "Webmention", "日記を書く", "ホーム"]);
   assert.equal(await menu.locator("button").count(), 0);
   const diaryTitle = page.getByLabel("タイトル", { exact: true });
   await diaryTitle.focus();
@@ -139,8 +151,9 @@ try {
   assert.ok((await detail.textContent()).includes("公開中"));
   await editRow();
   await page.getByRole("button", { name: "保存する", exact: true }).waitFor();
-  assert.equal(await menu.evaluate(element => element.getBoundingClientRect().width), 72);
+  assert.equal(await menu.evaluate(element => element.getBoundingClientRect().width), 224);
   assert.equal(await page.locator(".draft-editor").evaluate(element => getComputedStyle(element).backgroundColor), "rgb(247, 247, 244)");
+  assert.equal(await page.locator(".draft-editor").evaluate(element => getComputedStyle(element).paddingInlineStart), "224px");
   assert.equal(await page.locator(".draft-preview__document").evaluate(element => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   await page.screenshot({ path: "/tmp/weblog-authoring-editor-parchment.png" });
   await body.fill("公開後に追記した本文");

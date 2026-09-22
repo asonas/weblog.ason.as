@@ -446,12 +446,7 @@ function RootApp({
     );
   }
   if (window.location.pathname === "/authoring/webmentions") {
-    return (
-      <>
-        <HeaderSearch />
-        <WebmentionModerationPage canEdit={auth.can_edit} />
-      </>
-    );
+    return <WebmentionModerationPage canEdit={auth.can_edit} />;
   }
   return <App initialBootstrap={initialBootstrap} auth={auth} />;
 }

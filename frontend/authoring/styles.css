@@ -1240,8 +1240,10 @@ html[data-view="article-editing"] .page-shell {
 }
 
 html[data-view="webmention-moderation"] .page-shell {
-  max-inline-size: 90rem;
-  padding: clamp(1rem, 3vw, 3rem);
+  max-inline-size: none;
+  padding: 0;
+  margin: 0;
+  inline-size: 100%;
 }
 
 .webmention-access {

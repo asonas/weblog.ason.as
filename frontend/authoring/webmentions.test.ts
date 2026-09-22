@@ -13,6 +13,26 @@ const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "https://weblog.ason.as/authoring/webmentions",
 });
 
+test("shows a readable error for an empty HTTP error response", async () => {
+  globalThis.fetch = async () => new Response(null, { status: 404 });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(createElement(WebmentionModerationPage, { canEdit: true })),
+    );
+    assert.match(
+      container.textContent || "",
+      /Webmentionを読み込めませんでした（HTTP 404）/,
+    );
+    assert.doesNotMatch(container.textContent || "", /Unexpected end/);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
 Object.assign(globalThis, {
   window: dom.window,
   document: dom.window.document,
