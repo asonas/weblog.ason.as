@@ -166,7 +166,7 @@ try {
   await page.screenshot({ path: "/tmp/weblog-authoring-status-columns.png", fullPage: true });
   assert.ok((await detail.textContent()).includes("公開中"));
   await editRow();
-  await page.getByRole("button", { name: "保存する", exact: true }).waitFor();
+  await page.getByRole("button", { name: "更新する", exact: true }).waitFor();
   assert.equal(await menu.evaluate(element => element.getBoundingClientRect().width), 224);
   assert.equal(await page.locator(".draft-editor").evaluate(element => getComputedStyle(element).backgroundColor), "rgb(247, 247, 244)");
   assert.equal(await page.locator(".draft-editor").evaluate(element => getComputedStyle(element).paddingInlineStart), "224px");
@@ -239,7 +239,7 @@ try {
       targets: sentMentions ? [] : ["https://example.net/new"] } });
   });
   await page.getByRole("textbox", { name: "本文", exact: true }).fill("今日の日記の本文\n\n[追加リンク](https://example.net/new)");
-  await page.getByRole("button", { name: "保存する", exact: true }).click();
+  await page.getByRole("button", { name: "更新する", exact: true }).click();
   const sendMention = page.getByRole("dialog").getByRole("button", { name: "Webmentionを送る", exact: true });
   await sendMention.waitFor();
   assert.equal(sentMentions, 0);

@@ -204,7 +204,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     "idle" | "running" | "success" | "error"
   >("idle");
   const [publicationIntent, setPublicationIntent] = useState<
-    "publish" | "save"
+    "publish" | "update"
   >("publish");
   const [wikiLinkNames, setWikiLinkNames] = useState<Array<string>>([]);
   const [wikiLinkQuery, setWikiLinkQuery] = useState<WikiLinkQuery | null>(
@@ -576,7 +576,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     setPublicationError("");
     setWebmentions(undefined);
     setWebmentionStatus("");
-    setPublicationIntent(articleState === "draft" ? "publish" : "save");
+    setPublicationIntent(articleState === "draft" ? "publish" : "update");
     setPublicationFlow("running");
     publicationDialog.current?.showModal();
     try {
@@ -589,7 +589,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       if (prepared) {
         setArticleState(prepared.article_state);
         setPublicationIntent(
-          prepared.article_state === "draft" ? "publish" : "save",
+          prepared.article_state === "draft" ? "publish" : "update",
         );
       }
       await session.publish(prepared);
@@ -694,12 +694,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             {session?.isPublishing
               ? articleState === "draft"
                 ? "公開中"
-                : "保存中"
+                : "更新中"
               : session?.pendingPublication
                 ? "公開を再試行"
                 : articleState === "draft"
                   ? "公開する"
-                  : "保存する"}
+                  : "更新する"}
           </button>
         </div>
       </div>
@@ -984,14 +984,14 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       >
         <h2 id="draft-publication-title">
           {publicationFlow === "success"
-            ? publicationIntent === "save"
-              ? "記事を保存しました"
+            ? publicationIntent === "update"
+              ? "記事を更新しました"
               : "記事を公開しました"
             : publicationFlow === "error"
               ? "処理を完了できませんでした"
               : publicationIntent === "publish"
                 ? "記事を公開しています"
-                : "記事を保存しています"}
+                : "記事を更新しています"}
         </h2>
         <p role="status" aria-live="polite">
           {publicationFlow === "running"

@@ -898,7 +898,7 @@ end
     await publicationGate;
     await route.continue();
   });
-  await publicationPage.getByRole("button", { name: "保存する", exact: true }).click();
+  await publicationPage.getByRole("button", { name: "更新する", exact: true }).click();
   await until(async () => requestStarted);
   assert.equal(await publicationBody.isDisabled(), true);
   const concurrentContext = await browser.newContext();
@@ -913,10 +913,10 @@ end
   await publicationPage.getByRole("button", { name: "エディタに戻る", exact: true }).click();
   assert.ok(!(await (await fetch(readerUrl)).text()).includes("別のタブで追記した内容"));
   await publicationPage.unroute("**/publications");
-  await publicationPage.getByRole("button", { name: "保存する", exact: true }).click();
+  await publicationPage.getByRole("button", { name: "更新する", exact: true }).click();
   await until(async () => (await publicationPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("合流しました"));
   await publicationPage.getByRole("button", { name: "エディタに戻る", exact: true }).click();
-  await publicationPage.getByRole("button", { name: "保存する", exact: true }).click();
+  await publicationPage.getByRole("button", { name: "更新する", exact: true }).click();
   await until(async () => (await publicationPage.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
   await publicationPage.getByRole("button", { name: "編集を続ける", exact: true }).click();
   assert.ok((await (await fetch(readerUrl)).text()).includes("別のタブで追記した内容"));
@@ -933,7 +933,7 @@ end
   await referenceBody.fill("非公開で編集中の参照元");
   await until(async () => (await referencePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
   await publicationPage.getByLabel("タイトル", { exact: true }).fill("名前変更した記事");
-  await publicationPage.getByRole("button", { name: "保存する", exact: true }).click();
+  await publicationPage.getByRole("button", { name: "更新する", exact: true }).click();
   await until(async () => (await publicationPage.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
   await publicationPage.getByRole("button", { name: "編集を続ける", exact: true }).click();
   const oldRouteUrl = `http://127.0.0.1:18082/${encodeURIComponent("確認して公開する記事")}`;
