@@ -38,9 +38,26 @@ module WeblogAuthoring
       { "revision" => before, "snapshots" => snapshots }
     end
 
+    def published_pages(limit: nil, before: nil, after: nil, kind: nil)
+      @connect.call do |db|
+        db.published_pages(limit:, before:, after:, kind:).map { |row| normalize_published_row(row) }
+      end
+    end
+
+    def published_timeline_pages(limit:, before: nil, after: nil, month: nil)
+      @connect.call do |db|
+        db.published_timeline_pages(limit:, before:, after:, month:).map { |row| normalize_published_row(row) }
+      end
+    end
+
     def publication_revision
       @connect.call { |db| db.query("SELECT revision FROM #{db.prefix}draft_publication_clock WHERE id = 1").first.fetch("revision").to_i }
     end
+
+    def normalize_published_row(row)
+      row.merge("metadata" => JSON.parse(row.fetch("metadata"))).reject { |key, value| key == "atom_id" && value.nil? }
+    end
+    private :normalize_published_row
 
     def output_head(stage)
       @connect.call { |db| db.query("SELECT * FROM #{db.prefix}draft_output_heads WHERE stage = $1", [stage]).first }

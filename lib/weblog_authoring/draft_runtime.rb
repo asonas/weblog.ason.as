@@ -4,33 +4,58 @@ require "aws-sdk-lambda"
 require_relative "dsql_database"
 require_relative "draft_cutover_api"
 require_relative "draft_reader"
-require_relative "draft_jobs"
-require_relative "remote_draft_jobs"
 require_relative "lambda_api"
 require_relative "draft_site"
 
 module WeblogAuthoring
   class DraftRuntime
+    class LazyService
+      def initialize(&factory) = @factory = factory
+
+      def method_missing(name, ...) = target.public_send(name, ...)
+      def respond_to_missing?(name, include_private = false) = target.respond_to?(name, include_private)
+
+      private
+
+      def target = (@target ||= @factory.call)
+    end
+
     def self.for_environment
       pool = AuroraDsql::Pg.create_pool(host: ENV.fetch("DSQL_HOST"), user: "weblog_authoring", application_name: "draft-runtime", occ_max_retries: 3)
       store = DraftStore.postgres(pool)
       database = DsqlDatabase.new(host: ENV.fetch("DSQL_HOST"), content_dir: Pathname("/tmp/content"), pool:)
-      client = Aws::Lambda::Client.new
-      publication = DraftPublication.remote(store:, lambda_client: client, function_name: ENV.fetch("DRAFT_WORKER_FUNCTION_NAME"))
-      new(store:, database:, publication:, s3_client: Aws::S3::Client.new, bucket: ENV.fetch("SITE_BUCKET"), site_url: ENV.fetch("FRONTEND_URL", "https://weblog.ason.as"), lambda_client: client, worker_function: ENV.fetch("DRAFT_PUBLICATION_FUNCTION_NAME"))
+      lambda_client = LazyService.new { Aws::Lambda::Client.new }
+      publication = LazyService.new do
+        DraftPublication.remote(store:, lambda_client:, function_name: ENV.fetch("DRAFT_WORKER_FUNCTION_NAME"))
+      end
+      new(store:, database:, publication:, s3_client: LazyService.new { Aws::S3::Client.new },
+        bucket: ENV.fetch("SITE_BUCKET"), site_url: ENV.fetch("FRONTEND_URL", "https://weblog.ason.as"),
+        lambda_client:, worker_function: ENV.fetch("DRAFT_PUBLICATION_FUNCTION_NAME"), defer_services: true)
     end
 
-    def initialize(store:, database:, publication:, s3_client:, bucket:, site_url:, lambda_client:, worker_function:, search_runner: SearchIndexer::QmdRunner.new)
+    def initialize(store:, database:, publication:, s3_client:, bucket:, site_url:, lambda_client:, worker_function:,
+      search_runner: nil, defer_services: false)
       @store = store
       @database = database
       @publication = publication
       @s3 = s3_client
       @bucket = bucket
       @reader = DraftReader.new(store:, database:)
-      @publisher = DraftPublisher.s3(publication:, database: @reader, s3_client:, site_bucket: bucket, site_url:, shell_key: "static/authoring/public.html")
-      @outputs = DraftOutputs.new(store:, s3_client:, bucket:, site_url:, search_runner:)
-      @jobs = DraftJobs.new(store:, publisher: @publisher, outputs: @outputs)
-      @remote_jobs = RemoteDraftJobs.new(store:, lambda_client:, function_name: worker_function)
+      services = lambda do
+        require_relative "draft_jobs"
+        require_relative "remote_draft_jobs"
+        runner = search_runner || SearchIndexer::QmdRunner.new
+        publisher = DraftPublisher.s3(publication:, database: @reader, s3_client:, site_bucket: bucket, site_url:, shell_key: "static/authoring/public.html")
+        outputs = DraftOutputs.new(store:, s3_client:, bucket:, site_url:, search_runner: runner)
+        { publisher:, outputs:, jobs: DraftJobs.new(store:, publisher:, outputs:),
+          remote_jobs: RemoteDraftJobs.new(store:, lambda_client:, function_name: worker_function), }
+      end
+      resolved = nil
+      service = ->(name) { LazyService.new { resolved ||= services.call; resolved.fetch(name) } }
+      @publisher = defer_services ? service.call(:publisher) : (resolved ||= services.call).fetch(:publisher)
+      @outputs = defer_services ? service.call(:outputs) : resolved.fetch(:outputs)
+      @jobs = defer_services ? service.call(:jobs) : resolved.fetch(:jobs)
+      @remote_jobs = defer_services ? service.call(:remote_jobs) : resolved.fetch(:remote_jobs)
     end
 
     def api(options)

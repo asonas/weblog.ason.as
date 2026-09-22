@@ -19,17 +19,11 @@ module WeblogAuthoring
     end
 
     def list_pages(limit: nil, before: nil, after: nil, kind: nil, timings: nil) # rubocop:disable Lint/UnusedMethodArgument
-      pages = @store.published_collection.fetch("snapshots").map { |snapshot| DraftPublisher.page(snapshot) }
-      if kind
-        pages = pages.select { |page| page.links.any? { |link| link.name == "日記" } == (kind == "diary") }
-      end
-      select_window(pages, limit:, before:, after:) { |page| [kind == "diary" ? page.created_at : page.updated_at, page.id] }
+      @store.published_pages(limit:, before:, after:, kind:).map { |snapshot| DraftPublisher.page(snapshot) }
     end
 
     def list_timeline_pages(limit:, before: nil, after: nil, month: nil)
-      pages = list_pages
-      pages = pages.select { |page| HomeTimeline.key(page).start_with?(month) } if month
-      select_window(pages, limit:, before:, after:) { |page| [HomeTimeline.key(page), page.id] }
+      @store.published_timeline_pages(limit:, before:, after:, month:).map { |snapshot| DraftPublisher.page(snapshot) }
     end
 
     def list_diary_routes

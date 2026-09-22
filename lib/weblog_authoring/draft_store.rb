@@ -531,6 +531,55 @@ module WeblogAuthoring
       def prefix = ""
       def query(sql, values = []) = @connection.execute(sql, values)
       def transaction(&block) = @connection.transaction(:immediate, &block)
+
+      def published_pages(limit:, before:, after:, kind:)
+        published_window(limit:, before:, after:, kind:)
+      end
+
+      def published_timeline_pages(limit:, before:, after:, month:)
+        published_window(limit:, before:, after:, month:, timeline: true)
+      end
+
+      private
+
+      def published_window(limit:, before:, after:, kind: nil, month: nil, timeline: false)
+        key = if timeline
+                "CASE WHEN v.body LIKE '%[[日記]]%' AND v.route GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' THEN v.route || 'T00:00:00' ELSE strftime('%Y-%m-%dT%H:%M:%S', h.updated_at, '+9 hours') END"
+              else
+                kind == "diary" ? "v.article_created_at" : "h.updated_at"
+              end
+        sql, values = published_window_sql(key:, limit:, before:, after:, kind:, month:, timeline:, placeholder: "?")
+        rows = @connection.execute(sql, values).map(&:to_h)
+        after ? rows.reverse : rows
+      end
+
+      def published_window_sql(key:, limit:, before:, after:, kind:, month:, timeline:, placeholder:)
+        sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key FROM draft_publication_heads h JOIN draft_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id LEFT JOIN draft_atom_ids a ON a.article_id = h.article_id"
+        conditions = []
+        values = []
+        if kind
+          conditions << (kind == "diary" ? "v.body LIKE '%[[日記]]%'" : "v.body NOT LIKE '%[[日記]]%'")
+        end
+        if month
+          conditions << "substr(#{key}, 1, 7) = #{placeholder}"
+          values << month
+        end
+        cursor = before || after
+        if cursor
+          operator = before ? "<" : ">"
+          cursor_key = cursor.fetch(timeline ? :key : :timestamp)
+          cursor_key = cursor_key.iso8601 if cursor_key.respond_to?(:iso8601)
+          conditions << "(#{key} #{operator} #{placeholder} OR (#{key} = #{placeholder} AND v.article_id #{operator} #{placeholder}))"
+          values.concat([cursor_key, cursor_key, cursor.fetch(:id)])
+        end
+        sql += " WHERE #{conditions.join(' AND ')}" unless conditions.empty?
+        sql += " ORDER BY #{key} #{after ? 'ASC' : 'DESC'}, v.article_id #{after ? 'ASC' : 'DESC'}"
+        if limit
+          sql += " LIMIT #{placeholder}"
+          values << limit
+        end
+        [sql, values]
+      end
     end
 
     class PostgresConnection
@@ -538,6 +587,50 @@ module WeblogAuthoring
       def prefix = "weblog_authoring."
       def query(sql, values = []) = @connection.exec_params(sql, values).to_a
       def transaction(&block) = @connection.transaction(&block)
+
+      def published_pages(limit:, before:, after:, kind:)
+        published_window(limit:, before:, after:, kind:)
+      end
+
+      def published_timeline_pages(limit:, before:, after:, month:)
+        published_window(limit:, before:, after:, month:, timeline: true)
+      end
+
+      private
+
+      def published_window(limit:, before:, after:, kind: nil, month: nil, timeline: false)
+        key = if timeline
+                "CASE WHEN v.body LIKE '%[[日記]]%' AND v.route ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN v.route || 'T00:00:00' ELSE to_char(h.updated_at::timestamptz AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD\"T\"HH24:MI:SS') END"
+              else
+                kind == "diary" ? "v.article_created_at" : "h.updated_at"
+              end
+        conditions = []
+        values = []
+        if kind
+          conditions << (kind == "diary" ? "v.body LIKE '%[[日記]]%'" : "v.body NOT LIKE '%[[日記]]%'")
+        end
+        if month
+          values << month
+          conditions << "substr(#{key}, 1, 7) = $#{values.length}"
+        end
+        cursor = before || after
+        if cursor
+          operator = before ? "<" : ">"
+          cursor_key = cursor.fetch(timeline ? :key : :timestamp)
+          cursor_key = cursor_key.iso8601 if cursor_key.respond_to?(:iso8601)
+          values.concat([cursor_key, cursor.fetch(:id)])
+          conditions << "(#{key} #{operator} $#{values.length - 1} OR (#{key} = $#{values.length - 1} AND v.article_id #{operator} $#{values.length}))"
+        end
+        sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key FROM weblog_authoring.draft_publication_heads h JOIN weblog_authoring.draft_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id LEFT JOIN weblog_authoring.draft_atom_ids a ON a.article_id = h.article_id"
+        sql += " WHERE #{conditions.join(' AND ')}" unless conditions.empty?
+        sql += " ORDER BY #{key} #{after ? 'ASC' : 'DESC'}, v.article_id #{after ? 'ASC' : 'DESC'}"
+        if limit
+          values << limit
+          sql += " LIMIT $#{values.length}"
+        end
+        rows = @connection.exec_params(sql, values).to_a
+        after ? rows.reverse : rows
+      end
     end
   end
 end
