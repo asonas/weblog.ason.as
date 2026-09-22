@@ -1,6 +1,6 @@
 Regen Icons https://github.com/kazdenc/regen-icons
 Source revision: 64c0e165c3ce6d5c9d7329acf5762306f86d6b1d
-Outline paths used: pencil, calendar-plus, file-text, home, refresh.
+Outline paths used: pencil, calendar-plus, file-text, home, refresh, info-circle.
 
 MIT License
 

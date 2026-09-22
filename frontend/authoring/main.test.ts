@@ -252,7 +252,7 @@ test("shows a home skeleton while initial home data is pending", async () => {
     assert.ok(container.querySelectorAll(".home-loading__shimmer").length > 1);
     assert.equal(container.querySelector(".loading-state"), null);
     assert.equal(
-      container.querySelector(".card-home__about")?.textContent,
+      container.querySelector(".card-home__about")?.getAttribute("aria-label"),
       "このサイトについて",
     );
     assert.equal(
@@ -336,7 +336,8 @@ test("keeps the about link in the header and recent tags before the cards", asyn
       ".atlas-header a[href='/about']",
     );
     const tags = container.querySelector(".card-home__tags");
-    assert.equal(about?.textContent, "このサイトについて");
+    assert.equal(about?.getAttribute("aria-label"), "このサイトについて");
+    assert.ok(about?.querySelector('svg[aria-hidden="true"]'));
     assert.equal(about?.getAttribute("href"), "/about");
     const aboutContainer = about?.parentElement;
     assert.ok(aboutContainer);
