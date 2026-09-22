@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "aws-sdk-lambda"
+require "aws-sdk-sqs"
 require_relative "dsql_database"
 require_relative "draft_cutover_api"
 require_relative "draft_reader"
@@ -30,24 +31,27 @@ module WeblogAuthoring
       end
       new(store:, database:, publication:, s3_client: LazyService.new { Aws::S3::Client.new },
         bucket: ENV.fetch("SITE_BUCKET"), site_url: ENV.fetch("FRONTEND_URL", "https://weblog.ason.as"),
-        lambda_client:, worker_function: ENV.fetch("DRAFT_PUBLICATION_FUNCTION_NAME"), defer_services: true)
+        lambda_client:, worker_function: ENV.fetch("DRAFT_PUBLICATION_FUNCTION_NAME"), defer_services: true,
+        sqs_client: LazyService.new { Aws::SQS::Client.new }, webmention_queue_url: ENV["WEBMENTION_QUEUE_URL"],
+        sender_enabled: ENV.fetch("WEBMENTION_SENDER_ENABLED", "false") == "true")
     end
 
     def initialize(store:, database:, publication:, s3_client:, bucket:, site_url:, lambda_client:, worker_function:,
-      search_runner: nil, defer_services: false)
+      search_runner: nil, defer_services: false, sqs_client: nil, webmention_queue_url: nil, sender_enabled: false)
       @store = store
       @database = database
       @publication = publication
       @s3 = s3_client
       @bucket = bucket
       @reader = DraftReader.new(store:, database:)
+      @webmentions = DraftWebmentions.new(store:, sqs_client:, queue_url: webmention_queue_url, site_url:, enabled: sender_enabled)
       services = lambda do
         require_relative "draft_jobs"
         require_relative "remote_draft_jobs"
         runner = search_runner || SearchIndexer::QmdRunner.new
         publisher = DraftPublisher.s3(publication:, database: @reader, s3_client:, site_bucket: bucket, site_url:, shell_key: "static/authoring/public.html")
         outputs = DraftOutputs.new(store:, s3_client:, bucket:, site_url:, search_runner: runner)
-        { publisher:, outputs:, jobs: DraftJobs.new(store:, publisher:, outputs:),
+        { publisher:, outputs:, jobs: DraftJobs.new(store:, publisher:, outputs:, webmentions: @webmentions),
           remote_jobs: RemoteDraftJobs.new(store:, lambda_client:, function_name: worker_function), }
       end
       resolved = nil
@@ -61,7 +65,7 @@ module WeblogAuthoring
     def api(options)
       legacy = LambdaApi.new(**options)
       published = LambdaApi.new(**options, reader_database: @reader, draft_store: @store, draft_publication: @publication,
-        draft_publisher: @publisher, draft_outputs: @outputs, draft_jobs: @remote_jobs)
+        draft_publisher: @publisher, draft_outputs: @outputs, draft_jobs: @remote_jobs, draft_webmentions: @webmentions)
       legacy = DraftSite.new(api: legacy, reader: @database, s3_client: @s3, bucket: @bucket, published: false)
       published = DraftSite.new(api: published, reader: @reader, s3_client: @s3, bucket: @bucket, published: true)
       DraftCutoverApi.new(store: @store, legacy:, published:)

@@ -70,12 +70,13 @@ module WeblogAuthoring
                    bluesky_oauth_function_name: nil, webmention_queue_url: nil,
                    webmention_publish_queue_url: nil, webmention_dead_letter_arn: nil,
                    webmention_queue_arn: nil, webmention_publish_dead_letter_arn: nil,
-                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, draft_store: nil, draft_publication: nil, draft_publisher: nil, draft_jobs: nil, draft_outputs: nil, clock: Time.method(:now))
+                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, draft_store: nil, draft_publication: nil, draft_publisher: nil, draft_jobs: nil, draft_outputs: nil, draft_webmentions: nil, clock: Time.method(:now))
       @draft_store = draft_store
       @draft_publication = draft_publication
       @draft_publisher = draft_publisher
       @draft_jobs = draft_jobs
       @draft_outputs = draft_outputs
+      @draft_webmentions = draft_webmentions
       @database = database
       @published_reader = reader_database
       @reader_database = reader_database || database
@@ -242,7 +243,7 @@ module WeblogAuthoring
         return { statusCode: 301, headers: { "location" => "/#{WeblogAuthoring.encoded_route(destination)}", "cache-control" => "no-cache" }, body: "" } if destination
         snapshot = resolution["snapshot"]
         if snapshot
-          return { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => "no-store" }, body: publisher.read(snapshot) }
+          return { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => "no-store" }, body: publisher.read_with_webmentions(snapshot) }
         end
       end
 
@@ -476,6 +477,15 @@ module WeblogAuthoring
         elsif method == "POST" && path == "/api/authoring/drafts/daily"
           return json_response(200, administration.daily(parse_json(event)["date"]))
         end
+        return json_response(404, error: "Not Found")
+      end
+      mentions = %r{\A/api/authoring/drafts/([^/]+)/webmentions\z}.match(path)
+      if mentions
+        sender = @draft_webmentions
+        return json_response(503, error: "Webmentionの送信は停止中です。") unless sender
+        id = mentions[1].to_s
+        return json_response(200, sender.status(id)) if method == "GET"
+        return json_response(202, sender.send_new(id, parse_json(event)["version_id"])) if method == "POST"
         return json_response(404, error: "Not Found")
       end
       publication = %r{\A/api/authoring/drafts/([^/]+)/publications(?:/([^/]+)(?:/(run))?)?\z}.match(path)

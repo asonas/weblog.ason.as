@@ -630,6 +630,12 @@ html[data-draft-workspace="true"]
   inline-size: 1.5rem;
   block-size: 1.5rem;
 }
+.draft-navigation .draft-navigation__webmentions {
+  font-size: 0.625rem;
+  text-align: center;
+  overflow-wrap: normal;
+  word-break: normal;
+}
 .draft-navigation a:hover {
   background: oklch(1 0 0 / 0.14);
 }

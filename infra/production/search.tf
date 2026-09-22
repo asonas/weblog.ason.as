@@ -163,8 +163,10 @@ resource "aws_lambda_function" "search_indexer" {
 
   environment {
     variables = merge(local.draft_runtime_environment, {
-      DSQL_HOST   = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
-      SITE_BUCKET = aws_s3_bucket.site.id
+      DSQL_HOST                 = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
+      SITE_BUCKET               = aws_s3_bucket.site.id
+      WEBMENTION_QUEUE_URL      = aws_sqs_queue.webmention.url
+      WEBMENTION_SENDER_ENABLED = tostring(var.webmention_sender_enabled)
     })
   }
 

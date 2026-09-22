@@ -23,6 +23,12 @@ mock_provider "aws" {
   override_resource {
     target = aws_cloudwatch_log_group.inbox_sync_legacy
   }
+  override_resource {
+    target = aws_sqs_queue.webmention
+    values = {
+      url = "https://sqs.ap-northeast-1.amazonaws.com/123456789012/webmention.fifo"
+    }
+  }
 }
 
 mock_provider "aws" {
@@ -66,6 +72,11 @@ run "cutover_routes_published_reads_and_retires_legacy_generators" {
 
   assert {
     condition     = aws_lambda_function.webmention_publisher.environment[0].variables["WEBMENTION_SENDER_ENABLED"] == "false" && aws_lambda_function.search_indexer.reserved_concurrent_executions == 1 && aws_cloudwatch_event_rule.draft_worker.state == "ENABLED"
-    error_message = "Cutover must retain disabled sending and bounded publication and maintenance workers."
+    error_message = "Cutover must retain disabled legacy sending and bounded publication and maintenance workers."
+  }
+
+  assert {
+    condition     = aws_lambda_function.authoring.environment[0].variables["WEBMENTION_SENDER_ENABLED"] == "true" && aws_lambda_function.search_indexer.environment[0].variables["WEBMENTION_SENDER_ENABLED"] == "true" && aws_lambda_function.search_indexer.environment[0].variables["WEBMENTION_QUEUE_URL"] == aws_sqs_queue.webmention.url
+    error_message = "The draft API and publication worker must share the enabled Webmention delivery queue."
   }
 }

@@ -1,0 +1,7 @@
+module WeblogAuthoring
+  class DraftWebmentions
+    def status: (String) -> Hash[String, untyped]
+    def send_new: (String, untyped) -> Hash[String, untyped]
+    def dispatch: (?String?) -> void
+  end
+end

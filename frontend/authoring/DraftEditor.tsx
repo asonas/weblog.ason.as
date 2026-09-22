@@ -141,6 +141,10 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [loadError, setLoadError] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [publicationError, setPublicationError] = useState("");
+  const [webmentions, setWebmentions] =
+    useState<Awaited<ReturnType<DraftSession["webmentionStatus"]>>>();
+  const [webmentionStatus, setWebmentionStatus] = useState("");
+  const [isSendingWebmentions, setIsSendingWebmentions] = useState(false);
   const [publicationFlow, setPublicationFlow] = useState<
     "idle" | "running" | "success" | "error"
   >("idle");
@@ -446,6 +450,8 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   async function publish() {
     if (!session || session.isPublishing) return;
     setPublicationError("");
+    setWebmentions(undefined);
+    setWebmentionStatus("");
     setPublicationIntent(articleState === "draft" ? "publish" : "save");
     setPublicationFlow("running");
     publicationDialog.current?.showModal();
@@ -456,10 +462,25 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       const prepared = session.pendingPublication
         ? undefined
         : await session.preparePublication();
-      if (prepared) setArticleState(prepared.article_state);
+      if (prepared) {
+        setArticleState(prepared.article_state);
+        setPublicationIntent(
+          prepared.article_state === "draft" ? "publish" : "save",
+        );
+      }
       await session.publish(prepared);
       setArticleState("public");
       setPublicationFlow("success");
+      try {
+        const mentions = await session.webmentionStatus();
+        setWebmentions(mentions);
+        if (mentions.pending)
+          setWebmentionStatus("Webmentionの送信を待っています。");
+        if (!mentions.enabled)
+          setWebmentionStatus("Webmentionの送信は停止中です。");
+      } catch {
+        setWebmentionStatus("Webmentionの送信状況を取得できませんでした。");
+      }
     } catch (error) {
       setPublicationError(
         error instanceof Error ? error.message : "公開に失敗しました",
@@ -819,6 +840,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
               ? session?.publicationStatus ||
                 "公開ページへの反映が完了しました。"
               : publicationError}
+          {publicationFlow === "success" && webmentionStatus && (
+            <>
+              <br />
+              {webmentionStatus}
+            </>
+          )}
         </p>
         <div className="draft-publication-dialog__actions">
           {publicationFlow === "success" && session && (
@@ -827,6 +854,35 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
                 記事を見る
               </a>
               <a href="/authoring/articles">記事一覧に戻る</a>
+              {webmentions?.enabled &&
+                (webmentions.targets.length > 0 || webmentions.pending) && (
+                  <button
+                    type="button"
+                    disabled={isSendingWebmentions}
+                    onClick={async () => {
+                      if (isSendingWebmentions) return;
+                      setIsSendingWebmentions(true);
+                      try {
+                        setWebmentions(
+                          await session.sendWebmentions(webmentions.version_id),
+                        );
+                        setWebmentionStatus(
+                          "Webmentionの送信を受け付けました。送信失敗はWebmention管理画面で確認できます。",
+                        );
+                      } catch (error) {
+                        setWebmentionStatus(
+                          error instanceof Error
+                            ? error.message
+                            : "Webmentionを送信できませんでした。再試行してください。",
+                        );
+                      } finally {
+                        setIsSendingWebmentions(false);
+                      }
+                    }}
+                  >
+                    {isSendingWebmentions ? "送信を依頼中" : "Webmentionを送る"}
+                  </button>
+                )}
               <button
                 type="button"
                 onClick={() => publicationDialog.current?.close()}

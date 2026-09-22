@@ -52,6 +52,13 @@ module WeblogAuthoring
       false
     end
 
+    def read_with_webmentions(snapshot)
+      html = read(snapshot).dup.force_encoding(Encoding::UTF_8)
+      mentions = @renderer.render_page_mentions(snapshot.fetch("article_id"))
+      html = html.sub(/\s*<section class="external-mentions".*?<\/section>/m, "")
+      html.sub(/(?=<div data-public-universe=)/) { mentions }
+    end
+
     def repair(snapshot)
       unless snapshot["html_digest"]
         begin

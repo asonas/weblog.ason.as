@@ -21,6 +21,7 @@ resource "aws_lambda_function" "authoring" {
       INBOX_SYNC_FUNCTION_NAME           = aws_lambda_function.inbox_sync.function_name
       BLUESKY_OAUTH_FUNCTION_NAME        = aws_lambda_function.bluesky_oauth.function_name
       WEBMENTION_QUEUE_URL               = aws_sqs_queue.webmention.url
+      WEBMENTION_SENDER_ENABLED          = tostring(var.webmention_sender_enabled)
       WEBMENTION_PUBLISH_QUEUE_URL       = aws_sqs_queue.webmention_publish.url
       WEBMENTION_DEAD_LETTER_ARN         = aws_sqs_queue.webmention_dead_letter.arn
       WEBMENTION_QUEUE_ARN               = aws_sqs_queue.webmention.arn

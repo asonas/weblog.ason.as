@@ -23,9 +23,9 @@ variable "webmention_publisher_enabled" {
 }
 
 variable "webmention_sender_enabled" {
-  description = "Release outbound Webmention delivery jobs after publishing article snapshots."
+  description = "Send Webmentions for first draft publications and explicitly requested new links."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "inbox_alert_email" {

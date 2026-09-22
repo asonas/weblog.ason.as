@@ -1094,6 +1094,15 @@ html[data-view="webmention-moderation"] .page-shell {
   gap: 1.25rem;
 }
 
+.webmention-administration {
+  margin-inline-start: 4.5rem;
+  min-block-size: 100dvh;
+}
+
+.webmention-administration .webmention-workbench {
+  min-inline-size: 0;
+}
+
 .webmention-filters {
   display: flex;
   flex-direction: column;

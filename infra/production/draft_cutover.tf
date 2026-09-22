@@ -32,6 +32,11 @@ data "aws_iam_policy_document" "draft_publication_worker" {
   source_policy_documents = [data.aws_iam_policy_document.draft_runtime.json]
 
   statement {
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.webmention.arn]
+  }
+
+  statement {
     actions = ["s3:PutObject"]
     resources = [
       "${aws_s3_bucket.site.arn}/published/*",

@@ -948,6 +948,24 @@ export class DraftSession extends EventTarget {
     }
   }
 
+  async webmentionStatus() {
+    return this.request<{
+      version_id: string;
+      targets: string[];
+      pending: boolean;
+      enabled: boolean;
+    }>("/webmentions");
+  }
+
+  async sendWebmentions(versionId: string) {
+    return this.request<{
+      version_id: string;
+      targets: string[];
+      pending: boolean;
+      enabled: boolean;
+    }>("/webmentions", "POST", { version_id: versionId });
+  }
+
   async retryOutputs() {
     if (!this.pendingOutputs || this.isRetryingOutputs) return;
     this.isRetryingOutputs = true;

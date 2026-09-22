@@ -6,6 +6,16 @@
 InboxのAlarmとは別に `webmention_alerting_enabled` で有効化するため、Inbox通知を同時に有効化する必要はない。
 `ALARM` は対応開始、`OK` は復旧を表す。
 
+## 新しい記事管理画面からの送信
+
+`/authoring/articles` のサイドバーにある「Webmention」から受信一覧と送信失敗を確認する。承認済みの言及は公開記事を読み込む際に反映され、承認取消し・削除も同じ経路で反映される。
+
+新規公開が完了すると `draft_webmention_requests` に送信依頼を記録する。通常の保存、名前変更、公開HTMLの修復では依頼を追加しない。更新後の完了モーダルでは、初回公開時のリンクと過去に送信を依頼したリンクを除いた外部URLを「Webmentionを送る」から送信する。送信せずにモーダルを閉じた場合、そのURLは次回保存後も候補に残る。リンクの削除通知は自動送信しない。
+
+送信依頼は公開workerと定期修復処理がSQSへ投入する。投入に失敗した依頼はpendingのまま残り、再試行する。記事の公開成功と外部サイトへの配信成功は別に扱う。外部サイトがWebmentionに対応していない場合は正常な送信対象外となる。
+
+本番反映では、先にDSQLスキーマへ `draft_webmention_requests` を追加し、アプリケーションをデプロイする。その後、Terraformで `webmention_sender_enabled=true` を設定し、authoring API・公開workerの環境変数と公開workerのSQS送信権限を反映する。既存のreceiverとverificationの有効値を維持し、旧Webmention publisherと旧outbox dispatcherは停止状態を維持する。旧outboxの一括再投入は行わない。
+
 ## 通知を有効にする
 
 Matrix bot、room、Parameter Store、SNS subscriptionが設定済みであることを確認する。

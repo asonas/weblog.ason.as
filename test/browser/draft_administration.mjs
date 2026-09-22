@@ -63,7 +63,11 @@ try {
   await page.reload();
   const menu = page.getByRole("navigation", { name: "執筆メニュー" });
   await menu.waitFor();
-  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事", "ホーム", "記事を書く", "日記を書く"]);
+  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事", "Webmention", "ホーム", "記事を書く", "日記を書く"]);
+  await menu.getByRole("link", { name: "Webmentionを管理" }).click();
+  await page.getByRole("heading", { name: "Webmention", exact: true }).waitFor();
+  await page.getByRole("navigation", { name: "執筆メニュー" }).getByRole("link", { name: "記事一覧", exact: true }).click();
+  await menu.waitFor();
   const filters = page.getByRole("navigation", { name: "記事の状態" });
   assert.ok(await filters.evaluate((element) => Boolean(element.closest(".draft-admin-ledger"))));
   await page.screenshot({ path: "/tmp/weblog-draft-admin-tabs.png" });
@@ -183,6 +187,26 @@ try {
   );
   assert.equal(publishedArticle.status, 200);
   assert.ok((await publishedArticle.text()).includes("今日の日記の本文"));
+  await page.getByRole("button", { name: "編集を続ける", exact: true }).click();
+  let sentMentions = 0;
+  await page.route("**/api/authoring/drafts/*/webmentions", async route => {
+    if (route.request().method() === "POST") {
+      sentMentions += 1;
+      assert.deepEqual(route.request().postDataJSON(), { version_id: "saved-version" });
+    }
+    await route.fulfill({ json: { version_id: "saved-version", enabled: true, pending: false,
+      targets: sentMentions ? [] : ["https://example.net/new"] } });
+  });
+  await page.getByRole("textbox", { name: "本文", exact: true }).fill("今日の日記の本文\n\n[追加リンク](https://example.net/new)");
+  await page.getByRole("button", { name: "保存する", exact: true }).click();
+  const sendMention = page.getByRole("dialog").getByRole("button", { name: "Webmentionを送る", exact: true });
+  await sendMention.waitFor();
+  assert.equal(sentMentions, 0);
+  await page.screenshot({ path: "/tmp/weblog-webmention-save-dialog.png" });
+  await sendMention.click();
+  await page.getByText("Webmentionの送信を受け付けました。", { exact: false }).waitFor();
+  assert.equal(sentMentions, 1);
+  assert.equal(await sendMention.count(), 0);
   assert.deepEqual(errors, []);
   console.log("PASS: diary-to-article conversion, create/search/reopen, publication retry, restored published content, wide/narrow layout, local pending summary");
 } finally {

@@ -79,6 +79,10 @@ module WeblogAuthoring
         .sub("</head>", "#{page_metadata(page, source_url)}</head>")
     end
 
+    def render_page_mentions(id)
+      render_mentions(@database.approved_webmentions_for_page(id))
+    end
+
     private
 
     def publish_linked_hubs(page)

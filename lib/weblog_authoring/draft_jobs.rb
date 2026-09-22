@@ -6,11 +6,12 @@ module WeblogAuthoring
   class DraftJobs
     REPAIR_BATCH_SIZE = 50
 
-    def initialize(store:, publisher:, outputs:, clock: Time.method(:now))
+    def initialize(store:, publisher:, outputs:, webmentions: nil, clock: Time.method(:now))
       @store = store
       @publisher = publisher
       @outputs = outputs
       @clock = clock
+      @webmentions = webmentions
     end
 
     def run(id, version_id, retry_now: false)
@@ -43,10 +44,12 @@ module WeblogAuthoring
         end
       end
       @store.supersede_publication_stages(id, now: @clock.call)
+      dispatch_webmentions(id)
       job.merge("stages" => @store.publication_stages(id, version_id))
     end
 
     def repair
+      dispatch_webmentions
       repair_outputs = %w[atom search].any? do |stage|
         !@outputs.current?(stage)
       rescue StandardError
@@ -88,6 +91,12 @@ module WeblogAuthoring
     end
 
     private
+
+    def dispatch_webmentions(id = nil)
+      @webmentions&.dispatch(id)
+    rescue Aws::SQS::Errors::ServiceError => error
+      warn JSON.generate("event" => "draft_webmention_dispatch_failed", "article_id" => id, "error" => error.class.name)
+    end
 
     def perform(id, version_id, stage, retry_now:, rebuild: false)
       claim = @store.begin_publication_stage(id, version_id, stage, now: @clock.call, retry_now:, rebuild:)

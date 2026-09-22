@@ -12,6 +12,7 @@ module WeblogAuthoring
   class DraftPublisher
     def run: (String, String) -> Hash[String, untyped]
     def read: (Hash[String, untyped]) -> String
+    def read_with_webmentions: (Hash[String, untyped]) -> String
     def self.page: (Hash[String, untyped]?) -> PageDocument?
   end
 

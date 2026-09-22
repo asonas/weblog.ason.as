@@ -24,6 +24,13 @@ const LINKS = [
     path: "M12.38 3L6.5 3A1.5 1.5 0 0 0 5 4.5L5 19.5A1.5 1.5 0 0 0 6.5 21L17.5 21A1.5 1.5 0 0 0 19 19.5L19 9.62A1.5 1.5 0 0 0 18.56 8.56L13.44 3.44A1.5 1.5 0 0 0 12.38 3ZM13 4L13 8A1 1 0 0 0 14 9L18 9M9 13L15 13M9 17L15 17",
   },
   {
+    key: "webmentions",
+    href: "/authoring/webmentions",
+    label: "Webmention",
+    name: "Webmentionを管理",
+    path: "M8.5 15.5L6 18A3.54 3.54 0 0 1 1 13L5 9A3.54 3.54 0 0 1 10 9M15.5 8.5L18 6A3.54 3.54 0 0 1 23 11L19 15A3.54 3.54 0 0 1 14 15M8 12H16",
+  },
+  {
     key: "home",
     href: "/",
     label: "ホーム",
@@ -33,7 +40,9 @@ const LINKS = [
 ];
 
 export function DraftNavigation({ editing = false }: { editing?: boolean }) {
-  const links = editing ? [LINKS[2]] : [LINKS[2], LINKS[3], LINKS[0], LINKS[1]];
+  const links = editing
+    ? [LINKS[2]]
+    : [LINKS[2], LINKS[3], LINKS[4], LINKS[0], LINKS[1]];
   return (
     <nav className="draft-navigation" aria-label="執筆メニュー">
       {links.map((link) => {
@@ -51,13 +60,28 @@ export function DraftNavigation({ editing = false }: { editing?: boolean }) {
               <path d={link.path} />
             </svg>
             <span>
-              {editing && link.key === "articles" ? "記事一覧へ" : link.label}
+              {editing && link.key === "articles" ? (
+                "記事一覧へ"
+              ) : link.key === "webmentions" ? (
+                <>
+                  Web
+                  <wbr />
+                  mention
+                </>
+              ) : (
+                link.label
+              )}
             </span>
           </>
         );
         return (
           <a
             href={link.href}
+            className={
+              link.key === "webmentions"
+                ? "draft-navigation__webmentions"
+                : undefined
+            }
             key={link.href}
             aria-label={editing ? "記事一覧に戻る" : link.name}
             title={editing ? "記事一覧に戻る" : link.name}

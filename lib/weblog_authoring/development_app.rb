@@ -374,6 +374,27 @@ module WeblogAuthoring
       api_response { settings.draft_publication.prepare(params.fetch("id")) }
     end
 
+    get "/api/authoring/drafts/:id/webmentions" do
+      json_response(settings.draft_webmentions.status(params.fetch("id")))
+    end
+
+    post "/api/authoring/drafts/:id/webmentions" do
+      api_response(202) { |payload| settings.draft_webmentions.send_new(params.fetch("id"), payload["version_id"]) }
+    end
+
+    get "/api/webmentions" do
+      require_authenticated! if settings.authentication_required
+      json_response("mentions" => settings.database.list_webmentions, "failures" => settings.database.list_webmention_failures, "delivery_failures" => settings.database.list_webmention_delivery_failures)
+    end
+
+    patch "/api/authoring/webmentions/:id" do
+      api_response { |payload| { "mention" => settings.database.moderate_webmention(id: params.fetch("id"), decision: payload.fetch("decision")) } }
+    end
+
+    delete "/api/authoring/webmentions/:id" do
+      api_response { settings.database.delete_webmention(id: params.fetch("id")); { "deleted" => true } }
+    end
+
     post "/api/authoring/drafts/:id/publications" do
       api_response(202) { |payload| settings.draft_publication.accept(params.fetch("id"), payload) }
     end
@@ -573,7 +594,7 @@ module WeblogAuthoring
       halt 404 unless snapshot
       content_type "text/html", charset: "utf-8"
       headers "Cache-Control" => "no-store"
-      settings.draft_publisher.read(snapshot)
+      settings.draft_publisher.read_with_webmentions(snapshot)
     end
 
     error DevelopmentInputError do
@@ -621,6 +642,7 @@ module WeblogAuthoring
           bucket: "site", site_url: FRONTEND_ORIGIN, cache_dir: development_data.join("published-search").to_s, search_runner: draft_search_runner)
         app.set :draft_outputs, outputs
         app.set :draft_jobs, DraftJobs.new(store: draft_store, publisher:, outputs:)
+        app.set :draft_webmentions, DraftWebmentions.new(store: draft_store, sqs_client: nil, queue_url: nil, site_url: FRONTEND_ORIGIN, enabled: false)
       end
       app.set :clock, -> { clock }
       app.set :s3_client, s3_client

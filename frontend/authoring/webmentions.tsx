@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DraftNavigation } from "./DraftNavigation";
 
 type WebmentionSnapshot = {
   source_url: string;
@@ -577,104 +578,107 @@ export function WebmentionModerationPage({ canEdit }: { canEdit: boolean }) {
   }
 
   return (
-    <div className="webmention-workbench">
-      <aside className="webmention-filters">
-        <h1>言及</h1>
-        <p>掲載判断が必要なものを上から処理します。</p>
-        {(Object.keys(FILTER_LABELS) as WebmentionFilter[]).map((state) => (
-          <button
-            type="button"
-            aria-pressed={filter === state}
-            onClick={() => setFilter(state)}
-            key={state}
-          >
-            {FILTER_LABELS[state]}
-            <span>
-              {mentions.filter((mention) => matchesFilter(mention, state))
-                .length +
-                (state === "invalid" ? failures.length : 0) +
-                (state === "delivery" ? deliveryFailures.length : 0)}
-            </span>
-          </button>
-        ))}
-        <details className="webmention-dead-letters">
-          <summary>DLQ操作</summary>
-          <p>自動再試行を使い切った項目を元のキューへ戻します。</p>
-          <button
-            type="button"
-            disabled={deadLetterBusy !== null}
-            onClick={() => void redriveDeadLetters("verification")}
-          >
-            {deadLetterBusy === "verification"
-              ? "再投入中"
-              : "受信・送信DLQを再投入"}
-          </button>
-          <button
-            type="button"
-            disabled={deadLetterBusy !== null}
-            onClick={() => void redriveDeadLetters("publishing")}
-          >
-            {deadLetterBusy === "publishing" ? "再投入中" : "公開DLQを再投入"}
-          </button>
-        </details>
-      </aside>
-      <main className="webmention-queue">
-        <header>
-          <small>判定キュー</small>
-          <h2>{FILTER_LABELS[filter]}</h2>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => void refresh()}
-          >
-            更新
-          </button>
-        </header>
-        {error && (
-          <p className="input-error" role="alert">
-            {error}
-          </p>
-        )}
-        {loading ? (
-          <p role="status">言及を読み込んでいます</p>
-        ) : visible.length === 0 &&
-          !(filter === "invalid" && failures.length > 0) &&
-          !(filter === "delivery" && deliveryFailures.length > 0) ? (
-          <p>該当する言及はありません。</p>
-        ) : (
-          <div className="webmention-queue__list">
-            {visible.map((mention) => (
-              <MentionCard
-                key={mention.id}
-                mention={mention}
-                busy={busyId === mention.id}
-                onDecision={(decision) => void decide(mention, decision)}
-                onReverify={() => void retry(mention)}
-                onDelete={() => void remove(mention)}
-              />
-            ))}
-            {filter === "invalid" &&
-              failures.map((failure) => (
-                <FailureCard
-                  key={failure.id}
-                  failure={failure}
-                  busy={busyId === failure.id}
-                  onReverify={() => void retryFailure(failure)}
+    <div className="webmention-administration">
+      <DraftNavigation />
+      <div className="webmention-workbench">
+        <aside className="webmention-filters">
+          <h1>Webmention</h1>
+          <p>掲載判断が必要なものを上から処理します。</p>
+          {(Object.keys(FILTER_LABELS) as WebmentionFilter[]).map((state) => (
+            <button
+              type="button"
+              aria-pressed={filter === state}
+              onClick={() => setFilter(state)}
+              key={state}
+            >
+              {FILTER_LABELS[state]}
+              <span>
+                {mentions.filter((mention) => matchesFilter(mention, state))
+                  .length +
+                  (state === "invalid" ? failures.length : 0) +
+                  (state === "delivery" ? deliveryFailures.length : 0)}
+              </span>
+            </button>
+          ))}
+          <details className="webmention-dead-letters">
+            <summary>DLQ操作</summary>
+            <p>自動再試行を使い切った項目を元のキューへ戻します。</p>
+            <button
+              type="button"
+              disabled={deadLetterBusy !== null}
+              onClick={() => void redriveDeadLetters("verification")}
+            >
+              {deadLetterBusy === "verification"
+                ? "再投入中"
+                : "受信・送信DLQを再投入"}
+            </button>
+            <button
+              type="button"
+              disabled={deadLetterBusy !== null}
+              onClick={() => void redriveDeadLetters("publishing")}
+            >
+              {deadLetterBusy === "publishing" ? "再投入中" : "公開DLQを再投入"}
+            </button>
+          </details>
+        </aside>
+        <main className="webmention-queue">
+          <header>
+            <small>判定キュー</small>
+            <h2>{FILTER_LABELS[filter]}</h2>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void refresh()}
+            >
+              更新
+            </button>
+          </header>
+          {error && (
+            <p className="input-error" role="alert">
+              {error}
+            </p>
+          )}
+          {loading ? (
+            <p role="status">言及を読み込んでいます</p>
+          ) : visible.length === 0 &&
+            !(filter === "invalid" && failures.length > 0) &&
+            !(filter === "delivery" && deliveryFailures.length > 0) ? (
+            <p>該当する言及はありません。</p>
+          ) : (
+            <div className="webmention-queue__list">
+              {visible.map((mention) => (
+                <MentionCard
+                  key={mention.id}
+                  mention={mention}
+                  busy={busyId === mention.id}
+                  onDecision={(decision) => void decide(mention, decision)}
+                  onReverify={() => void retry(mention)}
+                  onDelete={() => void remove(mention)}
                 />
               ))}
-            {filter === "delivery" &&
-              deliveryFailures.map((failure) => (
-                <DeliveryFailureCard
-                  key={failure.id}
-                  failure={failure}
-                  busy={busyId === failure.id}
-                  onRetry={() => void retryFailedDelivery(failure)}
-                />
-              ))}
-          </div>
-        )}
-      </main>
-      <PublicPreview mentions={visible.length > 0 ? visible : mentions} />
+              {filter === "invalid" &&
+                failures.map((failure) => (
+                  <FailureCard
+                    key={failure.id}
+                    failure={failure}
+                    busy={busyId === failure.id}
+                    onReverify={() => void retryFailure(failure)}
+                  />
+                ))}
+              {filter === "delivery" &&
+                deliveryFailures.map((failure) => (
+                  <DeliveryFailureCard
+                    key={failure.id}
+                    failure={failure}
+                    busy={busyId === failure.id}
+                    onRetry={() => void retryFailedDelivery(failure)}
+                  />
+                ))}
+            </div>
+          )}
+        </main>
+        <PublicPreview mentions={visible.length > 0 ? visible : mentions} />
+      </div>
     </div>
   );
 }
