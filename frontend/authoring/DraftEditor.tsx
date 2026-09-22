@@ -958,7 +958,28 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
         ref={publicationDialog}
         aria-labelledby="draft-publication-title"
         onCancel={(event) => {
-          if (publicationFlow === "running") event.preventDefault();
+          event.preventDefault();
+          if (publicationFlow !== "running") event.currentTarget.close();
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          if (publicationFlow !== "running") event.currentTarget.close();
+        }}
+        onClick={(event) => {
+          if (
+            publicationFlow === "running" ||
+            event.target !== event.currentTarget
+          )
+            return;
+          const bounds = event.currentTarget.getBoundingClientRect();
+          if (
+            event.clientX < bounds.left ||
+            event.clientX > bounds.right ||
+            event.clientY < bounds.top ||
+            event.clientY > bounds.bottom
+          )
+            event.currentTarget.close();
         }}
       >
         <h2 id="draft-publication-title">
