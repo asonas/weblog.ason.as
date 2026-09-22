@@ -72,13 +72,16 @@ try {
     .getByRole("link", { name: "記事一覧に戻る", exact: true })
     .waitFor();
   assert.deepEqual(await menu.locator("a").allTextContents(), ["記事一覧へ"]);
-  assert.deepEqual(await menu.locator("button:disabled").allTextContents(), [
-    "記事を書く",
-    "日記を書く",
-  ]);
+  assert.equal(await menu.locator("button").count(), 0);
+  const diaryTitle = page.getByLabel("タイトル", { exact: true });
+  await diaryTitle.focus();
+  assert.equal(
+    await diaryTitle.evaluate((element) => getComputedStyle(element).outlineOffset),
+    "-3px",
+  );
   await page.getByRole("textbox", { name: "本文", exact: true }).fill("今日の日記の本文");
-  const diaryDate = await page.getByLabel("タイトル", { exact: true }).inputValue();
-  await page.getByLabel("タイトル", { exact: true }).fill("日付とは別の日記タイトル");
+  const diaryDate = await diaryTitle.inputValue();
+  await diaryTitle.fill("日付とは別の日記タイトル");
   const diaryId = new URL(page.url()).searchParams.get("id");
   await until(async () => {
     const response = await page.request.get(

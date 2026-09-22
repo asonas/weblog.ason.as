@@ -33,14 +33,10 @@ const LINKS = [
 ];
 
 export function DraftNavigation({ editing = false }: { editing?: boolean }) {
-  const links = editing
-    ? [LINKS[2], LINKS[0], LINKS[1]]
-    : [LINKS[2], LINKS[3], LINKS[0], LINKS[1]];
+  const links = editing ? [LINKS[2]] : [LINKS[2], LINKS[3], LINKS[0], LINKS[1]];
   return (
     <nav className="draft-navigation" aria-label="執筆メニュー">
       {links.map((link) => {
-        const isDisabled =
-          editing && (link.key === "new" || link.key === "diary");
         const content = (
           <>
             <svg
@@ -59,18 +55,7 @@ export function DraftNavigation({ editing = false }: { editing?: boolean }) {
             </span>
           </>
         );
-        return isDisabled ? (
-          <button
-            type="button"
-            className="draft-navigation__disabled"
-            disabled
-            aria-label={`${link.name}（編集中は選択できません）`}
-            title="編集中は選択できません"
-            key={link.href}
-          >
-            {content}
-          </button>
-        ) : (
+        return (
           <a
             href={link.href}
             key={link.href}

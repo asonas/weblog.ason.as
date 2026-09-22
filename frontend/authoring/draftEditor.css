@@ -166,6 +166,10 @@ html[data-draft-workspace="true"] body {
   line-height: 1.25;
 }
 
+.draft-editor .draft-editor__titlebar input:focus-visible {
+  outline-offset: -3px;
+}
+
 .draft-editor__titlebar button {
   flex: 0 0 auto;
 }
@@ -604,8 +608,7 @@ html[data-draft-workspace="true"]
   color: var(--accent-ink);
   z-index: 10;
 }
-.draft-navigation a,
-.draft-navigation__disabled {
+.draft-navigation a {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -618,12 +621,6 @@ html[data-draft-workspace="true"]
   text-decoration: none;
   font-size: 0.75rem;
   font-weight: 600;
-}
-.draft-navigation__disabled {
-  border: 0;
-  background: transparent;
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 .draft-navigation svg {
   inline-size: 1.5rem;
