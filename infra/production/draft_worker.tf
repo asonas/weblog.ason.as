@@ -40,7 +40,7 @@ resource "aws_lambda_function" "draft_worker" {
   environment {
     variables = {
       DSQL_HOST             = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
-      DRAFT_CUTOVER_ENABLED = tostring(var.draft_cutover_enabled)
+      DRAFT_CUTOVER_ENABLED = "true"
     }
   }
 
@@ -63,7 +63,7 @@ resource "aws_cloudwatch_event_rule" "draft_worker" {
   name                = "weblog-draft-worker-production"
   description         = "Verify and compact durable draft histories"
   schedule_expression = "rate(1 hour)"
-  state               = var.draft_maintenance_enabled ? "ENABLED" : "DISABLED"
+  state               = "ENABLED"
 }
 
 resource "aws_cloudwatch_event_target" "draft_worker" {

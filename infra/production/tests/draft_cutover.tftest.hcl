@@ -50,10 +50,6 @@ run "cutover_routes_published_reads_and_retires_legacy_generators" {
   command = plan
 
   variables {
-    draft_cutover_enabled        = true
-    draft_reader_routing_enabled = true
-    legacy_generators_paused     = true
-    draft_maintenance_enabled    = true
     webmention_publisher_enabled = true
     webmention_sender_enabled    = true
   }

@@ -21,7 +21,7 @@ mock_provider "aws" {
   override_during = plan
 }
 
-run "draft_worker_is_provisioned_inactive" {
+run "draft_worker_runs_hourly" {
   command = plan
 
   plan_options {
@@ -34,7 +34,7 @@ run "draft_worker_is_provisioned_inactive" {
   }
 
   assert {
-    condition     = aws_cloudwatch_event_rule.draft_worker.schedule_expression == "rate(1 hour)" && aws_cloudwatch_event_rule.draft_worker.state == "DISABLED"
-    error_message = "Draft compaction must be provisioned hourly but remain disabled until migration is authorized"
+    condition     = aws_cloudwatch_event_rule.draft_worker.schedule_expression == "rate(1 hour)" && aws_cloudwatch_event_rule.draft_worker.state == "ENABLED"
+    error_message = "Draft compaction must run hourly after migration"
   }
 }

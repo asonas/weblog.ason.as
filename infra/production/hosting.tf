@@ -145,14 +145,6 @@ resource "aws_cloudfront_origin_access_control" "site" {
   signing_protocol                  = "sigv4"
 }
 
-resource "aws_cloudfront_function" "site_routes" {
-  name    = "weblog-site-routes-production"
-  runtime = "cloudfront-js-2.0"
-  comment = "Serve the app shell only for authoring and search routes"
-  publish = true
-  code    = var.draft_reader_routing_enabled ? "function handler(event) { return event.request; }" : file("${path.module}/site_routes.js")
-}
-
 resource "aws_cloudfront_distribution" "weblog" {
   enabled             = true
   is_ipv6_enabled     = true
@@ -180,18 +172,14 @@ resource "aws_cloudfront_distribution" "weblog" {
   }
 
   default_cache_behavior {
-    target_origin_id         = var.draft_reader_routing_enabled ? "authoring-api" : "site"
+    target_origin_id         = "authoring-api"
     viewer_protocol_policy   = "redirect-to-https"
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD"]
     compress                 = true
-    cache_policy_id          = var.draft_reader_routing_enabled ? data.aws_cloudfront_cache_policy.caching_disabled.id : data.aws_cloudfront_cache_policy.caching_optimized.id
-    origin_request_policy_id = var.draft_reader_routing_enabled ? data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id : null
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
 
-    function_association {
-      event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.site_routes.arn
-    }
   }
 
   ordered_cache_behavior {
@@ -206,7 +194,7 @@ resource "aws_cloudfront_distribution" "weblog" {
   }
 
   dynamic "ordered_cache_behavior" {
-    for_each = var.draft_reader_routing_enabled ? toset(["/assets/*", "/static/*", "/draft-offline.js", "/favicon.ico", "/robots.txt", "/manifest.webmanifest"]) : toset([])
+    for_each = toset(["/assets/*", "/static/*", "/draft-offline.js", "/favicon.ico", "/robots.txt", "/manifest.webmanifest"])
     content {
       path_pattern           = ordered_cache_behavior.value
       target_origin_id       = "site"

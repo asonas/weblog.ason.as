@@ -23,7 +23,7 @@ resource "aws_cloudwatch_event_rule" "search_index_nightly" {
   name                = "weblog-search-index-nightly-production"
   description         = "Recover any missed weblog search index updates"
   schedule_expression = "cron(0 18 * * ? *)"
-  state               = var.legacy_generators_paused ? "DISABLED" : "ENABLED"
+  state               = "DISABLED"
 }
 
 resource "aws_cloudwatch_event_target" "search_index_nightly" {
@@ -155,7 +155,7 @@ resource "aws_lambda_function" "search_indexer" {
   architectures                  = ["arm64"]
   memory_size                    = 1024
   timeout                        = 300
-  reserved_concurrent_executions = var.draft_cutover_enabled ? 1 : -1
+  reserved_concurrent_executions = 1
 
   ephemeral_storage {
     size = 1024
@@ -182,5 +182,5 @@ resource "aws_lambda_event_source_mapping" "search_indexer" {
   event_source_arn = aws_sqs_queue.search_index.arn
   function_name    = aws_lambda_function.search_indexer.arn
   batch_size       = 1
-  enabled          = !var.legacy_generators_paused
+  enabled          = false
 }
