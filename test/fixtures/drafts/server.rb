@@ -27,9 +27,11 @@ Dir.mktmpdir("draft-browser-test") do |root|
     scope = { "protocol" => 1, "generation" => 1 }
     store = WeblogAuthoring::DraftStore.sqlite(File.join(root, "data/development/drafts.sqlite3"))
     store.create(id, scope)
+    date = Time.now.getlocal("+09:00").strftime("%Y-%m-%d")
     store.append(id, scope.merge("update_id" => "legacy-diary", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
-                                "metadata" => { "title" => { "value" => Time.now.getlocal("+09:00").strftime("%Y-%m-%d"), "expected_revision" => 0 },
-                                                "page_type" => { "value" => "date", "expected_revision" => 0 }, }))
+                                "metadata" => { "title" => { "value" => date, "expected_revision" => 0 },
+                                                "page_type" => { "value" => "date", "expected_revision" => 0 },
+                                                "page_date" => { "value" => date, "expected_revision" => 0 }, }))
   end
   token = ENV.fetch("DRAFT_TEST_TOKEN")
   isolated_app = lambda do |env|

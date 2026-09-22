@@ -42,7 +42,7 @@ begin
   store.setup!
   imported_id = "dc802ad0b89946aeb6b7623c2ba7bc79"
   migration_source = { "format" => 1, "site_url" => "https://example.com", "articles" => [{
-    "id" => imported_id, "page_type" => "date", "route" => "2026-08-01", "title" => "DSQL移行検証",
+    "id" => imported_id, "page_type" => "date", "route" => "2026-08-01", "title" => "2026-08-01",
     "body" => "旧本文\r\n", "cover_mode" => "none", "cover_image_url" => nil,
     "created_at" => "2026-08-01T01:02:03Z", "updated_at" => "2026-08-02T04:05:06Z", "published_at" => "2026-08-01T02:03:04Z",
   }], }
@@ -119,7 +119,9 @@ begin
   new_articles = administration.list.fetch("articles").reject { |article| article.fetch("id") == imported_id }
   check("administration lists persisted metadata without publishing") { new_articles.length == 2 && new_articles.all? { |article| article.fetch("state") == "draft" } }
   original_daily = daily_results.first.fetch("id")
-  store.append(original_daily, scope.merge("update_id" => "rename-daily", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0, "metadata" => { "page_date" => { "value" => "2026-09-21", "expected_revision" => 0 } }))
+  store.append(original_daily, scope.merge("update_id" => "rename-daily", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
+                                            "metadata" => { "title" => { "value" => "2026-09-21", "expected_revision" => 0 },
+                                                            "page_date" => { "value" => "2026-09-21", "expected_revision" => 0 }, }))
   replacement_daily = 4.times.map { Thread.new { administration.daily("2026-09-20") } }.map(&:value)
   check("renamed diary is preserved while concurrent creation opens one replacement") { replacement_daily.uniq.length == 1 && replacement_daily.first.fetch("id") != original_daily && store.read(original_daily, {}).dig("metadata", "page_date", "value") == "2026-09-21" }
   request = publication.prepare(id).merge("request_id" => "same-request")

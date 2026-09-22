@@ -16,7 +16,7 @@ class DraftReaderTest < Minitest::Test
     @legacy.setup!
     @old = @legacy.save(WeblogAuthoring::SaveRequest.new(page_type: "named", title: "旧DBにだけ存在", body: "旧本文 [[非公開タグ]]"))
     @source = { "format" => 1, "site_url" => "https://example.com", "articles" => [{
-      "id" => ID, "page_type" => "date", "route" => "2026-09-01", "title" => "公開タイトル", "body" => "公開本文 [[日記]] [[公開タグ]]",
+      "id" => ID, "page_type" => "date", "route" => "2026-09-01", "title" => "2026-09-01", "body" => "公開本文 [[日記]] [[公開タグ]]",
       "cover_mode" => "none", "cover_image_url" => nil, "created_at" => "2026-09-01T01:00:00Z", "updated_at" => "2026-09-02T01:00:00Z", "published_at" => "2026-09-01T01:00:00Z",
     }], }
     WeblogAuthoring::DraftMigration.new(store: @store).import(@source)
@@ -29,7 +29,11 @@ class DraftReaderTest < Minitest::Test
   def test_published_reader_apis_do_not_fall_back_to_legacy_or_working_content
     outbox = @legacy.pending_webmention_outbox
     @store.append(ID, { "protocol" => 1, "generation" => 1, "update_id" => "working-title", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
-      "metadata" => { "title" => { "value" => "未公開タイトル", "expected_revision" => 0 } }, })
+      "metadata" => {
+        "title" => { "value" => "未公開タイトル", "expected_revision" => 0 },
+        "page_type" => { "value" => "named", "expected_revision" => 0 },
+        "page_date" => { "value" => "", "expected_revision" => 0 },
+      }, })
     @store.create(@old.id, { "protocol" => 1, "generation" => 1 })
     reader = WeblogAuthoring::DraftReader.new(store: @store, database: @legacy)
     publication = WeblogAuthoring::DraftPublication.local(store: @store)
@@ -47,7 +51,7 @@ class DraftReaderTest < Minitest::Test
     end
     list = JSON.parse(get(api, "/api/pages").fetch(:body)).fetch("pages")
     assert_equal [ID], (list.map { |page| page.fetch("id") })
-    assert_equal "公開タイトル", list.first.fetch("title")
+    assert_equal "2026-09-01", list.first.fetch("title")
     timeline = get(api, "/api/pages", query: { "kind" => "timeline" })
     assert_equal [ID], (JSON.parse(timeline.fetch(:body)).fetch("pages").map { |page| page.fetch("id") })
     assert_equal 404, get(api, "/api/pages/#{@old.id}", parameters: { "id" => @old.id }).fetch(:statusCode)
@@ -57,7 +61,7 @@ class DraftReaderTest < Minitest::Test
     assert_equal "公開本文 [[日記]] [[公開タグ]]", JSON.parse(published.fetch(:body)).fetch("body")
     html = get(api, "/2026-09-01")
     assert_equal 200, html.fetch(:statusCode)
-    assert_includes html.fetch(:body), "公開タイトル"
+    assert_includes html.fetch(:body), "2026-09-01"
     refute_includes html.fetch(:body), "未公開タイトル"
     assert_equal outbox, @legacy.pending_webmention_outbox
   end
@@ -69,7 +73,7 @@ class DraftReaderTest < Minitest::Test
     store = WeblogAuthoring::DraftStore.sqlite(root)
     store.setup!
     @source.fetch("articles").concat([
-      @source.fetch("articles").first.merge("id" => second, "route" => "2026-09-02", "updated_at" => "2026-09-03T01:00:00Z"),
+      @source.fetch("articles").first.merge("id" => second, "route" => "2026-09-02", "title" => "2026-09-02", "updated_at" => "2026-09-03T01:00:00Z"),
       @source.fetch("articles").first.merge("id" => third, "route" => "通常記事", "title" => "通常記事", "page_type" => "named", "body" => "[[公開タグ]]", "updated_at" => "2026-09-04T01:00:00Z"),
     ])
     WeblogAuthoring::DraftMigration.new(store:).import(@source)

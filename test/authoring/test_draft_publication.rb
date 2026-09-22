@@ -162,27 +162,20 @@ class DraftPublicationTest < Minitest::Test
     refute_includes html, "changed-template"
   end
 
-  def test_diary_title_and_date_route_remain_independent_across_publications
+  def test_diary_title_and_date_route_remain_equal_across_publications
     @store.append(ID, SCOPE.merge("update_id" => "diary", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 6,
-                                 "metadata" => { "page_type" => { "value" => "date", "expected_revision" => 0 },
+                                 "metadata" => { "title" => { "value" => "2026-09-20", "expected_revision" => 1 },
+                                                 "page_type" => { "value" => "date", "expected_revision" => 0 },
                                                  "page_date" => { "value" => "2026-09-20", "expected_revision" => 0 }, }))
     first = @publication.accept(ID, @publication.prepare(ID).merge("request_id" => "diary-first"))
     @publication.complete(ID, first.fetch("id")) { "diary-first.html" }
     page = WeblogAuthoring::DraftPublisher.page(@store.published_snapshot(ID))
     assert_equal "2026-09-20", page.route
-    assert_equal "公開する記事", page.display_title
-
-    append_title("日記の表示タイトルだけを変更")
-    confirmation = @publication.prepare(ID)
-    assert_nil confirmation.fetch("rename")
-    second = @publication.accept(ID, confirmation.merge("request_id" => "diary-title"))
-    @publication.complete(ID, second.fetch("id")) { "diary-second.html" }
-    assert_equal "2026-09-20", @store.published_snapshot(ID).fetch("route")
-    assert_equal "日記の表示タイトルだけを変更", WeblogAuthoring::DraftPublisher.page(@store.published_snapshot(ID)).display_title
-    assert_equal "public", @publication.prepare(ID).fetch("article_state")
+    assert_equal "2026-09-20", page.display_title
 
     @store.append(ID, SCOPE.merge("update_id" => "date-change", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 6,
-                                 "metadata" => { "page_date" => { "value" => "2026-09-21", "expected_revision" => 1 } }))
+                                 "metadata" => { "title" => { "value" => "2026-09-21", "expected_revision" => 2 },
+                                                 "page_date" => { "value" => "2026-09-21", "expected_revision" => 1 }, }))
     changed = @publication.prepare(ID)
     assert_equal %w[2026-09-20 2026-09-21], changed.fetch("rename").values_at("from", "to")
     assert_equal "2026-09-20", @store.published_snapshot(ID).fetch("route")

@@ -93,7 +93,8 @@ class DraftAdministrationTest < Minitest::Test
     id = SecureRandom.uuid
     @store.create(id, { "protocol" => 1, "generation" => 1 })
     @store.append(id, { "protocol" => 1, "generation" => 1, "update_id" => "date", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
-      "metadata" => { "title" => { "value" => "2026-09-20", "expected_revision" => 0 }, "page_type" => { "value" => "date", "expected_revision" => 0 } }, })
+      "metadata" => { "title" => { "value" => "2026-09-20", "expected_revision" => 0 }, "page_type" => { "value" => "date", "expected_revision" => 0 },
+                      "page_date" => { "value" => "2026-09-20", "expected_revision" => 0 }, }, })
     assert_equal id, @admin.daily("2026-09-20").fetch("id")
     assert_raises(WeblogAuthoring::DraftStore::Error) { @admin.daily("2026-02-30") }
     assert_raises(WeblogAuthoring::DraftStore::Error) { @admin.daily(nil) }
@@ -123,12 +124,35 @@ class DraftAdministrationTest < Minitest::Test
   def test_renamed_unpublished_diary_does_not_capture_the_original_date
     first = @admin.daily("2026-09-20").fetch("id")
     @store.append(first, { "protocol" => 1, "generation" => 1, "update_id" => "rename-date", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
-      "metadata" => { "page_date" => { "value" => "2026-09-21", "expected_revision" => 0 } }, })
+      "metadata" => { "title" => { "value" => "2026-09-21", "expected_revision" => 0 },
+                      "page_date" => { "value" => "2026-09-21", "expected_revision" => 0 }, }, })
     second = @admin.daily("2026-09-20").fetch("id")
     refute_equal first, second
     assert_equal "2026-09-20", @store.read(second, {}).dig("metadata", "title", "value")
     assert_equal first, @admin.daily("2026-09-21").fetch("id")
     assert_equal second, @admin.daily("2026-09-20").fetch("id")
+  end
+
+  def test_renamed_published_diary_redirect_does_not_reopen_as_the_daily_entry
+    original = @admin.daily("2026-09-22").fetch("id")
+    first = @publication.accept(original, @publication.prepare(original).merge("request_id" => "publish-diary"))
+    @publication.complete(original, first.fetch("id")) { "daily.html" }
+    @store.append(original, { "protocol" => 1, "generation" => 1, "update_id" => "convert-to-article", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
+      "metadata" => {
+        "title" => { "value" => "テストの記事です。", "expected_revision" => 0 },
+        "page_type" => { "value" => "named", "expected_revision" => 0 },
+        "page_date" => { "value" => "", "expected_revision" => 0 },
+      }, })
+    renamed = @publication.prepare(original)
+    second = @publication.accept(original, renamed.merge("request_id" => "publish-article"))
+    @publication.complete(original, second.fetch("id")) { "article.html" }
+
+    new_daily = @admin.daily("2026-09-22")
+    metadata = @store.read(new_daily.fetch("id"), {}).fetch("metadata")
+
+    refute_equal original, new_daily.fetch("id")
+    assert_equal "2026-09-22", metadata.dig("title", "value")
+    assert_equal "date", metadata.dig("page_type", "value")
   end
 
   private

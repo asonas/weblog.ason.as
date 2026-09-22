@@ -90,6 +90,7 @@ module WeblogAuthoring
       raise DraftStore::Error, "Migration route is reserved" if %w[draft-editor draft-offline.js published].include?(route.split("/").first)
       if type == "date"
         raise DraftStore::Error, "Invalid diary route" unless WeblogAuthoring::DATE_NAME.match?(route)
+        raise DraftStore::Error, "Diary title must match route" unless title == route
         Date.iso8601(route)
       else
         raise DraftStore::Error, "Named article title must match route" unless title == route

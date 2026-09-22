@@ -19,9 +19,7 @@ export type DraftMetadata = {
 };
 type Field = keyof DraftMetadata;
 export function draftRoute(metadata: DraftMetadata): string {
-  return metadata.page_type === "date" && metadata.page_date
-    ? metadata.page_date
-    : metadata.title;
+  return metadata.title;
 }
 type VersionedMetadata = Record<
   Field,

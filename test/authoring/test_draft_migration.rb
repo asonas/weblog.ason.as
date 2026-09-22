@@ -16,7 +16,7 @@ class DraftMigrationTest < Minitest::Test
     @publication = WeblogAuthoring::DraftPublication.local(store: @store)
     @source = {
       "format" => 1, "site_url" => "https://example.com", "articles" => [{
-        "id" => ID, "page_type" => "date", "route" => "2026-09-01", "title" => "日付とは異なる日記タイトル",
+        "id" => ID, "page_type" => "date", "route" => "2026-09-01", "title" => "2026-09-01",
         "body" => "# 元の本文\r\n\r\n`ruby` と日本語。", "cover_mode" => "explicit", "cover_image_url" => "/assets/cover.jpg",
         "created_at" => "2026-09-01T01:02:03.123456Z", "updated_at" => "2026-09-03T04:05:06.654321Z",
         "published_at" => "2026-09-02T01:02:03.123456Z",
@@ -63,13 +63,13 @@ class DraftMigrationTest < Minitest::Test
     artifact = publisher.repair(snapshot)
     assert @store.record_publication_html(ID, snapshot.fetch("id"), artifact)
     repaired = @store.published_snapshot(ID)
-    assert_includes publisher.read(repaired), "日付とは異なる日記タイトル"
+    assert_includes publisher.read(repaired), "2026-09-01"
     assert_equal snapshot, repaired.except("html_key", "html_digest")
     assert_empty legacy.pending_webmention_outbox
   end
 
   def test_restart_resumes_a_partial_import_without_replacing_committed_versions
-    @source.fetch("articles") << @source.fetch("articles").first.merge("id" => "ff802ad0b89946aeb6b7623c2ba7bc79", "route" => "2026-09-02")
+    @source.fetch("articles") << @source.fetch("articles").first.merge("id" => "ff802ad0b89946aeb6b7623c2ba7bc79", "route" => "2026-09-02", "title" => "2026-09-02")
     plan = WeblogAuthoring::DraftMigration.new(store: @store).prepare(@source)
     @store.begin_migration(plan.fetch("fingerprint"))
     output, error, status = Open3.capture3("node", "scripts/seed-draft.mjs", stdin_data: JSON.generate(plan.fetch("articles").first.fetch("body")))
@@ -89,7 +89,11 @@ class DraftMigrationTest < Minitest::Test
     altered.fetch("articles").first["body"] = "違う移行元"
     assert_raises(WeblogAuthoring::DraftStore::Error) { migration.import(altered) }
     @store.append(ID, { "protocol" => 1, "generation" => 1, "update_id" => "edit", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
-      "metadata" => { "title" => { "value" => "保持する新しい編集", "expected_revision" => 0 } }, })
+      "metadata" => {
+        "title" => { "value" => "保持する新しい編集", "expected_revision" => 0 },
+        "page_type" => { "value" => "named", "expected_revision" => 0 },
+        "page_date" => { "value" => "", "expected_revision" => 0 },
+      }, })
     assert_raises(WeblogAuthoring::DraftStore::Error) { migration.import(@source) }
     assert_equal "保持する新しい編集", @store.read(ID, {}).dig("metadata", "title", "value")
     @store.seal_migration
@@ -100,7 +104,8 @@ class DraftMigrationTest < Minitest::Test
   def test_renaming_an_imported_article_retains_its_original_atom_identity
     WeblogAuthoring::DraftMigration.new(store: @store).import(@source)
     @store.append(ID, { "protocol" => 1, "generation" => 1, "update_id" => "rename", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
-      "metadata" => { "page_date" => { "value" => "2026-09-04", "expected_revision" => 0 } }, })
+      "metadata" => { "title" => { "value" => "2026-09-04", "expected_revision" => 0 },
+                      "page_date" => { "value" => "2026-09-04", "expected_revision" => 0 }, }, })
     accepted = @publication.accept(ID, @publication.prepare(ID).merge("request_id" => "rename"))
     @publication.complete(ID, accepted.fetch("id")) { "renamed.html" }
     snapshot = @store.published_snapshot(ID)

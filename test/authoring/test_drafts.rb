@@ -48,6 +48,20 @@ class DraftsTest < Minitest::Test
     assert_equal 1, JSON.parse(call("GET")[:body]).fetch("head")
   end
 
+  def test_diary_title_and_date_route_cannot_diverge
+    call("PUT", "", { "protocol" => 1, "generation" => 1 })
+    update = { "protocol" => 1, "generation" => 1, "update_id" => "divergent-diary", "data" => "AAA=",
+               "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
+               "metadata" => {
+                 "title" => { "value" => "日付とは別のタイトル", "expected_revision" => 0 },
+                 "page_type" => { "value" => "date", "expected_revision" => 0 },
+                 "page_date" => { "value" => "2026-09-22", "expected_revision" => 0 },
+               }, }
+
+    assert_equal 422, upload(update)[:statusCode]
+    assert_equal 0, JSON.parse(call("GET")[:body]).fetch("head")
+  end
+
   def test_drafts_require_authentication_and_csrf_and_are_disabled_by_default
     assert_equal 401, call("GET", authenticated: false)[:statusCode]
     assert_equal "private, no-store", call("GET", authenticated: false)[:headers]["cache-control"]

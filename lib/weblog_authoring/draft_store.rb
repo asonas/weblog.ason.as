@@ -50,7 +50,7 @@ module WeblogAuthoring
     DEFAULT_METADATA = { "title" => "", "page_type" => "named", "page_date" => "", "cover_mode" => "auto", "cover_image_url" => nil }.freeze
 
     def self.working_route(metadata)
-      metadata["page_type"] == "date" && !metadata["page_date"].to_s.empty? ? metadata.fetch("page_date") : metadata.fetch("title")
+      metadata.fetch("title")
     end
 
     def self.sqlite(path)
@@ -131,7 +131,13 @@ module WeblogAuthoring
     def daily_draft(date)
       @connect.call do |db|
         db.transaction do
-          owner = db.query("SELECT article_id FROM #{db.prefix}draft_publication_routes WHERE route = $1", [date]).first
+          owner = db.query(<<~SQL, [date]).first
+            SELECT routes.article_id
+            FROM #{db.prefix}draft_publication_routes routes
+            JOIN #{db.prefix}draft_publication_heads heads ON heads.article_id = routes.article_id
+            JOIN #{db.prefix}draft_published_versions versions ON versions.id = heads.active_id
+            WHERE routes.route = $1 AND versions.route = $1
+          SQL
           next owner.fetch("article_id") if owner
           cursor = ""
           found = nil
@@ -521,6 +527,11 @@ module WeblogAuthoring
         current[field] = { "value" => value, "revision" => current.fetch(field).fetch("revision") + 1 }
       end
       raise Error, "Invalid article type" unless %w[named date].include?(current.dig("page_type", "value"))
+      type = current.dig("page_type", "value")
+      title = current.dig("title", "value").strip
+      date = current.dig("page_date", "value").to_s
+      raise Error, "Diary title must match its date" if type == "date" && title != date
+      raise Error, "Named articles cannot retain a diary date" if type == "named" && !date.empty?
       raise Error, "Invalid cover mode" unless CoverImage::MODES.include?(current.dig("cover_mode", "value"))
       CoverImage.validate(current.dig("cover_mode", "value"), current.dig("cover_image_url", "value"))
       current
