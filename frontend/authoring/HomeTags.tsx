@@ -83,8 +83,8 @@ export function HomeTags({
           ))
         )}
       </div>
-      <div className="card-home__tag-disclosure">
-        {overflowTags.length > 0 && (
+      {overflowTags.length > 0 && (
+        <div className="card-home__tag-disclosure">
           <button
             type="button"
             aria-expanded={isExpanded}
@@ -93,8 +93,8 @@ export function HomeTags({
           >
             {isExpanded ? "折りたたむ" : "すべて表示"}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </nav>
   );
 }

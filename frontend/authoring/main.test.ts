@@ -336,6 +336,7 @@ test("keeps the about link in the header and recent tags before the cards", asyn
       ".atlas-header a[href='/about']",
     );
     const tags = container.querySelector(".card-home__tags");
+    assert.equal(container.querySelector(".card-home__tag-disclosure"), null);
     assert.equal(about?.getAttribute("aria-label"), "このサイトについて");
     assert.ok(about?.querySelector('svg[aria-hidden="true"]'));
     assert.equal(about?.getAttribute("href"), "/about");
