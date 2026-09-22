@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useMemo,
@@ -13,6 +14,7 @@ import { DraftNavigation } from "./DraftNavigation";
 import { DraftPreview } from "./DraftPreview";
 import { takeDraftInitialBody } from "./draftInitialBody";
 import {
+  insertMarkdownBlock,
   markdownBlockIndexAt,
   suggestionVerticalPosition,
   textareaWikiLinkQuery,
@@ -40,6 +42,54 @@ const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
 type WikiLinkSuggestionsResponse = {
   names: Array<string>;
 };
+
+type UploadResponse = {
+  upload_url: string;
+  fields: Record<string, string>;
+  public_url: string;
+};
+
+async function uploadImage(file: File, csrf: () => Promise<string>) {
+  const [{ imageDimensions }, { prepareImage }] = await Promise.all([
+    import("./imageMetadata"),
+    import("./imageUpload"),
+  ]);
+  const prepared = await prepareImage(file);
+  const dimensions = imageDimensions(
+    await prepared.file.arrayBuffer(),
+    prepared.file.type,
+  );
+  if (!dimensions) throw new Error("画像の寸法を読み取れませんでした");
+  const response = await fetch("/api/uploads", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-CSRF-Token": await csrf(),
+    },
+    body: JSON.stringify({
+      width: dimensions.width,
+      height: dimensions.height,
+      content_type: prepared.file.type,
+      size: prepared.file.size,
+    }),
+  });
+  const result = (await response.json()) as UploadResponse & { error?: string };
+  if (!response.ok)
+    throw new Error(result.error || "画像をアップロードできませんでした");
+  const form = new FormData();
+  for (const [key, value] of Object.entries(result.fields))
+    form.append(key, value);
+  form.append("file", prepared.file);
+  const uploaded = await fetch(result.upload_url, {
+    method: "POST",
+    body: form,
+  });
+  if (!uploaded.ok) throw new Error("画像をS3へ送信できませんでした");
+  if (!result.public_url.startsWith("/assets/uploads/"))
+    throw new Error("画像のURLが不正です");
+  return result.public_url;
+}
 
 function caretPosition(field: HTMLTextAreaElement): CSSProperties {
   const mirror = document.createElement("div");
@@ -145,6 +195,8 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     useState<Awaited<ReturnType<DraftSession["webmentionStatus"]>>>();
   const [webmentionStatus, setWebmentionStatus] = useState("");
   const [isSendingWebmentions, setIsSendingWebmentions] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState("");
+  const [imageUploadStatus, setImageUploadStatus] = useState("");
   const [publicationFlow, setPublicationFlow] = useState<
     "idle" | "running" | "success" | "error"
   >("idle");
@@ -447,6 +499,47 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  async function handleImageDrop(event: ReactDragEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.dataTransfer.files).filter((file) =>
+      file.type.startsWith("image/"),
+    );
+    if (files.length === 0 || !session || imageUploadStatus) return;
+    event.preventDefault();
+    const field = textarea.current;
+    if (!field) return;
+    const selectionStart = field.selectionStart;
+    const selectionEnd = field.selectionEnd;
+    setImageUploadError("");
+    try {
+      const markdown: Array<string> = [];
+      for (const [index, file] of files.entries()) {
+        setImageUploadStatus(
+          `画像をアップロード中 ${index + 1}/${files.length}`,
+        );
+        markdown.push(`![](${await uploadImage(file, csrf)})`);
+      }
+      const next = insertMarkdownBlock(
+        field.value,
+        selectionStart,
+        selectionEnd,
+        markdown.join("\n\n"),
+      );
+      session.undo.stopCapturing();
+      session.setBody(next.body);
+      session.undo.stopCapturing();
+      requestAnimationFrame(() => {
+        field.focus();
+        field.setSelectionRange(next.caret, next.caret);
+      });
+    } catch (error) {
+      setImageUploadError(
+        error instanceof Error ? error.message : "画像を追加できませんでした",
+      );
+    } finally {
+      setImageUploadStatus("");
+    }
+  }
+
   async function publish() {
     if (!session || session.isPublishing) return;
     setPublicationError("");
@@ -585,7 +678,10 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             ? `本文 ${Math.ceil(bytes / 1024)} / 512 KiB。上限を超えても本文は削除されません。`
             : ""}
         </p>
-        <p role="alert">{loadError || publicationError || session?.error}</p>
+        <p role="status">{imageUploadStatus}</p>
+        <p role="alert">
+          {loadError || publicationError || imageUploadError || session?.error}
+        </p>
         {session?.pendingOutputs && (
           <button
             type="button"
@@ -639,7 +735,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             aria-label="本文"
             aria-describedby="draft-size"
             aria-invalid={bytes > DRAFT_BODY_LIMIT}
-            disabled={!session || session.isPublishing}
+            disabled={!session || session.isPublishing || !!imageUploadStatus}
             spellCheck={false}
             aria-controls={
               wikiLinkSuggestions.length > 0
@@ -662,6 +758,18 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             }}
             onSelect={updateCursorContext}
             onKeyDown={handleWikiLinkSuggestionKeyDown}
+            onDragOver={(event) => {
+              if (
+                Array.from(event.dataTransfer.items).some(
+                  (item) =>
+                    item.kind === "file" && item.type.startsWith("image/"),
+                )
+              ) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }
+            }}
+            onDrop={(event) => void handleImageDrop(event)}
           />
           {wikiLinkSuggestionStyle && wikiLinkSuggestions.length > 0 && (
             <div
