@@ -116,7 +116,33 @@ try {
     await body.inputValue(),
     "画像の前\n\n![](/assets/uploads/2026/09/dropped-image.webp)\n\n画像の後",
   );
-  console.log("PASS: dropped image uploads and inserts Markdown at the textarea selection");
+
+  await body.evaluate(async (field) => {
+    field.setSelectionRange(0, 0);
+    const response = await fetch("/assets/uploads/drop-source.webp");
+    const file = new File([await response.blob()], "pasted-source.webp", {
+      type: "image/webp",
+    });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    field.dispatchEvent(
+      new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: transfer,
+      }),
+    );
+  });
+
+  await until(() => uploads === 2);
+  await until(async () => (await body.inputValue()).startsWith("![]("));
+  assert.equal(
+    await body.inputValue(),
+    "![](/assets/uploads/2026/09/dropped-image.webp)\n\n画像の前\n\n![](/assets/uploads/2026/09/dropped-image.webp)\n\n画像の後",
+  );
+  console.log(
+    "PASS: dropped and pasted images upload and insert Markdown at the textarea selection",
+  );
 } finally {
   await browser?.close();
   for (const child of children) child.kill("SIGTERM");

@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type ClipboardEvent as ReactClipboardEvent,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
@@ -499,16 +500,14 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  async function handleImageDrop(event: ReactDragEvent<HTMLTextAreaElement>) {
-    const files = Array.from(event.dataTransfer.files).filter((file) =>
-      file.type.startsWith("image/"),
-    );
+  async function insertImageFiles(
+    files: Array<File>,
+    selectionStart: number,
+    selectionEnd: number,
+  ) {
     if (files.length === 0 || !session || imageUploadStatus) return;
-    event.preventDefault();
     const field = textarea.current;
     if (!field) return;
-    const selectionStart = field.selectionStart;
-    const selectionEnd = field.selectionEnd;
     setImageUploadError("");
     try {
       const markdown: Array<string> = [];
@@ -538,6 +537,29 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     } finally {
       setImageUploadStatus("");
     }
+  }
+
+  async function handleImageDrop(event: ReactDragEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.dataTransfer.files).filter((file) =>
+      file.type.startsWith("image/"),
+    );
+    if (files.length === 0 || !session || imageUploadStatus) return;
+    event.preventDefault();
+    const field = textarea.current;
+    if (!field) return;
+    await insertImageFiles(files, field.selectionStart, field.selectionEnd);
+  }
+
+  async function handleImagePaste(
+    event: ReactClipboardEvent<HTMLTextAreaElement>,
+  ) {
+    const files = Array.from(event.clipboardData.files).filter((file) =>
+      file.type.startsWith("image/"),
+    );
+    if (files.length === 0 || !session || imageUploadStatus) return;
+    event.preventDefault();
+    const field = event.currentTarget;
+    await insertImageFiles(files, field.selectionStart, field.selectionEnd);
   }
 
   async function publish() {
@@ -770,6 +792,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
               }
             }}
             onDrop={(event) => void handleImageDrop(event)}
+            onPaste={(event) => void handleImagePaste(event)}
           />
           {wikiLinkSuggestionStyle && wikiLinkSuggestions.length > 0 && (
             <div
