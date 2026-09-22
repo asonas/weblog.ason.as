@@ -13,6 +13,7 @@ import { DraftCoverSettings } from "./DraftCoverSettings";
 import { DraftInbox } from "./DraftInbox";
 import { DraftNavigation } from "./DraftNavigation";
 import { DraftPreview } from "./DraftPreview";
+import { articleDocumentTitle } from "./documentTitle";
 import { takeDraftInitialBody } from "./draftInitialBody";
 import {
   insertMarkdownBlock,
@@ -238,6 +239,13 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       delete document.documentElement.dataset.draftWorkspace;
     };
   }, []);
+
+  useEffect(() => {
+    document.title = articleDocumentTitle(
+      session?.metadata.title || "",
+      document.documentElement.dataset.environment,
+    );
+  }, [session?.metadata.title]);
 
   useEffect(() => {
     let isActive = true;
