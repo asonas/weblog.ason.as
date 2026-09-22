@@ -207,6 +207,7 @@
 }
 .cf-copy {
   padding-block-start: 14px;
+  min-block-size: calc(14px + 3 * 16px * 1.8);
 }
 .cf-category {
   display: inline-block;

@@ -13,15 +13,15 @@
   flex-wrap: wrap;
   gap: 8px;
   align-content: start;
-  max-block-size: 124px;
-  min-block-size: 36px;
+  block-size: 124px;
   overflow: hidden;
 }
 .card-home__tag-list[data-expanded="true"] {
-  max-block-size: none;
+  block-size: auto;
+  min-block-size: 124px;
 }
 .card-home__tag-disclosure {
-  min-block-size: 0;
+  min-block-size: 44px;
 }
 .card-home__tag-disclosure button {
   min-block-size: 44px;

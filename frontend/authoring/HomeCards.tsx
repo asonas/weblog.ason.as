@@ -5,18 +5,19 @@ import "./homeCards.css";
 
 export function HomeCardsSkeleton() {
   return (
-    <div className="home-loading__cards" aria-hidden="true">
+    <div className="cf-grid home-loading__cards" aria-hidden="true">
       {["first", "second", "third", "fourth", "fifth", "sixth"].map((card) => (
         <div className="home-loading__card" key={card}>
           <div className="home-loading__card-media cf-media">
             <div className="cf-cover-caption">
+              <span className="cf-category home-loading__category home-loading__shimmer" />
               <div className="cf-title home-loading__card-title">
                 <span className="home-loading__shimmer" />
                 <span className="home-loading__shimmer" />
               </div>
             </div>
           </div>
-          <div className="home-loading__card-copy">
+          <div className="cf-copy home-loading__card-copy">
             <span className="home-loading__shimmer home-loading__card-line home-loading__card-line--long" />
             <span className="home-loading__shimmer home-loading__card-line" />
             <span className="home-loading__shimmer home-loading__card-line home-loading__card-line--short" />

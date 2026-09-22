@@ -248,7 +248,7 @@ export function HomeLoading() {
         </div>
       </div>
       <HomeTags />
-      <section className="home-loading__content" aria-hidden="true">
+      <section className="card-home__content" aria-hidden="true">
         <HomeCardsSkeleton />
       </section>
     </div>
