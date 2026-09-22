@@ -89,7 +89,7 @@ function caretPosition(field: HTMLTextAreaElement): CSSProperties {
       field.clientWidth - 24,
       marker.offsetLeft - field.scrollLeft,
     ),
-    ...suggestionVerticalPosition(caretTop + lineHeight, field.clientHeight),
+    ...suggestionVerticalPosition(caretTop, field.clientHeight),
   };
   mirror.remove();
   return result;
