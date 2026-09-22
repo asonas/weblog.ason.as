@@ -193,13 +193,15 @@ try {
   await context.setOffline(false);
   await page.getByRole("link", { name: /記事一覧/ }).click();
   await search.fill("管理画面");
-  await until(async () => (await detail.textContent()).includes("未送信の変更あり"));
+  await until(async () => (await detail.textContent()).includes("未送信あり"));
+  assert.equal(await detail.locator(".draft-admin-save-status").getAttribute("aria-label"), "端末に未送信の変更あり");
+  await page.screenshot({ path: "/tmp/weblog-authoring-pending-badge.png", fullPage: true });
   await editRow();
   await body.fill("検索と再開を確認する本文");
   await until(async () => (await page.getByRole("status").textContent()).includes("端末に保存済み"));
   await page.getByRole("link", { name: /記事一覧/ }).click();
   await search.fill("管理画面");
-  await until(async () => (await detail.textContent()).includes("未送信の変更あり"));
+  await until(async () => (await detail.textContent()).includes("未送信あり"));
   assert.ok((await detail.textContent()).includes("公開中"), "local content equal to the published hash stays public despite pending CRDT updates");
   await page.route("**/api/authoring/drafts?*", async route => {
     const response = await route.fetch();

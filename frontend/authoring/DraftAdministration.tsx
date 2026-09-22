@@ -65,11 +65,26 @@ function needsAttention(row: Row) {
 }
 function serverStatus(row: Row, available: boolean) {
   if (row.localOnly)
-    return available ? "サーバー未保存" : "サーバー保存を未確認";
-  if (row.local?.pending) return "端末に未送信の変更あり";
+    return available
+      ? { label: "端末のみ", detail: "サーバー未保存", tone: "pending" }
+      : {
+          label: "保存未確認",
+          detail: "サーバー保存を未確認",
+          tone: "unknown",
+        };
+  if (row.local?.pending)
+    return {
+      label: "未送信あり",
+      detail: "端末に未送信の変更あり",
+      tone: "pending",
+    };
   if (row.local && row.local.cursor < row.head)
-    return "サーバーに新しい変更あり";
-  return "サーバーに保存済み";
+    return {
+      label: "更新あり",
+      detail: "サーバーに新しい変更あり",
+      tone: "pending",
+    };
+  return { label: "保存済み", detail: "サーバーに保存済み", tone: "saved" };
 }
 
 export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
@@ -392,6 +407,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                   : row.metadata.title) || "無題";
               const editHref = `/draft-editor?id=${encodeURIComponent(row.id)}${row.state === "draft" ? "" : `&state=${row.state}`}`;
               const attention = needsAttention(row);
+              const saveStatus = serverStatus(row, available);
               const retryable =
                 row.publication &&
                 row.publication.status !== "superseded" &&
@@ -438,11 +454,15 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                       </span>
                       <span
                         className="draft-admin-save-status"
-                        data-pending={Boolean(
-                          row.local?.pending || row.localOnly,
-                        )}
+                        role="img"
+                        data-tone={saveStatus.tone}
+                        aria-label={saveStatus.detail}
+                        title={saveStatus.detail}
                       >
-                        {serverStatus(row, available)}
+                        {saveStatus.tone === "saved" && (
+                          <AuthoringIcon name="check" />
+                        )}
+                        {saveStatus.label}
                       </span>
                       {attention && (
                         <span

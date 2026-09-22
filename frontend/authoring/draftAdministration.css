@@ -274,13 +274,39 @@ body:has(.draft-admin) .page-shell {
   color: var(--authoring-status-error);
 }
 .draft-admin-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--separator);
+  border-radius: 4px;
+  background: var(--card-surface);
   color: var(--muted-ink);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  white-space: nowrap;
 }
-.draft-admin-save-status[data-pending="true"] {
-  text-decoration: underline;
-  text-decoration-color: var(--authoring-status-pending);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
+.draft-admin-save-status svg {
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+}
+.draft-admin-save-status[data-tone="pending"] {
+  border-color: var(--authoring-status-pending);
+  color: var(--ink);
+}
+.draft-admin-save-status[data-tone="unknown"] {
+  border-color: var(--authoring-status-error);
+  color: var(--authoring-status-error);
+}
+.draft-admin-save-status:not([data-tone="saved"])::before {
+  content: "";
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+  background: var(--authoring-status-pending);
+  border-radius: 1px;
+}
+.draft-admin-save-status[data-tone="unknown"]::before {
+  background: var(--authoring-status-error);
 }
 .draft-admin-publication {
   font-size: 0.75rem;
