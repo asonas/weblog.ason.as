@@ -13,12 +13,9 @@ export type TextareaEdit = {
 export function suggestionVerticalPosition(
   caretTop: number,
   fieldHeight: number,
-  menuHeight = 224,
-): { top?: number; bottom?: number } {
+): { bottom: number } {
   const gap = 8;
-  if (fieldHeight - caretTop < menuHeight && caretTop >= menuHeight)
-    return { bottom: fieldHeight - caretTop + gap };
-  return { top: caretTop + gap };
+  return { bottom: fieldHeight - caretTop + gap };
 }
 
 export function textareaWikiLinkQuery(
