@@ -47,7 +47,7 @@ const STATES = {
   unknown: "状態を確認できません",
 };
 const STAGES: Record<string, string> = {
-  html: "公開ページ",
+  html: "ページ",
   atom: "フィード",
   search: "検索",
 };
@@ -483,45 +483,57 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                   >
                     {row.publication ? (
                       <div className="draft-admin-publication">
-                        <p>
-                          {row.publication.status === "completed"
-                            ? "反映完了"
-                            : row.publication.status === "superseded"
-                              ? "公開処理は失効しています"
-                              : attention
-                                ? "公開処理を確認してください"
+                        {row.publication.stages.length === 0 && (
+                          <p>
+                            {row.publication.status === "completed"
+                              ? "詳細記録なし"
+                              : row.publication.status === "superseded"
+                                ? "失効済み"
                                 : "公開処理中"}
-                        </p>
+                          </p>
+                        )}
                         {row.publication.status === "superseded" && (
                           <p>
                             この公開処理は失効しました。エディタで内容を再確認してください。
                           </p>
                         )}
-                        {row.publication.stages.map((stage) => (
-                          <p key={stage.stage}>
-                            {STAGES[stage.stage] || stage.stage}：
-                            {stage.status === "completed" && (
-                              <span
-                                className="draft-admin-stage-check"
-                                role="img"
-                                aria-label="反映済み"
-                                title="反映済み"
-                              >
-                                <AuthoringIcon name="check" />
-                              </span>
-                            )}
-                            {stage.status === "completed"
-                              ? null
-                              : stage.status === "retry_wait"
-                                ? "再試行待ち"
-                                : stage.status === "needs_attention"
-                                  ? "要確認"
-                                  : stage.status === "superseded"
-                                    ? "失効済み"
-                                    : "処理中"}
-                            {stage.error && ` — ${stage.error}`}
-                          </p>
-                        ))}
+                        <ul className="draft-admin-stages">
+                          {row.publication.stages.map((stage) => (
+                            <li key={stage.stage} data-state={stage.status}>
+                              <span>{STAGES[stage.stage] || stage.stage}</span>
+                              {stage.status === "completed" && (
+                                <span
+                                  className="draft-admin-stage-check"
+                                  role="img"
+                                  aria-label="反映済み"
+                                  title="反映済み"
+                                >
+                                  <AuthoringIcon name="check" />
+                                </span>
+                              )}
+                              {stage.status === "completed"
+                                ? null
+                                : stage.status === "retry_wait"
+                                  ? "再試行待ち"
+                                  : stage.status === "needs_attention"
+                                    ? "要確認"
+                                    : stage.status === "superseded"
+                                      ? "失効済み"
+                                      : "処理中"}
+                            </li>
+                          ))}
+                        </ul>
+                        {row.publication.stages
+                          .filter((stage) => stage.error)
+                          .map((stage) => (
+                            <p
+                              className="draft-admin-row-error"
+                              key={stage.stage}
+                            >
+                              {STAGES[stage.stage] || stage.stage}：
+                              {stage.error}
+                            </p>
+                          ))}
                       </div>
                     ) : (
                       "—"

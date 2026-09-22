@@ -96,6 +96,7 @@ try {
   assert.deepEqual(await menu.locator("a").allTextContents(), ["日記を書く", "記事を書く", "記事の管理", "Webmention", "ホーム"]);
   assert.equal(await menu.locator("button").count(), 0);
   const diaryTitle = page.getByLabel("タイトル", { exact: true });
+  await until(async () => await diaryTitle.isEnabled());
   await diaryTitle.focus();
   assert.equal(
     await diaryTitle.evaluate((element) => getComputedStyle(element).outlineOffset),
@@ -160,6 +161,8 @@ try {
   const stageCheck = detail.locator(".draft-admin-stage-check").first();
   assert.ok(await stageCheck.isVisible());
   assert.equal(await stageCheck.evaluate(element => getComputedStyle(element).color), "rgb(52, 120, 92)");
+  assert.ok(!(await detail.textContent()).includes("反映完了"));
+  assert.ok(await detail.locator(".draft-admin-stages li").evaluateAll(elements => elements.every(element => Math.abs(element.getBoundingClientRect().top - elements[0].getBoundingClientRect().top) < 1)));
   await page.screenshot({ path: "/tmp/weblog-authoring-status-columns.png", fullPage: true });
   assert.ok((await detail.textContent()).includes("公開中"));
   await editRow();
