@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AuthoringIcon } from "./AuthoringIcon";
+import { DraftArticleMenu } from "./DraftArticleMenu";
 import { DraftNavigation } from "./DraftNavigation";
 import { storeDraftInitialBody } from "./draftInitialBody";
 import {
@@ -9,12 +11,15 @@ import {
 } from "./draftSession";
 import "./draftEditor.css";
 import "./draftAdministration.css";
+import "./authoringTheme.css";
 
 type Article = {
   id: string;
   head: number;
   metadata: DraftMetadata;
   updated_at: string;
+  published_at: string | null;
+  webmention_count: number | null;
   public_route: string | null;
   public_hash: string | null;
   state: "draft" | "public" | "unpublished_changes" | "unknown";
@@ -73,7 +78,6 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -180,6 +184,8 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
           metadata: saved.metadata,
           head: 0,
           updated_at: "",
+          published_at: null,
+          webmention_count: null,
           public_route: null,
           public_hash: null,
           state: available ? "draft" : "unknown",
@@ -209,7 +215,6 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
       (a, b) =>
         b.updated_at.localeCompare(a.updated_at) || a.id.localeCompare(b.id),
     );
-  const selected = visible.find((row) => row.id === selectedId) || visible[0];
 
   const create = useCallback(
     async (daily: boolean) => {
@@ -295,8 +300,40 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
 
   return (
     <div className="draft-admin">
-      <DraftNavigation />
-      <section className="draft-admin-ledger" aria-label="記事一覧">
+      <a className="draft-admin-skip" href="#draft-admin-ledger">
+        記事一覧へ移動
+      </a>
+      <DraftNavigation expanded />
+      <section
+        id="draft-admin-ledger"
+        className="draft-admin-ledger"
+        aria-label="記事一覧"
+      >
+        <header className="draft-admin-heading">
+          <h1>記事の管理</h1>
+          <p>記事と日記の公開状態を確認・編集できます。</p>
+        </header>
+        <div className="draft-admin-tools">
+          <label className="draft-admin-search-label">
+            記事を検索
+            <input
+              className="draft-admin-search"
+              type="search"
+              aria-label="タイトルまたはURLで検索"
+              placeholder="タイトルまたはURL"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={loading || busy}
+            onClick={() => void reload()}
+          >
+            <AuthoringIcon name="refresh" />
+            再読み込み
+          </button>
+        </div>
         <nav className="draft-admin-filters" aria-label="記事の状態">
           {FILTERS.map(([value, label]) => (
             <button
@@ -309,27 +346,12 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
             </button>
           ))}
         </nav>
-        <input
-          className="draft-admin-search"
-          type="search"
-          aria-label="タイトルまたはURLで検索"
-          placeholder="タイトルまたはURLで検索"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
         <div className="draft-admin-count">
           <span role="status">
             {loading
               ? "記事を読み込み中…"
               : `${visible.length}件を表示${cursor ? "・続きあり" : ""}${available ? "" : "（取得済み分）"}`}
           </span>
-          <button
-            type="button"
-            disabled={loading || busy}
-            onClick={() => void reload()}
-          >
-            再読み込み
-          </button>
         </div>
         {error && <p role="alert">{error}</p>}
         {localError && <p role="alert">{localError}</p>}
@@ -340,38 +362,164 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
               : "この状態の記事はありません。"}
           </p>
         )}
-        <ul className="draft-admin-rows">
-          {visible.map((row) => (
-            <li key={row.id}>
-              <button
-                type="button"
-                aria-pressed={selected?.id === row.id}
-                onClick={() => setSelectedId(row.id)}
-              >
-                <strong>
-                  {row.local?.pending
-                    ? row.local.metadata.title || "無題"
-                    : row.metadata.title || "無題"}
-                </strong>
-                <span className="draft-admin-route">
-                  /{row.public_route || draftRoute(row.metadata)}
-                </span>
-                <span>
-                  {row.localOnly ? "端末に保存した記事" : STATES[row.state]}
-                  {row.local?.pending ? "・端末に変更あり" : ""}
-                </span>
-                <small>
-                  {serverStatus(row, available)}
-                  {row.updated_at &&
-                    ` · ${new Date(row.updated_at).toLocaleString("ja-JP")}`}
-                </small>
-                {needsAttention(row) && !row.localOnly && (
-                  <span>公開状態の確認が必要です</span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <table className="draft-admin-table">
+          <caption className="visually-hidden">
+            記事の状態と承認済みWebmention、投稿日、最終更新日
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">記事タイトル・状態</th>
+              <th scope="col">
+                <span className="visually-hidden">操作</span>
+              </th>
+              <th scope="col">
+                Webmention
+                <span className="draft-admin-column-note">承認済み</span>
+              </th>
+              <th scope="col">投稿日</th>
+              <th scope="col">最終更新日</th>
+              <th scope="col">
+                <span className="visually-hidden">公開記事</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((row) => {
+              const title =
+                (row.local?.pending
+                  ? row.local.metadata.title
+                  : row.metadata.title) || "無題";
+              const editHref = `/draft-editor?id=${encodeURIComponent(row.id)}${row.state === "draft" ? "" : `&state=${row.state}`}`;
+              const attention = needsAttention(row);
+              const retryable =
+                row.publication &&
+                row.publication.status !== "superseded" &&
+                (attention || row.publication.status === "accepted");
+              return (
+                <tr
+                  key={row.id}
+                  data-state={attention ? "attention" : row.state}
+                >
+                  <th scope="row" className="draft-admin-article">
+                    <a className="draft-admin-title" href={editHref}>
+                      {title}
+                    </a>
+                    <span className="draft-admin-route">
+                      /
+                      {row.public_route ||
+                        draftRoute(
+                          row.local?.pending
+                            ? row.local.metadata
+                            : row.metadata,
+                        )}
+                    </span>
+                    <div className="draft-admin-row-status">
+                      <span
+                        className="draft-admin-state"
+                        data-state={row.state}
+                      >
+                        {row.localOnly
+                          ? "端末に保存した記事"
+                          : STATES[row.state]}
+                      </span>
+                      <span
+                        className="draft-admin-save-status"
+                        data-pending={Boolean(
+                          row.local?.pending || row.localOnly,
+                        )}
+                      >
+                        {serverStatus(row, available)}
+                      </span>
+                      {attention && (
+                        <span
+                          className="draft-admin-state"
+                          data-state="attention"
+                        >
+                          要確認
+                        </span>
+                      )}
+                    </div>
+                    {row.publication && (
+                      <details className="draft-admin-publication">
+                        <summary>
+                          {row.publication.status === "completed"
+                            ? "公開処理の詳細"
+                            : row.publication.status === "superseded"
+                              ? "公開処理は失効しています"
+                              : attention
+                                ? "公開処理を確認してください"
+                                : "公開処理中"}
+                        </summary>
+                        {row.publication.status === "superseded" && (
+                          <p>
+                            この公開処理は失効しました。エディタで内容を再確認してください。
+                          </p>
+                        )}
+                        {row.publication.stages.map((stage) => (
+                          <p key={stage.stage}>
+                            {STAGES[stage.stage] || stage.stage}：
+                            {stage.status === "completed"
+                              ? "反映済み"
+                              : stage.status === "retry_wait"
+                                ? "再試行待ち"
+                                : stage.status === "needs_attention"
+                                  ? "要確認"
+                                  : stage.status === "superseded"
+                                    ? "失効済み"
+                                    : "処理中"}
+                            {stage.error && ` — ${stage.error}`}
+                          </p>
+                        ))}
+                      </details>
+                    )}
+                    {(row.state_error || row.publication?.error) && (
+                      <p className="draft-admin-row-error">
+                        {row.state_error || row.publication?.error}
+                      </p>
+                    )}
+                  </th>
+                  <td className="draft-admin-menu-cell">
+                    <DraftArticleMenu
+                      title={title}
+                      editHref={editHref}
+                      busy={busy}
+                      onRetry={retryable ? () => void retry(row) : undefined}
+                    />
+                  </td>
+                  <td
+                    className="draft-admin-mentions"
+                    data-label="Webmention（承認済み）"
+                  >
+                    {row.webmention_count ?? "—"}
+                  </td>
+                  <td className="draft-admin-date" data-label="投稿日">
+                    <ArticleDate
+                      value={row.published_at}
+                      empty={row.localOnly ? "未確認" : "未公開"}
+                    />
+                  </td>
+                  <td className="draft-admin-date" data-label="最終更新日">
+                    <ArticleDate value={row.updated_at} empty="未保存" />
+                  </td>
+                  <td className="draft-admin-open">
+                    {row.public_route && (
+                      <a
+                        className="draft-admin-icon"
+                        href={`/${encodeURIComponent(row.public_route)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${title}の公開記事を開く（新しいタブ）`}
+                        title="公開記事を開く（新しいタブ）"
+                      >
+                        <AuthoringIcon name="external" />
+                      </a>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
         {cursor && (
           <button
             className="draft-admin-more"
@@ -383,90 +531,34 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
           </button>
         )}
       </section>
-      <section className="draft-admin-detail" aria-label="選択した記事">
-        {selected ? (
-          <>
-            <h1>
-              {selected.local?.pending
-                ? selected.local.metadata.title || "無題"
-                : selected.metadata.title || "無題"}
-            </h1>
-            <p>
-              {selected.localOnly
-                ? "サーバー上の状態を確認してから編集できます。"
-                : STATES[selected.state]}
-            </p>
-            <dl>
-              <dt>端末保存</dt>
-              <dd>
-                {selected.local ? "この端末に保存済み" : "この端末には未保存"}
-              </dd>
-              <dt>サーバー保存</dt>
-              <dd>{serverStatus(selected, available)}</dd>
-              <dt>公開処理</dt>
-              <dd>
-                {!selected.publication
-                  ? "公開処理なし"
-                  : selected.publication.status === "completed"
-                    ? "公開ページを反映済み"
-                    : selected.publication.status === "needs_attention"
-                      ? "公開ページの反映に失敗"
-                      : selected.publication.status === "superseded"
-                        ? "この公開処理は失効しました。エディタで内容を再確認してください。"
-                        : "公開処理中"}
-              </dd>
-            </dl>
-            {selected.publication?.stages.map((stage) => (
-              <p key={stage.stage}>
-                {STAGES[stage.stage] || stage.stage}：
-                {stage.status === "completed"
-                  ? "反映済み"
-                  : stage.status === "retry_wait"
-                    ? "再試行待ち"
-                    : stage.status === "needs_attention"
-                      ? "要確認"
-                      : stage.status === "superseded"
-                        ? "失効済み"
-                        : "処理中"}
-                {stage.error && ` — ${stage.error}`}
-              </p>
-            ))}
-            {(selected.state_error || selected.publication?.error) && (
-              <p role="alert">
-                {selected.state_error || selected.publication?.error}
-              </p>
-            )}
-            <a
-              className="draft-admin-edit"
-              href={`/draft-editor?id=${encodeURIComponent(selected.id)}${selected.state === "draft" ? "" : `&state=${selected.state}`}`}
-            >
-              編集・公開内容を確認
-            </a>
-            <p className="draft-admin-hint">
-              プレビューと公開の確認はエディタで行います。
-            </p>
-            {selected.publication &&
-              selected.publication.status !== "superseded" &&
-              (needsAttention(selected) ||
-                selected.publication.status === "accepted") && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void retry(selected)}
-                >
-                  公開処理を再試行
-                </button>
-              )}
-            {selected.public_route && (
-              <a href={`/${encodeURIComponent(selected.public_route)}`}>
-                公開ページを開く
-              </a>
-            )}
-          </>
-        ) : (
-          <p>記事を選択してください。</p>
-        )}
-      </section>
     </div>
+  );
+}
+
+function ArticleDate({
+  value,
+  empty,
+}: {
+  value: string | null;
+  empty: string;
+}) {
+  if (!value) return <span>{empty}</span>;
+  const date = new Date(value);
+  return (
+    <time dateTime={value}>
+      <span>
+        {date.toLocaleDateString("ja-JP", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })}
+      </span>
+      <span>
+        {date.toLocaleTimeString("ja-JP", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+      </span>
+    </time>
   );
 }

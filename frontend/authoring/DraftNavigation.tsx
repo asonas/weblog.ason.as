@@ -39,12 +39,26 @@ const LINKS = [
   },
 ];
 
-export function DraftNavigation({ editing = false }: { editing?: boolean }) {
+export function DraftNavigation({
+  editing = false,
+  expanded = false,
+}: {
+  editing?: boolean;
+  expanded?: boolean;
+}) {
   const links = editing
     ? [LINKS[2]]
-    : [LINKS[2], LINKS[3], LINKS[4], LINKS[0], LINKS[1]];
+    : expanded
+      ? [LINKS[0], LINKS[2], LINKS[3], LINKS[1], LINKS[4]]
+      : [LINKS[2], LINKS[3], LINKS[4], LINKS[0], LINKS[1]];
   return (
-    <nav className="draft-navigation" aria-label="執筆メニュー">
+    <nav
+      className={`draft-navigation${expanded ? " draft-navigation--expanded" : ""}`}
+      aria-label="執筆メニュー"
+    >
+      {expanded && (
+        <span className="draft-navigation__brand">weblog.ason.as</span>
+      )}
       {links.map((link) => {
         const content = (
           <>
@@ -62,7 +76,9 @@ export function DraftNavigation({ editing = false }: { editing?: boolean }) {
             <span>
               {editing && link.key === "articles" ? (
                 "記事一覧へ"
-              ) : link.key === "webmentions" ? (
+              ) : expanded && link.key === "articles" ? (
+                "記事の管理"
+              ) : link.key === "webmentions" && !expanded ? (
                 <>
                   Web
                   <wbr />
@@ -77,6 +93,10 @@ export function DraftNavigation({ editing = false }: { editing?: boolean }) {
         return (
           <a
             href={link.href}
+            data-action={link.key}
+            aria-current={
+              window.location.pathname === link.href ? "page" : undefined
+            }
             className={
               link.key === "webmentions"
                 ? "draft-navigation__webmentions"

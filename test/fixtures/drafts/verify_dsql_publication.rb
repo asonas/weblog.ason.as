@@ -5,6 +5,10 @@ require "securerandom"
 require "open3"
 require "json"
 require "timeout"
+require "tmpdir"
+require "fileutils"
+require "pathname"
+require_relative "../../../lib/weblog_authoring/development_database"
 ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
 require "aurora_dsql_pg"
 require_relative "../../../lib/weblog_authoring/draft_publication"
@@ -34,6 +38,9 @@ end
 
 pool = AuroraDsql::Pg.create_pool(host: ENV.fetch("DSQL_HOST"), user: "admin", application_name: "draft-publication-verification", occ_max_retries: 5)
 created = false
+mention_root = Pathname(Dir.mktmpdir("draft-publication-mentions"))
+mentions = WeblogAuthoring::DevelopmentDatabase.new(mention_root.join("mentions.sqlite3"), content_dir: mention_root.join("content"))
+mentions.setup!
 begin
   pool.with { |connection| connection.exec("CREATE SCHEMA #{SCHEMA}") }
   created = true
@@ -113,7 +120,7 @@ begin
     store.append(id, scope.merge(update).merge("update_id" => "initial-#{index}", "body_bytes" => 12, "metadata" => metadata))
   end
   publication = WeblogAuthoring::DraftPublication.local(store:)
-  administration = WeblogAuthoring::DraftAdministration.new(store:, publication:)
+  administration = WeblogAuthoring::DraftAdministration.new(store:, publication:, database: mentions)
   daily_results = 4.times.map { Thread.new { administration.daily("2026-09-20") } }.map(&:value)
   check("concurrent daily creation opens one working article") { daily_results.uniq.length == 1 }
   new_articles = administration.list.fetch("articles").reject { |article| article.fetch("id") == imported_id }
@@ -223,6 +230,7 @@ begin
   check("batch activation rewrites references without advancing their public time") { store.published_snapshot(referring_id).fetch("body") == "公開済み [[DSQL新URL]]" && store.published_snapshot(referring_id).fetch("updated_at") == before_reference.fetch("updated_at") }
   check("old route redirects to the active article") { store.published_redirect("DSQL公開の確認") == "DSQL新URL" }
 ensure
+  FileUtils.remove_entry(mention_root)
   if created
     pool.with do |connection|
       tables = connection.exec_params("SELECT table_name FROM information_schema.tables WHERE table_schema = $1", [SCHEMA]).map { |row| row.fetch("table_name") }

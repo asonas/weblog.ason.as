@@ -806,6 +806,21 @@ module WeblogAuthoring
       end.map { |mention| public_webmention(mention) }
     end
 
+    def approved_webmention_counts(page_ids)
+      return {} if page_ids.empty?
+      with_connection do |connection|
+        connection.exec_params(<<~SQL, page_ids).to_h { |row| [row.fetch("target_page_id"), row.fetch("count").to_i] }
+          SELECT relations.target_page_id, COUNT(DISTINCT relations.id) AS count
+          FROM #{SCHEMA}.webmention_relations relations
+          JOIN #{SCHEMA}.webmention_snapshots snapshots ON snapshots.relation_id = relations.id
+          WHERE relations.target_page_id IN (#{page_ids.each_index.map { |index| "$#{index + 1}" }.join(', ')})
+            AND relations.moderation_status = 'approved' AND relations.verification_status = 'verified'
+            AND snapshots.snapshot_kind = 'approved' AND snapshots.is_current = TRUE
+          GROUP BY relations.target_page_id
+        SQL
+      end
+    end
+
     def moderate_webmention(id:, decision:)
       raise ArgumentError, "invalid Webmention decision" unless %w[approved rejected pending].include?(decision)
 

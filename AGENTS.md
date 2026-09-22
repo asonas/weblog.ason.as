@@ -12,6 +12,10 @@ The canonical triage labels use their default names. See `docs/agents/triage-lab
 
 Domain documentation uses a single-context layout. See `docs/agents/domain.md`.
 
+### Authoring design
+
+`/authoring/*` と `/draft-editor` のUIを変更するときは、先に `frontend/authoring/DESIGN.md` を読む。管理画面専用の規範であり、公開サイトとエディタ内の公開プレビューには `docs/design-system.md` を使う。
+
 ### Terraform operations
 
 - Run Terraform checks, plans, and applies locally. GitHub Actions must not execute Terraform.

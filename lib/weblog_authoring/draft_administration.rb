@@ -6,9 +6,10 @@ module WeblogAuthoring
   class DraftAdministration
     JAPANESE_WEEKDAYS = %w[日曜日 月曜日 火曜日 水曜日 木曜日 金曜日 土曜日].freeze
 
-    def initialize(store:, publication:)
+    def initialize(store:, publication:, database:)
       @store = store
       @publication = publication
+      @database = database
     end
 
     def daily(date)
@@ -43,6 +44,8 @@ module WeblogAuthoring
         break if articles.length == 25 || !has_more
         page_cursor = cursor_fields(rows.fetch(24))
       end
+      counts = @database.approved_webmention_counts(articles.map { |article| article.fetch("id") })
+      articles.each { |article| article["webmention_count"] = counts.fetch(article.fetch("id"), 0) }
       { "articles" => articles, "cursor" => has_more && last_scanned ? encode_cursor(last_scanned) : nil }
     end
 
@@ -66,7 +69,7 @@ module WeblogAuthoring
       end
       publication = row["latest_id"] && @store.publication_job(row.fetch("id"), row.fetch("latest_id"))
       publication = publication.merge("stages" => @store.publication_stages(row.fetch("id"), row.fetch("latest_id"))) if publication
-      row.slice("id", "head", "created_at", "updated_at", "public_route", "public_hash").merge("metadata" => metadata, "state" => state, "state_error" => error, "publication" => publication)
+      row.slice("id", "head", "created_at", "updated_at", "published_at", "public_route", "public_hash").merge("metadata" => metadata, "state" => state, "state_error" => error, "publication" => publication)
     end
 
     def working_content_hashes(ids)

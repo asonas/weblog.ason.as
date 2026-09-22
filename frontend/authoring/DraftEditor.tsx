@@ -31,6 +31,7 @@ import {
 import { draftMetadataForTitle, hasCustomDiaryTitle } from "./draftTitle";
 import { prefetchEmbedMetadata } from "./EmbedCard";
 import "./draftEditor.css";
+import "./authoringTheme.css";
 
 const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
   title: "タイトル",

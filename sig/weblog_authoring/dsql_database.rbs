@@ -76,6 +76,7 @@ module WeblogAuthoring
     def delete_webmention: (id: String) -> untyped
     def cleanup_expired_webmentions: (kind: String, limit: Integer, dry_run: bool) -> Hash[String, untyped]
     def approved_webmentions_for_page: (String) -> Array[Hash[String, untyped]]
+    def approved_webmention_counts: (Array[String]) -> Hash[String, Integer]
     def moderate_webmention: (id: String, decision: String) -> Hash[String, untyped]?
 
     private

@@ -1,6 +1,6 @@
 module WeblogAuthoring
   class DraftAdministration
-    def initialize: (store: DraftStore, publication: DraftPublication) -> void
+    def initialize: (store: DraftStore, publication: DraftPublication, database: DsqlDatabase) -> void
     def list: (?query: String, ?cursor: String) -> Hash[String, untyped]
     def daily: (untyped) -> Hash[String, untyped]
   end

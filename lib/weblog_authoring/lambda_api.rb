@@ -470,7 +470,7 @@ module WeblogAuthoring
       if path == "/api/authoring/drafts" || path == "/api/authoring/drafts/daily"
         service = @draft_publication
         return json_response(404, error: "Not Found") unless service
-        administration = DraftAdministration.new(store:, publication: service)
+        administration = DraftAdministration.new(store:, publication: service, database: @database)
         if method == "GET" && path == "/api/authoring/drafts"
           query = event["queryStringParameters"] || {}
           return json_response(200, administration.list(query: query.fetch("q", ""), cursor: query.fetch("cursor", "")))

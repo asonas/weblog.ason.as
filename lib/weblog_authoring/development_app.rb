@@ -359,11 +359,11 @@ module WeblogAuthoring
     end
 
     get "/api/authoring/drafts" do
-      json_response(DraftAdministration.new(store: settings.draft_store, publication: settings.draft_publication).list(query: params.fetch("q", ""), cursor: params.fetch("cursor", "")))
+      json_response(DraftAdministration.new(store: settings.draft_store, publication: settings.draft_publication, database: settings.database).list(query: params.fetch("q", ""), cursor: params.fetch("cursor", "")))
     end
 
     post "/api/authoring/drafts/daily" do
-      api_response { |payload| DraftAdministration.new(store: settings.draft_store, publication: settings.draft_publication).daily(payload["date"]) }
+      api_response { |payload| DraftAdministration.new(store: settings.draft_store, publication: settings.draft_publication, database: settings.database).daily(payload["date"]) }
     end
 
     put "/api/authoring/drafts/:id" do

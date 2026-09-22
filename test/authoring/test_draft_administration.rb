@@ -6,6 +6,7 @@ require "weblog_authoring/draft_publication"
 require "weblog_authoring/development_database"
 require "weblog_authoring/lambda_api"
 require "weblog_authoring/lambda_session"
+require "weblog_authoring/webmention_fetcher"
 
 class DraftAdministrationTest < Minitest::Test
   def setup
@@ -13,7 +14,9 @@ class DraftAdministrationTest < Minitest::Test
     @store = WeblogAuthoring::DraftStore.sqlite(@root.join("drafts.sqlite3"))
     @store.setup!
     @publication = WeblogAuthoring::DraftPublication.local(store: @store)
-    @admin = WeblogAuthoring::DraftAdministration.new(store: @store, publication: @publication)
+    @database = WeblogAuthoring::DevelopmentDatabase.new(@root.join("public.sqlite3"), content_dir: @root.join("content"))
+    @database.setup!
+    @admin = WeblogAuthoring::DraftAdministration.new(store: @store, publication: @publication, database: @database)
   end
 
   def teardown
@@ -87,6 +90,37 @@ class DraftAdministrationTest < Minitest::Test
 
   def test_listing_rejects_an_invalid_cursor
     assert_raises(WeblogAuthoring::DraftStore::Error) { @admin.list(cursor: "not-a-cursor") }
+  end
+
+  def test_listing_keeps_first_publication_date_and_counts_only_approved_verified_mentions
+    id = @admin.daily("2026-09-20").fetch("id")
+    draft = @admin.list.fetch("articles").first
+    assert_nil draft.fetch("published_at")
+    assert_equal 0, draft.fetch("webmention_count")
+    accepted = @publication.accept(id, @publication.prepare(id).merge("request_id" => "first"))
+    @publication.complete(id, accepted.fetch("id")) { "daily.html" }
+    first_published_at = @store.published_snapshot(id).fetch("published_at")
+    change_cover(id, "none", 0)
+    updated = @publication.accept(id, @publication.prepare(id).merge("request_id" => "second"))
+    @publication.complete(id, updated.fetch("id")) { "updated.html" }
+
+    %w[approved pending rejected].each do |decision|
+      source = "https://#{decision}.example/post"
+      job = { "job_id" => decision, "source" => source, "target" => "https://example.com/2026-09-20", "target_page_id" => id, "received_at" => Time.now.iso8601 }
+      response = WeblogAuthoring::WebmentionFetcher::Response.new(url: source, status: 200, content_type: "text/html", link_header: nil, body: "source", redirect_count: 0, duration_ms: 1)
+      @database.record_verified_webmention(job:, response:, title: decision, site_name: "Reader", content_hash: decision)
+      mention = @database.list_webmentions.find { |item| item.fetch("source_url") == source }
+      @database.moderate_webmention(id: mention.fetch("id"), decision:)
+    end
+    row = @admin.list.fetch("articles").first
+    assert_equal first_published_at, row.fetch("published_at")
+    assert_equal @store.administration_page.first.fetch("updated_at"), row.fetch("updated_at")
+    assert_equal 1, row.fetch("webmention_count")
+    approved = @database.list_webmentions.find { |item| item.fetch("moderation_status") == "approved" }
+    @database.moderate_webmention(id: approved.fetch("id"), decision: "pending")
+    assert_equal 0, @admin.list.fetch("articles").first.fetch("webmention_count")
+    assert_empty @database.approved_webmention_counts([])
+    assert_empty @database.approved_webmention_counts(["another-article"])
   end
 
   def test_daily_reuses_an_existing_date_article_and_rejects_invalid_dates

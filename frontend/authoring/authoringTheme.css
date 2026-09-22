@@ -1,0 +1,105 @@
+/* Management chrome only. Public pages and .draft-preview__document keep their theme. */
+:is(.draft-admin, .draft-editor, .webmention-administration) {
+  --authoring-parchment: #f7f7f4;
+  --authoring-bone: #f2f1ed;
+  --authoring-linen: #e6e5e0;
+  --authoring-stone: #cdcdc9;
+  --authoring-ink: #26251e;
+  --authoring-font-ui:
+    "CursorGothic", "Inter", "Helvetica Neue", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic", sans-serif;
+  --authoring-font-mono:
+    "berkeleyMono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --authoring-status-draft: #7a7974;
+  --authoring-status-public: #34785c;
+  --authoring-status-pending: #c08532;
+  --authoring-status-error: #cf2d56;
+  --authoring-nav-selected: #34785c;
+  --authoring-input-border: #84847e;
+  --canvas: var(--authoring-parchment);
+  --surface: var(--authoring-parchment);
+  --card-surface: var(--authoring-bone);
+  --ink: var(--authoring-ink);
+  --muted-ink: #65645e;
+  --quiet-fill: var(--authoring-linen);
+  --accent: var(--authoring-ink);
+  --accent-ink: var(--authoring-parchment);
+  --separator: var(--authoring-stone);
+  --focus-ring: var(--authoring-ink);
+  --danger: var(--authoring-status-error);
+  --radius-control: 4px;
+  --radius-media: 4px;
+  color-scheme: light;
+  font-family: var(--authoring-font-ui);
+  color: var(--ink);
+}
+:is(.draft-admin, .draft-editor, .webmention-administration)::selection {
+  color: var(--authoring-ink);
+  background: #8bc4f8;
+}
+html[data-draft-workspace="true"] body,
+.draft-editor,
+.draft-editor__titlebar,
+.draft-editor__status,
+.draft-editor__inbox,
+.draft-editor__source textarea,
+.draft-inbox__column {
+  background: var(--authoring-parchment, #f7f7f4);
+}
+.draft-editor__inbox .draft-inbox__column > header {
+  background: var(--card-surface);
+}
+.draft-editor .draft-inbox__item {
+  background: var(--card-surface);
+  color: var(--ink);
+  border-color: var(--separator);
+  border-radius: 4px;
+}
+.draft-editor :is(.draft-cover-settings, .draft-publication-dialog) {
+  border-radius: 8px;
+}
+.draft-editor
+  :is(
+    .draft-cover-settings h2,
+    .draft-publication-dialog h2,
+    .draft-inbox__column h2
+  ) {
+  font-weight: 400;
+}
+.draft-editor .draft-cover-settings fieldset label:hover {
+  background: var(--quiet-fill);
+}
+.draft-editor .draft-editor__status-icon[data-tone="success"] {
+  color: var(--authoring-status-public);
+}
+.draft-editor .draft-editor__status-icon[data-tone="pending"] {
+  color: var(--authoring-status-pending);
+}
+.draft-editor .draft-editor__status-icon[data-tone="error"] {
+  color: var(--authoring-status-error);
+}
+.draft-editor .draft-editor__source textarea {
+  font-family: var(--authoring-font-mono);
+  color: var(--ink);
+}
+.draft-editor .draft-editor__source textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.draft-editor .draft-navigation,
+.webmention-administration .draft-navigation {
+  background: var(--card-surface);
+  color: var(--ink);
+  border-inline-end: 1px solid var(--separator);
+}
+.draft-editor .draft-navigation a,
+.webmention-administration .draft-navigation a {
+  font-weight: 400;
+}
+.draft-editor .draft-navigation a:hover,
+.webmention-administration .draft-navigation a:hover {
+  background: var(--quiet-fill);
+}
+.webmention-administration {
+  background: var(--canvas);
+}
