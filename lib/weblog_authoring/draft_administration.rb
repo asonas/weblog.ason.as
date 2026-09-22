@@ -15,7 +15,7 @@ module WeblogAuthoring
       raise DraftStore::Error, "日付はYYYY-MM-DDで指定してください。" unless date.is_a?(String) && /\A\d{4}-\d{2}-\d{2}\z/.match?(date)
       parsed = Date.iso8601(date)
       links = [JAPANESE_WEEKDAYS.fetch(parsed.wday), parsed.strftime("%Y%m"), parsed.strftime("%m%d"), "日記"]
-      { "id" => @store.daily_draft(date), "initial_body" => links.map { |name| "[[#{name}]]" }.join(" ") }
+      { "id" => @store.daily_draft(date), "initial_body" => "\n#{links.map { |name| "[[#{name}]]" }.join(' ')}" }
     rescue ArgumentError
       raise DraftStore::Error, "正しい日付を指定してください。"
     end

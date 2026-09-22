@@ -23,7 +23,7 @@ class DraftAdministrationTest < Minitest::Test
   def test_daily_reopens_real_work_and_returning_metadata_to_public_hash_clears_changes
     first = @admin.daily("2026-09-20")
     id = first.fetch("id")
-    assert_equal "[[日曜日]] [[202609]] [[0920]] [[日記]]", first.fetch("initial_body")
+    assert_equal "\n[[日曜日]] [[202609]] [[0920]] [[日記]]", first.fetch("initial_body")
     assert_equal first, @admin.daily("2026-09-20")
     assert_equal "date", @store.read(id, {}).dig("metadata", "page_type", "value")
     assert_equal "draft", @admin.list.fetch("articles").first.fetch("state")
