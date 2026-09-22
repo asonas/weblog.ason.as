@@ -89,7 +89,7 @@ try {
     );
     return response.ok() && (await response.json()).metadata.title.value === "日付とは別の日記タイトル";
   });
-  const diary = page.url();
+  const renamedArticle = page.url();
   await page.reload();
   await until(
     async () =>
@@ -97,11 +97,12 @@ try {
       "日付とは別の日記タイトル",
   );
   await page.getByRole("link", { name: /記事一覧/ }).click();
+  await ledger.getByText("日付とは別の日記タイトル", { exact: true }).waitFor();
+  assert.ok((await ledger.textContent()).includes("/日付とは別の日記タイトル"));
   await page.getByRole("link", { name: "今日の日記を書く", exact: true }).click();
   await page.getByRole("textbox", { name: "本文", exact: true }).waitFor();
-  await until(async () => await page.getByRole("textbox", { name: "本文", exact: true }).inputValue() === "今日の日記の本文");
-  assert.equal(page.url(), diary);
-  assert.equal(await page.getByRole("textbox", { name: "本文", exact: true }).inputValue(), "今日の日記の本文");
+  assert.notEqual(page.url(), renamedArticle);
+  assert.equal(await page.getByLabel("タイトル", { exact: true }).inputValue(), diaryDate);
   await page.getByRole("link", { name: /記事一覧/ }).click();
   await page.getByRole("link", { name: "新しい記事を書く", exact: true }).click();
   await page.getByLabel("タイトル", { exact: true }).fill("管理画面の実データ");
@@ -174,14 +175,16 @@ try {
   assert.ok(!(await detail.textContent()).includes("処理中"));
   assert.equal(await detail.getByRole("button", { name: "公開処理を再試行" }).count(), 0);
   await page.unroute("**/api/authoring/drafts/**");
-  await page.goto(diary);
+  await page.goto(renamedArticle);
   await page.getByRole("button", { name: "公開する", exact: true }).click();
   await until(async () => (await page.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
-  const publishedDiary = await fetch(`http://127.0.0.1:18082/${diaryDate}`);
-  assert.equal(publishedDiary.status, 200);
-  assert.ok((await publishedDiary.text()).includes("日付とは別の日記タイトル"));
+  const publishedArticle = await fetch(
+    `http://127.0.0.1:18082/${encodeURIComponent("日付とは別の日記タイトル")}`,
+  );
+  assert.equal(publishedArticle.status, 200);
+  assert.ok((await publishedArticle.text()).includes("今日の日記の本文"));
   assert.deepEqual(errors, []);
-  console.log("PASS: daily reuse, create/search/reopen, publication retry, restored published content, wide/narrow layout, local pending summary");
+  console.log("PASS: diary-to-article conversion, create/search/reopen, publication retry, restored published content, wide/narrow layout, local pending summary");
 } finally {
   await browser?.close();
   for (const child of children.reverse()) child.kill("SIGTERM");

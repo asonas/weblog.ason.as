@@ -25,6 +25,7 @@ import {
   DraftSession,
   draftRoute,
 } from "./draftSession";
+import { draftMetadataForTitle, hasCustomDiaryTitle } from "./draftTitle";
 import { prefetchEmbedMetadata } from "./EmbedCard";
 import "./draftEditor.css";
 
@@ -185,6 +186,8 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     let opened: DraftSession | undefined;
     void DraftSession.open(id, csrf, isNew)
       .then((value) => {
+        if (hasCustomDiaryTitle(value.metadata))
+          value.setMetadata(draftMetadataForTitle(value.metadata.title));
         const initialBody = takeDraftInitialBody(
           sessionStorage,
           id,
@@ -491,27 +494,9 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           placeholder="タイトル"
           value={session?.metadata.title || ""}
           disabled={!session || session.isPublishing}
-          onChange={(event) =>
-            session?.setMetadata({
-              title: event.target.value,
-              ...(session.metadata.page_type !== "date" ||
-              (session.metadata.page_date &&
-                session.metadata.title === session.metadata.page_date)
-                ? {
-                    page_type: /^\d{4}-\d{2}-\d{2}$/.test(
-                      event.target.value.trim(),
-                    )
-                      ? "date"
-                      : "named",
-                    page_date: /^\d{4}-\d{2}-\d{2}$/.test(
-                      event.target.value.trim(),
-                    )
-                      ? event.target.value.trim()
-                      : "",
-                  }
-                : {}),
-            })
-          }
+          onChange={(event) => {
+            session?.setMetadata(draftMetadataForTitle(event.target.value));
+          }}
         />
         <div className="draft-editor__controls">
           {session && <DraftCoverSettings session={session} />}

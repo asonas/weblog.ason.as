@@ -14,7 +14,7 @@ The enabled development backend and injected Lambda API read active snapshots fo
 
 ### Route rename batches
 
-Named articles use their title as the working route. Diaries keep a separate field-revisioned `page_date` for their date URL and an independently editable display title. Changing only a diary title does not rename its route; changing its date uses the same rename confirmation and reference-update path as a named article. The date control is inside article settings. Legacy drafts that stored the date only as their title preserve that date when the title is edited. Both 32-character legacy article IDs and hyphenated UUIDs are accepted without rewriting identity.
+Named articles use their title as the working route. A title in `YYYY-MM-DD` format identifies a diary and supplies its date URL. Changing a diary title to any other value converts it to a named article and releases the date for a new diary. The backend retains the separate field-revisioned `page_date` representation needed to read migrated snapshots, but the editor does not create or preserve independently titled diaries. Both 32-character legacy article IDs and hyphenated UUIDs are accepted without rewriting identity.
 
 Saving a valid changed route on a published article reserves that working route. Another article cannot reserve or publish it, and the old public route remains readable. Moving the working route releases its previous unaccepted reservation; published routes and accepted publication reservations remain owned by their article. Invalid/empty intermediate values remain draft text, not publishable routes. New unpublished drafts may share provisional routes; publication acceptance still enforces unique route ownership.
 
