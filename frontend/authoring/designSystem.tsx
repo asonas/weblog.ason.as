@@ -8,6 +8,7 @@ const COLOR_TOKENS = [
   ["Muted ink", "--muted-ink"],
   ["Accent", "--accent"],
   ["Separator", "--separator"],
+  ["Subtle separator", "--separator-subtle"],
   ["Focus", "--focus-ring"],
 ] as const;
 

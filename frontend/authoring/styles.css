@@ -35,6 +35,7 @@
   --accent-ink: oklch(0.97 0.001 260);
   --focus-ring: oklch(0.42 0.153 275);
   --separator: oklch(0.766 0.019 260);
+  --separator-subtle: color-mix(in oklch, var(--separator) 50%, transparent);
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -2875,8 +2876,7 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
 .ProseMirror hr {
   margin-block: var(--space-8);
   border: 0;
-  border-block-start: var(--border-width) solid
-    color-mix(in oklch, var(--separator) 50%, transparent);
+  border-block-start: var(--border-width) solid var(--separator);
 }
 
 .ProseMirror:focus:not(:focus-visible) {

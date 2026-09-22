@@ -27,7 +27,8 @@
 | `--quiet-fill` | 控えめな選択・ホバー面 |
 | `--accent` | 選択、リンク、主要状態 |
 | `--accent-ink` | accent上の文字 |
-| `--separator` | 必要な境界線 |
+| `--separator` | 記事内の区切りなど、判別できる必要がある境界線 |
+| `--separator-subtle` | 補助的な境界線 |
 | `--focus-ring` | キーボードフォーカス |
 | `--tag-surface` / `--tag-ink` | タグ |
 
