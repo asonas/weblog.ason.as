@@ -526,6 +526,7 @@ function HeaderDock() {
           aria-label="このサイトについて"
           title="このサイトについて"
         >
+          <span className="visually-hidden">このサイトについて</span>
           <svg
             viewBox="0 0 24 24"
             fill="none"
