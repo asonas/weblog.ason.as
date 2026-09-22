@@ -63,10 +63,10 @@ try {
   await page.reload();
   const menu = page.getByRole("navigation", { name: "執筆メニュー" });
   await menu.waitFor();
-  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事を書く", "記事の管理", "Webmention", "日記を書く", "ホーム"]);
+  assert.deepEqual(await menu.locator("a").allTextContents(), ["日記を書く", "記事を書く", "記事の管理", "Webmention", "ホーム"]);
   await menu.getByRole("link", { name: "Webmentionを管理" }).click();
   await page.getByRole("heading", { name: "Webmention", exact: true }).waitFor();
-  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事を書く", "記事の管理", "Webmention", "日記を書く", "ホーム"]);
+  assert.deepEqual(await menu.locator("a").allTextContents(), ["日記を書く", "記事を書く", "記事の管理", "Webmention", "ホーム"]);
   assert.equal(await menu.evaluate(element => element.getBoundingClientRect().width), 224);
   assert.equal(await page.locator("body > .site-header").isVisible(), false);
   const mentionTabs = page.getByRole("navigation", { name: "Webmentionの状態" });
@@ -87,7 +87,7 @@ try {
   await page.screenshot({ path: "/tmp/weblog-draft-admin-tabs.png" });
   await page.getByRole("link", { name: "今日の日記を書く", exact: true }).click();
   await page.getByLabel("タイトル", { exact: true }).waitFor();
-  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事を書く", "記事の管理", "Webmention", "日記を書く", "ホーム"]);
+  assert.deepEqual(await menu.locator("a").allTextContents(), ["日記を書く", "記事を書く", "記事の管理", "Webmention", "ホーム"]);
   assert.equal(await menu.locator("button").count(), 0);
   const diaryTitle = page.getByLabel("タイトル", { exact: true });
   await diaryTitle.focus();

@@ -40,7 +40,7 @@ const LINKS = [
 ];
 
 export function DraftNavigation() {
-  const links = [LINKS[0], LINKS[2], LINKS[3], LINKS[1], LINKS[4]];
+  const links = [LINKS[1], LINKS[0], LINKS[2], LINKS[3], LINKS[4]];
   return (
     <nav
       className="draft-navigation draft-navigation--expanded"
