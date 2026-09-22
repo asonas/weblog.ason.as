@@ -89,9 +89,14 @@ export async function enhancePublicArticleEditing(
       return;
 
     const edit = document.createElement("a");
-    edit.className = "header-action header-action--view-mode";
-    edit.href = editingHref;
-    edit.textContent = "編集";
+    edit.className =
+      "header-action header-action--view-mode public-authoring-action";
+    edit.href = "/authoring/articles";
+    edit.setAttribute("aria-label", "記事管理");
+    edit.title = "記事管理";
+    // Regen Icons file-text, MIT: ./regen-icons-LICENSE.txt
+    edit.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.38 3L6.5 3A1.5 1.5 0 0 0 5 4.5L5 19.5A1.5 1.5 0 0 0 6.5 21L17.5 21A1.5 1.5 0 0 0 19 19.5L19 9.62A1.5 1.5 0 0 0 18.56 8.56L13.44 3.44A1.5 1.5 0 0 0 12.38 3ZM13 4L13 8A1 1 0 0 0 14 9L18 9M9 13L15 13M9 17L15 17"/></svg>';
     actions.append(edit);
   } catch {
     return;

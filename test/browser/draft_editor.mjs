@@ -30,7 +30,7 @@ async function until(check) {
 let browser;
 try {
   const apiLog = start(["ruby", "-rbundler/setup", "test/fixtures/drafts/server.rb"], { DRAFT_TEST_TOKEN: token });
-  const viteLog = start(["node", "node_modules/vite/bin/vite.js", "--port", "15182"], { AUTHORING_API_ORIGIN: "http://127.0.0.1:18082" });
+  const viteLog = start(["npm", "run", "dev", "--", "--port", "15182"], { AUTHORING_API_ORIGIN: "http://127.0.0.1:18082" });
   await ready("http://127.0.0.1:18082/api/draft-test-health", apiLog);
   await ready("http://127.0.0.1:15182/api/draft-test-health", viteLog);
   browser = await chromium.launch({ channel: "chrome", headless: true });
@@ -355,6 +355,29 @@ end
   );
   assert.equal(await page.locator("body > .site-header").count(), 0);
   assert.equal(await preview.getByRole("link", { name: "weblog.ason.as", exact: true }).count(), 1);
+  const previewStyle = await preview.evaluate((element) => {
+    const title = element.querySelector(".article-reading-header h1");
+    const body = element.querySelector(".ProseMirror");
+    const header = element.querySelector(".site-header");
+    return {
+      titleWeight: getComputedStyle(title).fontWeight,
+      titleBottomPadding: getComputedStyle(title).paddingBottom,
+      bodyColor: getComputedStyle(body).color,
+      bodySize: getComputedStyle(body).fontSize,
+      headerBackground: getComputedStyle(header).backgroundColor,
+      coverHeight: element.querySelector(".article-reading-header").getBoundingClientRect().height,
+    };
+  });
+  assert.deepEqual(previewStyle, {
+    titleWeight: "400",
+    titleBottomPadding: "30px",
+    bodyColor: "rgb(0, 0, 0)",
+    bodySize: "18px",
+    headerBackground: "rgba(255, 255, 255, 0.75)",
+    coverHeight: 608,
+  });
+  await preview.evaluate((element) => { element.scrollTop = 0; });
+  await preview.screenshot({ path: "/private/tmp/editorial-draft-preview.png" });
   assert.ok(await preview.locator(".line-update-rail__segment").count() > 0);
   assert.equal(
     await preview.getByRole("link", { name: "公開先" }).getAttribute("class"),
@@ -431,6 +454,18 @@ end
   await page.getByRole("button", { name: "プレビュー" }).click();
   await setTimeout(250);
   assert.equal(await preview.isVisible(), true);
+  await page.setViewportSize({ width: 375, height: 900 });
+  await setTimeout(250);
+  const narrowStyle = await preview.evaluate((element) => ({
+    padding: getComputedStyle(element.querySelector(".article-reading-header h1")).paddingBottom,
+    bodySize: getComputedStyle(element.querySelector(".ProseMirror")).fontSize,
+    coverHeight: element.querySelector(".article-reading-header").getBoundingClientRect().height,
+    overflows: element.scrollWidth > element.clientWidth,
+  }));
+  assert.deepEqual(narrowStyle, { padding: "20px", bodySize: "16px", coverHeight: 288, overflows: false });
+  await preview.evaluate((element) => { element.scrollTop = 0; });
+  await preview.screenshot({ path: "/private/tmp/editorial-draft-preview-mobile.png" });
+  await page.setViewportSize({ width: 700, height: 900 });
   await page.screenshot({ path: "/tmp/weblog-draft-workspace-narrow.png" });
   await page.getByRole("button", { name: "閉じる" }).click();
   await setTimeout(250);

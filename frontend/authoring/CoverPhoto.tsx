@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function CoverPhoto({
   url,
@@ -8,6 +8,17 @@ export function CoverPhoto({
   hero?: boolean;
 }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(
+    () => hero && window.matchMedia("(max-width: 600px)").matches,
+  );
+  useEffect(() => {
+    if (!hero) return;
+    const media = window.matchMedia("(max-width: 600px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, [hero]);
   const preview = url.startsWith("/assets/") && failedUrl !== url;
   const path = url.slice("/assets/".length);
   const small = `/assets/previews/640/${path}.webp`;
@@ -26,7 +37,11 @@ export function CoverPhoto({
   if (!hero) return image;
 
   return (
-    <picture className="cover-journal__photo">
+    // Responsive source failures can omit error events on an already loaded image.
+    <picture
+      className="cover-journal__photo"
+      key={isMobile ? "mobile" : "desktop"}
+    >
       {preview && (
         <source
           media="(max-width: 600px)"

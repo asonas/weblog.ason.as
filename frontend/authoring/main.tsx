@@ -38,6 +38,10 @@ async function setupAuthentication(): Promise<AuthState> {
   const auth = await fetchBootstrap<AuthState>("/api/auth/session");
   document.documentElement.dataset.canEdit = String(auth.can_edit);
   document.documentElement.dataset.csrfToken = auth.csrf_token;
+  const articleManagement = document.querySelector<HTMLElement>(
+    "#authoring-articles-action",
+  );
+  if (articleManagement) articleManagement.hidden = !auth.can_edit;
 
   document
     .querySelectorAll<HTMLElement>("#new-page-action, #daily-page-action")
@@ -342,7 +346,7 @@ export function App({
         key={viewMode}
         bootstrap={bootstrap}
         canEdit={viewMode === "editing"}
-        canSwitchToEdit={auth.can_edit && Boolean(bootstrap.page_id)}
+        canSwitchToEdit={false}
         editingHref={editingHref}
         readingHref={readingHref}
       />

@@ -1,38 +1,26 @@
-.cf {
-  --cf-paper: color-mix(in oklch, var(--atlas-warm) 10%, var(--canvas));
-}
 .cf-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
+  gap: 40px 20px;
 }
 .cf-card {
-  min-height: 340px;
   min-width: 0;
-  border-radius: 8px;
-  background: var(--cf-paper);
-  box-shadow:
-    0 1px 2px oklch(0 0 0 / 0.09),
-    0 4px 12px oklch(0 0 0 / 0.04);
 }
 .cf-card > a {
   color: inherit;
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 340px;
-  position: relative;
-  overflow: hidden;
-  border-radius: inherit;
   text-decoration: none;
 }
 .cf-media {
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
   position: relative;
-  min-height: 200px;
+  display: flex;
+  align-items: end;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
   flex-shrink: 0;
+  background: var(--quiet-fill);
 }
 .cf-photo {
   position: absolute;
@@ -40,76 +28,227 @@
   height: 100%;
   object-fit: cover;
 }
-.cf-empty-marker {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: oklch(0.5 0.025 185);
+.cf-media:has(.generated-cover) {
+  border: 1px solid var(--separator);
 }
-.cf-empty-marker svg {
-  width: 32px;
-  height: 32px;
+.cf-cover-caption {
+  --cf-fade-from: rgb(0 0 0 / 0.88);
+  position: relative;
+  width: 100%;
+  padding: 48px 20px 20px;
+  color: #fff;
+  background: linear-gradient(to top, var(--cf-fade-from), transparent);
+  /* tw-easing-gradients: ease-in-out, cubic-bezier(0.42, 0, 0.58, 1), 15 subdivisions. */
+  @supports (color: oklch(from red l c h)) {
+    background-image: linear-gradient(
+      to top,
+      var(--cf-fade-from) 0%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 1.3%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        8.1%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 4.9%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        15.5%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 10.4%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        22.5%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 17.5%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        29%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 25.9%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        35.3%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 35.2%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        41.2%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 45%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        47.1%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 55%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        52.9%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 64.8%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        58.8%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 74.1%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        64.7%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 82.5%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        71%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 89.6%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        77.5%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 95.1%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        84.5%,
+      oklch(
+          from
+            color-mix(
+              in oklch,
+              oklch(from var(--cf-fade-from) l c h / 0) 98.7%,
+              var(--cf-fade-from)
+            )
+            l c h /
+          alpha
+        )
+        91.9%,
+      oklch(from var(--cf-fade-from) l c h / 0) 100%
+    );
+  }
+}
+.cf-media:has(.generated-cover) .cf-cover-caption {
+  --cf-fade-from: #fff;
+  color: var(--ink);
 }
 .cf-copy {
-  position: relative;
-  padding: 20px;
-  flex: 1;
-  min-height: 140px;
-  background: var(--cf-paper);
-  border-top: 1px solid oklch(0 0 0 / 0.08);
+  padding-block-start: 14px;
+}
+.cf-category {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--category-coral);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.cf-category[data-kind="diary"] {
+  background: var(--category-teal);
+}
+.cf-title {
+  margin: 10px 0 0;
+  color: inherit;
+  font-size: clamp(28px, 2.25vw, 32px);
+  font-weight: 400;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
 }
 .cf-copy p {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: 16px;
+  line-height: 1.8;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 3;
   overflow: hidden;
   overflow-wrap: anywhere;
 }
-.cf-title {
-  position: relative;
-  margin: auto 0 0;
-  padding: 48px 20px 14px;
-  color: white;
-  background: var(--image-overlay-eased);
-  font-size: 34px;
-  font-weight: 650;
-  line-height: 1.15;
-  letter-spacing: -0.025em;
-  overflow-wrap: anywhere;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 3px oklch(0 0 0 / 0.25);
-}
-.cf-card a:hover .cf-title {
-  color: #a8e4dd;
+.cf-card a:is(:hover, :focus-visible) .cf-title {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 @media (max-width: 1000px) {
   .cf-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px;
   }
 }
 @media (max-width: 600px) {
   .cf-grid {
     grid-template-columns: 1fr;
-    gap: 20px;
   }
-}
-
-.cf-media:has(.generated-cover) .cf-title {
-  color: #293b3b;
-  background: none;
-  text-shadow: none;
-}
-.cf-media:has(.generated-cover) .cf-empty-marker {
-  color: #526767;
-}
-.cf-card
-  a:is(:hover, :focus-visible)
-  .cf-media:has(.generated-cover)
-  .cf-title {
-  color: oklch(0.4 0.06 195);
 }

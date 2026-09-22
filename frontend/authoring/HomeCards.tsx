@@ -9,9 +9,11 @@ export function HomeCardsSkeleton() {
       {["first", "second", "third", "fourth", "fifth", "sixth"].map((card) => (
         <div className="home-loading__card" key={card}>
           <div className="home-loading__card-media cf-media">
-            <div className="cf-title home-loading__card-title">
-              <span className="home-loading__shimmer" />
-              <span className="home-loading__shimmer" />
+            <div className="cf-cover-caption">
+              <div className="cf-title home-loading__card-title">
+                <span className="home-loading__shimmer" />
+                <span className="home-loading__shimmer" />
+              </div>
             </div>
           </div>
           <div className="home-loading__card-copy">
@@ -30,23 +32,6 @@ export function HomeCards({ entries }: { entries: HomePage[] }) {
     <section className="cf" aria-label="新しい順の日記と記事">
       <div className="cf-grid">
         {entries.map((page) => {
-          const missingCoverMarker = !page.image_url && (
-            <span className="cf-empty-marker" aria-hidden="true">
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 32 32"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 5h13a2 2 0 0 1 2 2v13M5 12v13a2 2 0 0 0 2 2h13M5 5l22 22" />
-                <path d="m7 24 6-7 4 4M21 15l4 5" />
-                <circle cx="21" cy="10" r="2" />
-              </svg>
-            </span>
-          );
           return (
             <article className="cf-card" key={page.id}>
               <a
@@ -59,14 +44,21 @@ export function HomeCards({ entries }: { entries: HomePage[] }) {
                   ) : (
                     <GeneratedCover />
                   )}
-                  {missingCoverMarker}
-                  <h2 className="cf-title">
-                    {page.is_diary ? (
-                      <time dateTime={page.route}>{page.title}</time>
-                    ) : (
-                      page.title
-                    )}
-                  </h2>
+                  <div className="cf-cover-caption">
+                    <span
+                      className="cf-category"
+                      data-kind={page.is_diary ? "diary" : "article"}
+                    >
+                      {page.is_diary ? "日記" : "記事"}
+                    </span>
+                    <h2 className="cf-title">
+                      {page.is_diary ? (
+                        <time dateTime={page.route}>{page.title}</time>
+                      ) : (
+                        page.title
+                      )}
+                    </h2>
+                  </div>
                 </div>
                 <div className="cf-copy">
                   <p>
