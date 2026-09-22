@@ -13,14 +13,13 @@ require_relative "cover_variants"
 
 module WeblogAuthoring
   class WebmentionSitePublisher
-    def initialize(database:, s3_client:, sqs_client:, site_bucket:, delivery_queue_url:, sender_enabled: true, draft_authoring: false)
+    def initialize(database:, s3_client:, sqs_client:, site_bucket:, delivery_queue_url:, sender_enabled: true)
       @database = database
       @s3_client = s3_client
       @sqs_client = sqs_client
       @site_bucket = site_bucket
       @delivery_queue_url = delivery_queue_url
       @sender_enabled = sender_enabled
-      @draft_authoring = draft_authoring
     end
 
     def call(event)
@@ -130,7 +129,7 @@ module WeblogAuthoring
       mentions = @database.approved_webmentions_for_page(page.id)
       escaped_source_url = CGI.escapeHTML(source_url)
       author_url = CGI.escapeHTML(URI.join(source_url, "/").to_s)
-      editing_href = CGI.escapeHTML(@draft_authoring ? "/draft-editor?id=#{WeblogAuthoring.encoded_route(page.id)}" : "/editor/#{WeblogAuthoring.encoded_route(page.id)}")
+      editing_href = CGI.escapeHTML("/draft-editor?id=#{WeblogAuthoring.encoded_route(page.id)}")
       cover = CoverImage.resolve(page)
       cover_html = cover ? %(<img src="#{CGI.escapeHTML(cover)}" alt="" fetchpriority="high" />) : ""
       <<~HTML

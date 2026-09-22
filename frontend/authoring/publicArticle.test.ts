@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 
 test("public reading keeps existing text and links while media load or fail", async () => {
   const dom = new JSDOM(
-    `<!doctype html><article data-public-article="1"><h1>公開記事</h1><p>最初から読める本文</p><a href="/editor/page-id">編集</a><span class="article-image"><img src="/assets/photo.webp" alt="写真"></span></article>`,
+    `<!doctype html><article data-public-article="1"><h1>公開記事</h1><p>最初から読める本文</p><a href="/draft-editor?id=page-id">編集</a><span class="article-image"><img src="/assets/photo.webp" alt="写真"></span></article>`,
     { url: "https://weblog.ason.as/article" },
   );
   Object.assign(globalThis, {
@@ -28,7 +28,7 @@ test("public reading keeps existing text and links while media load or fail", as
     assert.equal(paragraph?.textContent, "最初から読める本文");
     assert.equal(
       document.querySelector("a")?.getAttribute("href"),
-      "/editor/page-id",
+      "/draft-editor?id=page-id",
     );
     assert.deepEqual(requests, []);
     const image = document.querySelector("img");
@@ -46,7 +46,7 @@ test("public reading keeps existing text and links while media load or fail", as
 
 test("authenticated public reading restores the header edit action", async () => {
   const dom = new JSDOM(
-    '<header class="site-header"><nav><span class="header-actions"><a href="/feed.xml">Feed</a></span></nav></header><article data-public-article="1" data-editing-href="/editor/page-id"></article>',
+    '<header class="site-header"><nav><span class="header-actions"><a href="/feed.xml">Feed</a></span></nav></header><article data-public-article="1" data-editing-href="/draft-editor?id=page-id"></article>',
     { url: "https://weblog.ason.as/article" },
   );
   Object.assign(globalThis, {

@@ -39,7 +39,7 @@ module WeblogAuthoring
       @place = place
       @read = read
       @site_url = site_url.delete_suffix("/")
-      @renderer = WebmentionSitePublisher.new(database:, s3_client: nil, site_bucket: nil, sqs_client: nil, delivery_queue_url: nil, sender_enabled: false, draft_authoring: true)
+      @renderer = WebmentionSitePublisher.new(database:, s3_client: nil, site_bucket: nil, sqs_client: nil, delivery_queue_url: nil, sender_enabled: false)
     end
 
     def read(snapshot)

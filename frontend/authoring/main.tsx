@@ -330,11 +330,7 @@ export function App({
   const isTodaysDiary =
     bootstrap.page_type === "date" && bootstrap.date === tokyoDate(new Date());
   const readingHref = `/${encodeURIComponent(route)}${isTodaysDiary ? "?view=reading" : ""}`;
-  const editingHref = auth.draft_authoring
-    ? `/draft-editor?id=${encodeURIComponent(bootstrap.page_id)}`
-    : isTodaysDiary
-      ? `/${encodeURIComponent(route)}`
-      : `/editor/${encodeURIComponent(bootstrap.page_id)}`;
+  const editingHref = `/draft-editor?id=${encodeURIComponent(bootstrap.page_id)}`;
 
   return (
     <>
