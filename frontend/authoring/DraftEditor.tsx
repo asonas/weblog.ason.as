@@ -11,6 +11,7 @@ import { DraftCoverSettings } from "./DraftCoverSettings";
 import { DraftInbox } from "./DraftInbox";
 import { DraftNavigation } from "./DraftNavigation";
 import { DraftPreview } from "./DraftPreview";
+import { takeDraftInitialBody } from "./draftInitialBody";
 import {
   markdownBlockIndexAt,
   textareaWikiLinkQuery,
@@ -169,6 +170,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     let opened: DraftSession | undefined;
     void DraftSession.open(id, csrf, isNew)
       .then((value) => {
+        const initialBody = takeDraftInitialBody(
+          sessionStorage,
+          id,
+          value.body.toString(),
+        );
+        if (initialBody !== null) value.setBody(initialBody);
         const recovery = sessionStorage.getItem(recoveryKey);
         if (recovery) {
           const parsed = JSON.parse(recovery) as {

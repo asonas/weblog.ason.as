@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DraftNavigation } from "./DraftNavigation";
+import { storeDraftInitialBody } from "./draftInitialBody";
 import {
   type DraftMetadata,
   draftRoute,
@@ -235,7 +236,14 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
           throw new Error(
             "下書きを作成できません。オンライン状態で再試行してください。",
           );
-        const created: { id: string } = await response.json();
+        const created: { id: string; initial_body?: string } =
+          await response.json();
+        if (created.initial_body)
+          storeDraftInitialBody(
+            sessionStorage,
+            created.id,
+            created.initial_body,
+          );
         window.location.assign(
           `/draft-editor?id=${encodeURIComponent(created.id)}`,
         );
