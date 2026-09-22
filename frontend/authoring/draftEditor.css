@@ -604,7 +604,8 @@ html[data-draft-workspace="true"]
   color: var(--accent-ink);
   z-index: 10;
 }
-.draft-navigation a {
+.draft-navigation a,
+.draft-navigation__disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -618,6 +619,12 @@ html[data-draft-workspace="true"]
   font-size: 0.75rem;
   font-weight: 600;
 }
+.draft-navigation__disabled {
+  border: 0;
+  background: transparent;
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .draft-navigation svg {
   inline-size: 1.5rem;
   block-size: 1.5rem;
@@ -628,6 +635,37 @@ html[data-draft-workspace="true"]
 .draft-navigation a:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: -2px;
+}
+.draft-publication-dialog {
+  inline-size: min(32rem, calc(100vw - 2rem));
+  padding: var(--space-6);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 16px 48px oklch(0 0 0 / 0.2);
+  overscroll-behavior: contain;
+}
+.draft-publication-dialog::backdrop {
+  background: oklch(0 0 0 / 0.45);
+}
+.draft-publication-dialog h2 {
+  margin: 0 0 var(--space-3);
+}
+.draft-publication-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-start: var(--space-5);
+}
+.draft-publication-dialog__actions a {
+  display: inline-flex;
+  min-block-size: 2.5rem;
+  align-items: center;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-control);
+  text-decoration: none;
 }
 @media (max-width: 36rem) {
   .draft-editor {

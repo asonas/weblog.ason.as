@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   markdownBlockIndexAt,
+  suggestionVerticalPosition,
   textareaWikiLinkQuery,
   wrapTextareaSelectionInWikiLink,
 } from "./draftMarkdown";
@@ -45,4 +46,9 @@ test("maps the cursor to its blank-line separated Markdown block", () => {
     1,
   );
   assert.equal(markdownBlockIndexAt(markdown, markdown.length), 2);
+});
+
+test("places Wiki link suggestions above a cursor near the textarea bottom", () => {
+  assert.deepEqual(suggestionVerticalPosition(480, 500), { bottom: 28 });
+  assert.deepEqual(suggestionVerticalPosition(120, 500), { top: 128 });
 });

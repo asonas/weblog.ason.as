@@ -63,33 +63,50 @@ try {
   await page.reload();
   const menu = page.getByRole("navigation", { name: "執筆メニュー" });
   await menu.waitFor();
-  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事", "ホーム", "新規", "今日"]);
+  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事", "ホーム", "記事を書く", "日記を書く"]);
   const filters = page.getByRole("navigation", { name: "記事の状態" });
   assert.ok(await filters.evaluate((element) => Boolean(element.closest(".draft-admin-ledger"))));
   await page.screenshot({ path: "/tmp/weblog-draft-admin-tabs.png" });
   await page.getByRole("link", { name: "今日の日記を書く", exact: true }).click();
+  await page
+    .getByRole("link", { name: "記事一覧に戻る", exact: true })
+    .waitFor();
+  assert.deepEqual(await menu.locator("a").allTextContents(), ["記事一覧へ"]);
+  assert.deepEqual(await menu.locator("button:disabled").allTextContents(), [
+    "記事を書く",
+    "日記を書く",
+  ]);
   await page.getByRole("textbox", { name: "本文", exact: true }).fill("今日の日記の本文");
-  const diaryDate = await page.getByLabel("日記の日付（URL）", { exact: true }).inputValue();
+  const diaryDate = await page.getByLabel("タイトル", { exact: true }).inputValue();
   await page.getByLabel("タイトル", { exact: true }).fill("日付とは別の日記タイトル");
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  const diaryId = new URL(page.url()).searchParams.get("id");
+  await until(async () => {
+    const response = await page.request.get(
+      `http://127.0.0.1:15182/api/authoring/drafts/${diaryId}?protocol=1&generation=1&cursor=0`,
+    );
+    return response.ok() && (await response.json()).metadata.title.value === "日付とは別の日記タイトル";
+  });
   const diary = page.url();
   await page.reload();
-  assert.equal(await page.getByLabel("日記の日付（URL）", { exact: true }).inputValue(), diaryDate);
-  assert.equal(await page.getByLabel("タイトル", { exact: true }).inputValue(), "日付とは別の日記タイトル");
-  await page.getByRole("link", { name: "記事一覧", exact: true }).click();
+  await until(
+    async () =>
+      (await page.getByLabel("タイトル", { exact: true }).inputValue()) ===
+      "日付とは別の日記タイトル",
+  );
+  await page.getByRole("link", { name: /記事一覧/ }).click();
   await page.getByRole("link", { name: "今日の日記を書く", exact: true }).click();
   await page.getByRole("textbox", { name: "本文", exact: true }).waitFor();
   await until(async () => await page.getByRole("textbox", { name: "本文", exact: true }).inputValue() === "今日の日記の本文");
   assert.equal(page.url(), diary);
   assert.equal(await page.getByRole("textbox", { name: "本文", exact: true }).inputValue(), "今日の日記の本文");
-  await page.getByRole("link", { name: "記事一覧", exact: true }).click();
-  await page.getByRole("link", { name: "新しい下書き", exact: true }).click();
+  await page.getByRole("link", { name: /記事一覧/ }).click();
+  await page.getByRole("link", { name: "新しい記事を書く", exact: true }).click();
   await page.getByLabel("タイトル", { exact: true }).fill("管理画面の実データ");
   const body = page.getByRole("textbox", { name: "本文", exact: true });
   await body.fill("検索と再開を確認する本文");
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
   const article = page.url();
-  await page.getByRole("link", { name: "記事一覧", exact: true }).click();
+  await page.getByRole("link", { name: /記事一覧/ }).click();
   const search = page.getByRole("searchbox", { name: "タイトルまたはURLで検索" });
   await search.fill("管理画面");
   const detail = page.getByRole("region", { name: "選択した記事", exact: true });
@@ -99,23 +116,25 @@ try {
   await until(async () => await body.inputValue() === "検索と再開を確認する本文");
   assert.equal(page.url(), article);
   await fetch("http://127.0.0.1:18082/api/draft-test-search-failure", { method: "POST", headers: { "X-Draft-Test-Token": token } });
-  await page.getByRole("button", { name: "公開", exact: true }).click();
-  await until(async () => (await page.getByRole("status").textContent()).includes("公開が完了しました"));
-  await page.getByRole("link", { name: "記事一覧", exact: true }).click();
+  await page.getByRole("button", { name: "公開する", exact: true }).click();
+  await until(async () => (await page.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
+  await page.getByRole("button", { name: "編集を続ける", exact: true }).click();
+  await page.getByRole("link", { name: /記事一覧/ }).click();
   await search.fill("管理画面");
   await detail.getByRole("button", { name: "公開処理を再試行" }).click();
   await until(async () => (await detail.textContent()).includes("検索：反映済み"));
   assert.ok((await detail.textContent()).includes("公開中"));
   await detail.getByRole("link", { name: "編集・公開内容を確認" }).click();
+  await page.getByRole("button", { name: "保存する", exact: true }).waitFor();
   await body.fill("公開後に追記した本文");
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
-  await page.getByRole("link", { name: "記事一覧", exact: true }).click();
+  await page.getByRole("link", { name: /記事一覧/ }).click();
   await page.getByRole("navigation", { name: "記事の状態" }).getByRole("button", { name: "未公開の変更あり" }).click();
   await until(async () => await ledger.locator("li").count() === 1);
   await detail.getByRole("link", { name: "編集・公開内容を確認" }).click();
   await body.fill("検索と再開を確認する本文");
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
-  await page.getByRole("link", { name: "記事一覧", exact: true }).click();
+  await page.getByRole("link", { name: /記事一覧/ }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("navigation", { name: "記事の状態" }).getByRole("button", { name: "公開中" }).click();
   await until(async () => await ledger.locator("li").count() === 1);
@@ -129,13 +148,13 @@ try {
   await until(async () => (await page.getByRole("status").textContent()).includes("端末に保存済み"));
   await page.route("**/api/authoring/drafts/**", route => route.abort());
   await context.setOffline(false);
-  await page.getByRole("link", { name: "記事一覧", exact: true }).click();
+  await page.getByRole("link", { name: /記事一覧/ }).click();
   await search.fill("管理画面");
   await until(async () => (await detail.textContent()).includes("未送信の変更あり"));
   await detail.getByRole("link", { name: "編集・公開内容を確認" }).click();
   await body.fill("検索と再開を確認する本文");
   await until(async () => (await page.getByRole("status").textContent()).includes("端末に保存済み"));
-  await page.getByRole("link", { name: "記事一覧", exact: true }).click();
+  await page.getByRole("link", { name: /記事一覧/ }).click();
   await search.fill("管理画面");
   await until(async () => (await detail.textContent()).includes("未送信の変更あり"));
   assert.ok((await detail.textContent()).includes("公開中"), "local content equal to the published hash stays public despite pending CRDT updates");
@@ -153,8 +172,8 @@ try {
   assert.equal(await detail.getByRole("button", { name: "公開処理を再試行" }).count(), 0);
   await page.unroute("**/api/authoring/drafts/**");
   await page.goto(diary);
-  await page.getByRole("button", { name: "公開", exact: true }).click();
-  await until(async () => (await page.getByRole("status").textContent()).includes("公開が完了しました"));
+  await page.getByRole("button", { name: "公開する", exact: true }).click();
+  await until(async () => (await page.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
   const publishedDiary = await fetch(`http://127.0.0.1:18082/${diaryDate}`);
   assert.equal(publishedDiary.status, 200);
   assert.ok((await publishedDiary.text()).includes("日付とは別の日記タイトル"));

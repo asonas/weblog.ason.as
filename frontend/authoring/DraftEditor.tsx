@@ -14,6 +14,7 @@ import { DraftPreview } from "./DraftPreview";
 import { takeDraftInitialBody } from "./draftInitialBody";
 import {
   markdownBlockIndexAt,
+  suggestionVerticalPosition,
   textareaWikiLinkQuery,
   type WikiLinkQuery,
   wrapTextareaSelectionInWikiLink,
@@ -22,6 +23,7 @@ import {
   DRAFT_BODY_LIMIT,
   type DraftMetadata,
   DraftSession,
+  draftRoute,
 } from "./draftSession";
 import { prefetchEmbedMetadata } from "./EmbedCard";
 import "./draftEditor.css";
@@ -73,21 +75,20 @@ function caretPosition(field: HTMLTextAreaElement): CSSProperties {
   marker.textContent = "\u200b";
   mirror.append(marker);
   document.body.append(mirror);
+  const lineHeight = Number.parseFloat(style.lineHeight);
+  const caretTop = Math.max(
+    lineHeight,
+    Math.min(
+      field.clientHeight - lineHeight,
+      marker.offsetTop - field.scrollTop,
+    ),
+  );
   const result = {
     left: Math.min(
       field.clientWidth - 24,
       marker.offsetLeft - field.scrollLeft,
     ),
-    top: Math.max(
-      8,
-      Math.min(
-        field.clientHeight - 8,
-        marker.offsetTop -
-          field.scrollTop +
-          Number.parseFloat(style.lineHeight) +
-          8,
-      ),
-    ),
+    ...suggestionVerticalPosition(caretTop + lineHeight, field.clientHeight),
   };
   mirror.remove();
   return result;
@@ -130,14 +131,21 @@ function DraftStatusIcon({
 
 export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [session, setSession] = useState<DraftSession>();
-  const [editorWidth, setEditorWidth] = useState(608);
+  const [previewWidth, setPreviewWidth] = useState(1000);
   const workspace = useRef<HTMLDivElement>(null);
+  const publicationDialog = useRef<HTMLDialogElement>(null);
   const [inboxHeight, setInboxHeight] = useState(() =>
     Math.round(window.innerHeight / 3),
   );
   const [loadError, setLoadError] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [publicationError, setPublicationError] = useState("");
+  const [publicationFlow, setPublicationFlow] = useState<
+    "idle" | "running" | "success" | "error"
+  >("idle");
+  const [publicationIntent, setPublicationIntent] = useState<
+    "publish" | "save"
+  >("publish");
   const [wikiLinkNames, setWikiLinkNames] = useState<Array<string>>([]);
   const [wikiLinkQuery, setWikiLinkQuery] = useState<WikiLinkQuery | null>(
     null,
@@ -148,15 +156,22 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [previewBlockIndex, setPreviewBlockIndex] = useState(0);
   const [, refresh] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const [{ id, isNew }] = useState(() => {
+  const [{ id, isNew, initialArticleState }] = useState(() => {
     const url = new URL(window.location.href);
     const isNew =
       !url.searchParams.has("id") || url.searchParams.get("recovery") === "1";
     const id = url.searchParams.get("id") || crypto.randomUUID();
     url.searchParams.set("id", id);
     window.history.replaceState(null, "", url);
-    return { id, isNew };
+    const state = url.searchParams.get("state");
+    return {
+      id,
+      isNew,
+      initialArticleState:
+        state === "public" || state === "unpublished_changes" ? state : "draft",
+    };
   });
+  const [articleState, setArticleState] = useState(initialArticleState);
   const recoveryKey = `draft-recovery:${id}`;
   useEffect(() => {
     document.documentElement.dataset.draftWorkspace = "true";
@@ -428,6 +443,9 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   async function publish() {
     if (!session || session.isPublishing) return;
     setPublicationError("");
+    setPublicationIntent(articleState === "draft" ? "publish" : "save");
+    setPublicationFlow("running");
+    publicationDialog.current?.showModal();
     try {
       await prefetchEmbedMetadata(
         textarea.current?.value || session.body.toString(),
@@ -435,11 +453,15 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       const prepared = session.pendingPublication
         ? undefined
         : await session.preparePublication();
+      if (prepared) setArticleState(prepared.article_state);
       await session.publish(prepared);
+      setArticleState("public");
+      setPublicationFlow("success");
     } catch (error) {
       setPublicationError(
         error instanceof Error ? error.message : "公開に失敗しました",
       );
+      setPublicationFlow("error");
     }
   }
 
@@ -459,7 +481,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const bytes = new TextEncoder().encode(session?.body.toString() || "").length;
   return (
     <section className="draft-editor" aria-label="下書き編集">
-      <DraftNavigation />
+      <DraftNavigation editing />
       <div className="draft-editor__titlebar">
         <label className="visually-hidden" htmlFor="draft-title">
           タイトル
@@ -540,10 +562,14 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             onClick={() => void publish()}
           >
             {session?.isPublishing
-              ? "公開中"
+              ? articleState === "draft"
+                ? "公開中"
+                : "保存中"
               : session?.pendingPublication
                 ? "公開を再試行"
-                : "公開"}
+                : articleState === "draft"
+                  ? "公開する"
+                  : "保存する"}
           </button>
         </div>
       </div>
@@ -598,7 +624,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
         className="draft-editor__workspace"
         ref={workspace}
         style={{
-          gridTemplateColumns: `minmax(16rem, ${editorWidth}px) 12px minmax(16rem, 1fr)`,
+          gridTemplateColumns: `minmax(16rem, 1fr) 12px minmax(16rem, ${previewWidth}px)`,
         }}
       >
         <div className="draft-editor__source">
@@ -662,14 +688,14 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           className="draft-editor__resize"
           role="separator"
           tabIndex={0}
-          aria-label="エディタの幅"
+          aria-label="プレビューの幅"
           aria-orientation="vertical"
           aria-valuemin={256}
           aria-valuemax={Math.max(
             256,
             (workspace.current?.clientWidth || 1132) - 268,
           )}
-          aria-valuenow={editorWidth}
+          aria-valuenow={previewWidth}
           onPointerDown={(event) =>
             event.currentTarget.setPointerCapture(event.pointerId)
           }
@@ -677,10 +703,10 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
             const rect = workspace.current?.getBoundingClientRect();
             if (rect)
-              setEditorWidth(
+              setPreviewWidth(
                 Math.max(
                   256,
-                  Math.min(rect.width - 268, event.clientX - rect.left),
+                  Math.min(rect.width - 268, rect.right - event.clientX),
                 ),
               );
           }}
@@ -690,12 +716,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           onKeyDown={(event) => {
             if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
             event.preventDefault();
-            setEditorWidth((width) =>
+            setPreviewWidth((width) =>
               Math.max(
                 256,
                 Math.min(
                   (workspace.current?.clientWidth || 1132) - 268,
-                  width + (event.key === "ArrowRight" ? 24 : -24),
+                  width + (event.key === "ArrowLeft" ? 24 : -24),
                 ),
               ),
             );
@@ -781,6 +807,59 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
           <DraftInbox session={session} textarea={textarea} />
         </div>
       )}
+      <dialog
+        className="draft-publication-dialog"
+        ref={publicationDialog}
+        aria-labelledby="draft-publication-title"
+        onCancel={(event) => {
+          if (publicationFlow === "running") event.preventDefault();
+        }}
+      >
+        <h2 id="draft-publication-title">
+          {publicationFlow === "success"
+            ? publicationIntent === "save"
+              ? "記事を保存しました"
+              : "記事を公開しました"
+            : publicationFlow === "error"
+              ? "処理を完了できませんでした"
+              : publicationIntent === "publish"
+                ? "記事を公開しています"
+                : "記事を保存しています"}
+        </h2>
+        <p role="status" aria-live="polite">
+          {publicationFlow === "running"
+            ? session?.publicationStatus ||
+              "本文と設定をサーバーへ保存しています。"
+            : publicationFlow === "success"
+              ? session?.publicationStatus ||
+                "公開ページへの反映が完了しました。"
+              : publicationError}
+        </p>
+        <div className="draft-publication-dialog__actions">
+          {publicationFlow === "success" && session && (
+            <>
+              <a href={`/${encodeURIComponent(draftRoute(session.metadata))}`}>
+                記事を見る
+              </a>
+              <a href="/authoring/articles">記事一覧に戻る</a>
+              <button
+                type="button"
+                onClick={() => publicationDialog.current?.close()}
+              >
+                編集を続ける
+              </button>
+            </>
+          )}
+          {publicationFlow === "error" && (
+            <button
+              type="button"
+              onClick={() => publicationDialog.current?.close()}
+            >
+              エディタに戻る
+            </button>
+          )}
+        </div>
+      </dialog>
     </section>
   );
 }

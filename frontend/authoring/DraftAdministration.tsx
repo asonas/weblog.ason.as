@@ -438,7 +438,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
             )}
             <a
               className="draft-admin-edit"
-              href={`/draft-editor?id=${encodeURIComponent(selected.id)}`}
+              href={`/draft-editor?id=${encodeURIComponent(selected.id)}${selected.state === "draft" ? "" : `&state=${selected.state}`}`}
             >
               編集・公開内容を確認
             </a>
