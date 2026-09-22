@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useEffect, useState } from "react";
+import { insertMarkdownBlock } from "./draftMarkdown";
 import type { DraftSession } from "./draftSession";
 import { videoAssetPath } from "./Video";
 
@@ -49,33 +50,6 @@ function httpUrl(value: unknown): string | null {
   } catch {
     return null;
   }
-}
-
-function insertMarkdownBlock(
-  body: string,
-  start: number,
-  end: number,
-  markdown: string,
-): { body: string; caret: number } {
-  const before = body.slice(0, start);
-  const after = body.slice(end);
-  const leading =
-    before && !before.endsWith("\n\n")
-      ? before.endsWith("\n")
-        ? "\n"
-        : "\n\n"
-      : "";
-  const trailing =
-    after && !after.startsWith("\n\n")
-      ? after.startsWith("\n")
-        ? "\n"
-        : "\n\n"
-      : "";
-  const inserted = `${leading}${markdown}${trailing}`;
-  return {
-    body: `${before}${inserted}${after}`,
-    caret: before.length + leading.length + markdown.length,
-  };
 }
 
 function itemMarkdown(item: InboxItem): string | null {

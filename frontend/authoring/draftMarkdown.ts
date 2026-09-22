@@ -10,6 +10,33 @@ export type TextareaEdit = {
   selectionEnd: number;
 };
 
+export function insertMarkdownBlock(
+  body: string,
+  start: number,
+  end: number,
+  markdown: string,
+): { body: string; caret: number } {
+  const before = body.slice(0, start);
+  const after = body.slice(end);
+  const leading =
+    before && !before.endsWith("\n\n")
+      ? before.endsWith("\n")
+        ? "\n"
+        : "\n\n"
+      : "";
+  const trailing =
+    after && !after.startsWith("\n\n")
+      ? after.startsWith("\n")
+        ? "\n"
+        : "\n\n"
+      : "";
+  const inserted = `${leading}${markdown}${trailing}`;
+  return {
+    body: `${before}${inserted}${after}`,
+    caret: before.length + leading.length + markdown.length,
+  };
+}
+
 export function suggestionVerticalPosition(
   caretTop: number,
   fieldHeight: number,
