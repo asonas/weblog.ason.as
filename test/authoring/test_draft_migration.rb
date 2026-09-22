@@ -116,36 +116,4 @@ class DraftMigrationTest < Minitest::Test
     assert_empty @store.published_collection.fetch("snapshots")
   end
 
-  def test_command_preserves_source_and_rehearses_only_in_its_own_destination
-    source_path = @root.join("legacy.sqlite3")
-    database = WeblogAuthoring::DevelopmentDatabase.new(source_path, content_dir: @root.join("content"))
-    database.setup!
-    page = database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", title: "移行前の記事", body: "保存する本文"))
-    before = Digest::SHA256.file(source_path).hexdigest
-    snapshot = @root.join("preserved.json")
-    command = ["ruby", "-rbundler/setup", "bin/draft-migration"]
-    output, error, status = Open3.capture3(*command, "export", "--database", source_path.to_s, "--snapshot", snapshot.to_s, "--site-url", "https://example.com")
-    assert status.success?, error
-    assert_equal 1, JSON.parse(output).fetch("articles")
-    assert_equal 0o600, snapshot.stat.mode & 0o777
-    preserved = snapshot.read
-    _output, _error, status = Open3.capture3(*command, "export", "--database", source_path.to_s, "--snapshot", snapshot.to_s, "--site-url", "https://example.com")
-    refute status.success?
-    assert_equal preserved, snapshot.read
-    output, error, status = Open3.capture3(*command, "check", "--snapshot", snapshot.to_s)
-    assert status.success?, error
-    assert_equal 1, JSON.parse(output).fetch("articles")
-    _output, _error, status = Open3.capture3(*command, "rehearse", "--database", source_path.to_s, "--snapshot", snapshot.to_s)
-    refute status.success?
-    assert_equal before, Digest::SHA256.file(source_path).hexdigest
-    destination = @root.join("rehearsal.sqlite3")
-    2.times do
-      output, error, status = Open3.capture3(*command, "rehearse", "--database", destination.to_s, "--snapshot", snapshot.to_s)
-      assert status.success?, error
-      assert_equal 1, JSON.parse(output).fetch("articles")
-    end
-    migrated = WeblogAuthoring::DraftStore.sqlite(destination).published_snapshot(page.id)
-    assert_equal "保存する本文", migrated.fetch("body")
-    assert_equal "https://example.com/%E7%A7%BB%E8%A1%8C%E5%89%8D%E3%81%AE%E8%A8%98%E4%BA%8B", migrated.fetch("atom_id")
-  end
 end

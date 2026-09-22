@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-export type SearchResult = {
+type SearchResult = {
   route: string;
   title: string;
   excerpt: string;

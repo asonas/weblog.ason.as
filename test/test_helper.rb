@@ -17,5 +17,3 @@ def require_system_chrome
 end
 
 $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
-
-require "weblog_migration"

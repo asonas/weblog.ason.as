@@ -51,7 +51,7 @@ function httpUrl(value: unknown): string | null {
   }
 }
 
-export function insertMarkdownBlock(
+function insertMarkdownBlock(
   body: string,
   start: number,
   end: number,

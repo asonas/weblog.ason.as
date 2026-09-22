@@ -192,7 +192,7 @@ Rubyの投稿機能は移行機能を含む `lib/weblog_migration/` とは別の
 - Create: `bin/authoring`
 - Create: `config.ru`
 - Modify: `README.md`
-- Keep: `lib/weblog_migration/` for Scrapbox移行・静的生成・アセット取得。
+- The completed Scrapbox migration tooling was retired after production migration.
 - Keep: `test/migration/` for移行処理とネットワーク境界の受入れテスト。
 
 - [ ] `bin/authoring`は既定で`127.0.0.1:8000`にbindし、`--host`でloopback以外を指定した場合は起動前に拒否する。設定されるcontent/index/siteはrepository rootから解決し、任意の外部パスで正本を上書きしない。

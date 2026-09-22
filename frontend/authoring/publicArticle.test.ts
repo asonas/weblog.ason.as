@@ -1,8 +1,6 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 
 test("public reading keeps existing text and links while media load or fail", async () => {
@@ -44,35 +42,6 @@ test("public reading keeps existing text and links while media load or fail", as
     globalThis.fetch = originalFetch;
     dom.window.close();
   }
-});
-
-test("site routing preserves article objects and selects the app shell only for app routes", () => {
-  const source = readFileSync(
-    new URL("../../infra/production/site_routes.js", import.meta.url),
-    "utf8",
-  );
-  const route = (uri: string): string =>
-    runInNewContext(`${source}\nhandler(event).uri`, {
-      event: { request: { uri } },
-    });
-  for (const uri of [
-    "/search",
-    "/editor/new",
-    "/editor/page-id",
-    "/authoring/webmentions",
-  ]) {
-    assert.equal(route(uri), "/index.html");
-  }
-  for (const uri of [
-    "/",
-    "/RubyKaigi%202026",
-    "/missing",
-    "/assets/photo.webp",
-    "/api/pages",
-  ]) {
-    assert.equal(route(uri), uri);
-  }
-  assert.equal(route("/RubyKaigi%202026/"), "/RubyKaigi%202026");
 });
 
 test("authenticated public reading restores the header edit action", async () => {

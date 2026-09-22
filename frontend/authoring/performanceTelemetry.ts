@@ -20,7 +20,7 @@ type TelemetrySpan = {
   attributes: Record<string, string | boolean>;
 };
 
-export type PerformanceTelemetryBatch = {
+type PerformanceTelemetryBatch = {
   schema_version: "1.0";
   resource: { attributes: Record<string, string | number | boolean> };
   metrics: Metric[];

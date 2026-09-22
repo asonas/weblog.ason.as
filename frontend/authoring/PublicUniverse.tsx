@@ -16,7 +16,7 @@ type Page = {
 };
 type Article = { id: string; route: string; wiki: string[]; urls: string[] };
 
-export function PublicUniverse({ article }: { article: Article }) {
+function PublicUniverse({ article }: { article: Article }) {
   const [pages, setPages] = useState<Page[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);

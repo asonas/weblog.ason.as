@@ -3,7 +3,8 @@
 This is the control plane for #172. Production API/worker factories and opt-in
 Terraform routing are connected, but all activation flags default to false.
 Nothing in this document authorizes deployment or changes to production data.
-Use the separately approved [production runbook](draft-cutover-runbook.md).
+The production migration is complete. This document remains for the active
+pause/resume control and forward-repair behavior.
 Passing tests is not evidence that production writers have stopped.
 
 ## Phase boundaries
@@ -76,9 +77,7 @@ The following evidence is required in addition to zero registered operations:
 - Back to `legacy`: `legacy_state_verified: true` and a nonblank `record`.
 
 These values are explicit operator attestations, **not automatic AWS checks**.
-Before supplying them, preserve old tabs as described in
-[Legacy editor cutover preparation](legacy-editor-cutover-preparation.md), confirm
-that every writer/runtime and generator is gated or retired, inspect actual
+Before supplying them, confirm that every writer/runtime and generator is gated or retired, inspect actual
 pending site publication and scheduled/queue invocation state, and keep the
 source snapshot plus its fingerprint. A previously deployed ungated Lambda or
 direct worker cannot be stopped by this wrapper. The retired-writer evidence must

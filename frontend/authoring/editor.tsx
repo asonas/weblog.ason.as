@@ -1164,7 +1164,7 @@ export function youtubeVideoId(rawUrl: string): string | null {
   }
 }
 
-export function blueskyPostIdentity(
+function blueskyPostIdentity(
   rawUrl: string,
 ): { did: string; rkey: string } | null {
   try {
