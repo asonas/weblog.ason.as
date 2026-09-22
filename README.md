@@ -101,6 +101,9 @@ coverageは言語別の`*:coverage`で実行します。
 production credentialを使う読み取り確認は`mise run check:production`で実行します。
 どちらも通常checkには含めません。
 
+Rubyタスクが認証情報なしで動作し、追跡対象ファイルを変更しないことは、`mise run ruby:test-tasks`で検証します。
+この検証は`ruby:test`と`ruby:coverage`をそれぞれ実行するため、通常checkには含めません。
+
 変更箇所に近いfocused checkは、次のtaskを使います。
 
 ```sh

@@ -246,6 +246,10 @@ run = "bundle exec rubocop"
 description = "Run the Ruby test suite"
 run = "bundle exec ruby -Itest -e 'Dir[\"test/authoring/test_*.rb\", \"test/migration/test_*.rb\", \"test/tooling/test_*.rb\"].sort.each { |file| require_relative file }'"
 
+[tasks."ruby:test-tasks"]
+description = "Verify Ruby task execution without credentials (runs the full suite twice)"
+run = "bundle exec ruby -Itest test/tasks/test_ruby_tasks.rb"
+
 [tasks."ruby:coverage"]
 description = "Generate Ruby coverage in coverage/ruby"
 env = { COVERAGE = "1" }
