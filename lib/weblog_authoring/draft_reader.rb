@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative "draft_publisher"
-require_relative "home_timeline"
 
 module WeblogAuthoring
   class DraftReader
@@ -36,20 +35,6 @@ module WeblogAuthoring
 
     def approved_webmentions_for_page(id)
       @database.approved_webmentions_for_page(id)
-    end
-
-    private
-
-    def select_window(pages, limit:, before:, after:)
-      ordered = pages.sort_by { |page| yield page }
-      cursor = before || after
-      if cursor
-        boundary = [cursor.fetch(:timestamp) { cursor.fetch(:key) }, cursor.fetch(:id)]
-        ordered = ordered.select { |page| (yield(page) <=> boundary) == (before ? -1 : 1) }
-      end
-      ordered.reverse! unless after
-      ordered = ordered.first(limit) if limit
-      after ? ordered.reverse : ordered
     end
   end
 end
