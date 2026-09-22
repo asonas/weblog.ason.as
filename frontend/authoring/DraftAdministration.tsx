@@ -311,7 +311,6 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
       >
         <header className="draft-admin-heading">
           <h1>記事の管理</h1>
-          <p>記事と日記の公開状態を確認・編集できます。</p>
         </header>
         <div className="draft-admin-tools">
           <label className="draft-admin-search-label">
@@ -368,10 +367,12 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
           </caption>
           <thead>
             <tr>
-              <th scope="col">記事タイトル・状態</th>
+              <th scope="col">記事タイトル</th>
               <th scope="col">
                 <span className="visually-hidden">操作</span>
               </th>
+              <th scope="col">ステータス</th>
+              <th scope="col">公開処理</th>
               <th scope="col">
                 Webmention
                 <span className="draft-admin-column-note">承認済み</span>
@@ -413,6 +414,19 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                             : row.metadata,
                         )}
                     </span>
+                  </th>
+                  <td className="draft-admin-menu-cell">
+                    <DraftArticleMenu
+                      title={title}
+                      editHref={editHref}
+                      busy={busy}
+                      onRetry={retryable ? () => void retry(row) : undefined}
+                    />
+                  </td>
+                  <td
+                    className="draft-admin-status-cell"
+                    data-label="ステータス"
+                  >
                     <div className="draft-admin-row-status">
                       <span
                         className="draft-admin-state"
@@ -439,17 +453,25 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                         </span>
                       )}
                     </div>
-                    {row.publication && (
-                      <details className="draft-admin-publication">
-                        <summary>
+                    {row.state_error && (
+                      <p className="draft-admin-row-error">{row.state_error}</p>
+                    )}
+                  </td>
+                  <td
+                    className="draft-admin-publication-cell"
+                    data-label="公開処理"
+                  >
+                    {row.publication ? (
+                      <div className="draft-admin-publication">
+                        <p>
                           {row.publication.status === "completed"
-                            ? "公開処理の詳細"
+                            ? "反映完了"
                             : row.publication.status === "superseded"
                               ? "公開処理は失効しています"
                               : attention
                                 ? "公開処理を確認してください"
                                 : "公開処理中"}
-                        </summary>
+                        </p>
                         {row.publication.status === "superseded" && (
                           <p>
                             この公開処理は失効しました。エディタで内容を再確認してください。
@@ -458,8 +480,18 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                         {row.publication.stages.map((stage) => (
                           <p key={stage.stage}>
                             {STAGES[stage.stage] || stage.stage}：
+                            {stage.status === "completed" && (
+                              <span
+                                className="draft-admin-stage-check"
+                                role="img"
+                                aria-label="反映済み"
+                                title="反映済み"
+                              >
+                                <AuthoringIcon name="check" />
+                              </span>
+                            )}
                             {stage.status === "completed"
-                              ? "反映済み"
+                              ? null
                               : stage.status === "retry_wait"
                                 ? "再試行待ち"
                                 : stage.status === "needs_attention"
@@ -470,21 +502,15 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                             {stage.error && ` — ${stage.error}`}
                           </p>
                         ))}
-                      </details>
+                      </div>
+                    ) : (
+                      "—"
                     )}
-                    {(row.state_error || row.publication?.error) && (
+                    {row.publication?.error && (
                       <p className="draft-admin-row-error">
-                        {row.state_error || row.publication?.error}
+                        {row.publication.error}
                       </p>
                     )}
-                  </th>
-                  <td className="draft-admin-menu-cell">
-                    <DraftArticleMenu
-                      title={title}
-                      editHref={editHref}
-                      busy={busy}
-                      onRetry={retryable ? () => void retry(row) : undefined}
-                    />
                   </td>
                   <td
                     className="draft-admin-mentions"

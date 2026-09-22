@@ -101,6 +101,9 @@ body:has(.draft-admin) .page-shell {
   padding: 2rem 1.5rem 4rem;
   min-inline-size: 0;
 }
+.draft-admin-heading {
+  margin-block-end: 1.75rem;
+}
 .draft-admin-heading h1 {
   margin: 0;
   font-size: 1.625rem;
@@ -196,12 +199,18 @@ body:has(.draft-admin) .page-shell {
   padding-inline: 0.25rem;
 }
 .draft-admin-table thead th:nth-child(3) {
-  width: 7.5rem;
+  width: 9rem;
+}
+.draft-admin-table thead th:nth-child(4) {
+  width: 12rem;
+}
+.draft-admin-table thead th:nth-child(5) {
+  width: 6.5rem;
   text-align: center;
 }
-.draft-admin-table thead th:nth-child(4),
-.draft-admin-table thead th:nth-child(5) {
-  width: 7.75rem;
+.draft-admin-table thead th:nth-child(6),
+.draft-admin-table thead th:nth-child(7) {
+  width: 10rem;
 }
 .draft-admin-table tbody tr {
   border-block-end: 1px solid var(--separator);
@@ -230,9 +239,9 @@ body:has(.draft-admin) .page-shell {
 }
 .draft-admin-row-status {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.375rem 0.75rem;
-  align-items: center;
+  align-items: flex-start;
   font-size: 0.75rem;
 }
 .draft-admin-state {
@@ -274,19 +283,22 @@ body:has(.draft-admin) .page-shell {
   text-underline-offset: 3px;
 }
 .draft-admin-publication {
-  margin-block-start: 0.625rem;
   font-size: 0.75rem;
   color: var(--muted-ink);
   font-weight: 400;
 }
-.draft-admin-publication summary {
-  cursor: pointer;
-  inline-size: fit-content;
-  padding-block: 0.25rem;
-}
 .draft-admin-publication p {
-  margin-block: 0.5rem;
+  margin-block: 0 0.5rem;
   overflow-wrap: anywhere;
+}
+.draft-admin-stage-check {
+  color: var(--authoring-status-public);
+}
+.draft-admin-stage-check svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  vertical-align: -0.2em;
+  margin-inline-end: 0.125rem;
 }
 .draft-admin-row-error {
   font-size: 0.8125rem;
@@ -308,8 +320,10 @@ body:has(.draft-admin) .page-shell {
 }
 .draft-admin-date time {
   font-style: normal;
-  display: grid;
-  gap: 0.125rem;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  gap: 0.5rem;
   font-family: var(--authoring-font-mono);
 }
 .draft-admin-table :is(.draft-admin-menu-cell, .draft-admin-open) {
@@ -455,13 +469,6 @@ body:has(.draft-admin) .page-shell {
   .draft-admin-ledger {
     padding-inline: 1rem;
   }
-  .draft-admin-table thead th:nth-child(3) {
-    width: 6.5rem;
-  }
-  .draft-admin-table thead th:nth-child(4),
-  .draft-admin-table thead th:nth-child(5) {
-    width: 6.75rem;
-  }
 }
 @media (max-width: 56rem) {
   .draft-admin,
@@ -526,6 +533,8 @@ body:has(.draft-admin) .page-shell {
     min-block-size: 2.75rem;
     padding-inline: 0.625rem;
   }
+}
+@media (max-width: 70rem) {
   .draft-admin-table,
   .draft-admin-table tbody {
     display: block;
@@ -559,7 +568,13 @@ body:has(.draft-admin) .page-shell {
     grid-column: 3;
     grid-row: 1;
   }
-  .draft-admin-table :is(.draft-admin-mentions, .draft-admin-date) {
+  .draft-admin-table
+    :is(
+      .draft-admin-mentions,
+      .draft-admin-date,
+      .draft-admin-status-cell,
+      .draft-admin-publication-cell
+    ) {
     grid-column: 1 / -1;
     display: flex;
     align-items: baseline;
@@ -567,16 +582,15 @@ body:has(.draft-admin) .page-shell {
     text-align: start;
     font-size: 0.75rem;
   }
+  .draft-admin-status-cell,
+  .draft-admin-publication-cell {
+    flex-wrap: wrap;
+  }
   .draft-admin-table [data-label]::before {
     content: attr(data-label);
     min-inline-size: 9.5rem;
     color: var(--muted-ink);
     font-family: var(--authoring-font-ui);
-  }
-  .draft-admin-date time {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
   }
   .draft-admin .draft-admin-icon {
     inline-size: 2.75rem;

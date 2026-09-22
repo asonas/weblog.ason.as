@@ -1,6 +1,7 @@
 // Regen Icons, MIT: ./regen-icons-LICENSE.txt
 // https://github.com/kazdenc/regen-icons/tree/main/svg/outline
 const paths = {
+  check: "M4 12L7.59 15.59A2 2 0 0 0 10.41 15.59L20 6",
   dots: "M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0ZM11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0ZM18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0Z",
   external:
     "M9 3L5 3A2 2 0 0 0 3 5L3 19A2 2 0 0 0 5 21L19 21A2 2 0 0 0 21 19L21 15M10 14L20.41 3.59M15 3L19 3A2 2 0 0 1 21 5L21 9",

@@ -153,7 +153,14 @@ try {
   await search.fill("管理画面");
   await detail.getByRole("button", { name: "管理画面の実データの操作", exact: true }).click();
   await page.getByRole("menuitem", { name: "公開処理を再試行" }).click();
-  await until(async () => (await detail.textContent()).includes("検索：反映済み"));
+  await until(async () => await detail.getByRole("img", { name: "反映済み" }).count() === 3);
+  assert.ok(!(await detail.textContent()).includes("反映済み"));
+  assert.equal(await detail.locator("details").count(), 0);
+  assert.ok(await detail.locator(".draft-admin-status-cell").isVisible());
+  const stageCheck = detail.locator(".draft-admin-stage-check").first();
+  assert.ok(await stageCheck.isVisible());
+  assert.equal(await stageCheck.evaluate(element => getComputedStyle(element).color), "rgb(52, 120, 92)");
+  await page.screenshot({ path: "/tmp/weblog-authoring-status-columns.png", fullPage: true });
   assert.ok((await detail.textContent()).includes("公開中"));
   await editRow();
   await page.getByRole("button", { name: "保存する", exact: true }).waitFor();
@@ -203,7 +210,7 @@ try {
     await route.fulfill({ response, json: data });
   });
   await page.getByRole("button", { name: "再読み込み", exact: true }).click();
-  await detail.locator("summary").click();
+  assert.equal(await detail.locator("details").count(), 0);
   await detail.getByText("この公開処理は失効しました。エディタで内容を再確認してください。").waitFor();
   assert.ok(!(await detail.textContent()).includes("処理中"));
   assert.equal(await detail.getByRole("menuitem", { name: "公開処理を再試行" }).count(), 0);
@@ -287,9 +294,13 @@ try {
     return (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
   });
   assert.ok(contrast >= 4.5);
-  for (const width of [390, 320]) {
+  for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    assert.ok(await exampleRow.locator("time").evaluateAll(elements => elements.every(element => {
+      const [date, time] = [...element.children].map(child => child.getBoundingClientRect());
+      return Math.abs(date.top - time.top) < 1 && element.getBoundingClientRect().right <= element.closest("td").getBoundingClientRect().right;
+    })));
     await rowActions.click();
     await editItem.waitFor();
     const bounds = await page.getByRole("menu", { name: `${examples[0].metadata.title}の操作` }).boundingBox();
