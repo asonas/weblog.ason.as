@@ -2021,10 +2021,6 @@ html[data-universe="on"] .linked-pages {
     padding: 0;
   }
 
-  .article-reading-header--covered::after {
-    background: rgb(0 0 0 / 0.5);
-  }
-
   .article-reading-header--covered h1 {
     inline-size: min(100%, 1280px);
     padding: 40px 40px 30px;
