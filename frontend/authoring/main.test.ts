@@ -78,9 +78,7 @@ registerHooks({
     return nextLoad(url, context);
   },
 });
-const { App, CoverJournalHome, HeaderSearch, editorViewMode } = await import(
-  "./main"
-);
+const { App, CoverJournalHome, HeaderSearch } = await import("./main");
 const { CardHome } = await import("./CardHome");
 const { CoverPhoto } = await import("./CoverPhoto");
 const { HomeCards } = await import("./HomeCards");
@@ -150,82 +148,6 @@ test("cover photos fall back to the original when a preview is unavailable", asy
   await act(async () => root.unmount());
 });
 
-const editorBootstrap = {
-  page_id: "page-id",
-  page_type: "named" as const,
-  date: "",
-  name: "article",
-  title: "article",
-  body: "body",
-  expected_updated_at: "2026-08-30T00:00:00+09:00",
-  save_message: "",
-  linked_pages: [],
-  linked_pages_has_more: false,
-};
-
-test("requires edit permission even on an explicit editor URL", () => {
-  assert.equal(
-    editorViewMode({
-      bootstrap: editorBootstrap,
-      canEdit: false,
-      pathname: "/editor/page-id",
-      search: "",
-    }),
-    "reading",
-  );
-  assert.equal(
-    editorViewMode({
-      bootstrap: editorBootstrap,
-      canEdit: true,
-      pathname: "/editor/page-id",
-      search: "",
-    }),
-    "editing",
-  );
-});
-
-test("opens only today's diary in editing mode by default", () => {
-  const now = new Date("2026-08-29T15:30:00Z");
-  const diary = {
-    ...editorBootstrap,
-    page_type: "date" as const,
-    date: "2026-08-30",
-    name: "",
-    title: "2026-08-30",
-  };
-
-  assert.equal(
-    editorViewMode({
-      bootstrap: diary,
-      canEdit: true,
-      pathname: "/2026-08-30",
-      search: "",
-      now,
-    }),
-    "editing",
-  );
-  assert.equal(
-    editorViewMode({
-      bootstrap: diary,
-      canEdit: true,
-      pathname: "/2026-08-30",
-      search: "?view=reading",
-      now,
-    }),
-    "reading",
-  );
-  assert.equal(
-    editorViewMode({
-      bootstrap: { ...diary, date: "2026-08-29" },
-      canEdit: true,
-      pathname: "/2026-08-29",
-      search: "",
-      now,
-    }),
-    "reading",
-  );
-});
-
 test("shows a home skeleton while initial home data is pending", async () => {
   const container = document.createElement("div");
   document.body.append(container);
@@ -268,25 +190,6 @@ test("shows a home skeleton while initial home data is pending", async () => {
     globalThis.fetch = originalFetch;
     container.remove();
   }
-});
-
-test("keeps today's title-routed diary in editing mode after reload", () => {
-  const now = new Date("2026-09-04T15:30:00Z");
-
-  assert.equal(
-    editorViewMode({
-      bootstrap: {
-        ...editorBootstrap,
-        name: "2026-09-05",
-        title: "2026-09-05",
-      },
-      canEdit: true,
-      pathname: "/2026-09-05",
-      search: "",
-      now,
-    }),
-    "editing",
-  );
 });
 
 test("keeps the shared search field in the header layout", async () => {

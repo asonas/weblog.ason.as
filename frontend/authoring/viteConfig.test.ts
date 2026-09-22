@@ -5,7 +5,7 @@ import test from "node:test";
 
 import { createServer } from "vite";
 
-test("serves editor routes as SPA pages", async () => {
+test("rejects removed editor routes", async () => {
   const server = await createServer({
     server: { host: "127.0.0.1", port: 0, strictPort: false },
   });
@@ -19,8 +19,7 @@ test("serves editor routes as SPA pages", async () => {
       headers: { Accept: "text/html" },
     });
 
-    assert.equal(response.status, 200);
-    assert.match(await response.text(), /id="authoring-root"/);
+    assert.equal(response.status, 404);
   } finally {
     await server.close();
   }

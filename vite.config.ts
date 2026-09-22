@@ -76,8 +76,8 @@ self.addEventListener("fetch", (event) => {
 
           const route = rawPathname.slice(1).replace(/\/$/, "");
           if (mode !== "production" && ["/authoring/articles", "/authoring/webmentions"].includes(rawPathname)) return next();
-          const isEditorRoute = /^\/editor\/[^/]+\/?$/.test(rawPathname);
-          if ((!isEditorRoute && route.includes("/")) || /[<>\\]/.test(pathname)) {
+          const appRoutes = ["", "search", "draft-editor"];
+          if (!appRoutes.includes(route) || /[<>\\]/.test(pathname)) {
             response.statusCode = 404;
             response.end("Not Found");
             return;

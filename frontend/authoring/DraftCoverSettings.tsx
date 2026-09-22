@@ -1,5 +1,5 @@
+import { autoCoverImageUrl } from "./articlePreviewEditor";
 import type { DraftSession } from "./draftSession";
-import { autoCoverImageUrl } from "./editor";
 
 export function DraftCoverSettings({ session }: { session: DraftSession }) {
   const { metadata } = session;

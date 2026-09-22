@@ -1,7 +1,11 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ARTICLE_PREVIEW_EXTENSIONS,
+  autoCoverImageUrl,
+  LineUpdateRail,
+} from "./articlePreviewEditor";
 import type { DraftMetadata } from "./draftSession";
-import { autoCoverImageUrl, EDITOR_EXTENSIONS, LineUpdateRail } from "./editor";
 import { markdownForEditor } from "./markdown";
 import { PublicArticlePresentation } from "./PublicArticlePresentation";
 
@@ -60,7 +64,7 @@ export function DraftPreview({
     [body, metadata],
   );
   const editor = useEditor({
-    extensions: EDITOR_EXTENSIONS,
+    extensions: ARTICLE_PREVIEW_EXTENSIONS,
     content: markdownForEditor(body),
     contentType: "markdown",
     editable: false,

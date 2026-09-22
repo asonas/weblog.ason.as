@@ -7,10 +7,8 @@ import { DraftAdministration } from "./DraftAdministration";
 import { DraftEditor } from "./DraftEditor";
 import { DesignSystemPage } from "./designSystem";
 import { resolveDraftRoute } from "./draftRoute";
-import { AuthoringEditor, type EditorBootstrap } from "./editor";
 import { HomeCardsSkeleton } from "./HomeCards";
 import { HomeTags } from "./HomeTags";
-import { startAuthoringPerformanceTelemetry } from "./performanceTelemetry";
 import { SearchPage, SiteSearch } from "./search";
 import { WebmentionModerationPage } from "./webmentions";
 import "./homeLoading.css";
@@ -47,7 +45,7 @@ async function setupAuthentication(): Promise<AuthState> {
     .querySelectorAll<HTMLElement>("#new-page-action, #daily-page-action")
     .forEach((action) => {
       action.hidden = !auth.can_edit;
-      if (auth.draft_authoring && action instanceof HTMLAnchorElement)
+      if (action instanceof HTMLAnchorElement)
         action.href =
           action.id === "daily-page-action"
             ? "/authoring/articles?daily=1"
@@ -94,73 +92,7 @@ export function HeaderSearch() {
   return navigation ? createPortal(<SiteSearch />, navigation) : null;
 }
 
-type AppBootstrap = (EditorBootstrap & { mode: "editor" }) | HomeBootstrap;
-
-type EditorViewMode = "editing" | "reading";
-
-declare const __BUILD_SHA__: string;
 declare const __DEPLOYMENT_ENVIRONMENT__: string;
-
-function AuthoringTelemetry({ auth, body }: { auth: AuthState; body: string }) {
-  useEffect(() => {
-    if (!auth.can_edit || !auth.csrf_token) return;
-    if (
-      __DEPLOYMENT_ENVIRONMENT__ !== "production" &&
-      new URLSearchParams(window.location.search).get("telemetry") === "off"
-    )
-      return;
-    return startAuthoringPerformanceTelemetry({
-      body,
-      csrfToken: auth.csrf_token,
-      environment: __DEPLOYMENT_ENVIRONMENT__,
-      serviceVersion: __BUILD_SHA__,
-    });
-  }, [auth.can_edit, auth.csrf_token, body]);
-  return null;
-}
-
-function tokyoDate(now: Date): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value || "";
-  return `${value("year")}-${value("month")}-${value("day")}`;
-}
-
-export function editorViewMode({
-  bootstrap,
-  canEdit,
-  pathname,
-  search,
-  now = new Date(),
-}: {
-  bootstrap: EditorBootstrap;
-  canEdit: boolean;
-  pathname: string;
-  search: string;
-  now?: Date;
-}): EditorViewMode {
-  if (!canEdit) return "reading";
-  if (!bootstrap.page_id) return "editing";
-  if (pathname === "/editor/new" || pathname.startsWith("/editor/"))
-    return "editing";
-  if (new URLSearchParams(search).get("view") === "reading") return "reading";
-  const today = tokyoDate(now);
-  if (
-    (bootstrap.page_type === "date" && bootstrap.date === today) ||
-    (bootstrap.page_type === "named" && bootstrap.name === today)
-  )
-    return "editing";
-  return "reading";
-}
-
-function pageRoute(bootstrap: EditorBootstrap): string {
-  return bootstrap.name || bootstrap.date || bootstrap.title;
-}
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -199,33 +131,7 @@ async function fetchBootstrap<T>(url: string): Promise<T> {
 }
 
 function isHomeRoute(): boolean {
-  return (
-    window.location.pathname === "/" &&
-    !new URLSearchParams(window.location.search).has("new")
-  );
-}
-
-function routeBootstrapUrl(): string {
-  const path = window.location.pathname;
-  if (path === "/") {
-    const newPage = new URLSearchParams(window.location.search).get("new");
-    if (newPage === "daily") return "/api/editor/new?template=daily";
-    if (newPage === "1") return "/api/editor/new?type=named";
-    return "/api/pages";
-  }
-  if (path === "/editor/new") return `/api/editor/new${window.location.search}`;
-
-  const prefix = "/editor/";
-  if (path.startsWith(prefix)) {
-    const pageId = path.slice(prefix.length).replace(/\/$/, "");
-    if (pageId && !pageId.includes("/"))
-      return `/api/pages/${encodeURIComponent(pageId)}`;
-  }
-
-  const route = path.slice(1).replace(/\/$/, "");
-  if (route && !route.includes("/")) return `/api/routes/${route}`;
-
-  throw new Error("対応していないページです");
+  return window.location.pathname === "/";
 }
 
 export function HomeLoading() {
@@ -259,10 +165,10 @@ export function App({
   initialBootstrap,
   auth,
 }: {
-  initialBootstrap?: AppBootstrap;
+  initialBootstrap?: HomeBootstrap;
   auth: AuthState;
 }) {
-  const [bootstrap, setBootstrap] = useState<AppBootstrap | null>(
+  const [bootstrap, setBootstrap] = useState<HomeBootstrap | null>(
     initialBootstrap || null,
   );
   const [error, setError] = useState<string | null>(null);
@@ -273,7 +179,7 @@ export function App({
     void requestVersion;
 
     let active = true;
-    void fetchBootstrap<AppBootstrap>(routeBootstrapUrl())
+    void fetchBootstrap<HomeBootstrap>("/api/pages")
       .then((nextBootstrap) => {
         if (active) setBootstrap(nextBootstrap);
       })
@@ -317,44 +223,14 @@ export function App({
     );
   }
 
-  if (bootstrap.mode === "home")
-    return <Home bootstrap={bootstrap} auth={auth} />;
-
-  const viewMode = editorViewMode({
-    bootstrap,
-    canEdit: auth.can_edit && !auth.draft_authoring,
-    pathname: window.location.pathname,
-    search: window.location.search,
-  });
-  const route = pageRoute(bootstrap);
-  const isTodaysDiary =
-    bootstrap.page_type === "date" && bootstrap.date === tokyoDate(new Date());
-  const readingHref = `/${encodeURIComponent(route)}${isTodaysDiary ? "?view=reading" : ""}`;
-  const editingHref = `/draft-editor?id=${encodeURIComponent(bootstrap.page_id)}`;
-
-  return (
-    <>
-      <HeaderSearch />
-      {viewMode === "editing" && (
-        <AuthoringTelemetry auth={auth} body={bootstrap.body} />
-      )}
-      <AuthoringEditor
-        key={viewMode}
-        bootstrap={bootstrap}
-        canEdit={viewMode === "editing"}
-        canSwitchToEdit={false}
-        editingHref={editingHref}
-        readingHref={readingHref}
-      />
-    </>
-  );
+  return <Home bootstrap={bootstrap} auth={auth} />;
 }
 
 function RootApp({
   initialBootstrap,
   initialAuth,
 }: {
-  initialBootstrap?: AppBootstrap;
+  initialBootstrap?: HomeBootstrap;
   initialAuth: AuthState;
 }) {
   const [auth, setAuth] = useState(initialAuth);
@@ -634,7 +510,7 @@ function start() {
       return;
     }
     const initialBootstrap = data?.textContent
-      ? (JSON.parse(data.textContent) as AppBootstrap)
+      ? (JSON.parse(data.textContent) as HomeBootstrap)
       : undefined;
     createRoot(root).render(
       <RootApp
