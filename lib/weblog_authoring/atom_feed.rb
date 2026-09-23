@@ -42,7 +42,7 @@ module WeblogAuthoring
     def entries_xml(pages, renderer, ids)
       pages.map do |page|
         url = page_url(page)
-        content = absolute_internal_urls(renderer.render(page.body, mode: "public").html)
+        content = absolute_internal_urls(renderer.render(page.body, mode: "public", feed: true).html)
         <<~XML.chomp
             <entry>
               <id>#{xml(ids.fetch(page.id, url))}</id>

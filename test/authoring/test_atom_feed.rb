@@ -44,6 +44,17 @@ class AtomFeedTest < Minitest::Test
                     '&lt;img src=&quot;https://weblog.ason.as/assets/uploads/2026/09/example.webp&quot; alt=&quot;photo&quot; /&gt;'
   end
 
+  def test_renders_one_linked_thumbnail_for_youtube_in_feed
+    article = page(name: "動画の記事", body: "https://www.youtube.com/watch?v=LYwE44GmAsE")
+
+    feed = WeblogAuthoring::AtomFeed.new(site_url: "https://weblog.ason.as").render([article])
+
+    assert_includes feed, 'href=&quot;https://www.youtube.com/watch?v=LYwE44GmAsE&quot;'
+    assert_includes feed, 'src=&quot;https://i.ytimg.com/vi/LYwE44GmAsE/hqdefault.jpg&quot;'
+    refute_includes feed, '&lt;iframe'
+    assert_equal 1, feed.scan('https://i.ytimg.com/vi/LYwE44GmAsE/').length
+  end
+
   def test_orders_entries_by_update_time_without_changing_publication_time
     newly_published = page(
       name: "新しい記事",

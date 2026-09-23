@@ -37,7 +37,7 @@ module WeblogAuthoring
       end
     end
 
-    def render(body, mode:, progressive: false, image_dimensions: nil)
+    def render(body, mode:, progressive: false, image_dimensions: nil, feed: false)
       validate_mode!(mode)
 
       source = body.to_s
@@ -51,7 +51,7 @@ module WeblogAuthoring
         smart_quotes: %w[apos apos quot quot]
       )
 
-      html, converter_warnings = SafeHtmlConverter.with_context(mode:, wiki_targets:, progressive:, image_dimensions:, image_count: 0) do
+      html, converter_warnings = SafeHtmlConverter.with_context(mode:, wiki_targets:, progressive:, image_dimensions:, image_count: 0, feed:) do
         SafeHtmlConverter.convert(document.root, document.options)
       end
 
@@ -410,10 +410,15 @@ module WeblogAuthoring
 
       def youtube_player_html(video_id, url, indent)
         spaces = " " * indent
+        escaped_url = CGI.escapeHTML(url)
+        if self.class.context[:feed]
+          thumbnail = "https://i.ytimg.com/vi/#{video_id}/hqdefault.jpg"
+          return %(#{spaces}<a href="#{escaped_url}"><img src="#{thumbnail}" alt="YouTubeで動画を見る" loading="lazy"></a>\n)
+        end
+
         src = "https://www.youtube.com/embed/#{video_id}?enablejsapi=1"
         thumbnail = "https://i.ytimg.com/vi/#{video_id}/maxresdefault.jpg"
         fallback_thumbnail = "https://i.ytimg.com/vi/#{video_id}/hqdefault.jpg"
-        escaped_url = CGI.escapeHTML(url)
         %(#{spaces}<div class="youtube-player"><iframe src="#{src}" data-youtube-player-frame title="YouTube動画" loading="lazy" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe><a class="youtube-player__fallback" href="#{escaped_url}" target="_blank" rel="noreferrer" aria-label="YouTubeで動画を見る"><img src="#{thumbnail}" data-youtube-thumbnail-fallback="#{fallback_thumbnail}" alt="" loading="lazy"><span class="youtube-player__brand" aria-hidden="true">YouTube</span><span class="youtube-player__details"><strong>YouTubeで見る</strong><span class="youtube-player__url">#{escaped_url}</span></span></a></div>\n)
       end
 
