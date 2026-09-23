@@ -2,10 +2,65 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   markdownBlockIndexAt,
+  markdownKeyEdit,
   suggestionVerticalPosition,
   textareaWikiLinkQuery,
   wrapTextareaSelectionInWikiLink,
 } from "./draftMarkdown";
+
+test("indents and unindents Markdown lines with Tab", () => {
+  assert.deepEqual(markdownKeyEdit("- one\n- two", 2, 2, "Tab"), {
+    value: "    - one\n- two",
+    selectionStart: 6,
+    selectionEnd: 6,
+  });
+  assert.deepEqual(markdownKeyEdit("    - one\n  - two", 4, 18, "Tab", true), {
+    value: "- one\n- two",
+    selectionStart: 0,
+    selectionEnd: 11,
+  });
+  assert.deepEqual(markdownKeyEdit("- one\n- two", 0, 6, "Tab"), {
+    value: "    - one\n- two",
+    selectionStart: 0,
+    selectionEnd: 9,
+  });
+});
+
+test("continues and ends Markdown lists with Enter", () => {
+  assert.deepEqual(markdownKeyEdit("2. item", 7, 7, "Enter"), {
+    value: "2. item\n3. ",
+    selectionStart: 11,
+    selectionEnd: 11,
+  });
+  assert.deepEqual(markdownKeyEdit("- [x] done", 10, 10, "Enter"), {
+    value: "- [x] done\n- [ ] ",
+    selectionStart: 17,
+    selectionEnd: 17,
+  });
+  assert.deepEqual(markdownKeyEdit("- ", 2, 2, "Enter"), {
+    value: "",
+    selectionStart: 0,
+    selectionEnd: 0,
+  });
+});
+
+test("moves between table cells and extends a table with Enter", () => {
+  assert.deepEqual(markdownKeyEdit("| one | two |", 2, 2, "Tab"), {
+    value: "| one | two |",
+    selectionStart: 8,
+    selectionEnd: 8,
+  });
+  assert.deepEqual(markdownKeyEdit("| one | two |", 8, 8, "Tab", true), {
+    value: "| one | two |",
+    selectionStart: 2,
+    selectionEnd: 2,
+  });
+  assert.deepEqual(markdownKeyEdit("| a | b |", 9, 9, "Enter"), {
+    value: "| a | b |\n| --- | --- |\n|  |  |",
+    selectionStart: 27,
+    selectionEnd: 27,
+  });
+});
 
 test("finds an unfinished Wiki link at the textarea cursor", () => {
   const unfinished = "before\n[[webl";

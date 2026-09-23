@@ -18,6 +18,7 @@ import { takeDraftInitialBody } from "./draftInitialBody";
 import {
   insertMarkdownBlock,
   markdownBlockIndexAt,
+  markdownKeyEdit,
   suggestionVerticalPosition,
   textareaWikiLinkQuery,
   type WikiLinkQuery,
@@ -216,6 +217,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [previewBlockIndex, setPreviewBlockIndex] = useState(0);
   const [, refresh] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const composing = useRef(false);
   const [{ id, isNew, initialArticleState }] = useState(() => {
     const url = new URL(window.location.href);
     const isNew =
@@ -348,10 +350,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     };
     const startComposition = () => {
       isComposing = true;
+      composing.current = true;
       session.setComposing(true);
     };
     const endComposition = () => {
       isComposing = false;
+      composing.current = false;
       input();
       session.setComposing(false);
     };
@@ -395,6 +399,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     field.addEventListener("compositionend", endComposition);
     window.addEventListener("beforeunload", beforeUnload);
     return () => {
+      composing.current = false;
       session.doc.off("beforeTransaction", remember);
       session.removeEventListener("change", show);
       field.removeEventListener("input", input);
@@ -454,7 +459,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   function handleWikiLinkSuggestionKeyDown(
     event: ReactKeyboardEvent<HTMLTextAreaElement>,
   ) {
-    if (event.nativeEvent.isComposing) return;
+    if (
+      composing.current ||
+      event.nativeEvent.isComposing ||
+      event.nativeEvent.keyCode === 229
+    )
+      return;
     const field = textarea.current;
     if (
       field &&
@@ -478,21 +488,46 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       );
       return;
     }
-    if (wikiLinkSuggestions.length === 0) return;
-    if (event.key === "Escape") {
+    if (wikiLinkSuggestions.length > 0 && event.key === "Escape") {
       event.preventDefault();
       setWikiLinkQuery(null);
       setWikiLinkSuggestionStyle(undefined);
-    } else if (event.key === "Enter") {
+    } else if (wikiLinkSuggestions.length > 0 && event.key === "Enter") {
       event.preventDefault();
       acceptWikiLinkSuggestion(wikiLinkSuggestions[activeWikiLinkSuggestion]);
-    } else if (event.key === "Tab") {
+    } else if (
+      wikiLinkSuggestions.length > 0 &&
+      ["Tab", "ArrowDown", "ArrowUp"].includes(event.key)
+    ) {
       event.preventDefault();
       setActiveWikiLinkSuggestion(
         (current) =>
-          (current + (event.shiftKey ? -1 : 1) + wikiLinkSuggestions.length) %
+          (current +
+            (event.shiftKey || event.key === "ArrowUp" ? -1 : 1) +
+            wikiLinkSuggestions.length) %
           wikiLinkSuggestions.length,
       );
+    } else if (
+      field &&
+      session &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      (event.key === "Tab" || event.key === "Enter")
+    ) {
+      const edit = markdownKeyEdit(
+        field.value,
+        field.selectionStart,
+        field.selectionEnd,
+        event.key,
+        event.shiftKey,
+      );
+      if (!edit) return;
+      event.preventDefault();
+      field.value = edit.value;
+      field.setSelectionRange(edit.selectionStart, edit.selectionEnd);
+      if (edit.value !== session.body.toString()) session.setBody(edit.value);
+      updateCursorContext();
     }
   }
 
