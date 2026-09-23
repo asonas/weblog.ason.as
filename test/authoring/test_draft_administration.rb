@@ -71,9 +71,14 @@ class DraftAdministrationTest < Minitest::Test
     end
 
     rows = @admin.list.fetch("articles")
+    cached = @admin.list.fetch("articles")
 
     assert_equal [ids.reverse], calls
     assert_equal %w[public public], (rows.map { |row| row.fetch("state") })
+    assert_equal %w[public public], (cached.map { |row| row.fetch("state") })
+    change_cover(ids.first, "none", 0)
+    assert_equal "unpublished_changes", @admin.list.fetch("articles").find { |row| row.fetch("id") == ids.first }.fetch("state")
+    assert_equal [ids.reverse, [ids.first]], calls
   end
 
   def test_listing_remains_available_when_reconstruction_is_throttled

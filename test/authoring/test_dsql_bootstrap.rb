@@ -65,6 +65,7 @@ class DsqlBootstrapTest < Minitest::Test
     assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_sync_run_sources") })
     %w[
       draft_articles
+      draft_working_hashes
       draft_updates
       draft_chunks
       draft_uploads

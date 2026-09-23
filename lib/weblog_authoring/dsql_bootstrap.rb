@@ -256,6 +256,7 @@ module WeblogAuthoring
         )
       SQL
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_published_versions (id TEXT PRIMARY KEY, article_id TEXT NOT NULL, content_hash TEXT NOT NULL, body TEXT NOT NULL, metadata TEXT NOT NULL, route TEXT NOT NULL, created_at TEXT NOT NULL, article_created_at TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_working_hashes (article_id TEXT PRIMARY KEY, head INTEGER NOT NULL, content_hash TEXT NOT NULL)")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_publication_jobs (id TEXT PRIMARY KEY, article_id TEXT NOT NULL, status TEXT NOT NULL, html_key TEXT, error TEXT)")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_webmention_requests (article_id TEXT NOT NULL, version_id TEXT NOT NULL, targets TEXT, status TEXT NOT NULL, PRIMARY KEY (article_id, version_id))")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_publication_heads (article_id TEXT PRIMARY KEY, latest_id TEXT NOT NULL, active_id TEXT, published_at TEXT, updated_at TEXT)")

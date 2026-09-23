@@ -86,6 +86,7 @@ module WeblogAuthoring
         setup_dispatches(db)
         setup_webmentions(db)
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_articles (id TEXT PRIMARY KEY, generation INTEGER NOT NULL, head INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
+        db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_working_hashes (article_id TEXT PRIMARY KEY, head INTEGER NOT NULL, content_hash TEXT NOT NULL)")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_updates (article_id TEXT NOT NULL, update_id TEXT NOT NULL, sequence INTEGER NOT NULL, digest TEXT NOT NULL, fingerprint TEXT NOT NULL, receipt TEXT NOT NULL, chunks INTEGER NOT NULL, PRIMARY KEY (article_id, update_id))")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_chunks (article_id TEXT NOT NULL, update_id TEXT NOT NULL, position INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (article_id, update_id, position))")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_uploads (article_id TEXT NOT NULL, update_id TEXT NOT NULL, digest TEXT NOT NULL, fingerprint TEXT NOT NULL, body_bytes INTEGER NOT NULL, metadata TEXT NOT NULL, chunks INTEGER NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (article_id, update_id))")
@@ -118,7 +119,7 @@ module WeblogAuthoring
 
     def administration_page(cursor = nil)
       @connect.call do |db|
-        sql = "SELECT a.id, a.head, a.metadata, a.created_at, a.updated_at, h.published_at, h.latest_id, v.route AS public_route, v.content_hash AS public_hash FROM #{db.prefix}draft_articles a LEFT JOIN #{db.prefix}draft_publication_heads h ON h.article_id = a.id LEFT JOIN #{db.prefix}draft_published_versions v ON v.id = h.active_id"
+        sql = "SELECT a.id, a.head, a.metadata, a.created_at, a.updated_at, h.published_at, h.latest_id, v.route AS public_route, v.content_hash AS public_hash, w.head AS working_hash_head, w.content_hash AS working_hash FROM #{db.prefix}draft_articles a LEFT JOIN #{db.prefix}draft_publication_heads h ON h.article_id = a.id LEFT JOIN #{db.prefix}draft_published_versions v ON v.id = h.active_id LEFT JOIN #{db.prefix}draft_working_hashes w ON w.article_id = a.id"
         params = []
         if cursor
           sql += " WHERE a.updated_at < $1 OR (a.updated_at = $1 AND a.id > $2)"
@@ -127,6 +128,17 @@ module WeblogAuthoring
         sql += " ORDER BY a.updated_at DESC, a.id LIMIT 26"
         db.query(sql, params).map do |row|
           row.merge("head" => row.fetch("head").to_i, "metadata" => JSON.parse(row.fetch("metadata")))
+        end
+      end
+    end
+
+    def cache_working_content_hashes(hashes)
+      return if hashes.empty?
+      @connect.call do |db|
+        db.transaction do
+          hashes.each do |id, result|
+            db.query("INSERT INTO #{db.prefix}draft_working_hashes (article_id, head, content_hash) VALUES ($1, $2, $3) ON CONFLICT (article_id) DO UPDATE SET head = $2, content_hash = $3", [id, result.fetch("through"), result.fetch("content_hash")])
+          end
         end
       end
     end

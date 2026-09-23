@@ -34,8 +34,14 @@ module WeblogAuthoring
           metadata = row.fetch("metadata").transform_values { |field| field.fetch("value") }
           [row, metadata] if [metadata.fetch("title"), DraftStore.working_route(metadata), row["public_route"]].compact.any? { |value| value.downcase.include?(needle) }
         end
-        published_ids = candidates.filter_map { |row, _metadata| row.fetch("id") if row["public_hash"] }
-        working = working_content_hashes(published_ids)
+        working = candidates.filter_map do |row, _metadata|
+          next unless row["public_hash"] && row["working_hash_head"]&.to_i == row.fetch("head")
+          [row.fetch("id"), { "through" => row.fetch("head"), "content_hash" => row.fetch("working_hash") }]
+        end.to_h
+        missing = candidates.filter_map { |row, _metadata| row.fetch("id") if row["public_hash"] && !working.key?(row.fetch("id")) }
+        calculated = missing.empty? ? {} : working_content_hashes(missing)
+        @store.cache_working_content_hashes(calculated.select { |id, result| result.is_a?(Hash) && candidates.any? { |row, _| row.fetch("id") == id && row.fetch("head") == result["through"] } })
+        working.merge!(calculated)
         candidates.each do |row, metadata|
           articles << article_row(row, metadata, working[row.fetch("id")])
           break if articles.length == 25

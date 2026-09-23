@@ -2,6 +2,7 @@
 
 require_relative "../test_helper"
 require "open3"
+require "aws-sdk-lambda"
 require "weblog_authoring/draft_store"
 require "weblog_authoring/draft_publication"
 require "weblog_authoring/development_database"
@@ -52,6 +53,18 @@ class DraftPublicationTest < Minitest::Test
     assert_equal "unpublished_changes", @publication.prepare(ID).fetch("article_state")
     assert_equal completed, @publication.complete(ID, accepted.fetch("id")) { flunk "Already placed" }
     assert_equal accepted.fetch("id"), @publication.accept(ID, request).fetch("id")
+  end
+
+  def test_remote_listing_does_not_read_updates_already_loaded_by_worker
+    expected = @publication.working_content_hash(ID)
+    client = Aws::Lambda::Client.new(stub_responses: true)
+    client.stub_responses(:invoke, payload: JSON.generate([{ "article_id" => ID, "protocol" => 1, "generation" => 1,
+                                                               "through" => expected.fetch("through"), "markdown" => "残す", }]))
+    @store.define_singleton_method(:read) { |*_args| flunk "Listing reread draft updates" }
+
+    remote = WeblogAuthoring::DraftPublication.remote(store: @store, lambda_client: client, function_name: "draft-worker")
+
+    assert_equal({ ID => expected }, remote.working_content_hashes([ID]))
   end
 
   def test_changed_head_or_confirmation_is_rejected_and_identical_content_is_a_noop

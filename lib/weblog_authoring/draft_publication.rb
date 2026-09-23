@@ -70,7 +70,9 @@ module WeblogAuthoring
 
     def working_content_hashes(ids)
       return ids.to_h { |id| [id, working_content_hash(id)] } unless @reconstruct_many
-      jobs = ids.map { |id| reconstruction_job(id) }
+      # The remote worker loads the history directly from DSQL. Only the
+      # metadata and head are needed here to verify its response.
+      jobs = ids.map { |id| @store.checkpoint_job(id) }
       results = @reconstruct_many.call(jobs)
       raise DraftStore::Error.new("公開版の復元に失敗しました。", 503) unless results.is_a?(Array) && results.length == jobs.length
       jobs.zip(results).to_h { |job, result| [job.fetch("article_id"), verified_result(job, result).slice("content_hash", "through")] }
