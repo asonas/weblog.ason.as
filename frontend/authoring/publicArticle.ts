@@ -91,12 +91,12 @@ export async function enhancePublicArticleEditing(
     const edit = document.createElement("a");
     edit.className =
       "header-action header-action--view-mode public-authoring-action";
-    edit.href = "/authoring/articles";
-    edit.setAttribute("aria-label", "記事管理");
-    edit.title = "記事管理";
-    // Regen Icons file-text, MIT: ./regen-icons-LICENSE.txt
+    edit.href = editingHref;
+    edit.setAttribute("aria-label", "この記事を編集");
+    edit.title = "この記事を編集";
+    // Regen Icons edit, MIT: ./regen-icons-LICENSE.txt
     edit.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.38 3L6.5 3A1.5 1.5 0 0 0 5 4.5L5 19.5A1.5 1.5 0 0 0 6.5 21L17.5 21A1.5 1.5 0 0 0 19 19.5L19 9.62A1.5 1.5 0 0 0 18.56 8.56L13.44 3.44A1.5 1.5 0 0 0 12.38 3ZM13 4L13 8A1 1 0 0 0 14 9L18 9M9 13L15 13M9 17L15 17"/></svg>';
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18.4L4 16.83A2 2 0 0 1 4.59 15.41L14.59 5.41A2 2 0 0 1 17.41 5.41L18.59 6.59A2 2 0 0 1 18.59 9.41L8.59 19.41A2 2 0 0 1 7.17 20L5.6 20A1.6 1.6 0 0 1 4 18.4ZM13 7L17 11"/></svg>';
     actions.append(edit);
   } catch {
     return;

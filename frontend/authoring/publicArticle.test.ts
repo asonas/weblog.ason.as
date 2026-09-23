@@ -70,9 +70,9 @@ test("authenticated public reading restores the header edit action", async () =>
     const edit = document.querySelector<HTMLAnchorElement>(
       ".header-action--view-mode",
     );
-    assert.equal(edit?.getAttribute("aria-label"), "記事管理");
+    assert.equal(edit?.getAttribute("aria-label"), "この記事を編集");
     assert.ok(edit?.querySelector('svg[aria-hidden="true"]'));
-    assert.equal(edit?.getAttribute("href"), "/authoring/articles");
+    assert.equal(edit?.getAttribute("href"), "/draft-editor?id=page-id");
   } finally {
     dom.window.close();
   }
