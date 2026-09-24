@@ -1149,6 +1149,71 @@ class LambdaApiTest < Minitest::Test
     refute_empty auth.fetch("csrf_token")
   end
 
+  def test_session_renews_on_use_but_stops_at_absolute_expiry
+    now = Time.utc(2026, 9, 24)
+    clock = -> { now }
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64, clock:)
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database, session_codec: codec, allowed_github_user_id: 630_181, clock:
+    )
+    token = codec.issue(
+      kind: "session",
+      attributes: { "github_user_id" => 630_181, "login" => "asonas", "csrf_token" => "csrf", "login_at" => now.iso8601 },
+      ttl: WeblogAuthoring::LambdaApi::SESSION_TTL
+    )
+    cookie = ["weblog_authoring_session=#{token}"]
+
+    initial = api.call(event("GET", "/api/auth/session", cookies: cookie))
+    assert_nil initial[:cookies]
+
+    now += 7 * 24 * 60 * 60
+    idle_expired = api.call(event("GET", "/api/auth/session", cookies: cookie))
+    assert_equal false, JSON.parse(idle_expired.fetch(:body)).fetch("authenticated")
+    assert_nil idle_expired[:cookies]
+
+    now -= 24 * 60 * 60
+    renewed = api.call(event("GET", "/api/auth/session", cookies: cookie))
+    renewed_cookie = renewed.fetch(:cookies).fetch(0)
+    assert_includes renewed_cookie, "Max-Age=#{WeblogAuthoring::LambdaApi::SESSION_TTL}"
+    assert_equal true, JSON.parse(renewed.fetch(:body)).fetch("authenticated")
+
+    cookie = [renewed_cookie.split(";", 2).first]
+    [12, 18, 24, 29].each do |day|
+      now = Time.utc(2026, 9, 24) + day * 24 * 60 * 60
+      response = api.call(event("GET", "/api/auth/session", cookies: cookie))
+      assert_equal true, JSON.parse(response.fetch(:body)).fetch("authenticated")
+      assert_includes response.fetch(:cookies).fetch(0), "Max-Age=86400" if day == 29
+      cookie = [response.fetch(:cookies).fetch(0).split(";", 2).first]
+    end
+    now = Time.utc(2026, 9, 24) + 30 * 24 * 60 * 60
+    expired = api.call(event("GET", "/api/auth/session", cookies: cookie))
+    assert_equal false, JSON.parse(expired.fetch(:body)).fetch("authenticated")
+  end
+
+  def test_github_oauth_denial_links_back_to_home
+    oauth = Class.new(FakeOAuth) do
+      def authenticate(**request)
+        super.merge("id" => 123, "login" => "other")
+      end
+    end.new
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    api = WeblogAuthoring::LambdaApi.new(
+      database: @database, oauth:, session_codec: codec,
+      redirect_uri: "https://weblog.ason.as/api/auth/github/callback",
+      frontend_url: "https://weblog.ason.as", allowed_github_user_id: 630_181
+    )
+    login = api.call(event("GET", "/api/auth/github"))
+    oauth_cookie = login.fetch(:cookies).fetch(0).split(";", 2).first
+    state = codec.read(oauth_cookie.split("=", 2).last, kind: "oauth").fetch("state")
+
+    response = api.call(event("GET", "/api/auth/github/callback", query: { "code" => "temporary", "state" => state }, cookies: [oauth_cookie]))
+
+    assert_equal 403, response.fetch(:statusCode)
+    assert_equal "text/html; charset=utf-8", response.fetch(:headers).fetch("content-type")
+    assert_includes response.fetch(:body), '<a href="/">トップページに戻る</a>'
+    refute response.key?(:cookies)
+  end
+
   def test_rejects_an_oauth_callback_with_mismatched_state
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
     token = codec.issue(

@@ -53,7 +53,9 @@ module WeblogAuthoring
 
     AUTH_COOKIE = "weblog_authoring_session"
     OAUTH_COOKIE = "weblog_authoring_oauth"
-    SESSION_TTL = 12 * 60 * 60
+    SESSION_TTL = 7 * 24 * 60 * 60
+    SESSION_ABSOLUTE_TTL = 30 * 24 * 60 * 60
+    SESSION_RENEWAL_WINDOW = 24 * 60 * 60
     OAUTH_TTL = 10 * 60
     TOKYO_OFFSET = "+09:00"
     HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]]+)/
@@ -278,7 +280,7 @@ module WeblogAuthoring
     def auth_session_response(event)
       session = read_cookie(event, AUTH_COOKIE, kind: "session")
       can_edit = allowed_session?(session)
-      json_response(
+      response = json_response(
         200,
         "authenticated" => !session.nil?,
         "authentication_required" => true,
@@ -287,6 +289,8 @@ module WeblogAuthoring
         "login" => session&.fetch("login", nil),
         "csrf_token" => can_edit && session ? session.fetch("csrf_token", "").to_s : ""
       )
+      renew_session(response, session) if can_edit
+      response
     end
 
     def github_login_response(event)
@@ -324,7 +328,22 @@ module WeblogAuthoring
         code_verifier: oauth_session.fetch("verifier")
       )
       unless user.fetch("id") == @allowed_github_user_id
-        return json_response(403, error: "Editing is not allowed for this GitHub account")
+        return {
+          statusCode: 403,
+          headers: { "content-type" => "text/html; charset=utf-8" },
+          body: <<~HTML,
+            <!doctype html>
+            <html lang="ja">
+              <head><meta charset="utf-8"><title>ログインできませんでした</title></head>
+              <body>
+                <main>
+                  <h1>このGitHubアカウントでは編集できません</h1>
+                  <p><a href="/">トップページに戻る</a></p>
+                </main>
+              </body>
+            </html>
+          HTML
+        }
       end
 
       session = @session_codec.issue(
@@ -333,6 +352,7 @@ module WeblogAuthoring
           "github_user_id" => user.fetch("id"),
           "login" => user.fetch("login"),
           "csrf_token" => SecureRandom.urlsafe_base64(32),
+          "login_at" => @clock.call.iso8601,
         },
         ttl: SESSION_TTL
       )
@@ -1399,6 +1419,23 @@ module WeblogAuthoring
       cookies = Array(event["cookies"]) # @type var cookies: Array[String]
       raw = cookies.find { |value| value.start_with?("#{name}=") }
       @session_codec&.read(raw.to_s.delete_prefix("#{name}="), kind:)
+    end
+
+    def renew_session(response, session)
+      now = @clock.call
+      login_at = Time.iso8601(session.fetch("login_at"))
+      expires_at = Time.iso8601(session.fetch("expires_at"))
+      absolute_expiry = login_at + SESSION_ABSOLUTE_TTL
+      return if now >= absolute_expiry || expires_at - now > SESSION_RENEWAL_WINDOW
+
+      ttl = [SESSION_TTL, (absolute_expiry - now).to_i].min
+      return if ttl <= 0
+
+      attributes = session.reject { |key, _| %w[kind expires_at].include?(key) }
+      token = @session_codec.issue(kind: "session", attributes:, ttl:)
+      response[:cookies] = [cookie(AUTH_COOKIE, token, max_age: ttl)]
+    rescue ArgumentError, KeyError
+      nil
     end
 
     def csrf_token_from(event)
