@@ -1179,13 +1179,13 @@ class LambdaApiTest < Minitest::Test
 
     cookie = [renewed_cookie.split(";", 2).first]
     [12, 18, 24, 29].each do |day|
-      now = Time.utc(2026, 9, 24) + day * 24 * 60 * 60
+      now = Time.utc(2026, 9, 24) + (day * 24 * 60 * 60)
       response = api.call(event("GET", "/api/auth/session", cookies: cookie))
       assert_equal true, JSON.parse(response.fetch(:body)).fetch("authenticated")
       assert_includes response.fetch(:cookies).fetch(0), "Max-Age=86400" if day == 29
       cookie = [response.fetch(:cookies).fetch(0).split(";", 2).first]
     end
-    now = Time.utc(2026, 9, 24) + 30 * 24 * 60 * 60
+    now = Time.utc(2026, 9, 24) + (30 * 24 * 60 * 60)
     expired = api.call(event("GET", "/api/auth/session", cookies: cookie))
     assert_equal false, JSON.parse(expired.fetch(:body)).fetch("authenticated")
   end
