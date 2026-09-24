@@ -342,8 +342,7 @@ html[data-header-scrolled="true"] .card-home__about {
     margin-block-start: 14px;
   }
   .card-home__tags {
-    min-block-size: 129px;
-    padding: 16px 20px;
+    padding: 16px 20px 0px;
   }
   .card-home__tag-list,
   .card-home__tag-list[data-expanded="true"] {
