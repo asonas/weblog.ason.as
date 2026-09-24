@@ -1623,13 +1623,24 @@ module WeblogAuthoring
     def upsert_webmention_snapshot(connection, relation_id:, source_url:, title:, site_name:, content_hash:, timestamp:)
       current = connection.exec_params(
         <<~SQL,
-          SELECT content_hash FROM #{SCHEMA}.webmention_snapshots
+          SELECT snapshot_kind, title, site_name FROM #{SCHEMA}.webmention_snapshots
           WHERE relation_id = $1 AND is_current = TRUE
           ORDER BY CASE snapshot_kind WHEN 'candidate' THEN 0 ELSE 1 END LIMIT 1
         SQL
         [relation_id]
       )
-      return if current.ntuples.positive? && current[0].fetch("content_hash") == content_hash
+      approved = connection.exec_params(
+        "SELECT title, site_name FROM #{SCHEMA}.webmention_snapshots WHERE relation_id = $1 AND snapshot_kind = 'approved' AND is_current = TRUE LIMIT 1",
+        [relation_id]
+      )
+      if approved.ntuples.positive? && approved[0].values_at("title", "site_name") == [title, site_name]
+        connection.exec_params(
+          "UPDATE #{SCHEMA}.webmention_snapshots SET is_current = FALSE, expires_at = $2 WHERE relation_id = $1 AND snapshot_kind = 'candidate' AND is_current = TRUE",
+          [relation_id, timestamp + (30 * 24 * 60 * 60)]
+        )
+        return
+      end
+      return if current.ntuples.positive? && current[0].values_at("title", "site_name") == [title, site_name]
 
       connection.exec_params(
         <<~SQL,

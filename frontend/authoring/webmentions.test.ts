@@ -33,6 +33,59 @@ test("shows a readable error for an empty HTTP error response", async () => {
   }
 });
 
+test("offers display replacement only when approved display values changed", async () => {
+  const snapshot = (title: string) => ({
+    source_url: "https://example.com/post",
+    title,
+    site_name: "Example",
+    content_hash: title,
+  });
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        mentions: [
+          {
+            id: "same",
+            source_url: "https://example.com/same",
+            target_url: "https://weblog.ason.as/article",
+            verification_status: "verified",
+            moderation_status: "approved",
+            approved: snapshot("Same title"),
+            candidate: snapshot("Same title"),
+          },
+          {
+            id: "changed",
+            source_url: "https://example.com/changed",
+            target_url: "https://weblog.ason.as/article",
+            verification_status: "verified",
+            moderation_status: "approved",
+            approved: snapshot("Old title"),
+            candidate: snapshot("New title"),
+          },
+        ],
+        failures: [],
+        delivery_failures: [],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(createElement(WebmentionModerationPage, { canEdit: true })),
+    );
+    const card = container.querySelector<HTMLElement>("[data-state='changed']");
+    assert(card);
+    assert.match(card.textContent || "", /表示を更新/);
+    assert.match(card.textContent || "", /現在の表示を維持/);
+    assert.doesNotMatch(container.textContent || "", /Same title/);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
 Object.assign(globalThis, {
   window: dom.window,
   document: dom.window.document,

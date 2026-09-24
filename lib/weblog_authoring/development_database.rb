@@ -1425,15 +1425,26 @@ module WeblogAuthoring
     end
 
     def upsert_webmention_snapshot(database, relation_id:, source_url:, title:, site_name:, content_hash:, timestamp:)
-      current_hash = database.get_first_value(
+      current = database.get_first_row(
         <<~SQL,
-          SELECT content_hash FROM webmention_snapshots
+          SELECT snapshot_kind, title, site_name FROM webmention_snapshots
           WHERE relation_id = ? AND is_current = 1
           ORDER BY CASE snapshot_kind WHEN 'candidate' THEN 0 ELSE 1 END LIMIT 1
         SQL
         relation_id
       )
-      return if current_hash == content_hash
+      approved = database.get_first_row(
+        "SELECT title, site_name FROM webmention_snapshots WHERE relation_id = ? AND snapshot_kind = 'approved' AND is_current = 1",
+        relation_id
+      )
+      if approved && approved == [title, site_name]
+        database.execute(
+          "UPDATE webmention_snapshots SET is_current = 0, expires_at = ? WHERE relation_id = ? AND snapshot_kind = 'candidate' AND is_current = 1",
+          [serialize_time(timestamp + (30 * 24 * 60 * 60)), relation_id]
+        )
+        return
+      end
+      return if current && current[1..2] == [title, site_name]
 
       database.execute(
         <<~SQL,

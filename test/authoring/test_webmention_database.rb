@@ -52,7 +52,7 @@ class WebmentionDatabaseTest < Minitest::Test
     relation = @database.list_webmentions.fetch(0)
     @database.moderate_webmention(id: relation.fetch("id"), decision: "approved")
 
-    verify(title: "Changed title", hash: "changed-hash")
+    verify(title: "Changed title", hash: "first-hash")
     changed = @database.list_webmentions.fetch(0)
 
     assert_equal "First title", changed.fetch("approved").fetch("title")
@@ -60,7 +60,7 @@ class WebmentionDatabaseTest < Minitest::Test
   end
 
   def test_duplicate_notification_does_not_create_an_unchanged_candidate
-    verify(title: "First title", hash: "first-hash")
+    verify(title: "First title", hash: "different-html-hash")
     relation = @database.list_webmentions.fetch(0)
     @database.moderate_webmention(id: relation.fetch("id"), decision: "approved")
 
@@ -70,6 +70,31 @@ class WebmentionDatabaseTest < Minitest::Test
     assert_equal "approved", duplicate.fetch("moderation_status")
     assert_nil duplicate.fetch("candidate")
     assert_equal "First title", duplicate.fetch("approved").fetch("title")
+  end
+
+  def test_changed_site_name_creates_a_candidate
+    verify(title: "First title", hash: "first-hash")
+    relation = @database.list_webmentions.fetch(0)
+    @database.moderate_webmention(id: relation.fetch("id"), decision: "approved")
+
+    verify(title: "First title", site_name: "New site", hash: "first-hash")
+    changed = @database.list_webmentions.fetch(0)
+
+    assert_equal "Example", changed.fetch("approved").fetch("site_name")
+    assert_equal "New site", changed.fetch("candidate").fetch("site_name")
+  end
+
+  def test_reverification_clears_a_candidate_when_display_values_match_the_approved_snapshot
+    verify(title: "First title", hash: "first-hash")
+    relation = @database.list_webmentions.fetch(0)
+    @database.moderate_webmention(id: relation.fetch("id"), decision: "approved")
+    verify(title: "Changed title", hash: "changed-hash")
+
+    verify(title: "First title", hash: "third-html-hash")
+    unchanged = @database.list_webmentions.fetch(0)
+
+    assert_equal "First title", unchanged.fetch("approved").fetch("title")
+    assert_nil unchanged.fetch("candidate")
   end
 
   def test_rejected_mention_can_be_returned_to_pending_without_refetching
@@ -304,9 +329,9 @@ class WebmentionDatabaseTest < Minitest::Test
 
   private
 
-  def verify(title:, hash:)
+  def verify(title:, hash:, site_name: "Example")
     @database.record_verified_webmention(
-      job: @job, response: @response, title:, site_name: "Example", content_hash: hash
+      job: @job, response: @response, title:, site_name:, content_hash: hash
     )
   end
 end

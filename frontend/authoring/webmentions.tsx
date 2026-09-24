@@ -71,7 +71,13 @@ const FILTER_LABELS: Record<WebmentionFilter, string> = {
 function stateOf(mention: Webmention): WebmentionFilter | "changed" {
   if (mention.verification_status === "deleted") return "removed";
   if (mention.verification_status !== "verified") return "invalid";
-  if (mention.approved && mention.candidate) return "changed";
+  if (mention.approved && mention.candidate) {
+    if (
+      mention.approved.title !== mention.candidate.title ||
+      mention.approved.site_name !== mention.candidate.site_name
+    )
+      return "changed";
+  }
   return mention.moderation_status === "pending"
     ? "active"
     : mention.moderation_status;
@@ -237,7 +243,7 @@ function MentionActions({
           disabled={busy}
           onClick={() => onDecision("approved")}
         >
-          承認
+          {state === "changed" ? "表示を更新" : "承認"}
         </button>
       )}
       {(state === "active" || state === "changed") && (
@@ -246,18 +252,19 @@ function MentionActions({
           disabled={busy}
           onClick={() => onDecision("rejected")}
         >
-          拒否
+          {state === "changed" ? "現在の表示を維持" : "拒否"}
         </button>
       )}
-      {(state === "approved" || state === "rejected") && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onDecision("pending")}
-        >
-          判断を取り消す
-        </button>
-      )}
+      {(state === "approved" || state === "rejected") &&
+        !(mention.approved && mention.candidate) && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onDecision("pending")}
+          >
+            判断を取り消す
+          </button>
+        )}
     </span>
   );
 }
@@ -289,7 +296,7 @@ function MentionCard({
           {mention.source_url}
         </a>
       </p>
-      {mention.approved && mention.candidate && (
+      {stateOf(mention) === "changed" && mention.approved && (
         <p className="webmention-card__detail">
           公開中: {mention.approved.title || mention.approved.source_url}
         </p>
