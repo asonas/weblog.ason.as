@@ -289,7 +289,7 @@ module WeblogAuthoring
         "login" => session&.fetch("login", nil),
         "csrf_token" => can_edit && session ? session.fetch("csrf_token", "").to_s : ""
       )
-      renew_session(response, session) if can_edit
+      renew_session(response, session) if can_edit && session
       response
     end
 

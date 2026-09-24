@@ -26,6 +26,8 @@ module WeblogAuthoring
     AUTH_COOKIE: String
     OAUTH_COOKIE: String
     SESSION_TTL: Integer
+    SESSION_ABSOLUTE_TTL: Integer
+    SESSION_RENEWAL_WINDOW: Integer
     OAUTH_TTL: Integer
     TOKYO_OFFSET: String
     HASHTAG_PATTERN: Regexp
@@ -132,6 +134,7 @@ module WeblogAuthoring
     def parse_time: (untyped, String) -> Time?
     def allowed_session?: (Hash[String, untyped]?) -> bool
     def read_cookie: (lambda_event, String, kind: String) -> Hash[String, untyped]?
+    def renew_session: (lambda_response, Hash[String, untyped]) -> void
     def csrf_token_from: (lambda_event) -> String
     def safe_return_to: (untyped) -> String
     def secure_equal?: (String?, String?) -> bool
