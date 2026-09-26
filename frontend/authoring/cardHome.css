@@ -236,7 +236,7 @@
   isolation: isolate;
   block-size: var(--home-hero-height);
   min-block-size: var(--home-hero-height);
-  padding: 160px max(40px, calc((100vw - 1200px) / 2)) 60px;
+  padding: 160px max(40px, calc((100vw - 1200px) / 2)) var(--space-12);
   justify-content: end;
 }
 
@@ -293,9 +293,8 @@
   margin-block-start: 20px;
   font-size: 16px;
   line-height: 1.6;
-  block-size: 3.2em;
   flex-shrink: 0;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
 }
 .card-home .atlas-header__actions {
   display: flex;
@@ -331,7 +330,7 @@ html[data-header-scrolled="true"] .card-home__about {
     --home-hero-height: 420px;
   }
   .card-home .cover-journal__hero {
-    padding: 180px 20px 24px;
+    padding: 180px 20px var(--space-12);
   }
   .card-home .cover-journal__lead > strong {
     font-size: clamp(36px, 11vw, 58px);

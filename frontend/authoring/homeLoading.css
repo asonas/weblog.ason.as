@@ -51,6 +51,9 @@
 .home-loading__hero-title > span:last-child {
   inline-size: 72%;
 }
+.home-loading .home-loading__hero-excerpt {
+  display: grid;
+}
 .home-loading__hero-excerpt > span {
   block-size: 1em;
   margin-block: 0.3em;
