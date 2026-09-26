@@ -585,16 +585,24 @@ module WeblogAuthoring
     end
 
     get "/*" do
-      halt 404 unless settings.draft_store
-      resolution = settings.draft_store.resolve_published_route(params.fetch("splat").first)
+      route = valid_page_route(params.fetch("splat").first)
+      halt 404 unless route
+      resolution = settings.draft_store&.resolve_published_route(route) || {}
       destination = resolution["redirect"]
       headers "Cache-Control" => "no-cache" if destination
       redirect "/#{WeblogAuthoring.encoded_route(destination)}", 301 if destination
-      snapshot = resolution["snapshot"]
-      halt 404 unless snapshot
+      page = DraftPublisher.page(resolution["snapshot"]) || settings.database.find_route(route)
+      renderer = WebmentionSitePublisher.new(database: settings.database, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
+      shell = ROOT.join("public.html").read
+      html = if page && page.status == "published" && !page.empty?
+               renderer.render_document(page, shell:, source_url: "#{FRONTEND_ORIGIN}/#{WeblogAuthoring.encoded_route(route)}")
+             else
+               renderer.render_linked_page(route, shell:)
+             end
       content_type "text/html", charset: "utf-8"
       headers "Cache-Control" => "no-store"
-      settings.draft_publisher.read_with_webmentions(snapshot)
+      halt 404, ROOT.join("404.html").read unless html
+      html
     end
 
     error DevelopmentInputError do
@@ -635,7 +643,7 @@ module WeblogAuthoring
         app.set :draft_publication, publication
         publisher = DraftPublisher.local(publication:, database:,
           root: development_data.join("publications"),
-          shell: -> { ROOT.join("index.html").read }, site_url: FRONTEND_ORIGIN)
+          shell: -> { ROOT.join("public.html").read }, site_url: FRONTEND_ORIGIN)
         app.set :draft_publisher, publisher
         outputs = DraftOutputs.new(store: draft_store,
           s3_client: LocalPublicationObjects.new(development_data.join("publication-outputs")),

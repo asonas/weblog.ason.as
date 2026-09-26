@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "uri"
+require_relative "webmention_site_publisher"
 
 module WeblogAuthoring
   class DraftSite
@@ -30,7 +31,12 @@ module WeblogAuthoring
                  end
       if response.fetch(:statusCode) == 404
         route = URI::DEFAULT_PARSER.unescape(path.delete_prefix("/"))
-        response = object("index.html", "text/html; charset=utf-8") if @reader.list_pages.any? { |page| page.links.any? { |link| link.name == route } }
+        if @reader.list_pages.any? { |page| page.links.any? { |link| link.name == route } }
+          renderer = WebmentionSitePublisher.new(database: @reader, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
+          shell = object("static/authoring/public.html", "text/html; charset=utf-8")
+          html = renderer.render_linked_page(route, shell: shell.fetch(:body))
+          response = shell.merge(body: html) if html
+        end
       end
       method == "HEAD" ? response.merge(body: "") : response
     rescue Aws::S3::Errors::NoSuchKey

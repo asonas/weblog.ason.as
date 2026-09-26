@@ -10,7 +10,7 @@ The development editor supports the publication flow from #167. Pressing Publish
 
 The JavaScript reconstructor receives only persisted Y.Text. Local development runs it as a Node subprocess; `DraftPublication.remote` invokes the internal worker with IAM authentication and only an article ID, never browser-supplied Markdown. Revision comparison and snapshot storage happen after reconstruction, without holding a transaction open across a worker call.
 
-The enabled development backend and injected Lambda API read active snapshots for article JSON and select immutable HTML through the active route pointer. Local HTML is stored beneath `data/development/publications`; the S3 adapter uses `published/:article_id/:version_id.html`. Production handler injection and CloudFront reader-origin cutover remain disabled until #172. Saving drafts does not modify legacy article tables. No publication path calls Webmention sending or its outbox.
+The development backend renders article HTML on each request from the active published snapshot and `public.html`, falling back to the local article database for existing articles. It does not read working drafts or require generated HTML files. Vite forwards article requests and transforms the returned HTML to load development assets. Publication jobs still place local HTML beneath `data/development/publications`; the production reader uses immutable HTML through the active route pointer. The S3 adapter uses `published/:article_id/:version_id.html`.
 
 ### Route rename batches
 

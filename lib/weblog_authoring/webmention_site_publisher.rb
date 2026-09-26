@@ -10,6 +10,7 @@ require "uri"
 require_relative "markdown"
 require_relative "cover_image"
 require_relative "cover_variants"
+require_relative "names"
 
 module WeblogAuthoring
   class WebmentionSitePublisher
@@ -80,6 +81,31 @@ module WeblogAuthoring
 
     def render_page_mentions(id)
       render_mentions(@database.approved_webmentions_for_page(id))
+    end
+
+    def render_linked_page(route, shell:)
+      WeblogAuthoring.validate_page_name(route)
+      pages = @database.list_pages.select { |page| page.links.any? { |link| link.name == route } }
+      return nil if pages.empty?
+
+      title = CGI.escapeHTML(route)
+      links = pages.map do |page|
+        %(<li><a href="/#{WeblogAuthoring.encoded_route(page.route)}">#{CGI.escapeHTML(page.display_title)}</a></li>)
+      end.join
+      universe = CGI.escapeHTML(JSON.generate({ route:, id: "", wiki: [], urls: [] }))
+      body = <<~HTML
+        <article class="article-workspace article-workspace--reading" data-public-article="1" data-editing-href="/draft-editor?title=#{WeblogAuthoring.encoded_route(route)}">
+          <header class="article-reading-header"><h1 class="p-name">#{title}</h1></header>
+          <div class="editor-canvas"><section class="public-article-body" aria-labelledby="related-pages-heading">
+            <h2 id="related-pages-heading">関連する記事</h2><ul>#{links}</ul>
+          </section></div>
+          <div data-public-universe="#{universe}"></div>
+        </article>
+      HTML
+      shell.sub('<div id="authoring-root"></div>') { %(<div id="authoring-root">#{body}</div>) }
+        .sub(/<title>.*?<\/title>/m) { "<title>#{title} | weblog.ason.as</title>" }
+    rescue ArgumentError
+      nil
     end
 
     private

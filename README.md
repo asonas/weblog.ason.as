@@ -18,6 +18,8 @@ mise run dev
 ブラウザで`http://127.0.0.1:5173/`を開きます。
 Frontendとbackendを個別に起動する場合は、`mise run dev:web`と`mise run dev:api`を使います。Webは`127.0.0.1:5173`、APIは`127.0.0.1:8000`を使用し、portが使用中の場合は起動に失敗します。
 
+開発環境の記事HTMLは、リクエストごとにバックエンドが公開済みデータと`public.html`からレンダリングします。記事閲覧のためのビルドやHTMLファイルの事前生成は不要です。Viteが記事URLをバックエンドへ渡し、閲覧用のCSS・JavaScriptを開発モードで配信します。
+
 production用のsite artifactは次のcommandで`dist/site/`へ生成します。
 
 ```sh

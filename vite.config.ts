@@ -54,7 +54,7 @@ self.addEventListener("fetch", (event) => {
       } },
     },
     {
-      name: "reject-unsafe-page-routes",
+      name: "development-page-routes",
       configureServer(server) {
         server.middlewares.use((request, response, next) => {
           if (!request.headers.accept?.includes("text/html") || !request.url) return next();
@@ -75,14 +75,33 @@ self.addEventListener("fetch", (event) => {
           }
 
           const route = rawPathname.slice(1).replace(/\/$/, "");
-          if (mode !== "production" && ["/authoring/articles", "/authoring/webmentions"].includes(rawPathname)) return next();
+          if (mode !== "production" && ["/authoring/articles", "/authoring/webmentions", "/design-system"].includes(rawPathname)) return next();
           const appRoutes = ["", "search", "draft-editor"];
-          if (!appRoutes.includes(route) || /[<>\\]/.test(pathname)) {
+          if (route.includes("/") || /[<>\\]/.test(pathname) || (mode === "production" && !appRoutes.includes(route))) {
             response.statusCode = 404;
             response.end("Not Found");
             return;
           }
-          next();
+          if (appRoutes.includes(route)) return next();
+
+          // Transform the backend's reading HTML so Vite can serve its source modules.
+          const url = request.url;
+          void (async () => {
+            const upstream = await fetch(`${authoringApiOrigin}${url}`, {
+              headers: { Accept: "text/html" },
+              redirect: "manual",
+              signal: AbortSignal.timeout(15000),
+            });
+            response.statusCode = upstream.status;
+            for (const header of ["content-type", "cache-control", "location"]) {
+              const value = upstream.headers.get(header);
+              if (value) response.setHeader(header, value);
+            }
+            const html = await upstream.text();
+            response.end(upstream.headers.get("content-type")?.includes("text/html")
+              ? await server.transformIndexHtml(url, html)
+              : html);
+          })().catch(next);
         });
       }
     },

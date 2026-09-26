@@ -517,6 +517,49 @@ class TestDevelopmentApp < Minitest::Test
     end
   end
 
+  def test_serves_published_articles_and_linked_topics_with_the_public_reader
+    json_request("POST", "/api/authoring/pages", page_type: "named", title: "記事", body: "公開された本文 [[KORG multi/poly]]")
+
+    status, headers, body = request("GET", "/#{WeblogAuthoring.encoded_route('記事')}")
+    assert_equal 200, status
+    assert_includes headers.fetch("content-type"), "text/html"
+    assert_includes body, "公開された本文"
+    assert_includes body, '/frontend/authoring/publicArticle.ts'
+    refute_includes body, '/frontend/authoring/main.tsx'
+
+    status, _headers, body = request("GET", "/KORG%20multi%2Fpoly")
+    assert_equal 200, status
+    assert_includes body, "<h1 class=\"p-name\">KORG multi/poly</h1>"
+    assert_includes body, "関連する記事"
+    assert_includes body, "href=\"/#{WeblogAuthoring.encoded_route('記事')}\""
+    assert_includes body, '/draft-editor?title=%4B%4F%52%47%20multi%2Fpoly'
+
+    status, _headers, body = request("GET", "/unknown-topic")
+    assert_equal 404, status
+    assert_includes body, "記事が見つかりません"
+  end
+
+  def test_reads_the_public_snapshot_when_local_html_is_missing
+    require_relative "../../lib/weblog_authoring/draft_migration"
+    json_request("POST", "/api/authoring/pages", page_type: "named", title: "公開記事", body: "公開済みの本文")
+    store = WeblogAuthoring::DraftStore.sqlite(root.join("data/development/drafts.sqlite3"))
+    store.setup!
+    source = WeblogAuthoring::DraftMigration.export_sqlite(database_path, site_url: "http://127.0.0.1:5173")
+    WeblogAuthoring::DraftMigration.new(store:).import(source)
+    article_id = source.fetch("articles").first.fetch("id")
+    snapshot = store.published_snapshot(article_id)
+    # A migrated snapshot can exist without local publication objects.
+    refute root.join("data/development/publications/published/#{article_id}/#{snapshot.fetch('id')}.html").exist?
+    draft_app = WeblogAuthoring::DevelopmentApp.application(root:, drafts_enabled: true, oauth_client: nil, s3_client:)
+
+    status, _headers, body = request_with(draft_app, "GET", "/#{WeblogAuthoring.encoded_route('公開記事')}")
+    assert_equal 200, status
+    assert_includes body, "公開済みの本文"
+    assert_includes body, '/frontend/authoring/publicArticle.ts'
+    refute_includes body, '/frontend/authoring/main.tsx'
+    assert_equal snapshot, store.published_snapshot(article_id)
+  end
+
   def test_daily_button_opens_the_japanese_daily_template
     status, _headers, body = request("GET", "/api/editor/new?template=daily")
 
