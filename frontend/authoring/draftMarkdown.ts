@@ -148,8 +148,13 @@ export function insertMarkdownBlock(
 export function suggestionVerticalPosition(
   caretTop: number,
   fieldHeight: number,
-): { bottom: number } {
+  lineHeight: number,
+  suggestionHeight: number,
+): { bottom: number } | { top: number } {
   const gap = 8;
+  if (caretTop < suggestionHeight + gap) {
+    return { top: caretTop + lineHeight + gap };
+  }
   return { bottom: fieldHeight - caretTop + gap };
 }
 

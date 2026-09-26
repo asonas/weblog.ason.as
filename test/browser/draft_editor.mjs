@@ -195,6 +195,27 @@ try {
       bodyBox.y + bodyMetrics.paddingTop + bodyMetrics.lineHeight + 6,
     `Wiki link suggestions must leave space below the caret line: ${JSON.stringify({ bodyBox, suggestionBox, bodyMetrics })}`,
   );
+  await body.fill(`${"行\n".repeat(10)}[[公\n${"行\n".repeat(30)}`);
+  await body.evaluate((field) => {
+    field.setSelectionRange(23, 23);
+    field.scrollTop = 0;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await until(async () => {
+    const box = await wikiSuggestions.boundingBox();
+    return box && box.y >= bodyBox.y &&
+      box.y + box.height <= bodyBox.y + bodyMetrics.paddingTop + bodyMetrics.lineHeight * 10 - 6;
+  });
+  await body.evaluate((field) => {
+    field.scrollTop = Number.parseFloat(getComputedStyle(field).lineHeight) * 10;
+    field.dispatchEvent(new Event("scroll"));
+  });
+  await until(async () => {
+    const box = await wikiSuggestions.boundingBox();
+    return box && box.y >= bodyBox.y + bodyMetrics.paddingTop + bodyMetrics.lineHeight + 6 &&
+      box.y + box.height <= bodyBox.y + bodyBox.height;
+  });
+  await body.fill("[[公");
   await body.press("Tab");
   assert.equal(await body.inputValue(), "[[公");
   assert.equal(await body.evaluate((field) => field === document.activeElement), true);

@@ -4,6 +4,7 @@ import {
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -95,7 +96,10 @@ async function uploadImage(file: File, csrf: () => Promise<string>) {
   return result.public_url;
 }
 
-function caretPosition(field: HTMLTextAreaElement): CSSProperties {
+function caretPosition(
+  field: HTMLTextAreaElement,
+  suggestionHeight: number,
+): CSSProperties {
   const mirror = document.createElement("div");
   const style = getComputedStyle(field);
   for (const property of [
@@ -132,7 +136,7 @@ function caretPosition(field: HTMLTextAreaElement): CSSProperties {
   document.body.append(mirror);
   const lineHeight = Number.parseFloat(style.lineHeight);
   const caretTop = Math.max(
-    lineHeight,
+    0,
     Math.min(
       field.clientHeight - lineHeight,
       marker.offsetTop - field.scrollTop,
@@ -143,7 +147,12 @@ function caretPosition(field: HTMLTextAreaElement): CSSProperties {
       field.clientWidth - 24,
       marker.offsetLeft - field.scrollLeft,
     ),
-    ...suggestionVerticalPosition(caretTop, field.clientHeight),
+    ...suggestionVerticalPosition(
+      caretTop,
+      field.clientHeight,
+      lineHeight,
+      suggestionHeight,
+    ),
   };
   mirror.remove();
   return result;
@@ -217,6 +226,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [previewBlockIndex, setPreviewBlockIndex] = useState(0);
   const [, refresh] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const wikiLinkSuggestionList = useRef<HTMLDivElement>(null);
   const composing = useRef(false);
   const [{ id, isNew, initialTitle, initialArticleState }] = useState(() => {
     const url = new URL(window.location.href);
@@ -424,6 +434,26 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     [wikiLinkNames, wikiLinkQuery],
   );
 
+  useLayoutEffect(() => {
+    const field = textarea.current;
+    const list = wikiLinkSuggestionList.current;
+    if (!field || !list || wikiLinkSuggestions.length === 0) return;
+    const updatePosition = () => {
+      setWikiLinkSuggestionStyle(
+        caretPosition(field, list.getBoundingClientRect().height),
+      );
+    };
+    updatePosition();
+    const observer = new ResizeObserver(updatePosition);
+    observer.observe(field);
+    observer.observe(list);
+    field.addEventListener("scroll", updatePosition);
+    return () => {
+      observer.disconnect();
+      field.removeEventListener("scroll", updatePosition);
+    };
+  }, [wikiLinkSuggestions]);
+
   function updateCursorContext() {
     const field = textarea.current;
     if (!field) return;
@@ -438,7 +468,6 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       query?.value === wikiLinkQuery?.value;
     setWikiLinkQuery(query);
     if (!isSameQuery) setActiveWikiLinkSuggestion(0);
-    setWikiLinkSuggestionStyle(query ? caretPosition(field) : undefined);
     setPreviewBlockIndex(
       markdownBlockIndexAt(field.value, field.selectionStart),
     );
@@ -841,8 +870,9 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
             onDrop={(event) => void handleImageDrop(event)}
             onPaste={(event) => void handleImagePaste(event)}
           />
-          {wikiLinkSuggestionStyle && wikiLinkSuggestions.length > 0 && (
+          {wikiLinkSuggestions.length > 0 && (
             <div
+              ref={wikiLinkSuggestionList}
               className="wiki-link-suggestions draft-wiki-link-suggestions"
               id="draft-wiki-link-suggestions"
               role="listbox"

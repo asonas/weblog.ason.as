@@ -104,6 +104,18 @@ test("maps the cursor to its blank-line separated Markdown block", () => {
 });
 
 test("places Wiki link suggestions above the textarea cursor", () => {
-  assert.deepEqual(suggestionVerticalPosition(480, 500), { bottom: 28 });
-  assert.deepEqual(suggestionVerticalPosition(120, 500), { bottom: 388 });
+  assert.deepEqual(suggestionVerticalPosition(480, 500, 24, 42), {
+    bottom: 28,
+  });
+  assert.deepEqual(suggestionVerticalPosition(120, 500, 24, 42), {
+    bottom: 388,
+  });
+});
+
+test("places Wiki link suggestions below the line when they do not fit above", () => {
+  assert.deepEqual(suggestionVerticalPosition(16, 500, 24, 42), { top: 48 });
+  assert.deepEqual(suggestionVerticalPosition(60, 500, 24, 56), { top: 92 });
+  assert.deepEqual(suggestionVerticalPosition(64, 500, 24, 56), {
+    bottom: 444,
+  });
 });
