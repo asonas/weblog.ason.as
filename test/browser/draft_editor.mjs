@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
@@ -34,6 +35,20 @@ try {
   await ready("http://127.0.0.1:18082/api/draft-test-health", apiLog);
   await ready("http://127.0.0.1:15182/api/draft-test-health", viteLog);
   browser = await chromium.launch({ channel: "chrome", headless: true });
+  const missingArticle = await browser.newPage();
+  await missingArticle.route("**/hoge-piyo", async (route) => route.fulfill({
+    status: 404,
+    contentType: "text/html",
+    body: await readFile("404.html", "utf8"),
+  }));
+  await missingArticle.goto("http://127.0.0.1:15182/hoge-piyo");
+  await missingArticle.waitForURL("**/draft-editor?**");
+  await until(async () => await missingArticle.getByLabel("タイトル", { exact: true }).inputValue() === "hoge-piyo");
+  await missingArticle.getByLabel("タイトル", { exact: true }).fill("書き換えたタイトル");
+  await until(async () => (await missingArticle.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await missingArticle.reload();
+  await until(async () => await missingArticle.getByLabel("タイトル", { exact: true }).inputValue() === "書き換えたタイトル");
+  await missingArticle.close();
   const page = await browser.newPage();
   await page.route(/\/assets\/.*\.webp$/, (route) => route.fulfill({
     path: "test/fixtures/article_comparison/assets/rubykaigi-follow-up.webp",

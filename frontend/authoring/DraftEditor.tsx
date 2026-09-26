@@ -218,7 +218,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [, refresh] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
-  const [{ id, isNew, initialArticleState }] = useState(() => {
+  const [{ id, isNew, initialTitle, initialArticleState }] = useState(() => {
     const url = new URL(window.location.href);
     const isNew =
       !url.searchParams.has("id") || url.searchParams.get("recovery") === "1";
@@ -229,6 +229,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     return {
       id,
       isNew,
+      initialTitle: isNew ? url.searchParams.get("title") : null,
       initialArticleState:
         state === "public" || state === "unpublished_changes" ? state : "draft",
     };
@@ -254,6 +255,8 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     let opened: DraftSession | undefined;
     void DraftSession.open(id, csrf, isNew)
       .then((value) => {
+        if (initialTitle !== null && !value.metadata.title)
+          value.setMetadata(draftMetadataForTitle(initialTitle));
         if (hasCustomDiaryTitle(value.metadata))
           value.setMetadata(draftMetadataForTitle(value.metadata.title));
         const initialBody = takeDraftInitialBody(
@@ -289,7 +292,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       isActive = false;
       opened?.close();
     };
-  }, [id, isNew, recoveryKey, csrf]);
+  }, [id, isNew, initialTitle, recoveryKey, csrf]);
 
   useEffect(() => {
     if (!session) return;
