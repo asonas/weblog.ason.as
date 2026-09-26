@@ -117,6 +117,10 @@ module WeblogAuthoring
       copy.host = copy.host&.downcase
       copy.fragment = nil
       copy.path = "/" if copy.path.empty?
+      copy.path = copy.path.gsub(/%[0-9A-Fa-f]{2}/) do |encoded|
+        character = encoded[1, 2].to_i(16).chr
+        character.match?(/\A[A-Za-z0-9._~-]\z/) ? character : encoded
+      end
       copy.path = copy.path.sub(%r{/+\z}, "") unless copy.path == "/"
       copy.port = nil if (copy.scheme == "http" && copy.port == 80) || (copy.scheme == "https" && copy.port == 443)
       copy.to_s

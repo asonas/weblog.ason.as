@@ -48,6 +48,24 @@ class WebmentionDocumentTest < Minitest::Test
     assert document.links_to?("https://weblog.ason.as/article")
   end
 
+  def test_matches_percent_encoded_unreserved_path_characters
+    document = WeblogAuthoring::WebmentionDocument.new(
+      '<a href="https://weblog.ason.as/%57ebmention%E3%82%AF%E3%83%A9%E3%83%96">Target</a>',
+      base_url: "https://example.com/post"
+    )
+
+    assert document.links_to?("https://weblog.ason.as/Webmention%E3%82%AF%E3%83%A9%E3%83%96")
+    refute document.links_to?("https://weblog.ason.as/webmention%E3%82%AF%E3%83%A9%E3%83%96")
+  end
+
+  def test_does_not_decode_percent_encoded_path_delimiters
+    document = WeblogAuthoring::WebmentionDocument.new(
+      '<a href="https://example.com/a%2Fb">Target</a>', base_url: "https://example.com/post"
+    )
+
+    refute document.links_to?("https://example.com/a/b")
+  end
+
   def test_discovers_webmention_endpoints_in_protocol_order
     document = WeblogAuthoring::WebmentionDocument.new(
       '<link rel="webmention" href="/html-endpoint"><a rel="webmention" href="/anchor-endpoint">endpoint</a>',
