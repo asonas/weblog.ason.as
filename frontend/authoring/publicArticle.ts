@@ -104,6 +104,22 @@ export async function enhancePublicArticleEditing(
 }
 
 export function enhancePublicArticle(root: HTMLElement) {
+  window.addEventListener("message", (event) => {
+    if (event.origin !== "https://embed.bsky.app") return;
+    const { id, height } = event.data ?? {};
+    if (
+      typeof id !== "string" ||
+      typeof height !== "number" ||
+      !Number.isFinite(height) ||
+      height <= 0
+    )
+      return;
+    const iframe = Array.from(
+      root.querySelectorAll<HTMLIFrameElement>("iframe[data-bluesky-id]"),
+    ).find((candidate) => candidate.dataset.blueskyId === id);
+    if (iframe && event.source === iframe.contentWindow)
+      iframe.style.height = `${height}px`;
+  });
   const pending = new Map<HTMLElement, () => void>();
   for (const media of root.querySelectorAll<
     HTMLImageElement | HTMLIFrameElement | HTMLVideoElement

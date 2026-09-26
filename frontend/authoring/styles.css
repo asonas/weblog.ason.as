@@ -3295,7 +3295,7 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
 .page-view .bluesky-player iframe {
   display: block;
   inline-size: 100%;
-  min-block-size: 18.75rem;
+  height: 12rem;
   border: 0;
 }
 

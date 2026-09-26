@@ -154,7 +154,8 @@ class TestMarkdown < Minitest::Test
 
     assert_includes rendered.html, 'class="bluesky-player"'
     assert_includes rendered.html,
-                    'src="https://embed.bsky.app/embed/did:plc:nzhcpsryikfegc27zbimbwhq/app.bsky.feed.post/3mexample"'
+                    'src="https://embed.bsky.app/embed/did:plc:nzhcpsryikfegc27zbimbwhq/app.bsky.feed.post/3mexample?id=did:plc:nzhcpsryikfegc27zbimbwhq-3mexample"'
+    assert_includes rendered.html, 'data-bluesky-id="did:plc:nzhcpsryikfegc27zbimbwhq-3mexample"'
     assert_includes rendered.html, 'title="Bluesky投稿"'
     assert_includes rendered.html, "#{url}</a>"
   end

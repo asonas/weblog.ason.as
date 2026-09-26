@@ -437,9 +437,10 @@ module WeblogAuthoring
       def bluesky_player_html(identity, url, indent)
         did, rkey = identity
         spaces = " " * indent
-        src = "https://embed.bsky.app/embed/#{did}/app.bsky.feed.post/#{rkey}"
+        embed_id = "#{did}-#{rkey}"
+        src = "https://embed.bsky.app/embed/#{did}/app.bsky.feed.post/#{rkey}?id=#{embed_id}"
         escaped_url = CGI.escapeHTML(url)
-        %(#{spaces}<div class="bluesky-player"><iframe src="#{src}" title="Bluesky投稿" loading="lazy"></iframe><a href="#{escaped_url}" target="_blank" rel="noreferrer">#{escaped_url}</a></div>\n)
+        %(#{spaces}<div class="bluesky-player"><iframe src="#{src}" data-bluesky-id="#{embed_id}" title="Bluesky投稿" loading="lazy" scrolling="no"></iframe><a href="#{escaped_url}" target="_blank" rel="noreferrer">#{escaped_url}</a></div>\n)
       end
 
       def x_post_identity(raw_url)

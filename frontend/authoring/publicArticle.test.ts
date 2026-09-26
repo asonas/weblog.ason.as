@@ -78,6 +78,45 @@ test("authenticated public reading restores the header edit action", async () =>
   }
 });
 
+test("public Bluesky embeds follow the height sent by their own iframe", async () => {
+  const dom = new JSDOM(
+    '<article><div class="bluesky-player"><iframe data-bluesky-id="post-1"></iframe></div></article>',
+    { url: "https://weblog.ason.as/article" },
+  );
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    HTMLElement: dom.window.HTMLElement,
+    HTMLImageElement: dom.window.HTMLImageElement,
+    HTMLVideoElement: dom.window.HTMLVideoElement,
+  });
+  try {
+    const { enhancePublicArticle } = await import("./publicArticle");
+    const article = document.querySelector<HTMLElement>("article");
+    const iframe = document.querySelector<HTMLIFrameElement>("iframe");
+    assert.ok(article && iframe);
+    enhancePublicArticle(article);
+    const sendHeight = (origin: string, id: string, height: number) => {
+      window.dispatchEvent(
+        new dom.window.MessageEvent("message", {
+          origin,
+          source: iframe.contentWindow,
+          data: { id, height },
+        }),
+      );
+    };
+    sendHeight("https://example.com", "post-1", 198);
+    sendHeight("https://embed.bsky.app", "other-post", 198);
+    assert.equal(iframe.style.height, "");
+    sendHeight("https://embed.bsky.app", "post-1", 198);
+    assert.equal(iframe.style.height, "198px");
+    sendHeight("https://embed.bsky.app", "post-1", 244);
+    assert.equal(iframe.style.height, "244px");
+  } finally {
+    dom.window.close();
+  }
+});
+
 test("offscreen media keep their waiting state until they approach the viewport", async () => {
   const dom = new JSDOM(
     '<article><span class="article-image"><img src="/assets/slow.webp" loading="lazy"></span><figure class="article-video"><video></video></figure></article>',
