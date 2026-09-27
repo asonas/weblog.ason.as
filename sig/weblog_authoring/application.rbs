@@ -4,6 +4,7 @@ module WeblogAuthoring
 
   class AtomFeed
     DEFAULT_LIMIT: Integer
+    AUTHOR_NAME: String
 
     def initialize: (site_url: String, ?title: String, ?limit: Integer) -> void
     def render: (Array[PageDocument], ?ids: Hash[String, String]) -> String
