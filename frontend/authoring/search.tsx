@@ -7,6 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal, flushSync } from "react-dom";
+import { AuthoringIcon } from "./AuthoringIcon";
 
 type SearchResult = {
   route: string;
@@ -82,11 +84,8 @@ function SearchField({
   onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <label className="site-search__field">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="11" cy="11" r="6.5" />
-        <path d="m16 16 4 4" />
-      </svg>
+    <div className="site-search__field">
+      <AuthoringIcon name="search" />
       <input
         ref={inputRef}
         type="search"
@@ -102,10 +101,10 @@ function SearchField({
           onClick={() => setQuery("")}
           aria-label="入力を消去"
         >
-          ×
+          <AuthoringIcon name="close" />
         </button>
       )}
-    </label>
+    </div>
   );
 }
 
@@ -207,9 +206,13 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
   const desktopRef = useRef<HTMLDivElement>(null);
   const mobileInputRef = useRef<HTMLInputElement>(null);
   const mobileButtonRef = useRef<HTMLButtonElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const closeMobile = useCallback(() => {
     setMobileOpen(false);
-    window.setTimeout(() => mobileButtonRef.current?.focus(), 0);
+    window.setTimeout(
+      () => mobileButtonRef.current?.focus({ preventScroll: true }),
+      0,
+    );
   }, []);
 
   useEffect(() => {
@@ -235,9 +238,6 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
     };
   }, []);
   useEffect(() => {
-    if (mobileOpen) mobileInputRef.current?.focus();
-  }, [mobileOpen]);
-  useEffect(() => {
     if (!mobileOpen) return;
     const viewport = window.visualViewport;
     const resize = () =>
@@ -254,32 +254,33 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
   }, [mobileOpen]);
   useEffect(() => {
     if (!mobileOpen) return;
-    const main = document.querySelector<HTMLElement>("#main");
-    const navigation = document.querySelector<HTMLElement>(".header-nav");
-    const searchRoot =
-      mobileButtonRef.current?.closest<HTMLElement>(".site-search");
-    const inertTargets: HTMLElement[] = [];
-    if (main && searchRoot && main.contains(searchRoot)) {
-      let current: HTMLElement | null = searchRoot;
-      while (current && current !== main) {
-        const parent: HTMLElement | null = current.parentElement;
-        if (!parent) break;
-        Array.from(parent.children).forEach((sibling) => {
-          if (sibling !== current && sibling instanceof HTMLElement)
-            inertTargets.push(sibling);
-        });
-        current = parent;
-      }
-    } else if (main) {
-      inertTargets.push(main);
-    }
+    const inertTargets = Array.from(document.body.children).filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement &&
+        element !== backdropRef.current &&
+        !element.hasAttribute("inert"),
+    );
     inertTargets.forEach((target) => {
       target.setAttribute("inert", "");
     });
-    navigation?.setAttribute("inert", "");
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const close = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") closeMobile();
+      if (event.key === "Tab") {
+        const controls = backdropRef.current?.querySelectorAll<HTMLElement>(
+          "input, button, a[href]",
+        );
+        const first = controls?.[0];
+        const last = controls?.[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
     };
     document.addEventListener("keydown", close);
     return () => {
@@ -287,8 +288,7 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
       inertTargets.forEach((target) => {
         target.removeAttribute("inert");
       });
-      navigation?.removeAttribute("inert");
-      document.body.style.removeProperty("overflow");
+      document.body.style.overflow = previousOverflow;
     };
   }, [mobileOpen, closeMobile]);
 
@@ -324,41 +324,47 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
         ref={mobileButtonRef}
         className="site-search__mobile-button"
         type="button"
-        onClick={() => setMobileOpen(true)}
+        onClick={() => {
+          flushSync(() => setMobileOpen(true));
+          mobileInputRef.current?.focus({ preventScroll: true });
+        }}
         aria-label="記事を検索"
         disabled={mobileOpen}
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="11" cy="11" r="6.5" />
-          <path d="m16 16 4 4" />
-        </svg>
+        <AuthoringIcon name="search" />
       </button>
-      {mobileOpen && (
-        <div className="site-search__backdrop" onPointerDown={closeMobile}>
-          <section
-            className="site-search__sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-label="記事を検索"
-            onPointerDown={(event) => event.stopPropagation()}
+      {mobileOpen &&
+        createPortal(
+          <div
+            ref={backdropRef}
+            className="site-search__backdrop"
+            onPointerDown={closeMobile}
           >
-            <div className="site-search__handle" aria-hidden="true" />
-            <div className="site-search__sheet-header">
-              <div>
-                <SearchContents
-                  query={query}
-                  setQuery={setQuery}
-                  inputRef={mobileInputRef}
-                  {...search}
-                />
+            <section
+              className="site-search__sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-label="記事を検索"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <div className="site-search__handle" aria-hidden="true" />
+              <div className="site-search__sheet-header">
+                <div>
+                  <SearchContents
+                    query={query}
+                    setQuery={setQuery}
+                    inputRef={mobileInputRef}
+                    {...search}
+                  />
+                </div>
+                <button type="button" onClick={closeMobile}>
+                  閉じる
+                </button>
               </div>
-              <button type="button" onClick={closeMobile}>
-                閉じる
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
+            </section>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

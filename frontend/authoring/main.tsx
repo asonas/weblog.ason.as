@@ -279,12 +279,7 @@ function RootApp({
   }, []);
 
   if (window.location.pathname === "/search") {
-    return (
-      <>
-        <HeaderSearch />
-        <SearchPage />
-      </>
-    );
+    return <SearchPage />;
   }
   const draftRoute = resolveDraftRoute(window.location.pathname, {
     deploymentEnvironment: __DEPLOYMENT_ENVIRONMENT__,

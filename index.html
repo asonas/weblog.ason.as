@@ -8,6 +8,9 @@
     <meta name="Hatena::Bookmark" content="nocomment">
     <title>weblog.ason.as</title>
     <script>
+      if (location.pathname === "/search") {
+        document.documentElement.dataset.view = "search";
+      }
       if (location.pathname === "/" && !new URLSearchParams(location.search).has("new")) {
         document.documentElement.dataset.home = "true";
       }

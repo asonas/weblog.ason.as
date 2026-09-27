@@ -774,16 +774,16 @@ select {
 .site-search__field > button {
   display: grid;
   place-items: center;
-  inline-size: 1.6rem;
-  block-size: 1.6rem;
-  min-inline-size: 1.6rem;
-  min-block-size: 1.6rem;
-  flex: 0 0 1.6rem;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  min-inline-size: 2.75rem;
+  min-block-size: 2.75rem;
+  flex: 0 0 2.75rem;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--ink);
-  color: var(--surface);
+  background: transparent;
+  color: var(--ink);
 }
 
 .site-search__desktop .site-search__results,
@@ -823,7 +823,7 @@ select {
 
 .site-search__results > a span {
   overflow: hidden;
-  color: var(--muted);
+  color: var(--muted-ink);
   font-size: 0.85rem;
   line-height: 1.45;
   text-overflow: ellipsis;
@@ -833,7 +833,7 @@ select {
 .site-search__message {
   margin: 0;
   padding: 1.25rem 1rem;
-  color: var(--muted);
+  color: var(--muted-ink);
 }
 
 .site-search__all {
@@ -854,13 +854,13 @@ select {
 }
 
 .search-page {
-  inline-size: min(48rem, 100%);
+  inline-size: min(var(--measure-content), 100%);
   margin-inline: auto;
-  padding-block: 2rem 5rem;
+  padding: var(--space-8) var(--space-4) var(--space-16);
 }
 
 .search-page .site-search__results {
-  margin-block-start: 1rem;
+  margin-block-start: var(--space-6);
   border-block-start: 1px solid var(--separator);
 }
 
@@ -1893,7 +1893,7 @@ html[data-universe="on"] .linked-pages {
 
 /* Scope the public theme without changing the authoring controls. */
 :is(
-  :root:is([data-home="true"], [data-view="reading"]),
+  :root:is([data-home="true"], [data-view="reading"], [data-view="search"]),
   .draft-preview__document
 ) {
   --canvas: #fff;
@@ -2389,22 +2389,68 @@ html[data-header-scrolled="true"]
   outline-color: var(--atlas-blue);
 }
 
-.search-page {
-  border-block-start: 0.3rem solid var(--atlas-teal);
+html[data-view="search"] .site-header {
+  max-inline-size: none;
+  padding: var(--space-3) var(--space-4);
+}
+
+html[data-view="search"] .header-actions {
+  margin-inline-start: auto;
+}
+
+html[data-view="search"] .header-action:not([hidden]) {
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
 }
 
 .search-page h1 {
-  color: var(--atlas-teal);
+  margin-block: 0 var(--space-6);
+  color: var(--ink);
+  font-size: var(--text-page-title);
   letter-spacing: normal;
 }
 
-.search-page .site-search__field:focus-within {
-  border-color: var(--atlas-teal);
+.search-page .site-search__field,
+.site-search__sheet .site-search__field {
+  gap: var(--space-2);
+  padding-inline: var(--space-3);
+  border: var(--border-width) solid var(--separator);
+  border-radius: var(--radius-control);
+  background: var(--canvas);
+}
+
+.search-page .site-search__field input,
+.site-search__sheet input {
+  font: inherit;
+  font-size: var(--text-body);
+}
+
+.search-page .site-search__field:focus-within,
+.site-search__sheet .site-search__field:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.search-page .site-search__results > a {
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+}
+
+.search-page .site-search__results > a span {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font-size: var(--text-ui);
+  line-height: 1.75;
 }
 
 .search-page .site-search__results > a:hover,
 .search-page .site-search__results > a:focus-visible {
-  background: color-mix(in oklch, var(--atlas-warm) 20%, var(--surface));
+  background: var(--quiet-fill);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3608,8 +3654,9 @@ td {
 
   .site-search__backdrop {
     position: fixed;
-    z-index: 30;
-    inset: 0;
+    z-index: 100;
+    inset: 0 0 auto;
+    block-size: var(--search-viewport-height, 100dvh);
     display: flex;
     align-items: flex-end;
     background: color-mix(in oklch, var(--ink) 35%, transparent);
@@ -3650,7 +3697,7 @@ td {
     min-block-size: 2.75rem;
     border: 0;
     background: transparent;
-    color: var(--atlas-teal);
+    color: var(--ink);
   }
 
   .site-search__sheet .site-search__results {
@@ -3658,7 +3705,7 @@ td {
   }
 
   .search-page {
-    padding-block-start: 1rem;
+    padding-block-start: var(--space-6);
   }
 }
 
