@@ -210,6 +210,7 @@ html[data-draft-workspace="true"] body {
   border: 0;
   padding: var(--space-4) var(--space-6);
   padding-block-end: calc(var(--space-4) + 3lh);
+  scroll-padding-block-end: 3lh;
   background: oklch(1 0 0);
   font-family:
     "Source Han Code JP", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
