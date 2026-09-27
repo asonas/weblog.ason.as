@@ -20,6 +20,7 @@ import {
   insertMarkdownBlock,
   markdownBlockIndexAt,
   markdownKeyEdit,
+  suggestionHorizontalPosition,
   suggestionVerticalPosition,
   textareaWikiLinkQuery,
   type WikiLinkQuery,
@@ -99,6 +100,7 @@ async function uploadImage(file: File, csrf: () => Promise<string>) {
 function caretPosition(
   field: HTMLTextAreaElement,
   suggestionHeight: number,
+  suggestionWidth: number,
 ): CSSProperties {
   const mirror = document.createElement("div");
   const style = getComputedStyle(field);
@@ -143,9 +145,10 @@ function caretPosition(
     ),
   );
   const result = {
-    left: Math.min(
-      field.clientWidth - 24,
+    left: suggestionHorizontalPosition(
       marker.offsetLeft - field.scrollLeft,
+      field.clientWidth,
+      suggestionWidth,
     ),
     ...suggestionVerticalPosition(
       caretTop,
@@ -439,9 +442,8 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     const list = wikiLinkSuggestionList.current;
     if (!field || !list || wikiLinkSuggestions.length === 0) return;
     const updatePosition = () => {
-      setWikiLinkSuggestionStyle(
-        caretPosition(field, list.getBoundingClientRect().height),
-      );
+      const { width, height } = list.getBoundingClientRect();
+      setWikiLinkSuggestionStyle(caretPosition(field, height, width));
     };
     updatePosition();
     const observer = new ResizeObserver(updatePosition);

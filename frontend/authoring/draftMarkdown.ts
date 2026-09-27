@@ -158,6 +158,18 @@ export function suggestionVerticalPosition(
   return { bottom: fieldHeight - caretTop + gap };
 }
 
+export function suggestionHorizontalPosition(
+  caretLeft: number,
+  fieldWidth: number,
+  suggestionWidth: number,
+): number {
+  const inset = 16;
+  return Math.max(
+    inset,
+    Math.min(caretLeft, fieldWidth - suggestionWidth - inset),
+  );
+}
+
 export function textareaWikiLinkQuery(
   value: string,
   selectionStart: number,

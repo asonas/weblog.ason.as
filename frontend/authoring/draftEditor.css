@@ -224,8 +224,16 @@ html[data-draft-workspace="true"] body {
 }
 
 .wiki-link-suggestions.draft-wiki-link-suggestions {
+  inline-size: max-content;
   max-inline-size: calc(100% - 2rem);
+  flex-wrap: wrap;
   transform: none;
+}
+
+.draft-wiki-link-suggestions .wiki-link-suggestions__option {
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .draft-preview {

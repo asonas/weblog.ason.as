@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   markdownBlockIndexAt,
   markdownKeyEdit,
+  suggestionHorizontalPosition,
   suggestionVerticalPosition,
   textareaWikiLinkQuery,
   wrapTextareaSelectionInWikiLink,
@@ -118,4 +119,10 @@ test("places Wiki link suggestions below the line when they do not fit above", (
   assert.deepEqual(suggestionVerticalPosition(64, 500, 24, 56), {
     bottom: 444,
   });
+});
+
+test("keeps Wiki link suggestions inside the textarea horizontally", () => {
+  assert.equal(suggestionHorizontalPosition(220, 300, 260), 24);
+  assert.equal(suggestionHorizontalPosition(24, 300, 200), 24);
+  assert.equal(suggestionHorizontalPosition(220, 300, 200), 84);
 });
