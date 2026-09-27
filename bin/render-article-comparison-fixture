@@ -24,6 +24,10 @@ module ArticleComparisonFixture
       [@page]
     end
 
+    def find_pages_by_routes(routes)
+      routes.include?(@page.name) ? [@page] : []
+    end
+
     def approved_webmentions_for_page(_id)
       []
     end

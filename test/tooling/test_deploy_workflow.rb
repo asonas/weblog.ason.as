@@ -41,9 +41,9 @@ class DeployWorkflowTest < Minitest::Test
   def test_mutations_publish_revalidating_entrypoints_without_invalidation
     steps = @workflow.dig("jobs", "deploy", "steps")
     names = steps.filter_map { |step| step["name"] }
-    ordered = ["Apply database schema", "Deploy authoring Lambda image", "Publish immutable site assets", "Publish stable site assets", "Publish site HTML", "Smoke check production"]
+    ordered = ["Apply database schema", "Publish immutable site assets before Lambda update", "Deploy authoring Lambda image", "Publish stable site assets", "Publish site HTML", "Smoke check production"]
     assert_equal(ordered, names.select { |name| ordered.include?(name) })
-    assets = steps.find { |step| step["name"] == "Publish immutable site assets" }.fetch("run")
+    assets = steps.find { |step| step["name"] == "Publish immutable site assets before Lambda update" }.fetch("run")
     assert_includes assets, "static/authoring/assets/"
     refute_includes assets, "--delete"
     assert_includes assets, "max-age=31536000,immutable"
