@@ -27,6 +27,21 @@ resource "aws_lambda_function" "authoring" {
       WEBMENTION_QUEUE_ARN               = aws_sqs_queue.webmention.arn
       WEBMENTION_PUBLISH_DEAD_LETTER_ARN = aws_sqs_queue.webmention_publish_dead_letter.arn
       WEBMENTION_PUBLISH_QUEUE_ARN       = aws_sqs_queue.webmention_publish.arn
+
+      DYNAMIC_PUBLIC_ARTICLE_ROUTES = join(",", [
+        "Monitor+",
+        "2026-09-26",
+        "2026-09-25",
+        "2026-09-24",
+        "Webmentionクラブ",
+        "2026-09-23",
+        "2026-09-22",
+        "2026-09-21",
+        "2026-09-19",
+        "2026-09-18",
+        "2026-09-17",
+        "2026-09-16",
+      ])
     })
   }
 
