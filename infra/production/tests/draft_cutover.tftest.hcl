@@ -1,5 +1,10 @@
 mock_provider "aws" {
   override_during = plan
+  mock_resource "aws_cloudfront_cache_policy" {
+    defaults = {
+      id = "public-html-test-policy"
+    }
+  }
   mock_data "aws_iam_policy_document" {
     defaults = {
       json = jsonencode({ Version = "2012-10-17", Statement = [] })
@@ -61,8 +66,8 @@ run "cutover_routes_published_reads_and_retires_legacy_generators" {
   }
 
   assert {
-    condition     = aws_cloudfront_distribution.weblog.default_cache_behavior[0].target_origin_id == "authoring-api" && aws_cloudfront_distribution.weblog.default_cache_behavior[0].cache_policy_id == data.aws_cloudfront_cache_policy.caching_disabled.id
-    error_message = "Article routes must resolve the active published pointer without stale CDN bodies."
+    condition     = aws_cloudfront_distribution.weblog.default_cache_behavior[0].target_origin_id == "authoring-api" && aws_cloudfront_distribution.weblog.default_cache_behavior[0].cache_policy_id == aws_cloudfront_cache_policy.public_html.id
+    error_message = "Article routes must resolve the active published pointer with origin-controlled caching."
   }
 
   assert {

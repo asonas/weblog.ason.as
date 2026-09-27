@@ -70,18 +70,30 @@ class DraftSiteTest < Minitest::Test
 
       first = get.call("選定記事")
       assert_equal 200, first.fetch(:statusCode)
+      assert_equal WeblogAuthoring::DraftSite::PUBLIC_HTML_CACHE_CONTROL, first.dig(:headers, "cache-control")
       assert_includes first.fetch(:body), "公開本文"
       assert_includes first.fetch(:body), '<meta property="og:title" content="選定記事"'
       assert_includes first.fetch(:body), 'src="/assets/photo.jpg"'
       assert_includes first.fetch(:body), WeblogAuthoring.encoded_route("従来記事")
       assert_includes first.fetch(:body), "data-public-universe="
       assert_includes first.fetch(:body), "public-#{release_a}.js"
-      assert_equal "Saved HTML 従来記事", get.call("従来記事").fetch(:body)
-      assert_equal "", get.call("選定記事", "HEAD").fetch(:body)
+      old_response = get.call("従来記事")
+      assert_equal "Saved HTML 従来記事", old_response.fetch(:body)
+      assert_equal "no-store", old_response.dig(:headers, "cache-control")
+      missing = get.call("存在しない記事")
+      assert_equal 404, missing.fetch(:statusCode)
+      assert_equal "no-store", missing.dig(:headers, "cache-control")
+      head = get.call("選定記事", "HEAD")
+      assert_equal "", head.fetch(:body)
+      assert_equal first.fetch(:headers), head.fetch(:headers)
+      request = { "rawPath" => "/#{WeblogAuthoring.encoded_route('選定記事')}", "requestContext" => { "http" => { "method" => "GET" } } }
+      assert_equal first, site.call(request.merge("rawPath" => "#{request.fetch('rawPath')}/"))
+      assert_equal first, site.call(request.merge("rawQueryString" => "ref=feed", "cookies" => ["session=private"]))
       not_modified = site.call("rawPath" => "/#{WeblogAuthoring.encoded_route('選定記事')}",
         "requestContext" => { "http" => { "method" => "GET" } }, "headers" => { "if-none-match" => first.dig(:headers, "etag") })
       assert_equal 304, not_modified.fetch(:statusCode)
       assert_equal "", not_modified.fetch(:body)
+      assert_equal first.dig(:headers, "cache-control"), not_modified.dig(:headers, "cache-control")
       api_response = site.call("rawPath" => "/api/pages/#{ids.first}", "pathParameters" => { "id" => ids.first },
         "requestContext" => { "http" => { "method" => "GET" } })
       assert_equal 200, api_response.fetch(:statusCode)

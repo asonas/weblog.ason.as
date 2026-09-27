@@ -1,6 +1,12 @@
 mock_provider "aws" {
   override_during = plan
 
+  mock_resource "aws_cloudfront_cache_policy" {
+    defaults = {
+      id = "public-html-test-policy"
+    }
+  }
+
   mock_resource "aws_cloudfront_function" {
     defaults = {
       arn = "arn:aws:cloudfront::123456789012:function/weblog-site-routes-production"
@@ -89,6 +95,16 @@ run "dynamic_api_caching_disabled" {
   assert {
     condition     = one([for behavior in aws_cloudfront_distribution.weblog.ordered_cache_behavior : behavior if behavior.path_pattern == "/api/*"]).cache_policy_id == data.aws_cloudfront_cache_policy.caching_disabled.id
     error_message = "dynamic API responses must use the managed caching-disabled policy"
+  }
+
+  assert {
+    condition     = aws_cloudfront_distribution.weblog.default_cache_behavior[0].cache_policy_id == aws_cloudfront_cache_policy.public_html.id && aws_cloudfront_cache_policy.public_html.min_ttl == 0 && aws_cloudfront_cache_policy.public_html.default_ttl == 0 && aws_cloudfront_cache_policy.public_html.max_ttl >= 86580
+    error_message = "only origin-opted-in public HTML may be cached for 180 seconds and kept stale for 24 hours"
+  }
+
+  assert {
+    condition     = one([for behavior in aws_cloudfront_distribution.weblog.ordered_cache_behavior : behavior if behavior.path_pattern == "/feed.xml"]).cache_policy_id == data.aws_cloudfront_cache_policy.caching_disabled.id
+    error_message = "the public Atom feed must retain its previous uncached behavior"
   }
 
   assert {

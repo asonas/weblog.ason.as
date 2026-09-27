@@ -17,6 +17,31 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host_header" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
+resource "aws_cloudfront_cache_policy" "public_html" {
+  name        = "weblog-public-html-production"
+  comment     = "Origin opt-in for published HTML; 180s fresh and up to 24h stale on error"
+  min_ttl     = 0
+  default_ttl = 0
+  max_ttl     = 86580
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
+
+    cookies_config {
+      cookie_behavior = "none"
+    }
+
+    headers_config {
+      header_behavior = "none"
+    }
+
+    query_strings_config {
+      query_string_behavior = "none"
+    }
+  }
+}
+
 resource "aws_s3_bucket" "site" {
   bucket = "weblog-asonas-site-production-${data.aws_caller_identity.current.account_id}"
 }
@@ -177,7 +202,7 @@ resource "aws_cloudfront_distribution" "weblog" {
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD"]
     compress                 = true
-    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    cache_policy_id          = aws_cloudfront_cache_policy.public_html.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
 
   }
@@ -187,6 +212,17 @@ resource "aws_cloudfront_distribution" "weblog" {
     target_origin_id         = "authoring-api"
     viewer_protocol_policy   = "https-only"
     allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
+  }
+
+  ordered_cache_behavior {
+    path_pattern             = "/feed.xml"
+    target_origin_id         = "authoring-api"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD"]
     compress                 = true
     cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id

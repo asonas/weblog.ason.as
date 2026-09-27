@@ -8,6 +8,8 @@ require_relative "webmention_site_publisher"
 
 module WeblogAuthoring
   class DraftSite
+    PUBLIC_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=180, stale-if-error=86400"
+
     def initialize(api:, reader:, s3_client:, bucket:, published:, store: nil, site_url: nil, dynamic_article_routes: [])
       @api = api
       @reader = reader
@@ -43,6 +45,7 @@ module WeblogAuthoring
           html = renderer.render_linked_page(route, shell: shell.fetch(:body))
           response = shell.merge(body: html) if html
         end
+        response = response.merge(headers: response.fetch(:headers, {}).merge("cache-control" => "no-store")) if response.fetch(:statusCode) == 404
       end
       method == "HEAD" ? response.merge(body: "") : response
     rescue Aws::S3::Errors::NoSuchKey
@@ -72,9 +75,9 @@ module WeblogAuthoring
       html = renderer.render_document(page, shell:, source_url: "#{@site_url}/#{WeblogAuthoring.encoded_route(page.route)}")
       etag = %("#{Digest::SHA256.hexdigest("#{id}\0#{html}")}")
       if event.fetch("headers", {})["if-none-match"] == etag
-        return { statusCode: 304, headers: { "cache-control" => "no-store", "etag" => etag }, body: "" }
+        return { statusCode: 304, headers: { "cache-control" => PUBLIC_HTML_CACHE_CONTROL, "etag" => etag }, body: "" }
       end
-      { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => "no-store", "etag" => etag }, body: html }
+      { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => PUBLIC_HTML_CACHE_CONTROL, "etag" => etag }, body: html }
     rescue Aws::S3::Errors::NoSuchKey, JSON::ParserError, KeyError
       nil
     end
