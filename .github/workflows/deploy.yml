@@ -288,7 +288,7 @@ jobs:
       - name: Verify display release assets
         if: steps.current.outputs.current == 'true'
         run: |
-          mapfile -t assets < <(rg --only-matching '/static/authoring/assets/[^" ]+' dist/site/public.html | sort -u)
+          mapfile -t assets < <(grep -oE '/static/authoring/assets/[^" ]+' dist/site/public.html | sort -u)
           [[ ${#assets[@]} -ge 2 ]]
           for asset in "${assets[@]}"; do
             aws s3api head-object --bucket "$SITE_BUCKET" --key "${asset#/}" >/dev/null
