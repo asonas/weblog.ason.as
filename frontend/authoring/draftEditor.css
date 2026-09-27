@@ -209,8 +209,7 @@ html[data-draft-workspace="true"] body {
   resize: none;
   border: 0;
   padding: var(--space-4) var(--space-6);
-  padding-block-end: calc(var(--space-4) + 3lh);
-  scroll-padding-block-end: 3lh;
+  padding-block-end: calc(var(--space-4) + 2lh);
   background: oklch(1 0 0);
   font-family:
     "Source Han Code JP", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
@@ -482,7 +481,7 @@ html[data-draft-workspace="true"] body {
 
   .draft-editor__source textarea {
     padding: var(--space-3) 2.25rem var(--space-3) var(--space-3);
-    padding-block-end: calc(var(--space-3) + 3lh);
+    padding-block-end: calc(var(--space-3) + 2lh);
   }
 
   .draft-preview {

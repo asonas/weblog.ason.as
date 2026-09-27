@@ -459,6 +459,11 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   function updateCursorContext() {
     const field = textarea.current;
     if (!field) return;
+    if (
+      field.selectionStart === field.value.length &&
+      field.selectionEnd === field.value.length
+    )
+      field.scrollTop = field.scrollHeight;
     const query = textareaWikiLinkQuery(
       field.value,
       field.selectionStart,
