@@ -103,6 +103,34 @@ export async function enhancePublicArticleEditing(
   }
 }
 
+function enhanceArticleImages(root: HTMLElement) {
+  const images = root.querySelectorAll<HTMLImageElement>(
+    ".article-image > img",
+  );
+
+  for (const image of images) {
+    const container = image.parentElement;
+    if (!container || container.closest("a")) continue;
+    const label = image.alt ? `${image.alt}を` : "画像を";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "article-image__zoom";
+    button.setAttribute("aria-label", `${label}拡大`);
+    button.setAttribute("aria-expanded", "false");
+    image.replaceWith(button);
+    button.append(image);
+    button.addEventListener("click", () => {
+      if (container.dataset.mediaState === "failed") return;
+      const expanded = container.classList.toggle("article-image--expanded");
+      button.setAttribute("aria-expanded", String(expanded));
+      button.setAttribute(
+        "aria-label",
+        `${label}${expanded ? "縮小" : "拡大"}`,
+      );
+    });
+  }
+}
+
 export function enhancePublicArticle(root: HTMLElement) {
   window.addEventListener("message", (event) => {
     if (event.origin !== "https://embed.bsky.app") return;
@@ -129,6 +157,7 @@ export function enhancePublicArticle(root: HTMLElement) {
     if (media.parentElement)
       pending.set(media.parentElement, watchMedia(media, media.parentElement));
   }
+  enhanceArticleImages(root);
   for (const embed of root.querySelectorAll<HTMLElement>(
     ".speakerdeck-player",
   )) {

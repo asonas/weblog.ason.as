@@ -34,12 +34,68 @@ test("public reading keeps existing text and links while media load or fail", as
     const image = document.querySelector("img");
     assert.ok(image);
     image.dispatchEvent(new dom.window.Event("error"));
-    assert.equal(image.parentElement?.dataset.mediaState, "failed");
+    assert.equal(
+      image.closest<HTMLElement>(".article-image")?.dataset.mediaState,
+      "failed",
+    );
     image.dispatchEvent(new dom.window.Event("load"));
-    assert.equal(image.parentElement?.dataset.mediaState, "ready");
+    assert.equal(
+      image.closest<HTMLElement>(".article-image")?.dataset.mediaState,
+      "ready",
+    );
     assert.equal(document.querySelector("p"), paragraph);
   } finally {
     globalThis.fetch = originalFetch;
+    dom.window.close();
+  }
+});
+
+test("article photos expand inline, including portrait photos", async () => {
+  const dom = new JSDOM(
+    '<article><span class="article-image"><img src="/assets/large.webp" width="2560" height="1707" alt="夕焼け"></span><span class="article-image"><img src="/assets/portrait.webp" width="1707" height="2560" alt="縦長の写真"></span><a href="/other"><span class="article-image"><img src="/assets/linked.webp" alt="リンク先の写真"></span></a></article>',
+    { url: "https://weblog.ason.as/article" },
+  );
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    HTMLElement: dom.window.HTMLElement,
+    HTMLImageElement: dom.window.HTMLImageElement,
+    HTMLVideoElement: dom.window.HTMLVideoElement,
+  });
+  try {
+    const { enhancePublicArticle } = await import("./publicArticle");
+    const article = document.querySelector<HTMLElement>("article");
+    assert.ok(article);
+    enhancePublicArticle(article);
+    const buttons = article.querySelectorAll<HTMLButtonElement>(
+      ".article-image__zoom",
+    );
+    assert.equal(buttons.length, 2);
+    assert.equal(document.querySelector("dialog"), null);
+    assert.equal(
+      article.querySelector("a > .article-image > img")?.getAttribute("src"),
+      "/assets/linked.webp",
+    );
+    for (const button of buttons) {
+      const image = button.querySelector("img");
+      assert.ok(image);
+      const originalSrc = image.getAttribute("src");
+      button.click();
+      assert.equal(
+        button.parentElement?.classList.contains("article-image--expanded"),
+        true,
+      );
+      assert.equal(button.getAttribute("aria-expanded"), "true");
+      assert.match(button.getAttribute("aria-label") || "", /縮小$/);
+      assert.equal(image.getAttribute("src"), originalSrc);
+      button.click();
+      assert.equal(
+        button.parentElement?.classList.contains("article-image--expanded"),
+        false,
+      );
+      assert.equal(button.getAttribute("aria-expanded"), "false");
+    }
+  } finally {
     dom.window.close();
   }
 });
@@ -154,17 +210,18 @@ test("offscreen media keep their waiting state until they approach the viewport"
     const image = document.querySelector("img");
     const video = document.querySelector("video");
     assert.ok(article && image?.parentElement && video?.parentElement);
+    const imageContainer = image.parentElement;
     enhancePublicArticle(article);
     for (const timer of timers.splice(0)) timer();
-    assert.equal(image.parentElement.dataset.mediaState, undefined);
+    assert.equal(imageContainer.dataset.mediaState, undefined);
     assert.ok(intersect);
     intersect([
-      { target: image.parentElement, isIntersecting: true },
+      { target: imageContainer, isIntersecting: true },
       { target: video.parentElement, isIntersecting: true },
     ]);
     image.dispatchEvent(new dom.window.Event("load"));
     video.dispatchEvent(new dom.window.Event("loadeddata"));
-    assert.equal(image.parentElement.dataset.mediaState, "ready");
+    assert.equal(imageContainer.dataset.mediaState, "ready");
     assert.equal(video.parentElement.dataset.mediaState, "ready");
   } finally {
     dom.window.close();
