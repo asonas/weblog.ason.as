@@ -34,7 +34,9 @@ env:
   BLUESKY_OAUTH_ECR_REPOSITORY: weblog-bluesky-oauth-production
   BLUESKY_OAUTH_LAMBDA_FUNCTION: weblog-bluesky-oauth-production
   DRAFT_WORKER_ECR_REPOSITORY: weblog-draft-worker-production
+  PROOFREADING_ECR_REPOSITORY: weblog-proofreading-production
   DRAFT_WORKER_LAMBDA_FUNCTION: weblog-draft-worker-production
+  PROOFREADING_LAMBDA_FUNCTION: weblog-proofreading-production
   WEBMENTION_RECEIVER_LAMBDA_FUNCTION: weblog-webmention-receiver-production
   WEBMENTION_WORKER_LAMBDA_FUNCTION: weblog-webmention-worker-production
   WEBMENTION_PUBLISHER_LAMBDA_FUNCTION: weblog-webmention-publisher-production
@@ -126,8 +128,20 @@ jobs:
       dockerfile: Dockerfile.draft-worker
       build_inputs: '[".dockerignore","Dockerfile.draft-worker","package.json","package-lock.json","tsconfig.draft-worker-lambda.json","lambda/draft_worker"]'
 
+  build-proofreading:
+    needs: gate
+    if: needs.gate.outputs.current == 'true'
+    uses: ./.github/workflows/build-lambda-image.yml
+    with:
+      service: proofreading
+      target_sha: ${{ github.event.workflow_run.head_sha }}
+      repository: weblog-proofreading-production
+      function_name: weblog-proofreading-production
+      dockerfile: Dockerfile.proofreading
+      build_inputs: '[".dockerignore","Dockerfile.proofreading","lambda/proofreading"]'
+
   deploy:
-    needs: [gate, build-authoring, build-search, build-inbox, build-oauth, build-draft-worker]
+    needs: [gate, build-authoring, build-search, build-inbox, build-oauth, build-draft-worker, build-proofreading]
     if: >-
       always() &&
       needs.gate.outputs.current == 'true' &&
@@ -135,7 +149,8 @@ jobs:
       needs.build-search.result == 'success' &&
       needs.build-inbox.result == 'success' &&
       needs.build-oauth.result == 'success' &&
-      needs.build-draft-worker.result == 'success'
+      needs.build-draft-worker.result == 'success' &&
+      needs.build-proofreading.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -164,10 +179,15 @@ jobs:
       OAUTH_SOURCE_COMMIT: ${{ needs.build-oauth.outputs.source_commit }}
       OAUTH_BUILD_RUN_ID: ${{ needs.build-oauth.outputs.build_run_id }}
       DRAFT_WORKER_DIGEST: ${{ needs.build-draft-worker.outputs.digest }}
+      PROOFREADING_DIGEST: ${{ needs.build-proofreading.outputs.digest }}
       DRAFT_WORKER_RELEASE_TAG: ${{ needs.build-draft-worker.outputs.release_tag }}
+      PROOFREADING_RELEASE_TAG: ${{ needs.build-proofreading.outputs.release_tag }}
       DRAFT_WORKER_CONTENT_HASH: ${{ needs.build-draft-worker.outputs.content_hash }}
+      PROOFREADING_CONTENT_HASH: ${{ needs.build-proofreading.outputs.content_hash }}
       DRAFT_WORKER_SOURCE_COMMIT: ${{ needs.build-draft-worker.outputs.source_commit }}
+      PROOFREADING_SOURCE_COMMIT: ${{ needs.build-proofreading.outputs.source_commit }}
       DRAFT_WORKER_BUILD_RUN_ID: ${{ needs.build-draft-worker.outputs.build_run_id }}
+      PROOFREADING_BUILD_RUN_ID: ${{ needs.build-proofreading.outputs.build_run_id }}
     steps:
       - name: Record production deploy start
         id: timing
@@ -212,13 +232,14 @@ jobs:
       - name: Detect optional Lambda infrastructure
         id: infra
         run: |
-          for service in search inbox notifier oauth draft receiver worker publisher cleanup; do
+          for service in search inbox notifier oauth draft proofreading receiver worker publisher cleanup; do
             case "$service" in
               search) repository="$SEARCH_INDEXER_ECR_REPOSITORY"; function="$SEARCH_INDEXER_LAMBDA_FUNCTION" ;;
               inbox) repository="$INBOX_SYNC_ECR_REPOSITORY"; function="$INBOX_SYNC_LAMBDA_FUNCTION" ;;
               notifier) repository="$INBOX_SYNC_ECR_REPOSITORY"; function="$MATRIX_NOTIFIER_LAMBDA_FUNCTION" ;;
               oauth) repository="$BLUESKY_OAUTH_ECR_REPOSITORY"; function="$BLUESKY_OAUTH_LAMBDA_FUNCTION" ;;
               draft) repository="$DRAFT_WORKER_ECR_REPOSITORY"; function="$DRAFT_WORKER_LAMBDA_FUNCTION" ;;
+              proofreading) repository="$PROOFREADING_ECR_REPOSITORY"; function="$PROOFREADING_LAMBDA_FUNCTION" ;;
               receiver) repository="$ECR_REPOSITORY"; function="$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" ;;
               worker) repository="$ECR_REPOSITORY"; function="$WEBMENTION_WORKER_LAMBDA_FUNCTION" ;;
               publisher) repository="$ECR_REPOSITORY"; function="$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" ;;
@@ -362,6 +383,13 @@ jobs:
           aws lambda update-function-code --function-name "$DRAFT_WORKER_LAMBDA_FUNCTION" --image-uri "$image_uri"
           aws lambda wait function-updated-v2 --function-name "$DRAFT_WORKER_LAMBDA_FUNCTION"
 
+      - name: Deploy proofreading Lambda image
+        if: steps.current.outputs.current == 'true' && steps.infra.outputs.proofreading == 'true' && needs.build-proofreading.outputs.deploy == 'true'
+        run: |
+          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROOFREADING_ECR_REPOSITORY}@${PROOFREADING_DIGEST}"
+          aws lambda update-function-code --function-name "$PROOFREADING_LAMBDA_FUNCTION" --image-uri "$image_uri"
+          aws lambda wait function-updated-v2 --function-name "$PROOFREADING_LAMBDA_FUNCTION"
+
       - name: Record Lambda deployment completion
         id: lambda
         if: steps.current.outputs.current == 'true'
@@ -436,11 +464,17 @@ jobs:
             --arg oauth_source_commit "$OAUTH_SOURCE_COMMIT" \
             --arg oauth_build_run_id "$OAUTH_BUILD_RUN_ID" \
             --arg draft_worker_repository "$DRAFT_WORKER_ECR_REPOSITORY" \
+            --arg proofreading_repository "$PROOFREADING_ECR_REPOSITORY" \
             --arg draft_worker_digest "$DRAFT_WORKER_DIGEST" \
+            --arg proofreading_digest "$PROOFREADING_DIGEST" \
             --arg draft_worker_release_tag "$DRAFT_WORKER_RELEASE_TAG" \
+            --arg proofreading_release_tag "$PROOFREADING_RELEASE_TAG" \
             --arg draft_worker_content_hash "$DRAFT_WORKER_CONTENT_HASH" \
+            --arg proofreading_content_hash "$PROOFREADING_CONTENT_HASH" \
             --arg draft_worker_source_commit "$DRAFT_WORKER_SOURCE_COMMIT" \
+            --arg proofreading_source_commit "$PROOFREADING_SOURCE_COMMIT" \
             --arg draft_worker_build_run_id "$DRAFT_WORKER_BUILD_RUN_ID" \
+            --arg proofreading_build_run_id "$PROOFREADING_BUILD_RUN_ID" \
             'def nullable: if length == 0 then null else . end;
             {
               schema_version: 1,
@@ -457,7 +491,8 @@ jobs:
                 {service: "search-indexer", repository: $search_repository, digest: $search_digest, release_tag: ($search_release_tag | nullable), content_hash: $search_content_hash, source_commit: $search_source_commit, build_run_id: $search_build_run_id},
                 {service: "inbox-sync", repository: $inbox_repository, digest: $inbox_digest, release_tag: ($inbox_release_tag | nullable), content_hash: $inbox_content_hash, source_commit: $inbox_source_commit, build_run_id: $inbox_build_run_id},
                 {service: "bluesky-oauth", repository: $oauth_repository, digest: $oauth_digest, release_tag: ($oauth_release_tag | nullable), content_hash: $oauth_content_hash, source_commit: $oauth_source_commit, build_run_id: $oauth_build_run_id},
-                {service: "draft-worker", repository: $draft_worker_repository, digest: $draft_worker_digest, release_tag: ($draft_worker_release_tag | nullable), content_hash: $draft_worker_content_hash, source_commit: $draft_worker_source_commit, build_run_id: $draft_worker_build_run_id}
+                {service: "draft-worker", repository: $draft_worker_repository, digest: $draft_worker_digest, release_tag: ($draft_worker_release_tag | nullable), content_hash: $draft_worker_content_hash, source_commit: $draft_worker_source_commit, build_run_id: $draft_worker_build_run_id},
+                {service: "proofreading", repository: $proofreading_repository, digest: $proofreading_digest, release_tag: ($proofreading_release_tag | nullable), content_hash: $proofreading_content_hash, source_commit: $proofreading_source_commit, build_run_id: $proofreading_build_run_id}
               ]
             }' > deployment-manifest.json
           aws s3 cp deployment-manifest.json "s3://${SITE_BUCKET}/${manifest_key}" --only-show-errors \

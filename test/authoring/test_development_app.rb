@@ -9,6 +9,13 @@ require "rack/mock"
 class TestDevelopmentApp < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-08-21T12:00:00+09:00")
 
+  def test_proofreading_api_runs_node_without_saving_the_text
+    status, headers, body = request("POST", "/api/authoring/proofread", payload: { "text" => "見れる。" })
+    assert_equal 200, status
+    assert_equal "no-store", headers.fetch("cache-control")
+    assert_equal "no-dropping-the-ra", JSON.parse(body).fetch("messages").fetch(0).fetch("ruleId")
+  end
+
   def test_lists_webmentions_for_the_local_administration
     status, _headers, body = request("GET", "/api/webmentions")
     assert_equal 200, status, body

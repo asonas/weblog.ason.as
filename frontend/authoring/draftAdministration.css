@@ -453,6 +453,60 @@ body:has(.draft-admin) .page-shell {
   padding: 0 0.75rem 1.75rem;
   font: 0.8125rem / 1.5 var(--authoring-font-mono);
 }
+.draft-proofreading {
+  min-block-size: 0;
+  overflow-y: auto;
+  margin-block-start: 1.5rem;
+  padding: 1rem 0.25rem 0;
+  border-block-start: 1px solid var(--separator);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.draft-proofreading h2 {
+  margin: 0 0 0.75rem;
+  padding-inline: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.draft-proofreading h2 span,
+.draft-proofreading p {
+  color: var(--muted-ink);
+}
+.draft-proofreading p {
+  margin: 0;
+  padding-inline: 0.5rem;
+}
+.draft-proofreading ol {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.draft-proofreading li button {
+  display: grid;
+  inline-size: 100%;
+  gap: 0.25rem;
+  padding: 0.625rem 0.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.draft-proofreading li button span:first-child {
+  color: var(--muted-ink);
+}
+.draft-proofreading li button:hover {
+  background: var(--quiet-fill);
+}
+.draft-proofreading li button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
 :is(.draft-admin, .draft-editor, .webmention-administration)
   .draft-navigation--expanded
   svg {
@@ -535,6 +589,11 @@ body:has(.draft-admin) .page-shell {
   .draft-navigation__brand {
     inline-size: 100%;
     padding: 0 0.5rem 0.5rem;
+  }
+  .draft-proofreading {
+    inline-size: 100%;
+    max-block-size: 8rem;
+    margin-block-start: 0.5rem;
   }
   .webmention-ledger .webmention-workbench {
     display: block;

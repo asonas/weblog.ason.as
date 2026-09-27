@@ -22,6 +22,7 @@ name: Roll back production Lambda
           - inbox-sync
           - bluesky-oauth
           - draft-worker
+          - proofreading
 
 permissions:
   contents: read
@@ -52,7 +53,9 @@ jobs:
       BLUESKY_OAUTH_ECR_REPOSITORY: weblog-bluesky-oauth-production
       BLUESKY_OAUTH_LAMBDA_FUNCTION: weblog-bluesky-oauth-production
       DRAFT_WORKER_ECR_REPOSITORY: weblog-draft-worker-production
+      PROOFREADING_ECR_REPOSITORY: weblog-proofreading-production
       DRAFT_WORKER_LAMBDA_FUNCTION: weblog-draft-worker-production
+      PROOFREADING_LAMBDA_FUNCTION: weblog-proofreading-production
       WEBMENTION_RECEIVER_LAMBDA_FUNCTION: weblog-webmention-receiver-production
       WEBMENTION_WORKER_LAMBDA_FUNCTION: weblog-webmention-worker-production
       WEBMENTION_PUBLISHER_LAMBDA_FUNCTION: weblog-webmention-publisher-production
@@ -87,6 +90,7 @@ jobs:
             inbox-sync) expected_repository="$INBOX_SYNC_ECR_REPOSITORY" ;;
             bluesky-oauth) expected_repository="$BLUESKY_OAUTH_ECR_REPOSITORY" ;;
             draft-worker) expected_repository="$DRAFT_WORKER_ECR_REPOSITORY" ;;
+            proofreading) expected_repository="$PROOFREADING_ECR_REPOSITORY" ;;
           esac
           [[ "$repository" == "$expected_repository" ]]
           [[ "$digest" == sha256:* ]]
@@ -153,6 +157,9 @@ jobs:
               ;;
             draft-worker)
               restore_function "$DRAFT_WORKER_LAMBDA_FUNCTION" false
+              ;;
+            proofreading)
+              restore_function "$PROOFREADING_LAMBDA_FUNCTION" false
               ;;
           esac
 

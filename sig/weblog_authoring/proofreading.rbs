@@ -1,0 +1,8 @@
+module WeblogAuthoring
+  class Proofreading
+    class Unavailable < StandardError
+    end
+    def initialize: (?lambda_client: untyped, ?function_name: String?) -> void
+    def call: (untyped) -> Hash[String, untyped]
+  end
+end

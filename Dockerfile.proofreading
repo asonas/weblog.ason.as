@@ -1,0 +1,6 @@
+FROM public.ecr.aws/lambda/nodejs:24
+COPY lambda/proofreading/package.json lambda/proofreading/package-lock.json ./
+RUN npm ci --omit=dev
+COPY lambda/proofreading/handler.mjs ./
+RUN node --input-type=module --eval "await import('./handler.mjs')"
+CMD ["handler.handler"]

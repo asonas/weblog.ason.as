@@ -20,6 +20,7 @@ resource "aws_lambda_function" "authoring" {
       SEARCH_INDEX_QUEUE_URL             = aws_sqs_queue.search_index.url
       INBOX_SYNC_FUNCTION_NAME           = aws_lambda_function.inbox_sync.function_name
       BLUESKY_OAUTH_FUNCTION_NAME        = aws_lambda_function.bluesky_oauth.function_name
+      PROOFREADING_FUNCTION_NAME         = aws_lambda_function.proofreading.function_name
       WEBMENTION_QUEUE_URL               = aws_sqs_queue.webmention.url
       WEBMENTION_SENDER_ENABLED          = tostring(var.webmention_sender_enabled)
       WEBMENTION_PUBLISH_QUEUE_URL       = aws_sqs_queue.webmention_publish.url
@@ -52,6 +53,7 @@ resource "aws_lambda_function" "authoring" {
     aws_iam_role_policy.image_upload,
     aws_iam_role_policy.invoke_inbox_sync,
     aws_iam_role_policy.invoke_bluesky_oauth,
+    aws_iam_role_policy.invoke_proofreading,
     aws_iam_role_policy.oauth_secret,
     aws_iam_role_policy.search_index_notify,
     aws_iam_role_policy.search_index_read,

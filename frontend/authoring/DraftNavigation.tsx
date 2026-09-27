@@ -1,3 +1,5 @@
+import { Fragment, type ReactNode } from "react";
+
 // Regen Icons, MIT: ./regen-icons-LICENSE.txt
 const licenseUrl = new URL("./regen-icons-LICENSE.txt", import.meta.url).href;
 
@@ -39,7 +41,7 @@ const LINKS = [
   },
 ];
 
-export function DraftNavigation() {
+export function DraftNavigation({ children }: { children?: ReactNode }) {
   const links = [LINKS[1], LINKS[0], LINKS[2], LINKS[3], LINKS[4]];
   return (
     <nav
@@ -65,23 +67,25 @@ export function DraftNavigation() {
           </>
         );
         return (
-          <a
-            href={link.href}
-            data-action={link.key}
-            aria-current={
-              window.location.pathname === link.href ? "page" : undefined
-            }
-            className={
-              link.key === "webmentions"
-                ? "draft-navigation__webmentions"
-                : undefined
-            }
-            key={link.href}
-            aria-label={link.name}
-            title={link.name}
-          >
-            {content}
-          </a>
+          <Fragment key={link.href}>
+            {link.key === "home" && children}
+            <a
+              href={link.href}
+              data-action={link.key}
+              aria-current={
+                window.location.pathname === link.href ? "page" : undefined
+              }
+              className={
+                link.key === "webmentions"
+                  ? "draft-navigation__webmentions"
+                  : undefined
+              }
+              aria-label={link.name}
+              title={link.name}
+            >
+              {content}
+            </a>
+          </Fragment>
         );
       })}
       <link rel="license" href={licenseUrl} />

@@ -31,6 +31,7 @@ require_relative "draft_publisher"
 require_relative "draft_jobs"
 require_relative "draft_administration"
 require_relative "draft_reader"
+require_relative "proofreading"
 
 module WeblogAuthoring
   class LambdaApi
@@ -69,11 +70,12 @@ module WeblogAuthoring
                    allowed_github_user_id: nil, s3_client: nil, asset_bucket: nil, embed_fetcher: nil,
                    development_asset_bucket: nil, site_bucket: nil, search_queue_url: nil, sqs_client: nil, logger: $stderr,
                    search_index: nil, lambda_client: nil, inbox_sync_function_name: nil,
-                   bluesky_oauth_function_name: nil, webmention_queue_url: nil,
+                   bluesky_oauth_function_name: nil, proofreader: nil, webmention_queue_url: nil,
                    webmention_publish_queue_url: nil, webmention_dead_letter_arn: nil,
                    webmention_queue_arn: nil, webmention_publish_dead_letter_arn: nil,
                    webmention_publish_queue_arn: nil, inbox_thumbnail: nil, draft_store: nil, draft_publication: nil, draft_publisher: nil, draft_jobs: nil, draft_outputs: nil, draft_webmentions: nil, clock: Time.method(:now))
       @draft_store = draft_store
+      @proofreader = proofreader
       @draft_publication = draft_publication
       @draft_publisher = draft_publisher
       @draft_jobs = draft_jobs
@@ -157,6 +159,7 @@ module WeblogAuthoring
 
       method = event.dig("requestContext", "http", "method").to_s
       path = event.fetch("rawPath", "")
+      return proofreading_response(event) if method == "POST" && path == "/api/authoring/proofread"
       return draft_response(event, method, path) if path == "/api/authoring/drafts" || path.start_with?("/api/authoring/drafts/")
       outputs = @draft_outputs
       if method == "GET" && path == "/feed.xml" && outputs
@@ -476,6 +479,20 @@ module WeblogAuthoring
       return daily_editor_response(event) if event.dig("queryStringParameters", "template") == "daily"
 
       json_response(200, editor_json(title: "", name: "", body: ""))
+    end
+
+    def proofreading_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required") unless session
+      return json_response(403, error: "Editing is not allowed") unless allowed_session?(session)
+      unless secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
+        return json_response(403, error: "CSRF token mismatch")
+      end
+      proofreader = @proofreader
+      return json_response(503, error: "文章を確認できませんでした") unless proofreader
+      json_response(200, proofreader.call(parse_json(event)["text"]))
+    rescue Proofreading::Unavailable => error
+      json_response(503, error: error.message)
     end
 
     def draft_response(event, method, path)

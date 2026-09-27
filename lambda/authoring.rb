@@ -69,6 +69,7 @@ module WeblogAuthoring
             sqs_client:, search_queue_url: ENV["SEARCH_INDEX_QUEUE_URL"], lambda_client:,
             inbox_sync_function_name: ENV["INBOX_SYNC_FUNCTION_NAME"],
             bluesky_oauth_function_name: ENV["BLUESKY_OAUTH_FUNCTION_NAME"],
+            proofreader: ENV["PROOFREADING_FUNCTION_NAME"] && Proofreading.new(lambda_client:, function_name: ENV["PROOFREADING_FUNCTION_NAME"]),
             webmention_queue_url: ENV["WEBMENTION_QUEUE_URL"],
             webmention_publish_queue_url: ENV["WEBMENTION_PUBLISH_QUEUE_URL"],
             webmention_dead_letter_arn: ENV["WEBMENTION_DEAD_LETTER_ARN"],

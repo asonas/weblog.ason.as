@@ -34,6 +34,7 @@ import {
 } from "./draftSession";
 import { draftMetadataForTitle, hasCustomDiaryTitle } from "./draftTitle";
 import { prefetchEmbedMetadata } from "./EmbedCard";
+import type { ProofreadingMessage, ProofreadingResponse } from "./proofreading";
 import "./draftEditor.css";
 import "./authoringTheme.css";
 
@@ -227,6 +228,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const [wikiLinkSuggestionStyle, setWikiLinkSuggestionStyle] =
     useState<CSSProperties>();
   const [previewBlockIndex, setPreviewBlockIndex] = useState(0);
+  const [proofreadingMessages, setProofreadingMessages] = useState<
+    ProofreadingMessage[]
+  >([]);
+  const [proofreadingStatus, setProofreadingStatus] = useState(
+    "本文を読み込んでいます",
+  );
   const [, refresh] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const wikiLinkSuggestionList = useRef<HTMLDivElement>(null);
@@ -296,10 +303,12 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
         else value.close();
       })
       .catch((error: unknown) => {
-        if (isActive)
+        if (isActive) {
           setLoadError(
             error instanceof Error ? error.message : "下書きを開けませんでした",
           );
+          setProofreadingStatus("文章を確認できませんでした");
+        }
       });
     return () => {
       isActive = false;
@@ -318,6 +327,77 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       .then((response) => setWikiLinkNames(response.names))
       .catch(() => setWikiLinkNames([]));
   }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    let revision = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    let request: AbortController | undefined;
+    const schedule = () => {
+      revision += 1;
+      clearTimeout(timer);
+      request?.abort();
+      setProofreadingMessages([]);
+      const currentRevision = revision;
+      const text = session.body.toString();
+      if (!text.trim()) {
+        setProofreadingStatus("本文を入力すると確認します");
+        return;
+      }
+      if (!navigator.onLine) {
+        setProofreadingStatus("オフラインのため文章の確認を停止しています");
+        return;
+      }
+      setProofreadingStatus("確認中");
+      timer = setTimeout(async () => {
+        if (composing.current) return;
+        const controller = new AbortController();
+        request = controller;
+        try {
+          const token = await csrf();
+          if (controller.signal.aborted) return;
+          const response = await fetch("/api/authoring/proofread", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": token,
+            },
+            body: JSON.stringify({ text }),
+            signal: AbortSignal.any([
+              controller.signal,
+              AbortSignal.timeout(30000),
+            ]),
+          });
+          if (!response.ok) throw new Error("文章を確認できませんでした");
+          const result: ProofreadingResponse = await response.json();
+          if (currentRevision !== revision || composing.current) return;
+          setProofreadingMessages(result.messages);
+          setProofreadingStatus("");
+        } catch {
+          if (controller.signal.aborted || currentRevision !== revision) return;
+          setProofreadingStatus(
+            "文章を確認できませんでした。次の入力時に再試行します",
+          );
+        }
+      }, 1000);
+    };
+    session.body.observe(schedule);
+    const field = textarea.current;
+    field?.addEventListener("compositionend", schedule);
+    window.addEventListener("online", schedule);
+    window.addEventListener("offline", schedule);
+    schedule();
+    return () => {
+      revision += 1;
+      clearTimeout(timer);
+      session.body.unobserve(schedule);
+      field?.removeEventListener("compositionend", schedule);
+      window.removeEventListener("online", schedule);
+      window.removeEventListener("offline", schedule);
+      request?.abort();
+    };
+  }, [session, csrf]);
 
   useEffect(() => {
     const field = textarea.current;
@@ -703,7 +783,47 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   const bytes = new TextEncoder().encode(session?.body.toString() || "").length;
   return (
     <section className="draft-editor" aria-label="下書き編集">
-      <DraftNavigation />
+      <DraftNavigation>
+        <section
+          className="draft-proofreading"
+          aria-labelledby="draft-proofreading-title"
+        >
+          <h2 id="draft-proofreading-title">
+            文章の確認
+            {proofreadingMessages.length > 0 && (
+              <span> {proofreadingMessages.length}件</span>
+            )}
+          </h2>
+          {proofreadingStatus ? (
+            <p role={proofreadingStatus === "確認中" ? "status" : undefined}>
+              {proofreadingStatus}
+            </p>
+          ) : proofreadingMessages.length === 0 ? (
+            <p>指摘はありません</p>
+          ) : (
+            <ol>
+              {proofreadingMessages.map((item) => (
+                <li
+                  key={`${item.ruleId}-${item.range.join("-")}-${item.message}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const field = textarea.current;
+                      if (!field) return;
+                      field.focus();
+                      field.setSelectionRange(item.range[0], item.range[1]);
+                    }}
+                  >
+                    <span>{item.line}行目</span>
+                    <span>{item.message}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      </DraftNavigation>
       <div className="draft-editor__titlebar">
         <label className="visually-hidden" htmlFor="draft-title">
           タイトル

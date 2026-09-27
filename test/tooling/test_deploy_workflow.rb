@@ -60,7 +60,7 @@ class DeployWorkflowTest < Minitest::Test
 
   def test_images_are_prepared_in_parallel_on_native_arm64
     build_jobs = @workflow.fetch("jobs").select { |name, _job| name.start_with?("build-") }
-    assert_equal %w[build-authoring build-draft-worker build-inbox build-oauth build-search], build_jobs.keys.sort
+    assert_equal %w[build-authoring build-draft-worker build-inbox build-oauth build-proofreading build-search], build_jobs.keys.sort
     build_jobs.each_value do |job|
       assert_equal ["gate"], Array(job.fetch("needs"))
       assert_equal "./.github/workflows/build-lambda-image.yml", job.fetch("uses")
@@ -128,7 +128,7 @@ class DeployWorkflowTest < Minitest::Test
     deploy = @workflow.dig("jobs", "deploy")
     assert_equal false, deploy.dig("concurrency", "cancel-in-progress")
     assert_equal 10, deploy.fetch("timeout-minutes")
-    assert_equal %w[gate build-authoring build-search build-inbox build-oauth build-draft-worker], deploy.fetch("needs")
+    assert_equal %w[gate build-authoring build-search build-inbox build-oauth build-draft-worker build-proofreading], deploy.fetch("needs")
     summary = deploy.fetch("steps").find { |step| step["name"] == "Summarize production deploy" }.fetch("run")
     assert_includes summary, "elapsed <= 300"
     assert_includes summary, "05m 00s"
@@ -164,7 +164,7 @@ class DeployWorkflowTest < Minitest::Test
   def test_lambda_rollback_requires_an_explicit_manifest_and_service
     trigger = @rollback_workflow.fetch("on").fetch("workflow_dispatch").fetch("inputs")
     assert_equal %w[deploy_run_id deploy_run_attempt service], trigger.keys
-    assert_equal %w[authoring search-indexer inbox-sync bluesky-oauth draft-worker], trigger.dig("service", "options")
+    assert_equal %w[authoring search-indexer inbox-sync bluesky-oauth draft-worker proofreading], trigger.dig("service", "options")
 
     rollback = @rollback_workflow.dig("jobs", "rollback")
     assert_equal "production-deploy", rollback.dig("concurrency", "group")

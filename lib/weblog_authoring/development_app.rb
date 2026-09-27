@@ -39,6 +39,7 @@ require_relative "draft_store"
 require_relative "draft_publisher"
 require_relative "draft_jobs"
 require_relative "draft_administration"
+require_relative "proofreading"
 
 module WeblogAuthoring
   class DevelopmentRequestLog
@@ -356,6 +357,13 @@ module WeblogAuthoring
       object.body.read
     rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::NotFound
       halt 404
+    end
+
+    post "/api/authoring/proofread" do
+      headers "Cache-Control" => "no-store"
+      api_response { |payload| Proofreading.new.call(payload["text"]) }
+    rescue Proofreading::Unavailable => error
+      json_error(503, error.message)
     end
 
     get "/api/authoring/drafts" do

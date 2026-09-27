@@ -626,6 +626,32 @@ class LambdaApiTest < Minitest::Test
     assert_equal 404, response.fetch(:statusCode)
   end
 
+  def test_proofreading_requires_editor_authentication_and_csrf_before_invoking_node
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    result = { "messages" => [{ "ruleId" => "no-dropping-the-ra", "message" => "ら抜き言葉を使用しています。", "line" => 1, "range" => [1, 2] }] }
+    client = FakeLambda.new(response: result)
+    api = WeblogAuthoring::LambdaApi.new(database: @database, session_codec: codec, allowed_github_user_id: 630_181,
+      proofreader: WeblogAuthoring::Proofreading.new(lambda_client: client, function_name: "proofreading"))
+    token = codec.issue(kind: "session", attributes: { "github_user_id" => 630_181, "csrf_token" => "csrf-token" }, ttl: 600)
+    cookies = ["weblog_authoring_session=#{token}"]
+    path = "/api/authoring/proofread"
+    headers = { "x-csrf-token" => "csrf-token" }
+    payload = { "text" => "見れる。" }
+    assert_equal 401, api.call(json_event("POST", path, payload, headers:)).fetch(:statusCode)
+    assert_equal 403, api.call(json_event("POST", path, payload, cookies:)).fetch(:statusCode)
+    other = codec.issue(kind: "session", attributes: { "github_user_id" => 999, "csrf_token" => "csrf-token" }, ttl: 600)
+    assert_equal 403, api.call(json_event("POST", path, payload, cookies: ["weblog_authoring_session=#{other}"], headers:)).fetch(:statusCode)
+    [nil, "あ" * 333_334].each do |text|
+      assert_equal 422, api.call(json_event("POST", path, { "text" => text }, cookies:, headers:)).fetch(:statusCode)
+    end
+    assert_empty client.invocations
+    response = api.call(json_event("POST", path, payload, cookies:, headers:))
+    assert_equal 200, response.fetch(:statusCode)
+    assert_equal "no-store", response.fetch(:headers).fetch("cache-control")
+    assert_equal result, JSON.parse(response.fetch(:body))
+    assert_equal payload, JSON.parse(client.invocations.fetch(0).fetch(:payload))
+  end
+
   def test_bluesky_oauth_routes_require_login_and_csrf_for_mutations
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
     lambda_client = FakeLambda.new(response: { "authorization_url" => "https://bsky.social/oauth" })

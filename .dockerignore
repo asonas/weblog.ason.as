@@ -4,5 +4,6 @@ data
 frontend
 log
 node_modules
+**/node_modules
 site
 test
