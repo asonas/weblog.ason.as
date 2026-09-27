@@ -37,19 +37,21 @@ UTCの2026-09-20〜26について、CloudWatchとCost Explorerの読み取り値
 | 09-25 | 4,321 | 3,549 | 0.081407 | 0.004613 | 0.013041 | 0.000038 | 0.000009 |
 | 09-26 | 6,316 | 4,915 | 0.066398 | 0.005188 | 0.010361 | 0.000026 | 0.000012 |
 
-CloudFrontの[popular objects report](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/popular-objects-report.html)は追加ログなしで上位50 URLのrequest/Hit/Missを遡って確認できる。ただし12 URLがすべて上位に入る保証はなく、全URLの確実な比較には別のアクセス記録が要る。[標準ログv2](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/standard-logging.html)をS3へ短期間出す案はCloudFrontの有効化料金がなく、S3保存・アクセス費が増える。採用するなら保存先・期間・削除を事前に限定して別のplanで確認する。
+CloudFrontの[popular objects report](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/popular-objects-report.html)は追加ログなしで上位50 URLのrequest/Hit/Missを遡って確認できる。ただし12 URLがすべて上位に入る保証はなく、全URLの比較には別のアクセス記録が要る。比較期間は[標準ログv2](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/standard-logging.html)を専用の非公開S3バケットに保存し、30日で自動失効させる。記録するのは日付、時刻、メソッド、パス、状態、キャッシュ結果、リクエストID、応答バイト数、応答時間、初回バイト時間の10項目に絞り、IP・Cookie・クエリは記録しない。CloudFrontのログ配信自体に追加料金はなく、S3の保存・アクセス費は一時的な計測費として別記する。ログ配信はbest effortで遅延・欠落の可能性があるため、費用や閲覧の厳密な全数とは扱わない。
+
+ログ到着と対象パスの記録を実証してから、UTCで連続7日の切替前期間を確定する。切替後も同じ曜日構成の連続7日を記録し、対象12 URLを日別・パス別に集計する。`GET`/`HEAD`、2xx/3xx/4xx/5xx、Hit/Missを分け、人工的な確認リクエストはリクエストIDで除く。計測が終わったら配信設定を削除し、保存済みログは期限切れ後にバケットを削除する。CloudFrontのinvalidationは使わない。
 
 ## 切替順序
 
 1. 12 URLについて、本文・title/OGP・HTML内のCSS/JS参照・ETag・画像/埋め込み/Wikiリンク/Webmention/ユニバースの有無を記録する。特に `Monitor+` はエンコードした `+`、`Webmentionクラブ` は日本語ルートと外部言及を確認する。公開済みsnapshotと旧HTMLがそれぞれ存在することを確かめる。公開閲覧と管理操作を分けて数え、切替前の比較期間・計測回数・費用範囲を記録する。
-2. 版付きCSS/JSを先行配置し、表示用リリースを配信できるコードをデプロイする。現行mainはリモートより8コミット進んでいるため、pushで記事切替以外の変更も一緒にデプロイされる。デプロイ完了、Lambdaコード版、`display-releases/current.json`、参照するassetsの存在を確認する。この段階で許可リストは空のままとする。
+2. 版付きCSS/JSを先行配置し、表示用リリースを配信できるコードをデプロイする。デプロイ完了、Lambdaコード版、`display-releases/current.json`、参照するassetsの存在を確認する。この段階で許可リストは空のままとする。
 3. 本番stateをrefreshしたTerraformの全体planと、`aws_lambda_function.authoring` だけの保存planを別々に確認する。既知のWebmentionドリフトを混ぜない。後者が許可リスト追加だけであることを確認し、その保存planだけを適用する。適用後にfresh planで対象差分がないことを確認する。CloudFrontのinvalidationは行わない。
 4. 各固定URLでGET/HEAD/条件付きGET、本文・title/OGP、CSS/JSの版と200、画像・埋め込み・Wikiリンク・Webmention・ユニバース、クエリ・Cookie・末尾スラッシュ・エンコードの扱いを確認する。未選定記事、API、feedは従来のままと確認する。初回Missと再取得Hit、180秒後のリリース更新、旧版への復帰を記録する。
 5. 連続7日、日別の閲覧回数とページ構成を揃えて機能・本文表示時間・Hit/Miss・cold/warm・通常費用を比較する。サンプル不足や費用の帰属が不明なら延長または回数を制限した追加比較を行う。通常費用が現状以下で、機能と速度が通過した場合のみ拡大可とする。
 
 ## 費用と復帰
 
-比較範囲はDSQLの読み取り、Lambda実行、S3のGET/保存、CloudFront/API Gatewayのリクエストと転送、公開時の旧HTML生成。無料枠・管理利用・一時的な移行/計測費を別記し、未測定値は0とみなさない。API Gatewayの既存アクセスログにはルートキーと応答時間はあるが個別記事パスがないため、現状のログだけで記事別の実閲覧数を確定できない。切替前に、閲覧量とページ構成を比較する追加データの取得方法を決める。
+比較範囲はDSQLの読み取り、Lambda実行、S3のGET/保存、CloudFront/API Gatewayのリクエストと転送、公開時の旧HTML生成。無料枠・管理利用・一時的な移行/計測費を別記し、未測定値は0とみなさない。API Gatewayの既存アクセスログにはルートキーと応答時間はあるが個別記事パスがないため、記事別の閲覧量は上記のCloudFrontログから集計する。費用の帰属ができない場合は現状以下と判定しない。
 
 切り戻しはLambdaの許可リストを空にしたfresh Terraform planを確認して適用する。保存済みHTMLと旧生成は維持するため、公開・renameを継続した記事も旧経路で読める。通常キャッシュの残り最大約180秒を待ち、同じURLの `no-store` と旧本文を確認する。表示用リリースだけの不具合なら `display-releases/current.json` を前の版へ戻し、HTML・assets・ETagの版を確認する。どちらもinvalidationに依存しない。予期しない5xxや本文/OGPの不一致があれば拡大を停止する。
 
