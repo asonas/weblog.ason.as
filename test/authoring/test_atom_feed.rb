@@ -2,8 +2,21 @@
 
 require_relative "../test_helper"
 require_relative "../../lib/weblog_authoring/atom_feed"
+require "rexml/document"
 
 class AtomFeedTest < Minitest::Test
+  def test_uses_asonas_as_feed_and_entry_author
+    feed = WeblogAuthoring::AtomFeed.new(site_url: "https://weblog.ason.as").render(
+      [page(name: "日記", body: "本文")]
+    )
+    document = REXML::Document.new(feed)
+    namespaces = { "atom" => "http://www.w3.org/2005/Atom" }
+
+    assert_equal "weblog.ason.as", REXML::XPath.first(document, "/atom:feed/atom:title", namespaces).text
+    assert_equal "asonas", REXML::XPath.first(document, "/atom:feed/atom:author/atom:name", namespaces).text
+    assert_equal ["asonas"], REXML::XPath.match(document, "/atom:feed/atom:entry/atom:author/atom:name", namespaces).map(&:text)
+  end
+
   def test_renders_recent_non_empty_published_pages_with_body_html
     article = page(
       name: "記事 & 一覧",

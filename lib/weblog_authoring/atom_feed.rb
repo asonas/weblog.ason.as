@@ -9,6 +9,7 @@ require_relative "names"
 module WeblogAuthoring
   class AtomFeed
     DEFAULT_LIMIT = 30
+    AUTHOR_NAME = "asonas"
 
     def initialize(site_url:, title: "weblog.ason.as", limit: DEFAULT_LIMIT)
       @site_url = site_url.to_s.sub(%r{/+\z}, "")
@@ -30,7 +31,7 @@ module WeblogAuthoring
           <link rel="alternate" type="text/html" href="#{xml(@site_url)}" />
           <link rel="self" type="application/atom+xml" href="#{xml("#{@site_url}/feed.xml")}" />
           <author>
-            <name>#{xml(@title)}</name>
+            <name>#{xml(AUTHOR_NAME)}</name>
           </author>
         #{entries_xml(feed_pages, renderer, ids)}
         </feed>
@@ -50,6 +51,9 @@ module WeblogAuthoring
               <link rel="alternate" type="text/html" href="#{xml(url)}" />
               <published>#{atom_time(page.published_at || page.created_at)}</published>
               <updated>#{atom_time(updated_time(page))}</updated>
+              <author>
+                <name>#{xml(AUTHOR_NAME)}</name>
+              </author>
               <content type="html">#{xml(content)}</content>
             </entry>
         XML
