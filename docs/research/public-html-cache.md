@@ -20,6 +20,10 @@ CloudFrontは期限切れ後、配信元が接続不能または5xxの場合に�
 
 2026-09-27の実行結果はRuby公開HTTPテスト2件・45 assertion、RuboCop、Terraform validate、production rootのmockテスト12件が成功。実CloudFrontの180秒更新、5xx・接続失敗時のstale、未保持時のエラー、復旧後の更新は未観測。時間を進めたローカル模擬だけで24時間の保持を証明しない。
 
-本番適用前に、`infra/production`をローカルで初期化し、fresh planを保存してCloudFrontポリシー1件の作成とdistributionの変更、および意図しない差分の有無を全件確認する。適用する場合はその保存planを使い、直後のfresh planで差分なしを確認する。2026-09-27の読み取り専用初期化は`asonas-blog`ロールのstate `HeadObject`が403で停止し、同ロールのCloudFront `GetDistributionConfig`もAccessDeniedだった。AdministratorAccessの読み取り専用使用は自動承認レビューに拒否されたため、本番planもapplyも未実施。
+2026-09-27の初回読み取り専用初期化は`asonas-blog`ロールのstate `HeadObject`が403で停止し、同ロールのCloudFront `GetDistributionConfig`もAccessDeniedだった。AdministratorAccessの使用は自動承認レビューが最初に拒否したが、ユーザーの明示的な読み取り専用plan承認後に実行できた。Terraform planは`-lock=false`でstateロックを書かず、保存先を権限700の`/tmp/weblog-188-plan/`にした。applyは未実施。
+
+本番stateをrefreshした全体planは**1件追加、5件変更、削除0件**。意図したCloudFrontポリシーとdistributionに加え、Webmention再検証ルールを`ENABLED`から`DISABLED`、workerのイベントソースを`true`から`false`、receiverの環境変数を`true`から`false`に戻す差分が出た。S3バケットポリシーにも計画時に値が未確定となる変更が出た。これらを今回のキャッシュ変更に混ぜて適用しない。
+
+CloudFrontポリシーとdistributionだけを対象にした別のfresh保存planは**1件追加、1件変更、削除0件**。ポリシーは最小/既定TTL 0、最大TTL 86,580秒で、Cookie・クエリ・追加ヘッダーをキャッシュキーに含めない。distributionは既定behaviorのポリシー差し替えと`/feed.xml`の非キャッシュbehavior追加だけで、`/api/*`と既存の静的assetsのbehaviorは同じ。対象付きplanであるため、適用後にも全体planを実行し、Webmentionの既知の差分と新たな意図しない差分を区別する。適用する場合は直前に再初期化・fresh保存plan・全変更確認を行い、その保存planだけを適用する。
 
 対象URLの本番指定と配信切替は後続Issueで行う。切替後は同じURLの初回Miss・再取得HitとAge、180秒経過後の表示用リリース更新・元の版への復帰、HTMLが参照するCSS/JSの200、Cookie付き・クエリ付き・末尾スラッシュ・エンコードされたURL、非選定記事・管理・認証・API・feed、redirect・404・ETag/304・HEADを確認する。CloudFrontの接続失敗・5xx、キャッシュ未保持、復旧の観測には隔離した配信元が必要で、本番配信元を故意に停止しない。観測回数と費用上限を別途決める。24時間の全期間保持は短時間のローカル模擬から保証しない。
