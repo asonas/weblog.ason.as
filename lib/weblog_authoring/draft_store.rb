@@ -580,7 +580,7 @@ module WeblogAuthoring
       end
 
       def published_window_sql(key:, limit:, before:, after:, kind:, month:, timeline:, placeholder:)
-        sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key FROM draft_publication_heads h JOIN draft_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id LEFT JOIN draft_atom_ids a ON a.article_id = h.article_id"
+        from = "FROM draft_publication_heads h JOIN draft_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id"
         conditions = []
         values = []
         if kind
@@ -598,11 +598,16 @@ module WeblogAuthoring
           conditions << "(#{key} #{operator} #{placeholder} OR (#{key} = #{placeholder} AND v.article_id #{operator} #{placeholder}))"
           values.concat([cursor_key, cursor_key, cursor.fetch(:id)])
         end
-        sql += " WHERE #{conditions.join(' AND ')}" unless conditions.empty?
-        sql += " ORDER BY #{key} #{after ? 'ASC' : 'DESC'}, v.article_id #{after ? 'ASC' : 'DESC'}"
+        where = conditions.empty? ? "" : " WHERE #{conditions.join(' AND ')}"
+        order = after ? "ASC" : "DESC"
         if limit
-          sql += " LIMIT #{placeholder}"
           values << limit
+          sql = "WITH selected AS (SELECT v.id, v.article_id, h.published_at, h.updated_at, #{key} AS listing_key #{from}#{where} ORDER BY listing_key #{order}, v.article_id #{order} LIMIT #{placeholder}) "
+          sql += "SELECT v.*, selected.published_at, selected.updated_at, a.atom_id, selected.listing_key FROM selected JOIN draft_published_versions v ON v.id = selected.id LEFT JOIN draft_atom_ids a ON a.article_id = selected.article_id"
+          sql += " ORDER BY selected.listing_key #{order}, selected.article_id #{order}"
+        else
+          sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key #{from} LEFT JOIN draft_atom_ids a ON a.article_id = h.article_id#{where}"
+          sql += " ORDER BY #{key} #{order}, v.article_id #{order}"
         end
         [sql, values]
       end
@@ -647,12 +652,17 @@ module WeblogAuthoring
           values.concat([cursor_key, cursor.fetch(:id)])
           conditions << "(#{key} #{operator} $#{values.length - 1} OR (#{key} = $#{values.length - 1} AND v.article_id #{operator} $#{values.length}))"
         end
-        sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key FROM weblog_authoring.draft_publication_heads h JOIN weblog_authoring.draft_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id LEFT JOIN weblog_authoring.draft_atom_ids a ON a.article_id = h.article_id"
-        sql += " WHERE #{conditions.join(' AND ')}" unless conditions.empty?
-        sql += " ORDER BY #{key} #{after ? 'ASC' : 'DESC'}, v.article_id #{after ? 'ASC' : 'DESC'}"
+        from = "FROM weblog_authoring.draft_publication_heads h JOIN weblog_authoring.draft_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id"
+        where = conditions.empty? ? "" : " WHERE #{conditions.join(' AND ')}"
+        order = after ? "ASC" : "DESC"
         if limit
           values << limit
-          sql += " LIMIT $#{values.length}"
+          sql = "WITH selected AS (SELECT v.id, v.article_id, h.published_at, h.updated_at, #{key} AS listing_key #{from}#{where} ORDER BY listing_key #{order}, v.article_id #{order} LIMIT $#{values.length}) "
+          sql += "SELECT v.*, selected.published_at, selected.updated_at, a.atom_id, selected.listing_key FROM selected JOIN weblog_authoring.draft_published_versions v ON v.id = selected.id LEFT JOIN weblog_authoring.draft_atom_ids a ON a.article_id = selected.article_id"
+          sql += " ORDER BY selected.listing_key #{order}, selected.article_id #{order}"
+        else
+          sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key #{from} LEFT JOIN weblog_authoring.draft_atom_ids a ON a.article_id = h.article_id#{where}"
+          sql += " ORDER BY #{key} #{order}, v.article_id #{order}"
         end
         rows = @connection.exec_params(sql, values).to_a
         after ? rows.reverse : rows

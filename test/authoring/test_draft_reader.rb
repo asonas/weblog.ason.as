@@ -115,6 +115,31 @@ class DraftReaderTest < Minitest::Test
     assert_equal [ID], reader.find_pages_by_routes(["2026-09-01"]).map(&:id)
   end
 
+  def test_limited_public_windows_preserve_ties_filters_and_atom_identity
+    first = "ac802ad0b89946aeb6b7623c2ba7bc79"
+    second = "bc802ad0b89946aeb6b7623c2ba7bc79"
+    third = "cc802ad0b89946aeb6b7623c2ba7bc79"
+    store = WeblogAuthoring::DraftStore.sqlite(@root.join("list-windows.sqlite3"))
+    store.setup!
+    original = @source.fetch("articles").first
+    articles = [original,
+      original.merge("id" => first, "page_type" => "named", "route" => "日記記事", "title" => "日記記事", "body" => "本文 [[日記]]", "created_at" => "2026-09-02T01:00:00Z", "updated_at" => "2026-09-04T01:00:00Z"),
+      original.merge("id" => second, "page_type" => "named", "route" => "同時更新", "title" => "同時更新", "body" => "通常記事", "updated_at" => "2026-09-04T01:00:00Z"),
+      original.merge("id" => third, "page_type" => "named", "route" => "前の記事", "title" => "前の記事", "body" => "通常記事", "updated_at" => "2026-09-03T01:00:00Z"),]
+    WeblogAuthoring::DraftMigration.new(store:).import("format" => 1, "site_url" => "https://example.com", "articles" => articles)
+    reader = WeblogAuthoring::DraftReader.new(store:, database: @legacy)
+    cursor = { timestamp: Time.iso8601("2026-09-04T01:00:00Z"), id: second }
+
+    assert_equal [second, first], reader.list_pages(limit: 2).map(&:id)
+    assert_equal [first, third], reader.list_pages(limit: 2, before: cursor).map(&:id)
+    assert_equal [second], reader.list_pages(limit: 2, after: cursor.merge(id: first)).map(&:id)
+    assert_equal [first, ID], reader.list_pages(limit: 2, kind: "diary").map(&:id)
+    assert_equal [second, third], reader.list_pages(limit: 2, kind: "article").map(&:id)
+    assert_equal "https://example.com/%E6%97%A5%E8%A8%98%E8%A8%98%E4%BA%8B", store.published_pages(limit: 2).find { |row| row.fetch("article_id") == first }.fetch("atom_id")
+    assert_equal [second, first, third, ID], reader.list_timeline_pages(limit: 4, month: "2026-09").map(&:id)
+    assert_empty reader.list_timeline_pages(limit: 4, month: "2026-08")
+  end
+
   private
 
   def get(api, path, query: {}, parameters: {})
