@@ -33,16 +33,20 @@ module WeblogAuthoring
         bucket: ENV.fetch("SITE_BUCKET"), site_url: ENV.fetch("FRONTEND_URL", "https://weblog.ason.as"),
         lambda_client:, worker_function: ENV.fetch("DRAFT_PUBLICATION_FUNCTION_NAME"), defer_services: true,
         sqs_client: LazyService.new { Aws::SQS::Client.new }, webmention_queue_url: ENV["WEBMENTION_QUEUE_URL"],
-        sender_enabled: ENV.fetch("WEBMENTION_SENDER_ENABLED", "false") == "true")
+        sender_enabled: ENV.fetch("WEBMENTION_SENDER_ENABLED", "false") == "true",
+        dynamic_article_routes: ENV.fetch("DYNAMIC_PUBLIC_ARTICLE_ROUTES", "").split(","))
     end
 
     def initialize(store:, database:, publication:, s3_client:, bucket:, site_url:, lambda_client:, worker_function:,
-      search_runner: nil, defer_services: false, sqs_client: nil, webmention_queue_url: nil, sender_enabled: false)
+      search_runner: nil, defer_services: false, sqs_client: nil, webmention_queue_url: nil, sender_enabled: false,
+      dynamic_article_routes: [])
       @store = store
       @database = database
       @publication = publication
       @s3 = s3_client
       @bucket = bucket
+      @site_url = site_url
+      @dynamic_article_routes = dynamic_article_routes
       @reader = DraftReader.new(store:, database:)
       @webmentions = DraftWebmentions.new(store:, sqs_client:, queue_url: webmention_queue_url, site_url:, enabled: sender_enabled)
       services = lambda do
@@ -67,7 +71,8 @@ module WeblogAuthoring
       published = LambdaApi.new(**options, reader_database: @reader, draft_store: @store, draft_publication: @publication,
         draft_publisher: @publisher, draft_outputs: @outputs, draft_jobs: @remote_jobs, draft_webmentions: @webmentions)
       legacy = DraftSite.new(api: legacy, reader: @database, s3_client: @s3, bucket: @bucket, published: false)
-      published = DraftSite.new(api: published, reader: @reader, s3_client: @s3, bucket: @bucket, published: true)
+      published = DraftSite.new(api: published, reader: @reader, s3_client: @s3, bucket: @bucket, published: true,
+        store: @store, site_url: @site_url, dynamic_article_routes: @dynamic_article_routes)
       DraftCutoverApi.new(store: @store, legacy:, published:)
     end
 

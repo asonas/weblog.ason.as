@@ -279,6 +279,21 @@ jobs:
         if: steps.current.outputs.current == 'true'
         run: echo "completed_at=$(date +%s)" >> "$GITHUB_OUTPUT"
 
+      - name: Publish immutable site assets before Lambda update
+        if: steps.current.outputs.current == 'true'
+        run: >-
+          aws s3 sync dist/site/static/authoring/assets/ "s3://${SITE_BUCKET}/static/authoring/assets/"
+          --only-show-errors --cache-control 'public,max-age=31536000,immutable'
+
+      - name: Verify display release assets
+        if: steps.current.outputs.current == 'true'
+        run: |
+          mapfile -t assets < <(rg --only-matching '/static/authoring/assets/[^" ]+' dist/site/public.html | sort -u)
+          [[ ${#assets[@]} -ge 2 ]]
+          for asset in "${assets[@]}"; do
+            aws s3api head-object --bucket "$SITE_BUCKET" --key "${asset#/}" >/dev/null
+          done
+
       - name: Deploy authoring Lambda image
         if: steps.current.outputs.current == 'true' && needs.build-authoring.outputs.deploy == 'true'
         run: |
@@ -350,11 +365,6 @@ jobs:
         if: steps.current.outputs.current == 'true'
         run: echo "completed_at=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      - name: Publish immutable site assets
-        if: steps.current.outputs.current == 'true'
-        run: >-
-          aws s3 sync dist/site/static/authoring/assets/ "s3://${SITE_BUCKET}/static/authoring/assets/"
-          --only-show-errors --cache-control 'public,max-age=31536000,immutable'
       - name: Publish stable site assets
         if: steps.current.outputs.current == 'true'
         run: |
@@ -373,6 +383,16 @@ jobs:
             aws s3 cp "dist/site/${page}.html" "s3://${SITE_BUCKET}/static/authoring/${page}.html" --only-show-errors \
               --content-type 'text/html; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
           done
+      - name: Activate display release
+        if: steps.current.outputs.current == 'true'
+        run: |
+          release_key="display-releases/${TARGET_SHA}/public.html"
+          aws s3 cp dist/site/public.html "s3://${SITE_BUCKET}/${release_key}" --only-show-errors \
+            --content-type 'text/html; charset=utf-8' --cache-control 'public,max-age=31536000,immutable'
+          aws s3api head-object --bucket "$SITE_BUCKET" --key "$release_key" >/dev/null
+          jq --null-input --arg id "$TARGET_SHA" '{id: $id}' > display-release.json
+          aws s3 cp display-release.json "s3://${SITE_BUCKET}/display-releases/current.json" --only-show-errors \
+            --content-type application/json --cache-control 'no-store'
       - name: Smoke check production
         if: steps.current.outputs.current == 'true'
         run: bundle exec ruby bin/smoke-production "$SITE_URL"

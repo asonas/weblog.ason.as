@@ -1,16 +1,22 @@
 # frozen_string_literal: true
 
 require "uri"
+require "digest"
+require "json"
+require_relative "draft_publisher"
 require_relative "webmention_site_publisher"
 
 module WeblogAuthoring
   class DraftSite
-    def initialize(api:, reader:, s3_client:, bucket:, published:)
+    def initialize(api:, reader:, s3_client:, bucket:, published:, store: nil, site_url: nil, dynamic_article_routes: [])
       @api = api
       @reader = reader
       @s3 = s3_client
       @bucket = bucket
       @published = published
+      @store = store
+      @site_url = site_url&.delete_suffix("/")
+      @dynamic_article_routes = dynamic_article_routes.freeze
     end
 
     def call(event)
@@ -22,7 +28,7 @@ module WeblogAuthoring
       response = if ["/", "/index.html", "/search", "/authoring/articles", "/authoring/webmentions", "/draft-editor"].include?(path)
                    object("index.html", "text/html; charset=utf-8")
                  elsif @published
-                   @api.call(read_event)
+                   dynamic_article(path, event) || @api.call(read_event)
                  elsif path == "/feed.xml"
                    object("feed.xml", "application/atom+xml; charset=utf-8")
                  else
@@ -48,6 +54,30 @@ module WeblogAuthoring
     end
 
     private
+
+    def dynamic_article(path, event)
+      route = URI::DEFAULT_PARSER.unescape(path.delete_prefix("/"))
+      return nil unless @dynamic_article_routes.include?(route)
+
+      resolution = @store.resolve_published_route(route)
+      snapshot = resolution["snapshot"]
+      return nil unless snapshot
+
+      release = JSON.parse(@s3.get_object(bucket: @bucket, key: "display-releases/current.json").body.read)
+      id = release.fetch("id")
+      raise ArgumentError, "Invalid display release" unless /\A[0-9a-f]{40}\z/.match?(id)
+      shell = @s3.get_object(bucket: @bucket, key: "display-releases/#{id}/public.html").body.read.force_encoding(Encoding::UTF_8)
+      renderer = WebmentionSitePublisher.new(database: @reader, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
+      page = DraftPublisher.page(snapshot)
+      html = renderer.render_document(page, shell:, source_url: "#{@site_url}/#{WeblogAuthoring.encoded_route(page.route)}")
+      etag = %("#{Digest::SHA256.hexdigest("#{id}\0#{html}")}")
+      if event.fetch("headers", {})["if-none-match"] == etag
+        return { statusCode: 304, headers: { "cache-control" => "no-store", "etag" => etag }, body: "" }
+      end
+      { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => "no-store", "etag" => etag }, body: html }
+    rescue Aws::S3::Errors::NoSuchKey, JSON::ParserError, KeyError
+      nil
+    end
 
     def object(key, content_type)
       { statusCode: 200, headers: { "content-type" => content_type, "cache-control" => "no-store" }, body: @s3.get_object(bucket: @bucket, key:).body.read }

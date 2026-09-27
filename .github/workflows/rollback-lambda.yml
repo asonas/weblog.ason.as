@@ -134,6 +134,12 @@ jobs:
               restore_function "$WEBMENTION_WORKER_LAMBDA_FUNCTION" true
               restore_function "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" true
               restore_function "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION" true
+              release_id="$(jq --raw-output '.site.artifact_commit' rollback-manifest.json)"
+              if aws s3api head-object --bucket "$SITE_BUCKET" --key "display-releases/${release_id}/public.html" >/dev/null 2>&1; then
+                jq --null-input --arg id "$release_id" '{id: $id}' > display-release.json
+                aws s3 cp display-release.json "s3://${SITE_BUCKET}/display-releases/current.json" --only-show-errors \
+                  --content-type application/json --cache-control 'no-store'
+              fi
               ;;
             search-indexer)
               restore_function "$SEARCH_INDEXER_LAMBDA_FUNCTION" false
