@@ -55,6 +55,15 @@ test("article photos use source width and Escape collapses inline expansion", as
     '<article><span class="article-image"><img src="/assets/large.webp" width="2560" height="1707" alt="夕焼け"></span><span class="article-image"><img src="/assets/portrait.webp" width="1707" height="2560" alt="縦長の写真"></span><span class="article-image"><img src="/assets/dog.webp" alt="犬"></span><a href="/other"><span class="article-image"><img src="/assets/linked.webp" alt="リンク先の写真"></span></a></article>',
     { url: "https://weblog.ason.as/article" },
   );
+  const header = dom.window.document.createElement("header");
+  header.className = "site-header";
+  header.getBoundingClientRect = () => new dom.window.DOMRect(0, 0, 1440, 68);
+  dom.window.document.body.prepend(header);
+  Object.defineProperty(dom.window, "innerHeight", {
+    value: 900,
+    configurable: true,
+  });
+  dom.window.scrollTo = () => {};
   Object.assign(globalThis, {
     window: dom.window,
     document: dom.window.document,
@@ -67,6 +76,16 @@ test("article photos use source width and Escape collapses inline expansion", as
     const article = document.querySelector<HTMLElement>("article");
     assert.ok(article);
     enhancePublicArticle(article);
+    assert.equal(
+      article.style.getPropertyValue("--expanded-image-height"),
+      "624px",
+    );
+    Object.defineProperty(dom.window, "innerHeight", { value: 600 });
+    window.dispatchEvent(new dom.window.Event("resize"));
+    assert.equal(
+      article.style.getPropertyValue("--expanded-image-height"),
+      "399px",
+    );
     const buttons = article.querySelectorAll<HTMLButtonElement>(
       ".article-image__zoom",
     );

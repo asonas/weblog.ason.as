@@ -57,11 +57,18 @@
   cursor: zoom-out;
 }
 .article-image--expanded .article-image__zoom img {
-  width: min(100%, var(--image-source-width, 100%));
+  width: min(
+    100%,
+    var(--image-source-width, 100%),
+    calc(var(--expanded-image-height) * var(--image-ratio, 1))
+  );
 }
 @media (max-width: 767px) {
   .article-image--expanded .article-image__zoom img {
-    width: 100%;
+    width: min(
+      100%,
+      calc(var(--expanded-image-height) * var(--image-ratio, 1))
+    );
   }
 }
 .article-image:not([data-media-state])::before {

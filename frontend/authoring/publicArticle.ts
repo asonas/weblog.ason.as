@@ -109,6 +109,22 @@ function enhanceArticleImages(root: HTMLElement) {
   );
   if (images.length === 0) return;
 
+  const header = document.querySelector<HTMLElement>(".site-header");
+  let headerHeight = 0;
+  let availableHeight = 0;
+  const updateViewport = () => {
+    headerHeight = header?.getBoundingClientRect().height ?? 0;
+    availableHeight = Math.max(0, window.innerHeight - headerHeight);
+    root.style.setProperty(
+      "--expanded-image-height",
+      `${availableHeight * 0.75}px`,
+    );
+  };
+  updateViewport();
+  window.addEventListener("resize", updateViewport);
+  if (header && typeof ResizeObserver !== "undefined")
+    new ResizeObserver(updateViewport).observe(header);
+
   window.addEventListener("keydown", (event) => {
     if (
       event.key !== "Escape" ||
@@ -127,8 +143,12 @@ function enhanceArticleImages(root: HTMLElement) {
     if (!container || container.closest("a")) continue;
     const updateSourceWidth = () => {
       const width = image.naturalWidth || Number(image.getAttribute("width"));
+      const height =
+        image.naturalHeight || Number(image.getAttribute("height"));
       if (width > 0)
         container.style.setProperty("--image-source-width", `${width}px`);
+      if (width > 0 && height > 0)
+        container.style.setProperty("--image-ratio", String(width / height));
     };
     image.addEventListener("load", updateSourceWidth);
     updateSourceWidth();
@@ -149,6 +169,18 @@ function enhanceArticleImages(root: HTMLElement) {
         "aria-label",
         `${label}${expanded ? "縮小" : "拡大"}`,
       );
+      if (expanded) {
+        updateViewport();
+        const bounds = image.getBoundingClientRect();
+        window.scrollTo({
+          top:
+            window.scrollY +
+            bounds.top -
+            headerHeight -
+            (availableHeight - bounds.height) / 2,
+          behavior: "instant",
+        });
+      }
     });
   }
 }
