@@ -11,9 +11,10 @@ class WebmentionSitePublisherTest < Minitest::Test
   class Database
     attr_reader :completed, :completed_revision, :failed
 
-    def initialize(page:, outbox:)
+    def initialize(page:, outbox:, pages: [page])
       @page = page
       @outbox = outbox
+      @pages = pages
     end
 
     def find(id)
@@ -21,7 +22,11 @@ class WebmentionSitePublisherTest < Minitest::Test
     end
 
     def list_pages
-      [@page]
+      @pages
+    end
+
+    def find_pages_by_routes(routes)
+      @pages.select { |page| routes.include?(page.route) }
     end
 
     def find_image_dimensions(url)
@@ -242,6 +247,42 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_includes html, 'href="https://speakerdeck.com/asonas/example"'
     assert_includes html, "読むための本文。"
     refute_includes html, "authoring-data"
+  end
+
+  def test_public_article_resolves_existing_and_missing_wiki_links
+    now = Time.iso8601("2026-09-01T00:00:00Z")
+    page = WeblogAuthoring::PageDocument.new(
+      id: "source", page_type: "named", name: "Source", title: nil,
+      status: "published", created_at: now, updated_at: now, published_at: now,
+      path: Pathname("content/pages/source.md"),
+      body: "[[KORG multi/poly]] [[未作成]]", links: []
+    )
+    target = WeblogAuthoring::PageDocument.new(
+      id: "target", page_type: "named", name: "KORG multi/poly", title: nil,
+      status: "published", created_at: now, updated_at: now, published_at: now,
+      path: Pathname("content/pages/target.md"), body: "公開本文", links: []
+    )
+    outbox = { "id" => "wiki", "page_id" => page.id, "payload" => { "source_url" => "https://weblog.ason.as/Source" } }
+    services = Services.new
+    database = Database.new(page:, outbox:, pages: [page, target])
+
+    WeblogAuthoring::WebmentionSitePublisher.new(
+      database:, s3_client: services, sqs_client: services,
+      site_bucket: "site", delivery_queue_url: "queue", sender_enabled: false
+    ).publish(outbox)
+
+    html = services.puts.fetch(0).fetch(:body)
+    baseline = Database.new(page:, outbox:, pages: [page, target])
+    baseline.define_singleton_method(:find_pages_by_routes) { |_routes| list_pages }
+    baseline_html = WeblogAuthoring::WebmentionSitePublisher.new(
+      database: baseline, s3_client: services, sqs_client: services,
+      site_bucket: "site", delivery_queue_url: "queue", sender_enabled: false
+    ).render_document(page, shell: services.get_object(bucket: "site", key: "static/authoring/public.html").body.read,
+      source_url: "https://weblog.ason.as/Source")
+    assert_equal baseline_html, html
+    assert_match(%r{<a href="/%4B%4F%52%47%20multi%2Fpoly" class="wiki-link wiki-link--existing">KORG multi/poly</a>}, html)
+    assert_match(%r{<a href="/%E6%9C%AA%E4%BD%9C%E6%88%90" class="wiki-link wiki-link--missing">未作成</a>}, html)
+    assert_includes html, '<meta property="og:title" content="Source" />'
   end
 
   def test_skips_an_outbox_for_an_older_page_update

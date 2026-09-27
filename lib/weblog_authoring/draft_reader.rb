@@ -21,6 +21,10 @@ module WeblogAuthoring
       @store.published_pages(limit:, before:, after:, kind:).map { |snapshot| DraftPublisher.page(snapshot) }
     end
 
+    def find_pages_by_routes(routes)
+      @store.published_pages_for_routes(routes).map { |snapshot| DraftPublisher.page(snapshot) }
+    end
+
     def list_timeline_pages(limit:, before: nil, after: nil, month: nil)
       @store.published_timeline_pages(limit:, before:, after:, month:).map { |snapshot| DraftPublisher.page(snapshot) }
     end

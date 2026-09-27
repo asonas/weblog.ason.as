@@ -44,6 +44,22 @@ module WeblogAuthoring
       end
     end
 
+    def published_pages_for_routes(routes)
+      routes = routes.uniq
+      return [] if routes.empty?
+
+      @connect.call do |db|
+        placeholders = routes.each_index.map { |index| "$#{index + 1}" }.join(", ")
+        db.query(<<~SQL, routes).map { |row| normalize_published_row(row) }
+          SELECT v.*, h.published_at, h.updated_at
+          FROM #{db.prefix}draft_publication_routes r
+          JOIN #{db.prefix}draft_publication_heads h ON h.article_id = r.article_id
+          JOIN #{db.prefix}draft_published_versions v ON v.id = h.active_id AND v.article_id = h.article_id
+          WHERE r.route IN (#{placeholders}) AND v.route = r.route
+        SQL
+      end
+    end
+
     def published_timeline_pages(limit:, before: nil, after: nil, month: nil)
       @connect.call do |db|
         db.published_timeline_pages(limit:, before:, after:, month:).map { |row| normalize_published_row(row) }

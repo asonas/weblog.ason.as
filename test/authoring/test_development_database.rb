@@ -40,6 +40,16 @@ class TestDevelopmentDatabase < Minitest::Test
     assert_equal updated, database.find_route("/最初の記事")
   end
 
+  def test_wiki_targets_read_only_requested_published_named_pages
+    database = development_database
+    target = database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "KORG multi/poly", body: "公開本文"))
+    database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "別の記事", body: "別本文"))
+
+    assert_equal [target.id], database.find_pages_by_routes(["KORG multi/poly", "未作成", "KORG multi/poly"]).map(&:id)
+    assert_empty database.find_pages_by_routes([])
+    assert_empty database.find_pages_by_routes(["存在しない記事"])
+  end
+
   def test_cover_selection_round_trips_and_an_omitted_update_preserves_it
     database = development_database
     page = database.save(WeblogAuthoring::SaveRequest.new(

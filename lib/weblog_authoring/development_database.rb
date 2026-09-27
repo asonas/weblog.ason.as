@@ -126,6 +126,21 @@ module WeblogAuthoring
       end
     end
 
+    def find_pages_by_routes(routes)
+      routes = routes.uniq
+      return [] if routes.empty?
+
+      with_connection do |database|
+        placeholders = (["?"] * routes.length).join(", ")
+        database.execute(<<~SQL, routes).map { |row| page_from_row(row) }
+          SELECT id, page_type, name, page_date, title, status,
+                 created_at, updated_at, published_at, path, body, cover_mode, cover_image_url
+          FROM pages
+          WHERE page_type = 'named' AND status = 'published' AND name IN (#{placeholders})
+        SQL
+      end
+    end
+
     def find(id)
       with_connection do |database|
         row = database.get_first_row(select_sql("id"), id)

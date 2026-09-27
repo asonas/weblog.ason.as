@@ -167,6 +167,21 @@ module WeblogAuthoring
       end
     end
 
+    def find_pages_by_routes(routes)
+      routes = routes.uniq
+      return [] if routes.empty?
+
+      with_connection do |connection|
+        placeholders = routes.each_index.map { |index| "$#{index + 1}" }.join(", ")
+        connection.exec_params(<<~SQL, routes).map { |row| page_from_row(row) }
+          SELECT id, page_type, name, page_date, title, status,
+                 created_at, updated_at, published_at, path, body, cover_mode, cover_image_url
+          FROM #{SCHEMA}.pages
+          WHERE page_type = 'named' AND status = 'published' AND name IN (#{placeholders})
+        SQL
+      end
+    end
+
     def healthy?
       with_connection { |connection| connection.exec("SELECT 1") }
       true

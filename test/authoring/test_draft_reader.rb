@@ -92,6 +92,29 @@ class DraftReaderTest < Minitest::Test
     assert_equal({ "newer" => "2026-09-02", "older" => nil }, WeblogAuthoring::DiaryNavigation.new(reader).neighbors("2026-09-01"))
   end
 
+  def test_wiki_targets_include_only_requested_public_named_routes
+    target_id = "ec802ad0b89946aeb6b7623c2ba7bc79"
+    store = WeblogAuthoring::DraftStore.sqlite(@root.join("wiki-targets.sqlite3"))
+    store.setup!
+    source = @source.fetch("articles").first.merge(
+      "id" => target_id, "page_type" => "named", "route" => "KORG multi/poly",
+      "title" => "KORG multi/poly", "body" => "公開済み本文"
+    )
+    WeblogAuthoring::DraftMigration.new(store:).import(
+      "format" => 1, "site_url" => "https://example.com", "articles" => [@source.fetch("articles").first, source]
+    )
+    store.append(target_id, { "protocol" => 1, "generation" => 1, "update_id" => "working-title", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
+      "metadata" => { "title" => { "value" => "未公開タイトル", "expected_revision" => 0 } }, })
+    reader = WeblogAuthoring::DraftReader.new(store:, database: @legacy)
+
+    pages = reader.find_pages_by_routes(["KORG multi/poly", "旧DBにだけ存在", "未作成", "KORG multi/poly"])
+
+    assert_equal [target_id], pages.map(&:id)
+    assert_equal "公開済み本文", pages.first.body
+    assert_empty reader.find_pages_by_routes([])
+    assert_equal [ID], reader.find_pages_by_routes(["2026-09-01"]).map(&:id)
+  end
+
   private
 
   def get(api, path, query: {}, parameters: {})

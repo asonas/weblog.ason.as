@@ -148,7 +148,8 @@ module WeblogAuthoring
 
     def render_page(page, source_url:)
       dimensions = {}
-      rendered = MarkdownRenderer.new(pages: @database.list_pages).render(
+      names = WeblogAuthoring.extract_wiki_links(page.body).map(&:name).uniq
+      rendered = MarkdownRenderer.new(pages: @database.find_pages_by_routes(names)).render(
         page.body, mode: "public", progressive: true,
         image_dimensions: ->(src) { dimensions.fetch(src) { dimensions[src] = @database.find_image_dimensions(src) } }
       )
