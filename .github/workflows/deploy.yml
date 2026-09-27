@@ -291,7 +291,9 @@ jobs:
           mapfile -t assets < <(grep -oE '/static/authoring/assets/[^" ]+' dist/site/public.html | sort -u)
           [[ ${#assets[@]} -ge 2 ]]
           for asset in "${assets[@]}"; do
-            aws s3api head-object --bucket "$SITE_BUCKET" --key "${asset#/}" >/dev/null
+            asset_key="${asset#/}"
+            listed_key="$(aws s3api list-objects-v2 --bucket "$SITE_BUCKET" --prefix "$asset_key" --max-keys 1 --query 'Contents[0].Key' --output text)"
+            [[ "$listed_key" == "$asset_key" ]]
           done
 
       - name: Deploy authoring Lambda image
@@ -389,7 +391,8 @@ jobs:
           release_key="display-releases/${TARGET_SHA}/public.html"
           aws s3 cp dist/site/public.html "s3://${SITE_BUCKET}/${release_key}" --only-show-errors \
             --content-type 'text/html; charset=utf-8' --cache-control 'public,max-age=31536000,immutable'
-          aws s3api head-object --bucket "$SITE_BUCKET" --key "$release_key" >/dev/null
+          listed_key="$(aws s3api list-objects-v2 --bucket "$SITE_BUCKET" --prefix "$release_key" --max-keys 1 --query 'Contents[0].Key' --output text)"
+          [[ "$listed_key" == "$release_key" ]]
           jq --null-input --arg id "$TARGET_SHA" '{id: $id}' > display-release.json
           aws s3 cp display-release.json "s3://${SITE_BUCKET}/display-releases/current.json" --only-show-errors \
             --content-type application/json --cache-control 'no-store'
