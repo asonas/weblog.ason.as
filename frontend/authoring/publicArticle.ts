@@ -107,10 +107,31 @@ function enhanceArticleImages(root: HTMLElement) {
   const images = root.querySelectorAll<HTMLImageElement>(
     ".article-image > img",
   );
+  if (images.length === 0) return;
+
+  window.addEventListener("keydown", (event) => {
+    if (
+      event.key !== "Escape" ||
+      event.defaultPrevented ||
+      document.querySelector("dialog[open]")
+    )
+      return;
+    for (const button of root.querySelectorAll<HTMLButtonElement>(
+      ".article-image--expanded .article-image__zoom",
+    ))
+      button.click();
+  });
 
   for (const image of images) {
     const container = image.parentElement;
     if (!container || container.closest("a")) continue;
+    const updateSourceWidth = () => {
+      const width = image.naturalWidth || Number(image.getAttribute("width"));
+      if (width > 0)
+        container.style.setProperty("--image-source-width", `${width}px`);
+    };
+    image.addEventListener("load", updateSourceWidth);
+    updateSourceWidth();
     const label = image.alt ? `${image.alt}を` : "画像を";
     const button = document.createElement("button");
     button.type = "button";
@@ -120,8 +141,9 @@ function enhanceArticleImages(root: HTMLElement) {
     image.replaceWith(button);
     button.append(image);
     button.addEventListener("click", () => {
-      if (container.dataset.mediaState === "failed") return;
-      const expanded = container.classList.toggle("article-image--expanded");
+      const expanded = !container.classList.contains("article-image--expanded");
+      if (expanded && container.dataset.mediaState === "failed") return;
+      container.classList.toggle("article-image--expanded", expanded);
       button.setAttribute("aria-expanded", String(expanded));
       button.setAttribute(
         "aria-label",

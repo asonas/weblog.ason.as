@@ -50,9 +50,9 @@ test("public reading keeps existing text and links while media load or fail", as
   }
 });
 
-test("article photos expand inline, including portrait photos", async () => {
+test("article photos use source width and Escape collapses inline expansion", async () => {
   const dom = new JSDOM(
-    '<article><span class="article-image"><img src="/assets/large.webp" width="2560" height="1707" alt="夕焼け"></span><span class="article-image"><img src="/assets/portrait.webp" width="1707" height="2560" alt="縦長の写真"></span><a href="/other"><span class="article-image"><img src="/assets/linked.webp" alt="リンク先の写真"></span></a></article>',
+    '<article><span class="article-image"><img src="/assets/large.webp" width="2560" height="1707" alt="夕焼け"></span><span class="article-image"><img src="/assets/portrait.webp" width="1707" height="2560" alt="縦長の写真"></span><span class="article-image"><img src="/assets/dog.webp" alt="犬"></span><a href="/other"><span class="article-image"><img src="/assets/linked.webp" alt="リンク先の写真"></span></a></article>',
     { url: "https://weblog.ason.as/article" },
   );
   Object.assign(globalThis, {
@@ -70,11 +70,23 @@ test("article photos expand inline, including portrait photos", async () => {
     const buttons = article.querySelectorAll<HTMLButtonElement>(
       ".article-image__zoom",
     );
-    assert.equal(buttons.length, 2);
+    assert.equal(buttons.length, 3);
     assert.equal(document.querySelector("dialog"), null);
     assert.equal(
       article.querySelector("a > .article-image > img")?.getAttribute("src"),
       "/assets/linked.webp",
+    );
+    assert.equal(
+      buttons[0]?.parentElement?.style.getPropertyValue("--image-source-width"),
+      "2560px",
+    );
+    const dog = buttons[2]?.querySelector("img");
+    assert.ok(dog);
+    Object.defineProperty(dog, "naturalWidth", { value: 424 });
+    dog.dispatchEvent(new dom.window.Event("load"));
+    assert.equal(
+      buttons[2]?.parentElement?.style.getPropertyValue("--image-source-width"),
+      "424px",
     );
     for (const button of buttons) {
       const image = button.querySelector("img");
@@ -94,6 +106,19 @@ test("article photos expand inline, including portrait photos", async () => {
         false,
       );
       assert.equal(button.getAttribute("aria-expanded"), "false");
+    }
+    buttons[0]?.click();
+    buttons[2]?.click();
+    window.dispatchEvent(
+      new dom.window.KeyboardEvent("keydown", { key: "Escape" }),
+    );
+    for (const button of [buttons[0], buttons[2]]) {
+      assert.equal(
+        button?.parentElement?.classList.contains("article-image--expanded"),
+        false,
+      );
+      assert.equal(button?.getAttribute("aria-expanded"), "false");
+      assert.match(button?.getAttribute("aria-label") || "", /拡大$/);
     }
   } finally {
     dom.window.close();
