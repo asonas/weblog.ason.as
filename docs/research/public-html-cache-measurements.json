@@ -1,0 +1,422 @@
+[
+  {
+    "phase": "connection-prime",
+    "at": "2026-09-27T02:06:43.741Z",
+    "responses": [
+      {
+        "path": "/about",
+        "status": 200,
+        "x_cache": "RefreshHit from cloudfront",
+        "age": null,
+        "release": "v1",
+        "origin_request_id": "75d0c516-551c-4490-854a-e1afe29c3ee3",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "505b040f00e1bd66d89f34595c8c1b3db435e9a8b0b25fae3863174f969f7828"
+      }
+    ],
+    "browsers": []
+  },
+  {
+    "phase": "recovered-connection-repeat",
+    "at": "2026-09-27T02:11:11.183Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "Hit from cloudfront",
+        "age": "16",
+        "release": "v2",
+        "origin_request_id": "24ab7f06-905b-4f8d-9462-f9d60326380b",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "KIX82-P3",
+        "sha256": "a1c65067fb6106f6ceb6fa9503c169b02077d8545341ae9603b32aca6a7faf16"
+      }
+    ],
+    "browsers": []
+  },
+  {
+    "phase": "recovered-connection",
+    "at": "2026-09-27T02:10:52.789Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "Miss from cloudfront",
+        "age": null,
+        "release": "v2",
+        "origin_request_id": "24ab7f06-905b-4f8d-9462-f9d60326380b",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "KIX82-P3",
+        "sha256": "a1c65067fb6106f6ceb6fa9503c169b02077d8545341ae9603b32aca6a7faf16"
+      }
+    ],
+    "browsers": [
+      {
+        "path": "/article-1",
+        "javascript_enabled": true,
+        "html_release": "v2",
+        "ogp": "article-1",
+        "css": "rgb(23, 107, 72)",
+        "script_release": "v2",
+        "script_src": "/app.v2.js",
+        "new_structure": 1
+      },
+      {
+        "path": "/article-1",
+        "javascript_enabled": false,
+        "html_release": "v2",
+        "ogp": "article-1",
+        "css": "rgb(23, 107, 72)",
+        "script_release": null,
+        "script_src": "/app.v2.js",
+        "new_structure": 1
+      }
+    ]
+  },
+  {
+    "phase": "recovered-http-500",
+    "at": "2026-09-27T02:06:09.584Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "RefreshHit from cloudfront",
+        "age": null,
+        "release": "v1",
+        "origin_request_id": "cb56e795-5cf1-4829-a34c-901f9cf9c550",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "352852b8d7f58ee52abade4c65a0ceb2c28e13f959c00ab9c416368f602869b4"
+      }
+    ],
+    "browsers": []
+  },
+  {
+    "phase": "retained-before-ttl",
+    "at": "2026-09-27T02:03:22.995Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "Hit from cloudfront",
+        "age": "82",
+        "release": "v1",
+        "origin_request_id": "cb56e795-5cf1-4829-a34c-901f9cf9c550",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "352852b8d7f58ee52abade4c65a0ceb2c28e13f959c00ab9c416368f602869b4"
+      }
+    ],
+    "browsers": []
+  },
+  {
+    "phase": "retained-connection",
+    "at": "2026-09-27T02:09:20.523Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "RefreshHit from cloudfront",
+        "age": "189",
+        "release": "v1",
+        "origin_request_id": "cb56e795-5cf1-4829-a34c-901f9cf9c550",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "352852b8d7f58ee52abade4c65a0ceb2c28e13f959c00ab9c416368f602869b4"
+      }
+    ],
+    "browsers": []
+  },
+  {
+    "phase": "retained-http-500",
+    "at": "2026-09-27T02:05:13.513Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "RefreshHit from cloudfront",
+        "age": "192",
+        "release": "v1",
+        "origin_request_id": "cb56e795-5cf1-4829-a34c-901f9cf9c550",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "352852b8d7f58ee52abade4c65a0ceb2c28e13f959c00ab9c416368f602869b4"
+      }
+    ],
+    "browsers": []
+  },
+  {
+    "phase": "rollback-after-ttl",
+    "at": "2026-09-27T02:01:58.686Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "Miss from cloudfront",
+        "age": null,
+        "release": "v1",
+        "origin_request_id": "cb56e795-5cf1-4829-a34c-901f9cf9c550",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "352852b8d7f58ee52abade4c65a0ceb2c28e13f959c00ab9c416368f602869b4"
+      }
+    ],
+    "browsers": [
+      {
+        "path": "/article-1",
+        "javascript_enabled": true,
+        "html_release": "v1",
+        "ogp": "article-1",
+        "css": "rgb(85, 85, 85)",
+        "script_release": "v1",
+        "script_src": "/app.v1.js",
+        "new_structure": 0
+      },
+      {
+        "path": "/article-1",
+        "javascript_enabled": false,
+        "html_release": "v1",
+        "ogp": "article-1",
+        "css": "rgb(85, 85, 85)",
+        "script_release": null,
+        "script_src": "/app.v1.js",
+        "new_structure": 0
+      }
+    ]
+  },
+  {
+    "phase": "rollback-before-ttl",
+    "at": "2026-09-27T01:59:40.451Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "Hit from cloudfront",
+        "age": "56",
+        "release": "v2",
+        "origin_request_id": "31e7d7b0-7680-41e6-b432-4ed7a9aa1020",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "a1c65067fb6106f6ceb6fa9503c169b02077d8545341ae9603b32aca6a7faf16"
+      }
+    ],
+    "browsers": []
+  },
+  {
+    "phase": "uncached-connection",
+    "at": "2026-09-27T02:08:08.721Z",
+    "responses": [
+      {
+        "path": "/article-3",
+        "status": 502,
+        "x_cache": "Error from cloudfront",
+        "age": null,
+        "release": null,
+        "origin_request_id": null,
+        "cache_control": null,
+        "pop": "NRT57-P4",
+        "sha256": "d5be9925c157ff1aa643636050562e060c9f64f34da9082778ec7f2528b167ff"
+      }
+    ],
+    "browsers": []
+  },
+  {
+    "phase": "uncached-http-500",
+    "at": "2026-09-27T02:03:11.196Z",
+    "responses": [
+      {
+        "path": "/article-2",
+        "status": 500,
+        "x_cache": "Error from cloudfront",
+        "age": null,
+        "release": null,
+        "origin_request_id": "c3c4ec6f-057e-4b5e-a926-5f9384d99df5",
+        "cache_control": "no-store",
+        "pop": "NRT57-P4",
+        "sha256": "691a6d22d4f509ca87bc7d4f84a889a9f28f6c26a951ded55dfa1c61a6db7c6a"
+      }
+    ],
+    "browsers": []
+  },
+  {
+    "phase": "v1-hit",
+    "at": "2026-09-27T01:55:37.428Z",
+    "responses": [
+      {
+        "path": "/",
+        "status": 200,
+        "x_cache": "Miss from cloudfront",
+        "age": null,
+        "release": "v1",
+        "origin_request_id": "f60a9198-239b-4bab-a4e5-86f97eb850e5",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "d32b6543fcb7d5f78027bd6861a548051b0e583165f2df7e2e5ba642935662cd"
+      },
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "Hit from cloudfront",
+        "age": "16",
+        "release": "v1",
+        "origin_request_id": "b5e188ed-78e5-4296-a45c-be37053c17bb",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "352852b8d7f58ee52abade4c65a0ceb2c28e13f959c00ab9c416368f602869b4"
+      },
+      {
+        "path": "/about",
+        "status": 200,
+        "x_cache": "Miss from cloudfront",
+        "age": null,
+        "release": "v1",
+        "origin_request_id": "75d0c516-551c-4490-854a-e1afe29c3ee3",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "505b040f00e1bd66d89f34595c8c1b3db435e9a8b0b25fae3863174f969f7828"
+      },
+      {
+        "path": "/app.v1.css",
+        "status": 200,
+        "x_cache": "Hit from cloudfront",
+        "age": "15",
+        "release": "v1",
+        "origin_request_id": "17ecd8b8-30e8-4fc1-aa25-e4437c7ab2e4",
+        "cache_control": "public, max-age=31536000, immutable",
+        "pop": "NRT57-P4",
+        "sha256": "2cc77c1641b71d65979e3f39c7130384ff853e583ca25df9a4ecc3cf762151a8"
+      },
+      {
+        "path": "/app.v1.js",
+        "status": 200,
+        "x_cache": "Miss from cloudfront",
+        "age": null,
+        "release": "v1",
+        "origin_request_id": "ca2fcc4b-e2af-4cd3-9b81-d23bd65e2cc3",
+        "cache_control": "public, max-age=31536000, immutable",
+        "pop": "NRT57-P4",
+        "sha256": "8c3fce99b76607ecb09dce5b6cc4b3581020317f62db0487d5ef00dbb7f2645f"
+      },
+      {
+        "path": "/app.v2.css",
+        "status": 200,
+        "x_cache": "Miss from cloudfront",
+        "age": null,
+        "release": "v2",
+        "origin_request_id": "28492401-1f25-4131-b3e6-315e10e6d1f7",
+        "cache_control": "public, max-age=31536000, immutable",
+        "pop": "NRT57-P4",
+        "sha256": "e5e81bfe5fd484c9a04e4b2eed29086e92caa008488a88db749b53ea882ff1e7"
+      },
+      {
+        "path": "/app.v2.js",
+        "status": 200,
+        "x_cache": "Miss from cloudfront",
+        "age": null,
+        "release": "v2",
+        "origin_request_id": "bb45844f-3f9d-45be-926d-687b9ff67007",
+        "cache_control": "public, max-age=31536000, immutable",
+        "pop": "NRT57-P4",
+        "sha256": "0eddd91909bf003fa4d574c7121fd34a348bb7969e2bb001fac1d7ac58ed446a"
+      }
+    ],
+    "browsers": []
+  },
+  {
+    "phase": "v1-miss",
+    "at": "2026-09-27T01:55:21.112Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "Miss from cloudfront",
+        "age": null,
+        "release": "v1",
+        "origin_request_id": "b5e188ed-78e5-4296-a45c-be37053c17bb",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "352852b8d7f58ee52abade4c65a0ceb2c28e13f959c00ab9c416368f602869b4"
+      }
+    ],
+    "browsers": [
+      {
+        "path": "/article-1",
+        "javascript_enabled": true,
+        "html_release": "v1",
+        "ogp": "article-1",
+        "css": "rgb(85, 85, 85)",
+        "script_release": null,
+        "script_src": null,
+        "new_structure": 0
+      },
+      {
+        "path": "/article-1",
+        "javascript_enabled": false,
+        "html_release": "v1",
+        "ogp": "article-1",
+        "css": "rgb(85, 85, 85)",
+        "script_release": null,
+        "script_src": null,
+        "new_structure": 0
+      }
+    ]
+  },
+  {
+    "phase": "v2-after-ttl",
+    "at": "2026-09-27T01:58:44.610Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "Miss from cloudfront",
+        "age": null,
+        "release": "v2",
+        "origin_request_id": "31e7d7b0-7680-41e6-b432-4ed7a9aa1020",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "a1c65067fb6106f6ceb6fa9503c169b02077d8545341ae9603b32aca6a7faf16"
+      }
+    ],
+    "browsers": [
+      {
+        "path": "/article-1",
+        "javascript_enabled": true,
+        "html_release": "v2",
+        "ogp": "article-1",
+        "css": "rgb(23, 107, 72)",
+        "script_release": "v2",
+        "script_src": "/app.v2.js",
+        "new_structure": 1
+      },
+      {
+        "path": "/article-1",
+        "javascript_enabled": false,
+        "html_release": "v2",
+        "ogp": "article-1",
+        "css": "rgb(23, 107, 72)",
+        "script_release": null,
+        "script_src": "/app.v2.js",
+        "new_structure": 1
+      }
+    ]
+  },
+  {
+    "phase": "v2-before-ttl",
+    "at": "2026-09-27T01:56:45.261Z",
+    "responses": [
+      {
+        "path": "/article-1",
+        "status": 200,
+        "x_cache": "Hit from cloudfront",
+        "age": "84",
+        "release": "v1",
+        "origin_request_id": "b5e188ed-78e5-4296-a45c-be37053c17bb",
+        "cache_control": "public, max-age=0, s-maxage=180, stale-if-error=86400",
+        "pop": "NRT57-P4",
+        "sha256": "352852b8d7f58ee52abade4c65a0ceb2c28e13f959c00ab9c416368f602869b4"
+      }
+    ],
+    "browsers": []
+  }
+]

@@ -18,7 +18,7 @@ CloudFrontは期限切れ後、配信元が接続不能または5xxの場合に�
 
 ローカルでは、HTTPテストでGET/HEAD/304、ETag、クエリ・Cookie・末尾スラッシュで同じ公開HTML、未選定記事とAPIの非キャッシュを確認する。Terraform mockテストはTTLの上下限、既定behavior、APIとfeedの専用behaviorを確認する。これらはCloudFront実配信のHit/Missやstale応答の証拠ではない。
 
-2026-09-27の実行結果はRuby公開HTTPテスト2件・45 assertion、RuboCop、Terraform validate、production rootのmockテスト12件が成功。実CloudFrontの180秒更新、5xx・接続失敗時のstale、未保持時のエラー、復旧後の更新は未観測。時間を進めたローカル模擬だけで24時間の保持を証明しない。
+2026-09-27のローカル検証ではRuby公開HTTPテスト2件・45 assertion、RuboCop、Terraform validate、production rootのmockテスト12件が成功。実CloudFrontの挙動は下記の隔離検証で別に確認した。
 
 2026-09-27の初回読み取り専用初期化は`asonas-blog`ロールのstate `HeadObject`が403で停止し、同ロールのCloudFront `GetDistributionConfig`もAccessDeniedだった。AdministratorAccessの使用は自動承認レビューが最初に拒否したが、ユーザーの明示的な読み取り専用plan承認後に実行できた。Terraform planは`-lock=false`でstateロックを書かず、保存先を権限700の`/tmp/weblog-188-plan/`にした。
 
@@ -28,4 +28,21 @@ CloudFrontポリシーとdistributionだけを対象にした別のfresh保存pl
 
 ユーザーがこの限定適用を承認した後、再初期化し、`public-html-approved.tfplan`をrefresh付きで新たに保存した。全変更を確認して、その保存planを適用し、**1件追加、1件変更、削除0件**で終了した。適用後の対象付きfresh planは差分なし。全体fresh planは**0件追加、3件変更、削除0件**で、上記Webmentionの3件だけが残り、S3バケットポリシーの計画時差分は消えた。全体planは適用していない。CloudFront APIでdistributionが`Deployed`、既定behaviorに新ポリシー`d4078009-fe13-4d31-a7f7-883dd42db37a`、`/api/*`と`/feed.xml`がCachingDisabled、静的assetsがCachingOptimizedのままと確認した。実サイトのHEADではトップが200・`no-store`、feedが200・`public, max-age=300`を返した。feedは専用behaviorでCloudFrontにキャッシュされない。選定記事の本番HTMLキャッシュはまだ観測していない。
 
-対象URLの本番指定と配信切替は後続Issueで行う。切替後は同じURLの初回Miss・再取得HitとAge、180秒経過後の表示用リリース更新・元の版への復帰、HTMLが参照するCSS/JSの200、Cookie付き・クエリ付き・末尾スラッシュ・エンコードされたURL、非選定記事・管理・認証・API・feed、redirect・404・ETag/304・HEADを確認する。CloudFrontの接続失敗・5xx、キャッシュ未保持、復旧の観測には隔離した配信元が必要で、本番配信元を故意に停止しない。観測回数と費用上限を別途決める。24時間の全期間保持は短時間のローカル模擬から保証しない。
+## 隔離した実CloudFrontの観測
+
+ユーザー承認の下、本番とは別のCloudFront・Lambda・DSQL・ECR等13リソースを作成し、人工記事1,000件を投入した。試作用CloudFrontも最小/既定TTL 0、最大TTL 86,580秒、試作HTMLも`public, max-age=0, s-maxage=180, stale-if-error=86400`に合わせた。閲覧tokenのない要求をCloudFront Functionで拒否し、本番データ・本番配信元には接続していない。新旧CSS/JSは版付きURLで配信した。[観測JSON](public-html-cache-measurements.json)には各段階の時刻、ステータス、`X-Cache`、`Age`、POP、本文ハッシュ、ブラウザのHTML/CSS/JS版を保存した。
+
+| UTC | 条件 | 実際の応答 |
+|---|---|---|
+| 01:55:21→01:55:37 | v1記事の初回と再取得 | `Miss`→`Hit`、Age 16秒、同じ本文ハッシュとorigin request ID |
+| 01:56:45→01:58:44 | originをv2へ変更 | Age 84秒ではv1を`Hit`、180秒経過後にv2を`Miss`で取得。ブラウザのHTML・CSS・実行されたJSがv2で一致 |
+| 01:59:40→02:01:58 | originをv1へ切り戻し | Age 56秒ではv2を`Hit`、180秒経過後にv1を`Miss`で取得。HTMLハッシュは初期v1と一致し、CSS/JSもv1 |
+| 02:03:11→02:05:13 | originがHTTP 500 | 未保持の`/article-2`は500。保持済み`/article-1`は期限切れ後Age 192秒でv1を200・`RefreshHit`で返した |
+| 02:08:08→02:09:20 | originのDNSが解決不能 | 未保持の`/article-3`は502。保持済み`/article-1`は期限切れ後Age 189秒でv1を200・`RefreshHit`で返した |
+| 02:10:52 | 接続を復旧しoriginをv2へ更新 | v2のHTML・CSS・JSを200で取得。ただしこの応答はKIXのPOPからの`Miss`で、先のNRTのstaleが同じエッジで更新されたことは証明しない |
+
+500解除後の02:06:09にも、NRTで同じv1本文を200・`RefreshHit`、Ageなしで取得した。ETagが同じだったため、新しい本文への更新例ではない。隔離試験で観測したのは180秒を少し超えたstaleであり、24時間ずっと保持できる保証ではない。CloudFrontの最大TTLは`180+86,400=86,580`秒なので設定で障害時上限を切り詰めないが、エッジからの退避はあり得る。invalidationは実行せず、旧assetsも削除していない。
+
+15段階でHTTPの明示的な取得21件とブラウザのページ遷移8件を記録した。LambdaのREPORTは32件、請求対象時間の合計は12.069秒（512MBで6.0345GB秒）。DSQL、CloudFront、ECR、ログ等を含む確定請求額はまだ得られず、費用1ドル以内を確定値としては扱わない。終了時は13リソースだけのfresh保存destroy planを適用し、適用後のfresh destroy planは差分なし、Terraform stateのmanaged resourceは0件。一時Docker認証もlogoutした。
+
+対象URLの本番指定と配信切替は後続Issueで行う。切替後は同じURLの初回Miss・再取得HitとAge、180秒経過後の表示用リリース更新・元の版への復帰、HTMLが参照するCSS/JSの200、Cookie付き・クエリ付き・末尾スラッシュ・エンコードされたURL、非選定記事・管理・認証・API・feed、redirect・404・ETag/304・HEADを確認する。隔離実験での合格を、本番の選定記事や全エッジの観測済みとは扱わない。
