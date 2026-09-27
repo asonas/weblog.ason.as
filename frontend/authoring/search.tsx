@@ -161,6 +161,7 @@ function SearchContents({
   state,
   inputRef,
   showResults = true,
+  showAllResultsLink = false,
 }: {
   query: string;
   setQuery: (value: string) => void;
@@ -168,6 +169,7 @@ function SearchContents({
   state: SearchState;
   inputRef?: RefObject<HTMLInputElement | null>;
   showResults?: boolean;
+  showAllResultsLink?: boolean;
 }) {
   const resultId = useId();
 
@@ -187,12 +189,20 @@ function SearchContents({
         onKeyDown={onKeyDown}
       />
       {showResults && (
-        <SearchResults
-          id={resultId}
-          query={query}
-          results={results}
-          state={state}
-        />
+        <div className="site-search__panel">
+          <SearchResults
+            id={resultId}
+            query={query}
+            results={results}
+            state={state}
+          />
+          {showAllResultsLink && query.trim() && (
+            <a className="site-search__all" href={searchPageUrl(query)}>
+              <span>検索結果ページへ</span>
+              <span aria-hidden="true">→</span>
+            </a>
+          )}
+        </div>
       )}
     </>
   );
@@ -311,14 +321,10 @@ export function SiteSearch({ initialQuery = "" }: { initialQuery?: string }) {
             query={query}
             setQuery={setQuery}
             showResults={desktopOpen}
+            showAllResultsLink
             {...search}
           />
         </div>
-        {desktopOpen && query.trim() && (
-          <a className="site-search__all" href={searchPageUrl(query)}>
-            すべての検索結果を表示
-          </a>
-        )}
       </div>
       <button
         ref={mobileButtonRef}

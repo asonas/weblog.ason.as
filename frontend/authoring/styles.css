@@ -786,24 +786,47 @@ select {
   color: var(--ink);
 }
 
-.site-search__desktop .site-search__results,
-.site-search__desktop .site-search__all {
+.site-search__desktop .site-search__panel {
+  margin-block-start: var(--space-1);
   background: var(--surface);
 }
 
 .site-search__desktop .site-search__results {
   max-block-size: min(60vh, 34rem);
-  margin-block-start: 0.35rem;
   overflow: auto;
-  border: 1px solid var(--separator);
-  border-radius: 0.75rem;
-  box-shadow: 0 1rem 2.5rem color-mix(in oklch, var(--ink) 18%, transparent);
+  /* The local surface layer covers the scroll hint at the end of the results. */
+  background-image:
+    linear-gradient(to top, var(--surface) 60%, transparent),
+    /* tw-easing-gradients: ease-in-out, 15 subdivisions, black at 22%. */
+    linear-gradient(
+      to top,
+      rgb(0 0 0 / 0.22) 0%,
+      rgb(0 0 0 / 0.21714) 8.1%,
+      rgb(0 0 0 / 0.20922) 15.5%,
+      rgb(0 0 0 / 0.19712) 22.5%,
+      rgb(0 0 0 / 0.1815) 29%,
+      rgb(0 0 0 / 0.16302) 35.3%,
+      rgb(0 0 0 / 0.14256) 41.2%,
+      rgb(0 0 0 / 0.121) 47.1%,
+      rgb(0 0 0 / 0.099) 52.9%,
+      rgb(0 0 0 / 0.07744) 58.8%,
+      rgb(0 0 0 / 0.05698) 64.7%,
+      rgb(0 0 0 / 0.0385) 71%,
+      rgb(0 0 0 / 0.02288) 77.5%,
+      rgb(0 0 0 / 0.01078) 84.5%,
+      rgb(0 0 0 / 0.00286) 91.9%,
+      rgb(0 0 0 / 0) 100%
+    );
+  background-position: center bottom;
+  background-size:
+    100% 40px,
+    100% 24px;
+  background-repeat: no-repeat;
+  background-attachment: local, scroll;
 }
 
-.site-search__desktop:not(.is-open) .site-search__results,
-.site-search__desktop:not(.is-open) .site-search__all,
-.site-search__desktop:not(:focus-within) .site-search__results,
-.site-search__desktop:not(:focus-within) .site-search__all {
+.site-search__desktop:not(.is-open) .site-search__panel,
+.site-search__desktop:not(:focus-within) .site-search__panel {
   display: none;
 }
 
@@ -837,15 +860,32 @@ select {
 }
 
 .site-search__all {
-  display: block;
-  margin-block-start: 0.35rem;
-  padding: 0.7rem 1rem;
-  border: 1px solid var(--separator);
-  border-radius: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-block-size: 44px;
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-4);
+  border-block-start: var(--border-width) solid var(--separator);
   color: var(--accent);
-  font-size: 0.85rem;
-  text-align: end;
+  font-size: var(--text-ui);
+  line-height: 20px;
   text-decoration: none;
+  text-underline-offset: 0.2em;
+}
+
+.site-search__all > span:first-child {
+  text-decoration: underline;
+}
+
+.site-search__all:hover > span:first-child {
+  text-decoration-thickness: 2px;
+}
+
+.site-search__all:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .site-search__mobile-button,
