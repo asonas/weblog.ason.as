@@ -33,3 +33,23 @@ test("rejects invalid or oversized text before linting", async () => {
     await assert.rejects(handler({ text }), /1 MB/);
   }
 });
+
+test("ignores missing periods only on trailing wiki-link tag lines", async () => {
+  const { messages } = await handler({
+    text: "句点のない本文\n\n[[途中のリンク]]\n\n本文内の[[リンク]]\n\n[[日記]] [[散歩]]\n[[記録]]  \n",
+  });
+  assert.deepEqual(
+    messages.filter(({ ruleId }) => ruleId === "ja-no-mixed-period").map(({ line }) => line),
+    [1, 3, 5],
+  );
+});
+
+test("keeps other proofreading rules on trailing tags and original body positions", async () => {
+  const text = "見れる。\n\n[[ｶﾀｶﾅ]]";
+  const { messages } = await handler({ text });
+  assert.ok(messages.some(({ ruleId }) => ruleId === "no-hankaku-kana"));
+  assert.ok(!messages.some(({ ruleId }) => ruleId === "ja-no-mixed-period"));
+  const ra = messages.find(({ ruleId }) => ruleId === "no-dropping-the-ra");
+  assert.equal(ra.line, 1);
+  assert.equal(text.slice(...ra.range), "れ");
+});

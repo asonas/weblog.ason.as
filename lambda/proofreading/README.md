@@ -4,6 +4,8 @@
 
 `preset-ja-technical-writing` から `sentence-length`、`max-comma`、`max-ten`、`no-mix-dearu-desumasu`、`no-exclamation-question-mark` を除く。依存パッケージと形態素解析辞書は Lambda イメージに同梱する。
 
+文書末尾の `[[日記]]` などWikiリンクだけのタグ行は、`ja-no-mixed-period` の指摘から除外する。本文中のリンクや他のルールは除外しない。
+
 エディタは最後の入力から1秒後に校正する。新しい入力で古い応答を無効化し、オフライン中は校正を停止する。ネットワークの復帰時に再試行する。校正失敗は本文の編集・保存を止めない。
 
 ## ローカル

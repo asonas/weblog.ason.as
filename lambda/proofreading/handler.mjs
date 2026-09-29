@@ -26,8 +26,17 @@ export async function handler(event) {
     throw new Error("校正する本文は UTF-8 で 1 MB 以下の文字列にしてください");
   }
   const result = await kernel.lintText(event.text, options);
+  let trailingTagsStart = event.text.length;
+  const lines = event.text.split("\n");
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index].trim();
+    if (line && !/^(?:\[\[[^\[\]\r\n]+\]\]\s*)+$/u.test(line)) break;
+    trailingTagsStart -= lines[index].length + (index < lines.length - 1 ? 1 : 0);
+  }
   return {
-    messages: result.messages.map(({ ruleId, message, line, range }) => ({
+    messages: result.messages.filter(({ ruleId, range }) => !(
+      ruleId === "ja-no-mixed-period" && range[0] >= trailingTagsStart
+    )).map(({ ruleId, message, line, range }) => ({
       ruleId, message, line, range,
     })),
   };
