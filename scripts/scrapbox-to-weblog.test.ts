@@ -13,6 +13,59 @@ test("converts Scrapbox internal links to weblog wiki links", () => {
   );
 });
 
+test("converts Scrapbox hashtags alongside internal links", () => {
+  assert.equal(
+    convertLine("#hoge #日本語 [日記]"),
+    "[[hoge]] [[日本語]] [[日記]]",
+  );
+});
+
+test("preserves code, URL fragments, and converted hashtag links", () => {
+  const line = "`#hoge` https://example.com/#hoge [[hoge]] [[#hoge]]";
+  assert.equal(convertLine(line), line);
+  assert.equal(convertLine("#hoge", new Map(), "assets"), "#hoge");
+  assert.equal(convertLine("## 見出し"), "## 見出し");
+});
+
+test("does not convert hashtags in Scrapbox code and table blocks", () => {
+  const result = convertExport({
+    pages: [
+      {
+        lines: ["記事", "code:sh", " #hoge", "table:tags", " #日本語", "#link"],
+      },
+    ],
+  });
+  assert.deepEqual(result.pages[0].lines, [
+    "記事",
+    "",
+    "#hoge",
+    "",
+    "#日本語",
+    "[[link]]",
+  ]);
+});
+
+test("preserves page and line timestamps when converting hashtags", () => {
+  const page = {
+    title: "記事",
+    created: 100,
+    updated: 200,
+    lines: ["記事", { text: "#hoge", created: 110, updated: 190, userId: "u" }],
+  };
+  const input = { pages: [page] };
+  const before = structuredClone(input);
+  const result = convertExport(input);
+  assert.deepEqual(result.pages[0], {
+    ...page,
+    lines: [
+      "記事",
+      { text: "[[hoge]]", created: 110, updated: 190, userId: "u" },
+    ],
+  });
+  assert.deepEqual(input, before);
+  assert.deepEqual(convertExport(result), result);
+});
+
 test("preserves external links, code, and already converted links", () => {
   assert.equal(
     convertLine("[https://example.com title] `[日記]` [[既存]]"),

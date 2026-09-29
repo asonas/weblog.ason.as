@@ -1,0 +1,99 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "optparse"
+require "fileutils"
+require "openssl"
+ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
+require "aurora_dsql_pg"
+require "aws-sdk-s3"
+require_relative "../lib/weblog_authoring/scrapbox_hashtag_repair"
+require_relative "../lib/weblog_authoring/dsql_database"
+require_relative "../lib/weblog_authoring/draft_reader"
+
+command = ARGV.shift
+options = {}
+OptionParser.new do |parser|
+  parser.banner = "Usage: repair-scrapbox-hashtags plan|apply --host HOST --plan PATH [--differences PATH --backups DIR] [--site-bucket BUCKET --site-url URL]"
+  %w[host plan differences backups site-bucket site-url].each do |key|
+    parser.on("--#{key} VALUE") { |value| options[key] = value }
+  end
+end.parse!
+raise ArgumentError, "Expected plan or apply" unless %w[plan apply].include?(command) && ARGV.empty?
+host = options.fetch("host")
+pool = AuroraDsql::Pg.create_pool(host:, user: "admin", application_name: "scrapbox-hashtag-repair", occ_max_retries: 3)
+store = WeblogAuthoring::ScrapboxHashtagRepair.postgres(pool)
+$stdout.sync = true
+
+if command == "plan"
+  differences = JSON.parse(File.read(options.fetch("differences"))).group_by { |row| row.fetch("title") }
+  backups = Pathname(options.fetch("backups"))
+  FileUtils.mkdir_p(backups, mode: 0700)
+  publication = WeblogAuthoring::DraftPublication.local(store:)
+  snapshots = store.published_collection.fetch("snapshots").to_h { |row| [row.fetch("route"), row] }
+  plans = []
+  skipped = []
+  differences.each do |route, changes|
+    snapshot = snapshots[route]
+    unless snapshot
+      skipped << { "route" => route, "reason" => "not_published" }
+      next
+    end
+    id = snapshot.fetch("article_id")
+    path = backups.join("#{id}.json")
+    unless path.exist?
+      job = publication.send(:reconstruction_job, id)
+      backup = { "job" => job, "snapshot" => store.published_snapshot(id), "document" => store.read(id, { "cursor" => job.fetch("through").to_s }) }
+      File.write(path, JSON.pretty_generate(backup), mode: "wx", perm: 0600)
+    end
+    begin
+      plan = WeblogAuthoring::ScrapboxHashtagRepair.prepare(JSON.parse(path.read), changes)
+      if plan
+        plans << plan
+      else
+        skipped << { "route" => route, "reason" => "no_approved_tag_lines_remain" }
+      end
+    rescue WeblogAuthoring::DraftStore::Error => error
+      skipped << { "route" => route, "reason" => error.message.lines.first.to_s.strip }
+    end
+    puts JSON.generate(planned: plans.length, inspected: plans.length + skipped.length) if (plans.length + skipped.length) % 20 == 0
+  end
+  File.write(options.fetch("plan"), JSON.pretty_generate({ "host" => host, "plans" => plans, "skipped" => skipped }), mode: "wx", perm: 0600)
+  puts JSON.generate(planned: plans.length, skipped: skipped.group_by { |row| row.fetch("reason") }.transform_values(&:length))
+else
+  manifest = JSON.parse(File.read(options.fetch("plan")))
+  raise ArgumentError, "Plan host mismatch" unless manifest.fetch("host") == host
+  bucket = options.fetch("site-bucket")
+  site_url = options.fetch("site-url")
+  s3 = Aws::S3::Client.new(region: "ap-northeast-1")
+  database = WeblogAuthoring::DsqlDatabase.new(host:, content_dir: ".", pool:)
+  reader = WeblogAuthoring::DraftReader.new(store:, database:)
+  renderer = WeblogAuthoring::WebmentionSitePublisher.new(database: reader, s3_client: nil, sqs_client: nil, site_bucket: bucket, delivery_queue_url: nil, sender_enabled: false)
+  shell = s3.get_object(bucket:, key: "static/authoring/public.html").body.read.force_encoding(Encoding::UTF_8)
+  manifest.fetch("plans").each do |plan|
+    original = plan.fetch("before")
+    id = original.fetch("article_id")
+    version = plan.fetch("version_id")
+    key = "published/#{id}/#{version}.html"
+    store.with_cutover_operation("draft_publication") do
+      active = store.published_snapshot(id)
+      if active && active.fetch("id") == version
+        artifact = active.slice("html_key", "html_digest")
+      else
+        snapshot = original.merge("id" => version, "body" => plan.fetch("body"), "content_hash" => plan.fetch("content_hash"))
+        page = WeblogAuthoring::DraftPublisher.page(snapshot)
+        html = renderer.render_document(page, shell:, source_url: "#{site_url.delete_suffix('/')}/#{WeblogAuthoring.encoded_route(page.route)}")
+        begin
+          s3.put_object(bucket:, key:, body: html, content_type: "text/html; charset=utf-8", cache_control: "public, max-age=31536000, immutable", if_none_match: "*")
+        rescue Aws::S3::Errors::PreconditionFailed
+          # Retrying a saved plan reuses only an identical staged artifact.
+        end
+        stored = s3.get_object(bucket:, key:).body.read
+        raise "Staged HTML differs from repair" unless Digest::SHA256.hexdigest(stored) == Digest::SHA256.hexdigest(html)
+        artifact = { "html_key" => key, "html_digest" => Digest::SHA256.hexdigest(stored) }
+      end
+      result = store.apply_repair(plan, artifact:)
+      puts JSON.generate(id:, route: original.fetch("route"), status: result, html_key: artifact.fetch("html_key"))
+    end
+  end
+end

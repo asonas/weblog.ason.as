@@ -54,7 +54,9 @@ npm run convert:scrapbox:all -- \
   --asset-fetch-report data/reports/asset-fetch-report.json
 ```
 
-`convert:scrapbox:all`では、例えば`[日記]`を`[[日記]]`にし、取得済みのGyazo画像も`![](/assets/asset_....jpg)`へ変換します。
+`convert:scrapbox:all`では、例えば`[日記]`と`#日記`を`[[日記]]`にし、取得済みのGyazo画像も`![](/assets/asset_....jpg)`へ変換します。ハッシュタグの範囲はScrapboxパーサーの判定に従います。コード・テーブルブロック内の`#...`、インラインコード、URLのフラグメント、既存の`[[...]]`はハッシュタグ変換の対象外です。
+
+変換はScrapboxエクスポートJSONを対象とし、ページ・行の日時などのメタデータを保持します。このコマンドはDB更新・HTML再生成・CloudFront invalidationを実行しません。移行済み記事への適用は別工程です。現在のMarkdown本文への一括再適用は、リストや画像なども再変換するため行わないでください。
 
 画像だけを変換し、Scrapbox内部リンクを変更しない場合は`convert:scrapbox:assets`を使います。
 
@@ -69,6 +71,8 @@ npm run convert:scrapbox:assets -- \
 どちらもmanifestの固定asset IDと取得レポートのファイル名を照合します。取得に失敗した画像、通常の外部URL、インラインコード中の記法、すでに変換済みの`[[日記]]`はそのまま保持します。`--asset-manifest`と`--asset-fetch-report`を省略した場合は、上記と同じ`data/normalized/asset-manifest.json`と`data/reports/asset-fetch-report.json`を使用します。
 
 ### 移行済み記事のリスト修復
+
+以下のリスト修復は旧`pages`テーブル用です。公開・下書き機構への移行後は使わず、ハッシュタグ修復には後述の専用コマンドを使用します。
 
 ScrapboxのインデントをMarkdownのリストへ変換した結果を既存記事へ反映する場合は、通常の`bin/import-dsql`を再実行せず、修正専用コマンドを使います。`--before`の本文ハッシュと本番記事の現在の本文ハッシュが一致する記事だけを更新し、編集済みの記事、新規記事、移行元にない記事は変更しません。移行時の表現修正は記事自体の更新ではないため、`updated_at`も変更しません。`--apply`を付けない実行では本番データを読み取って分類するだけです。
 
@@ -85,6 +89,26 @@ mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
 ```
 
 dry-runの結果を確認してから`--apply`を追加します。記事の削除や`--prune-excluded`はこの修復では行いません。
+
+### 公開・下書き機構のハッシュタグ修復
+
+`bin/repair-scrapbox-hashtags`は、確認済みの行差分JSON（`title`、`before`、`after`を持つ配列）から修復計画を作成します。`before`は旧変換結果、`after`はハッシュタグ対応後の変換結果です。記事内の一致する行だけを置換し、移行時のリスト記号の有無にも対応します。現在の本文・メタデータが公開版と異なる下書き、公開されていない記事、対応する行がない記事は除外します。
+
+```sh
+mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
+  mise exec -- bundle exec ruby bin/repair-scrapbox-hashtags plan \
+    --host "$DSQL_HOST" --differences /tmp/hashtag-differences.json \
+    --backups /tmp/hashtag-backups --plan /tmp/hashtag-plan.json
+
+mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
+  mise exec -- bundle exec ruby bin/repair-scrapbox-hashtags apply \
+    --host "$DSQL_HOST" --plan /tmp/hashtag-plan.json \
+    --site-bucket "$SITE_BUCKET" --site-url https://weblog.ason.as
+```
+
+`plan`は読み取りのみで、公開本文・下書き履歴・日時をローカルに退避します。既存の退避ファイルは再利用するため、再調査には新しい保存先を指定します。`apply`は同じ計画の再実行に対応し、計画後に編集・公開があった記事では停止します。新しいHTMLをS3へ配置・検証してから、Yjs差分の追記と公開版の切替を記事単位のトランザクションで行います。旧公開版と下書き履歴を保持し、記事の作成・更新・公開日時を変更しません。旧`pages`とその行日時情報も変更しません。
+
+この修復コマンドはCloudFront invalidationとWebmention送信を行いません。全件適用後は既存の公開派生データ修復処理でAtom・検索を更新し、公開HTML・下書き復元結果・日時の不変を検証します。作業記録と退避ファイルは適用後も保持してください。
 
 ## テスト
 

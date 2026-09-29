@@ -10,5 +10,5 @@
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["scripts/scrapbox-to-weblog.ts", "scripts/scrapbox-to-weblog.test.ts"]
+  "include": ["scripts/scrapbox-to-weblog.ts", "scripts/scrapbox-to-weblog.test.ts", "scripts/repair-scrapbox-draft.ts"]
 }

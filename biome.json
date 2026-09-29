@@ -6,7 +6,8 @@
       "lambda/bluesky_oauth/**/*.ts",
       "lambda/draft_worker/**/*.ts",
       "scripts/scrapbox-to-weblog.ts",
-      "scripts/scrapbox-to-weblog.test.ts"
+      "scripts/scrapbox-to-weblog.test.ts",
+      "scripts/repair-scrapbox-draft.ts"
     ]
   },
   "formatter": {

@@ -41,7 +41,14 @@ const renderNode = (
   node: Node,
   imagePaths: ImagePaths,
   mode: ConversionMode,
+  convertHashtags = true,
 ): string => {
+  if (node.type === "hashTag") {
+    return mode === "all" && convertHashtags && !/^#+$/.test(node.href)
+      ? `[[${node.href}]]`
+      : node.raw;
+  }
+
   if (node.type === "image" || node.type === "strongImage") {
     const imagePath = imagePaths.get(sourceImageUrl(node.src));
     return imagePath ? `![](${imagePath})` : node.raw;
@@ -62,7 +69,7 @@ const renderNode = (
 
   if (hasNodes(node)) {
     return node.nodes
-      .map((child) => renderNode(child, imagePaths, mode))
+      .map((child) => renderNode(child, imagePaths, mode, convertHashtags))
       .join("");
   }
 
@@ -74,6 +81,7 @@ const renderLine = (
   imagePaths: ImagePaths,
   mode: ConversionMode,
   renderList: boolean,
+  convertHashtags = true,
 ): string => {
   const blocks: Page = parse(line, { hasTitle: false });
   return blocks
@@ -81,7 +89,7 @@ const renderLine = (
       if (block.type !== "line") return "text" in block ? block.text : "";
 
       const text = block.nodes
-        .map((node) => renderNode(node, imagePaths, mode))
+        .map((node) => renderNode(node, imagePaths, mode, convertHashtags))
         .join("");
       if (!renderList || block.indent === 0 || text.trim().length === 0)
         return text;
@@ -117,6 +125,7 @@ const convertPageLines = (
       text,
       imagePaths,
       mode,
+      !isSpecialBlockChild && specialBlock === null,
       !isSpecialBlockChild && specialBlock === null,
     );
   });
