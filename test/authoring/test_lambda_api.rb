@@ -291,7 +291,7 @@ class LambdaApiTest < Minitest::Test
   end
 
   def setup
-    @page = WeblogAuthoring::PageDocument.new(
+    @page = WeblogAuthoring::ArticleDocument.new(
       id: "page-id",
       page_type: "named",
       name: "記事名",
@@ -1433,7 +1433,7 @@ class LambdaApiTest < Minitest::Test
 
   def page_document(id:, name:, body:, created_at: Time.iso8601("2026-08-22T10:00:00+09:00"),
                     updated_at: Time.iso8601("2026-08-22T11:00:00+09:00"))
-    WeblogAuthoring::PageDocument.new(
+    WeblogAuthoring::ArticleDocument.new(
       id:,
       page_type: "named",
       name:,

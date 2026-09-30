@@ -182,7 +182,7 @@ class DraftPublicationTest < Minitest::Test
                                                  "page_date" => { "value" => "2026-09-20", "expected_revision" => 0 }, }))
     first = @publication.accept(ID, @publication.prepare(ID).merge("request_id" => "diary-first"))
     @publication.complete(ID, first.fetch("id")) { "diary-first.html" }
-    page = WeblogAuthoring::DraftPublisher.page(@store.published_snapshot(ID))
+    page = WeblogAuthoring::ArticleDocument.from_published_version(@store.published_snapshot(ID))
     assert_equal "2026-09-20", page.route
     assert_equal "2026-09-20", page.display_title
 

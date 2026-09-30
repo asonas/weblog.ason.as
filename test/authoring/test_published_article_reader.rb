@@ -5,7 +5,7 @@ require "weblog_authoring/draft_migration"
 require "weblog_authoring/lambda_api"
 require "weblog_authoring/development_database"
 
-class DraftReaderTest < Minitest::Test
+class PublishedArticleReaderTest < Minitest::Test
   ID = "dc802ad0b89946aeb6b7623c2ba7bc79"
 
   def setup
@@ -35,7 +35,7 @@ class DraftReaderTest < Minitest::Test
         "page_date" => { "value" => "", "expected_revision" => 0 },
       }, })
     @store.create(@old.id, { "protocol" => 1, "generation" => 1 })
-    reader = WeblogAuthoring::DraftReader.new(store: @store, database: @legacy)
+    reader = WeblogAuthoring::PublishedArticleReader.new(store: @store, database: @legacy)
     publication = WeblogAuthoring::DraftPublication.local(store: @store)
     publisher = WeblogAuthoring::DraftPublisher.local(publication:, database: reader, root: @root.join("html"),
       shell: -> { '<html><head></head><body><div id="authoring-root"></div></body></html>' }, site_url: "https://example.com")
@@ -77,7 +77,7 @@ class DraftReaderTest < Minitest::Test
       @source.fetch("articles").first.merge("id" => third, "route" => "通常記事", "title" => "通常記事", "page_type" => "named", "body" => "[[公開タグ]]", "updated_at" => "2026-09-04T01:00:00Z"),
     ])
     WeblogAuthoring::DraftMigration.new(store:).import(@source)
-    reader = WeblogAuthoring::DraftReader.new(store:, database: @legacy)
+    reader = WeblogAuthoring::PublishedArticleReader.new(store:, database: @legacy)
     assert_equal [third, second, ID], reader.list_pages.map(&:id)
     cursor = { timestamp: Time.iso8601("2026-09-03T01:00:00Z"), id: second }
     assert_equal [ID], reader.list_pages(limit: 1, before: cursor).map(&:id)
@@ -105,7 +105,7 @@ class DraftReaderTest < Minitest::Test
     )
     store.append(target_id, { "protocol" => 1, "generation" => 1, "update_id" => "working-title", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
       "metadata" => { "title" => { "value" => "未公開タイトル", "expected_revision" => 0 } }, })
-    reader = WeblogAuthoring::DraftReader.new(store:, database: @legacy)
+    reader = WeblogAuthoring::PublishedArticleReader.new(store:, database: @legacy)
 
     pages = reader.find_pages_by_routes(["KORG multi/poly", "旧DBにだけ存在", "未作成", "KORG multi/poly"])
 
@@ -127,7 +127,7 @@ class DraftReaderTest < Minitest::Test
       original.merge("id" => second, "page_type" => "named", "route" => "同時更新", "title" => "同時更新", "body" => "通常記事", "updated_at" => "2026-09-04T01:00:00Z"),
       original.merge("id" => third, "page_type" => "named", "route" => "前の記事", "title" => "前の記事", "body" => "通常記事", "updated_at" => "2026-09-03T01:00:00Z"),]
     WeblogAuthoring::DraftMigration.new(store:).import("format" => 1, "site_url" => "https://example.com", "articles" => articles)
-    reader = WeblogAuthoring::DraftReader.new(store:, database: @legacy)
+    reader = WeblogAuthoring::PublishedArticleReader.new(store:, database: @legacy)
     cursor = { timestamp: Time.iso8601("2026-09-04T01:00:00Z"), id: second }
 
     assert_equal [second, first], reader.list_pages(limit: 2).map(&:id)

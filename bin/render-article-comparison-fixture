@@ -77,7 +77,7 @@ module ArticleComparisonFixture
 
   def page_from(data, fixture_path)
     page = data.fetch("page")
-    WeblogAuthoring::PageDocument.new(
+    WeblogAuthoring::ArticleDocument.new(
       id: page.fetch("id"),
       page_type: page.fetch("page_type"),
       name: page.fetch("name"),

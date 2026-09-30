@@ -30,7 +30,7 @@ require_relative "draft_store"
 require_relative "draft_publisher"
 require_relative "draft_jobs"
 require_relative "draft_administration"
-require_relative "draft_reader"
+require_relative "published_article_reader"
 require_relative "proofreading"
 
 module WeblogAuthoring
@@ -229,7 +229,7 @@ module WeblogAuthoring
       return new_editor_response(event) if method == "GET" && path == "/api/editor/new"
       if method == "GET" && page_id_path?(path)
         id = event.dig("pathParameters", "id")
-        page = @published_reader ? @reader_database.find(id) : DraftPublisher.page(@draft_store&.published_snapshot(id)) || @database.find(id)
+        page = @published_reader ? @reader_database.find(id) : ArticleDocument.from_published_version(@draft_store&.published_snapshot(id)) || @database.find(id)
         return page_response(page, event:)
       end
       return route_response(event) if method == "GET" && route_path?(path)
@@ -1045,7 +1045,7 @@ module WeblogAuthoring
     def related_pages_response(event)
       timings = {} # @type var timings: Hash[String, Float]
       query = event.fetch("queryStringParameters", EMPTY_HASH).to_h # @type var query: Hash[String, untyped]
-      # @type var page: PageDocument?
+      # @type var page: ArticleDocument?
       page = query["excluding_id"].to_s.empty? ? nil : @reader_database.find(query["excluding_id"], timings:)
       result = related_page_result(
         query.fetch("route", ""),
@@ -1141,7 +1141,7 @@ module WeblogAuthoring
       resolution = @draft_store&.resolve_published_route(route) || {}
       destination = resolution["redirect"]
       return { statusCode: 301, headers: { "location" => "/api/routes/#{WeblogAuthoring.encoded_route(destination)}", "cache-control" => "no-cache" }, body: "" } if destination
-      page = DraftPublisher.page(resolution["snapshot"])
+      page = ArticleDocument.from_published_version(resolution["snapshot"])
       page ||= @reader_database.find_route(route)
       return page_response(page, event:) unless page.nil?
 

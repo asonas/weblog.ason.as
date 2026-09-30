@@ -5,7 +5,7 @@ require "weblog_authoring/draft_site"
 require "weblog_authoring/lambda_api"
 require "weblog_authoring/development_database"
 require "weblog_authoring/draft_migration"
-require "weblog_authoring/draft_reader"
+require "weblog_authoring/published_article_reader"
 require "weblog_authoring/local_publication_objects"
 
 class DraftSiteTest < Minitest::Test
@@ -47,7 +47,7 @@ class DraftSiteTest < Minitest::Test
           "updated_at" => "2026-09-01T01:00:00Z", "published_at" => "2026-09-01T01:00:00Z", }
       end
       WeblogAuthoring::DraftMigration.new(store:).import("format" => 1, "site_url" => "https://example.com", "articles" => articles)
-      reader = WeblogAuthoring::DraftReader.new(store:, database:)
+      reader = WeblogAuthoring::PublishedArticleReader.new(store:, database:)
       objects = WeblogAuthoring::LocalPublicationObjects.new(root.join("objects"))
       objects.put_object(bucket: "site", key: "static/authoring/public.html", body: '<html><head><title>Old</title></head><body><div id="authoring-root"></div></body></html>')
       ids.each do |id|

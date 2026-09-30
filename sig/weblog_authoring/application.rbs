@@ -7,13 +7,13 @@ module WeblogAuthoring
     AUTHOR_NAME: String
 
     def initialize: (site_url: String, ?title: String, ?limit: Integer) -> void
-    def render: (Array[PageDocument], ?ids: Hash[String, String]) -> String
+    def render: (Array[ArticleDocument], ?ids: Hash[String, String]) -> String
 
     private
 
-    def entries_xml: (Array[PageDocument], MarkdownRenderer, Hash[String, String]) -> String
-    def page_url: (PageDocument) -> String
-    def updated_time: (PageDocument) -> Time
+    def entries_xml: (Array[ArticleDocument], MarkdownRenderer, Hash[String, String]) -> String
+    def page_url: (ArticleDocument) -> String
+    def updated_time: (ArticleDocument) -> Time
     def atom_time: (Time?) -> String
     def absolute_internal_urls: (String) -> String
     def xml: (String) -> String

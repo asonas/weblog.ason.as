@@ -14,8 +14,9 @@ module WeblogAuthoring
     def initialize: (name: String, ?start: Integer, ?end: Integer) -> void
   end
 
-  class PageDocument < Struct[untyped]
-    def self.new: (id: String, page_type: page_type, name: String?, page_date: Date?, title: String?, status: page_status, created_at: Time, updated_at: Time, published_at: Time?, path: Pathname, body: String, links: Array[WikiLink], cover_mode: String?, cover_image_url: String?) -> PageDocument
+  class ArticleDocument < Struct[untyped]
+    def self.from_published_version: (Hash[String, untyped]?) -> ArticleDocument?
+    def self.new: (id: String, page_type: page_type, name: String?, page_date: Date?, title: String?, status: page_status, created_at: Time, updated_at: Time, published_at: Time?, ?path: Pathname, body: String, links: Array[WikiLink], cover_mode: String?, cover_image_url: String?) -> ArticleDocument
     attr_reader id: String
     attr_reader page_type: page_type
     attr_reader name: String?
@@ -92,12 +93,12 @@ module WeblogAuthoring
   end
 
   class ReleaseSnapshot < Struct[untyped]
-    def self.new: (?pages: Array[PageDocument], ?redirects: Array[Redirect], ?published_at: Time?) -> ReleaseSnapshot
-    attr_reader pages: Array[PageDocument]
+    def self.new: (?pages: Array[ArticleDocument], ?redirects: Array[Redirect], ?published_at: Time?) -> ReleaseSnapshot
+    attr_reader pages: Array[ArticleDocument]
     attr_reader redirects: Array[Redirect]
     attr_reader published_at: Time?
 
-    def initialize: (?pages: Array[PageDocument], ?redirects: Array[Redirect], ?published_at: Time?) -> void
+    def initialize: (?pages: Array[ArticleDocument], ?redirects: Array[Redirect], ?published_at: Time?) -> void
   end
 
   class SaveRequest < Struct[untyped]

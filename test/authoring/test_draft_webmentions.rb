@@ -10,7 +10,7 @@ require "weblog_authoring/lambda_api"
 require "weblog_authoring/lambda_session"
 require "weblog_authoring/webmention_fetcher"
 require "weblog_authoring/webmention_receiver"
-require "weblog_authoring/draft_reader"
+require "weblog_authoring/published_article_reader"
 
 class DraftWebmentionsTest < Minitest::Test
   ID = "d33af6a1-5b55-4a44-8b61-95a3847167b1"
@@ -113,7 +113,7 @@ class DraftWebmentionsTest < Minitest::Test
   def test_receiver_accepts_a_newly_published_draft_without_a_legacy_page
     resolver = Object.new
     def resolver.getaddresses(_host) = ["8.8.8.8"]
-    reader = WeblogAuthoring::DraftReader.new(store: @store, database: @database)
+    reader = WeblogAuthoring::PublishedArticleReader.new(store: @store, database: @database)
     receiver = WeblogAuthoring::WebmentionReceiver.new(database: reader, sqs_client: @sqs,
       queue_url: "https://sqs.ap-northeast-1.amazonaws.com/123456789012/mentions.fifo", site_url: "https://example.com", resolver:)
     event = { "headers" => { "content-type" => "application/x-www-form-urlencoded" },

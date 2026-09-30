@@ -289,7 +289,7 @@ module WeblogAuthoring
       end
 
       timestamp = now
-      # @type var changes: Array[[PageDocument, PageDocument, Array[Hash[Symbol, untyped]]]]
+      # @type var changes: Array[[ArticleDocument, ArticleDocument, Array[Hash[Symbol, untyped]]]]
       changes = pages.filter_map do |source|
         rewritten_body = WeblogAuthoring.replace_wiki_links(
           source.id == page_id ? body : source.body,
@@ -298,7 +298,7 @@ module WeblogAuthoring
         next if source.id != page_id && rewritten_body == source.body
 
         renamed = source.id == page_id
-        document = PageDocument.new(
+        document = ArticleDocument.new(
           id: source.id, page_type: source.page_type, page_date: source.page_date,
           status: source.status, created_at: source.created_at, published_at: source.published_at,
           cover_mode: source.cover_mode, cover_image_url: source.cover_image_url,
@@ -2072,7 +2072,7 @@ module WeblogAuthoring
       body = request.body.to_s
       cover_mode, cover_image_url = CoverImage.validate(request.cover_mode, request.cover_image_url)
 
-      PageDocument.new(
+      ArticleDocument.new(
         id: SecureRandom.uuid.delete("-"),
         page_type: "named",
         name:,
@@ -2098,7 +2098,7 @@ module WeblogAuthoring
                                     else
                                       CoverImage.validate(request.cover_mode, request.cover_image_url)
                                     end
-      PageDocument.new(
+      ArticleDocument.new(
         id: current.id,
         page_type: current.page_type,
         name: current.name,
@@ -2247,7 +2247,7 @@ module WeblogAuthoring
       wiki_started_at = monotonic_time if timings
       links = WeblogAuthoring.extract_wiki_links(body)
       record_timing(timings, "wiki_parse", wiki_started_at)
-      PageDocument.new(
+      ArticleDocument.new(
         id: row.fetch("id"),
         page_type: row.fetch("page_type"),
         name: row["name"],

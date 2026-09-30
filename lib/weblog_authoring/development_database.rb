@@ -1355,7 +1355,7 @@ module WeblogAuthoring
 
       changed_at = now
       renamed_body = WeblogAuthoring.replace_wiki_links(body, old_name: current.name.to_s, new_name: normalized_name)
-      renamed = PageDocument.new(
+      renamed = ArticleDocument.new(
         **current.to_h,
         name: normalized_name,
         path: page_path("named", name: normalized_name, page_date: nil),
@@ -1394,7 +1394,7 @@ module WeblogAuthoring
             )
             next if rewritten_body == source.body
 
-            rewritten = PageDocument.new(
+            rewritten = ArticleDocument.new(
               **source.to_h,
               body: rewritten_body,
               updated_at: changed_at,
@@ -2202,7 +2202,7 @@ module WeblogAuthoring
       when "date"
         name = WeblogAuthoring.validate_page_name(request.title.to_s)
 
-        PageDocument.new(
+        ArticleDocument.new(
           id: new_id,
           page_type: "named",
           name:,
@@ -2221,7 +2221,7 @@ module WeblogAuthoring
       when "named"
         name = WeblogAuthoring.validate_page_name(request.name || request.title.to_s)
 
-        PageDocument.new(
+        ArticleDocument.new(
           id: new_id,
           page_type:,
           name:,
@@ -2252,7 +2252,7 @@ module WeblogAuthoring
                                     else
                                       CoverImage.validate(request.cover_mode, request.cover_image_url)
                                     end
-      PageDocument.new(
+      ArticleDocument.new(
         **current.to_h,
         title:,
         body:,
@@ -2390,7 +2390,7 @@ module WeblogAuthoring
     def page_from_row(row)
       id, page_type, name, page_date, title, status, created_at, updated_at, published_at, path, body,
         cover_mode, cover_image_url = row
-      PageDocument.new(
+      ArticleDocument.new(
         id:,
         page_type:,
         name:,

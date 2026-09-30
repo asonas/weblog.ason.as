@@ -33,7 +33,7 @@ and in-flight operation receipts. No public endpoint can change the phase.
 ## Admission and draining
 
 `DraftCutoverApi` receives two fully assembled APIs, `legacy` and `published`, plus
-their shared control store. The published API must use `DraftReader`, the draft
+their shared control store. The published API must use `PublishedArticleReader`, the draft
 publisher, outputs and jobs. `DraftRuntime` assembles those dependencies for the
 API and publication worker.
 

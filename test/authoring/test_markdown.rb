@@ -346,7 +346,7 @@ class TestMarkdown < Minitest::Test
   private
 
   def named_page(name, body: "本文")
-    WeblogAuthoring::PageDocument.new(
+    WeblogAuthoring::ArticleDocument.new(
       id: "page-#{name}",
       page_type: "named",
       name:,
@@ -364,7 +364,7 @@ class TestMarkdown < Minitest::Test
 
   def date_page(date_string)
     page_date = Date.iso8601(date_string)
-    WeblogAuthoring::PageDocument.new(
+    WeblogAuthoring::ArticleDocument.new(
       id: "date-#{date_string}",
       page_type: "date",
       name: nil,

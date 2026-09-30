@@ -4,7 +4,7 @@ require "aws-sdk-lambda"
 require "aws-sdk-sqs"
 require_relative "dsql_database"
 require_relative "draft_cutover_api"
-require_relative "draft_reader"
+require_relative "published_article_reader"
 require_relative "lambda_api"
 require_relative "draft_site"
 
@@ -47,7 +47,7 @@ module WeblogAuthoring
       @bucket = bucket
       @site_url = site_url
       @dynamic_article_routes = dynamic_article_routes
-      @reader = DraftReader.new(store:, database:)
+      @reader = PublishedArticleReader.new(store:, database:)
       @webmentions = DraftWebmentions.new(store:, sqs_client:, queue_url: webmention_queue_url, site_url:, enabled: sender_enabled)
       services = lambda do
         require_relative "draft_jobs"

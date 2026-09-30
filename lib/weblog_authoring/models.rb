@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 require "date"
+require "time"
 require "pathname"
+require_relative "links"
 
 module WeblogAuthoring
   class WikiLink < Struct.new(:name, :start, :end, keyword_init: true)
@@ -11,7 +13,7 @@ module WeblogAuthoring
     end
   end
 
-  class PageDocument < Struct.new(
+  class ArticleDocument < Struct.new(
     :id,
     :page_type,
     :name,
@@ -33,6 +35,19 @@ module WeblogAuthoring
       attributes[:cover_mode] ||= "auto"
       super(**attributes)
       freeze
+    end
+
+    def self.from_published_version(snapshot)
+      return nil unless snapshot
+      metadata = snapshot.fetch("metadata")
+      ArticleDocument.new(id: snapshot.fetch("article_id"), page_type: metadata.fetch("page_type"),
+        name: snapshot.fetch("route"), page_date: metadata.fetch("page_type") == "date" ? Date.iso8601(snapshot.fetch("route")) : nil,
+        title: metadata.fetch("title"), status: "published", body: snapshot.fetch("body"),
+        created_at: Time.iso8601(snapshot.fetch("article_created_at")),
+        updated_at: Time.iso8601(snapshot.fetch("updated_at", snapshot.fetch("created_at"))),
+        published_at: Time.iso8601(snapshot.fetch("published_at", snapshot.fetch("created_at"))),
+        cover_mode: metadata.fetch("cover_mode"), cover_image_url: metadata["cover_image_url"],
+        links: WeblogAuthoring.extract_wiki_links(snapshot.fetch("body")))
     end
 
     def display_title

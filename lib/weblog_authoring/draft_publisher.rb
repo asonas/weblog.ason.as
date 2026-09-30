@@ -68,7 +68,7 @@ module WeblogAuthoring
           # An interrupted placement is rebuilt from its immutable snapshot.
         end
       end
-      page = self.class.page(snapshot)
+      page = ArticleDocument.from_published_version(snapshot)
       html = @renderer.render_document(page, shell: @shell.call, source_url: "#{@site_url}/#{URI::DEFAULT_PARSER.escape(page.route)}")
       key = "published/#{snapshot.fetch('article_id')}/#{snapshot.fetch('id')}/#{SecureRandom.uuid}.html"
       @place.call(key, html)
@@ -78,25 +78,12 @@ module WeblogAuthoring
     def run(id, version_id)
       @publication.complete(id, version_id) do |snapshot|
         shell = @shell.call
-        page = self.class.page(snapshot)
+        page = ArticleDocument.from_published_version(snapshot)
         html = @renderer.render_document(page, shell:, source_url: "#{@site_url}/#{URI::DEFAULT_PARSER.escape(page.route)}")
         key = "published/#{snapshot.fetch('article_id')}/#{snapshot.fetch('id')}.html"
         @place.call(key, html)
         key
       end
-    end
-
-    def self.page(snapshot)
-      return nil unless snapshot
-      metadata = snapshot.fetch("metadata")
-      PageDocument.new(id: snapshot.fetch("article_id"), page_type: metadata.fetch("page_type"),
-        name: snapshot.fetch("route"), page_date: metadata.fetch("page_type") == "date" ? Date.iso8601(snapshot.fetch("route")) : nil,
-        title: metadata.fetch("title"), status: "published", body: snapshot.fetch("body"),
-        created_at: Time.iso8601(snapshot.fetch("article_created_at")),
-        updated_at: Time.iso8601(snapshot.fetch("updated_at", snapshot.fetch("created_at"))),
-        published_at: Time.iso8601(snapshot.fetch("published_at", snapshot.fetch("created_at"))),
-        cover_mode: metadata.fetch("cover_mode"), cover_image_url: metadata["cover_image_url"],
-        links: WeblogAuthoring.extract_wiki_links(snapshot.fetch("body")))
     end
   end
 end

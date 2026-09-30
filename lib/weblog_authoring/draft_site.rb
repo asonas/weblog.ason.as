@@ -71,7 +71,7 @@ module WeblogAuthoring
       raise ArgumentError, "Invalid display release" unless /\A[0-9a-f]{40}\z/.match?(id)
       shell = @s3.get_object(bucket: @bucket, key: "display-releases/#{id}/public.html").body.read.force_encoding(Encoding::UTF_8)
       renderer = WebmentionSitePublisher.new(database: @reader, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
-      page = DraftPublisher.page(snapshot)
+      page = ArticleDocument.from_published_version(snapshot)
       html = renderer.render_document(page, shell:, source_url: "#{@site_url}/#{WeblogAuthoring.encoded_route(page.route)}")
       etag = %("#{Digest::SHA256.hexdigest("#{id}\0#{html}")}")
       if event.fetch("headers", {})["if-none-match"] == etag

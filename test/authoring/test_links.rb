@@ -57,7 +57,7 @@ class TestLinks < Minitest::Test
   end
 
   def test_page_name_entries_include_materialized_pages_and_link_only_hubs
-    source = WeblogAuthoring::PageDocument.new(
+    source = WeblogAuthoring::ArticleDocument.new(
       id: "source-id",
       page_type: "named",
       name: "source",
@@ -91,7 +91,7 @@ class TestLinks < Minitest::Test
   private
 
   def page(name:, updated_at:, body: "")
-    WeblogAuthoring::PageDocument.new(
+    WeblogAuthoring::ArticleDocument.new(
       id: "#{name}-id",
       page_type: "named",
       name:,

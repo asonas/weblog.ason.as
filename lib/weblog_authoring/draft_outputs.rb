@@ -36,7 +36,7 @@ module WeblogAuthoring
 
     def build(stage)
       collection = @store.published_collection
-      pages = collection.fetch("snapshots").map { |snapshot| DraftPublisher.page(snapshot) }
+      pages = collection.fetch("snapshots").map { |snapshot| ArticleDocument.from_published_version(snapshot) }
       prefix = "published-outputs/#{collection.fetch('revision')}/#{SecureRandom.uuid}"
       if stage == "atom"
         ids = collection.fetch("snapshots").to_h { |snapshot| [snapshot.fetch("article_id"), snapshot.fetch("atom_id", "urn:uuid:#{snapshot.fetch('article_id')}")] }

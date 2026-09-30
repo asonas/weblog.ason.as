@@ -1,8 +1,8 @@
 module WeblogAuthoring
   class DiaryNavigation
     DATE_ROUTE: Regexp
-    @database: _PageRepository | DraftReader
-    def initialize: (_PageRepository | DraftReader) -> void
+    @database: _PageRepository | PublishedArticleReader
+    def initialize: (_PageRepository | PublishedArticleReader) -> void
     def neighbors: (String) -> Hash[String, String?]
   end
 end

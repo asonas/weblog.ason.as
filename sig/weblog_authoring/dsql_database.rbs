@@ -89,17 +89,17 @@ module WeblogAuthoring
     def inbox_image_adoption_from_row: (untyped) -> InboxImageAdoption
     def mobile_upload_columns: () -> String
     def mobile_upload_from_row: (untyped) -> Hash[String, untyped]
-    def new_document: (SaveRequest) -> PageDocument
-    def updated_document: (PageDocument, SaveRequest) -> PageDocument
-    def ensure_unique_route!: (untyped, PageDocument, PageDocument?) -> untyped
-    def insert_page: (untyped, PageDocument) -> untyped
-    def update_page: (untyped, PageDocument) -> untyped
-    def replace_links: (untyped, PageDocument) -> untyped
-    def replace_line_metadata_after_save: (untyped, PageDocument, PageDocument?, Array[Hash[Symbol, untyped]]) -> untyped
-    def page_values: (PageDocument) -> Array[untyped]
-    def page_from_row: (_DsqlPageRow, ?timings: Hash[String, Float]?) -> PageDocument
+    def new_document: (SaveRequest) -> ArticleDocument
+    def updated_document: (ArticleDocument, SaveRequest) -> ArticleDocument
+    def ensure_unique_route!: (untyped, ArticleDocument, ArticleDocument?) -> untyped
+    def insert_page: (untyped, ArticleDocument) -> untyped
+    def update_page: (untyped, ArticleDocument) -> untyped
+    def replace_links: (untyped, ArticleDocument) -> untyped
+    def replace_line_metadata_after_save: (untyped, ArticleDocument, ArticleDocument?, Array[Hash[Symbol, untyped]]) -> untyped
+    def page_values: (ArticleDocument) -> Array[untyped]
+    def page_from_row: (_DsqlPageRow, ?timings: Hash[String, Float]?) -> ArticleDocument
     def select_sql: (String) -> String
-    def validate_expected_update: (PageDocument, SaveRequest) -> untyped
+    def validate_expected_update: (ArticleDocument, SaveRequest) -> untyped
     def now: () -> Time
     def parse_time: (untyped) -> Time
     def with_connection: [A] (?timings: Hash[String, Float]?) { (untyped) -> A } -> A
@@ -117,7 +117,7 @@ module WeblogAuthoring
     def webmention_snapshot: (String, untyped, untyped, untyped) -> Hash[String, untyped]?
     def public_webmention: (Hash[String, untyped]) -> Hash[String, untyped]
     def webmention_failure_from_dsql_row: (untyped) -> Hash[String, untyped]
-    def enqueue_webmention_outbox: (untyped, PageDocument?, PageDocument) -> untyped
+    def enqueue_webmention_outbox: (untyped, ArticleDocument?, ArticleDocument) -> untyped
     def webmention_source_url: (String) -> String
     def webmention_outbox_from_dsql_row: (untyped) -> Hash[String, untyped]
   end

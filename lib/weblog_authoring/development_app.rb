@@ -205,7 +205,7 @@ module WeblogAuthoring
     end
 
     get "/api/pages/:id" do
-      page = settings.draft_store && DraftPublisher.page(settings.draft_store.published_snapshot(params.fetch("id")))
+      page = settings.draft_store && ArticleDocument.from_published_version(settings.draft_store.published_snapshot(params.fetch("id")))
       page ||= settings.database.find(params.fetch("id"))
       return json_error(404, "ページが見つかりません") if page.nil?
 
@@ -221,7 +221,7 @@ module WeblogAuthoring
       headers "Cache-Control" => "no-cache" if destination
       redirect "/api/routes/#{WeblogAuthoring.encoded_route(destination)}", 301 if destination
 
-      page = DraftPublisher.page(resolution["snapshot"])
+      page = ArticleDocument.from_published_version(resolution["snapshot"])
       conditional_json_response(page ? editor_json(page) : editor_state_for_route(route))
     end
 
@@ -599,7 +599,7 @@ module WeblogAuthoring
       destination = resolution["redirect"]
       headers "Cache-Control" => "no-cache" if destination
       redirect "/#{WeblogAuthoring.encoded_route(destination)}", 301 if destination
-      page = DraftPublisher.page(resolution["snapshot"]) || settings.database.find_route(route)
+      page = ArticleDocument.from_published_version(resolution["snapshot"]) || settings.database.find_route(route)
       renderer = WebmentionSitePublisher.new(database: settings.database, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
       shell = ROOT.join("public.html").read
       html = if page && page.status == "published" && !page.empty?

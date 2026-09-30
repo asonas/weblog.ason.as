@@ -118,7 +118,7 @@ class DraftCutoverTest < Minitest::Test
     cookie = codec.issue(kind: "session", attributes: { "github_user_id" => 630_181, "csrf_token" => "csrf" }, ttl: 3600)
     options = { database:, session_codec: codec, allowed_github_user_id: 630_181, frontend_url: "https://example.com" }
     legacy = WeblogAuthoring::LambdaApi.new(**options)
-    published = WeblogAuthoring::LambdaApi.new(**options, draft_store: @store, reader_database: WeblogAuthoring::DraftReader.new(store: @store, database:))
+    published = WeblogAuthoring::LambdaApi.new(**options, draft_store: @store, reader_database: WeblogAuthoring::PublishedArticleReader.new(store: @store, database:))
     api = WeblogAuthoring::DraftCutoverApi.new(store: @store, legacy:, published:)
     request = lambda do |method, path, payload = {}|
       api.call({ "requestContext" => { "http" => { "method" => method } }, "rawPath" => path,

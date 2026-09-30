@@ -4,7 +4,7 @@ require "tmpdir"
 require "sqlite3"
 require "digest"
 require "weblog_authoring/draft_migration"
-require "weblog_authoring/draft_reader"
+require "weblog_authoring/published_article_reader"
 
 Database = Class.new do
   def find_image_dimensions(_url) = nil
@@ -42,8 +42,8 @@ Dir.mktmpdir("wiki-reads") do |dir|
   plan = db.execute("EXPLAIN QUERY PLAN SELECT v.*, h.published_at, h.updated_at FROM draft_publication_routes r JOIN draft_publication_heads h ON h.article_id = r.article_id JOIN draft_published_versions v ON v.id = h.active_id AND v.article_id = h.article_id WHERE r.route IN (?) AND v.route = r.route", ["KORG multi/poly"])
   db.close
 
-  reader = WeblogAuthoring::DraftReader.new(store:, database: Database.new)
-  baseline = Class.new(WeblogAuthoring::DraftReader) do
+  reader = WeblogAuthoring::PublishedArticleReader.new(store:, database: Database.new)
+  baseline = Class.new(WeblogAuthoring::PublishedArticleReader) do
     def find_pages_by_routes(_routes) = list_pages
   end.new(store:, database: Database.new)
   page = reader.find(source_id)

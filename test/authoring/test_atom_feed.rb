@@ -111,7 +111,7 @@ class AtomFeedTest < Minitest::Test
 
   def page(name:, body:, updated_at: Time.iso8601("2026-08-21T12:00:00+09:00"),
            published_at: updated_at, status: "published")
-    WeblogAuthoring::PageDocument.new(
+    WeblogAuthoring::ArticleDocument.new(
       id: name,
       page_type: "named",
       name:,

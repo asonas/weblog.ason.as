@@ -1,12 +1,13 @@
 module WeblogAuthoring
-  interface _PageRepository
+  class PublishedArticleReader
+    def initialize: (store: DraftStore, database: untyped) -> void
     def list_diary_routes: () -> Array[String]
     def list_timeline_pages: (limit: Integer, ?before: timeline_cursor?, ?after: timeline_cursor?, ?month: String?) -> Array[ArticleDocument]
     def list_pages: (?limit: Integer?, ?before: page_cursor?, ?after: page_cursor?, ?kind: String?, ?timings: Hash[String, Float]?) -> Array[ArticleDocument]
     def find_pages_by_routes: (Array[String]) -> Array[ArticleDocument]
-    def find: (String id, ?timings: Hash[String, Float]?) -> ArticleDocument?
-    def find_route: (String route) -> ArticleDocument?
-    def save: (SaveRequest request) -> ArticleDocument?
-    def rename: (String page_id, String new_name, body: String, ?expected_updated_at: Time?) -> ArticleDocument?
+    def find: (String, ?timings: Hash[String, Float]?) -> ArticleDocument?
+    def find_route: (String) -> ArticleDocument?
+    def find_image_dimensions: (String) -> untyped
+    def approved_webmentions_for_page: (String) -> untyped
   end
 end

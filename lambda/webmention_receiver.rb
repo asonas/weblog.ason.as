@@ -5,7 +5,7 @@ require "pathname"
 require "aws-sdk-sqs"
 require "weblog_authoring/dsql_database"
 require "weblog_authoring/webmention_receiver"
-require "weblog_authoring/draft_reader"
+require "weblog_authoring/published_article_reader"
 require "weblog_authoring/draft_store"
 
 module WeblogAuthoring
@@ -31,7 +31,7 @@ module WeblogAuthoring
       pool = AuroraDsql::Pg.create_pool(host: ENV.fetch("DSQL_HOST"), user: "weblog_authoring", application_name: "webmention-receiver", occ_max_retries: 3)
       database = DsqlDatabase.new(host: ENV.fetch("DSQL_HOST"), content_dir: Pathname("/tmp/content"), pool:)
       store = DraftStore.postgres(pool)
-      %w[verifying open paused].include?(store.cutover_status.fetch("phase")) ? DraftReader.new(store:, database:) : database
+      %w[verifying open paused].include?(store.cutover_status.fetch("phase")) ? PublishedArticleReader.new(store:, database:) : database
     end
   end
 end

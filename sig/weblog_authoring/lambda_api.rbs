@@ -3,8 +3,8 @@ module WeblogAuthoring
   type lambda_response = { statusCode: Integer, ?headers: Hash[String, String], ?cookies: Array[String], body: String }
 
   class LambdaApi
-    @published_reader: DraftReader?
-    @reader_database: DsqlDatabase | DraftReader
+    @published_reader: PublishedArticleReader?
+    @reader_database: DsqlDatabase | PublishedArticleReader
     @proofreader: Proofreading?
     @draft_store: DraftStore?
     @draft_publication: DraftPublication?
@@ -38,7 +38,7 @@ module WeblogAuthoring
     EMBED_CACHE_TTL: Integer
     EMBED_FALLBACK_CACHE_TTL: Integer
 
-    def initialize: (database: DsqlDatabase, ?reader_database: DraftReader?, ?oauth: GitHubOAuth?, ?session_codec: LambdaSession?, ?redirect_uri: String?, ?frontend_url: String?, ?allowed_github_user_id: String?, ?s3_client: untyped, ?asset_bucket: String?, ?embed_fetcher: untyped, ?development_asset_bucket: String?, ?site_bucket: String?, ?search_queue_url: String?, ?sqs_client: untyped, ?logger: untyped, ?search_index: untyped, ?lambda_client: untyped, ?inbox_sync_function_name: String?, ?bluesky_oauth_function_name: String?, ?proofreader: Proofreading?, ?webmention_queue_url: String?, ?webmention_publish_queue_url: String?, ?webmention_dead_letter_arn: String?, ?webmention_queue_arn: String?, ?webmention_publish_dead_letter_arn: String?, ?webmention_publish_queue_arn: String?, ?inbox_thumbnail: untyped, ?draft_store: DraftStore?, ?draft_publication: DraftPublication?, ?draft_publisher: DraftPublisher?, ?draft_jobs: (DraftJobs | RemoteDraftJobs)?, ?draft_outputs: DraftOutputs?, ?draft_webmentions: DraftWebmentions?, ?clock: ^() -> Time) -> void
+    def initialize: (database: DsqlDatabase, ?reader_database: PublishedArticleReader?, ?oauth: GitHubOAuth?, ?session_codec: LambdaSession?, ?redirect_uri: String?, ?frontend_url: String?, ?allowed_github_user_id: String?, ?s3_client: untyped, ?asset_bucket: String?, ?embed_fetcher: untyped, ?development_asset_bucket: String?, ?site_bucket: String?, ?search_queue_url: String?, ?sqs_client: untyped, ?logger: untyped, ?search_index: untyped, ?lambda_client: untyped, ?inbox_sync_function_name: String?, ?bluesky_oauth_function_name: String?, ?proofreader: Proofreading?, ?webmention_queue_url: String?, ?webmention_publish_queue_url: String?, ?webmention_dead_letter_arn: String?, ?webmention_queue_arn: String?, ?webmention_publish_dead_letter_arn: String?, ?webmention_publish_queue_arn: String?, ?inbox_thumbnail: untyped, ?draft_store: DraftStore?, ?draft_publication: DraftPublication?, ?draft_publisher: DraftPublisher?, ?draft_jobs: (DraftJobs | RemoteDraftJobs)?, ?draft_outputs: DraftOutputs?, ?draft_webmentions: DraftWebmentions?, ?clock: ^() -> Time) -> void
     def call: (lambda_event) -> lambda_response
     def backfill_inbox_thumbnails: (?limit: Integer | String) -> Hash[String, String | Integer]
 
@@ -56,10 +56,10 @@ module WeblogAuthoring
     def logout_response: (lambda_event) -> lambda_response
     def pages_response: (lambda_event) -> lambda_response
     def page_window: (untyped, ?timings: untyped) -> untyped
-    def newer_pages?: (Array[PageDocument], before: page_cursor?, kind: String?) -> bool
-    def older_pages?: (Array[PageDocument], kind: String?) -> bool
-    def page_cursor: (PageDocument, kind: String?) -> page_cursor
-    def encode_page_cursor: (PageDocument, kind: String?) -> String
+    def newer_pages?: (Array[ArticleDocument], before: page_cursor?, kind: String?) -> bool
+    def older_pages?: (Array[ArticleDocument], kind: String?) -> bool
+    def page_cursor: (ArticleDocument, kind: String?) -> page_cursor
+    def encode_page_cursor: (ArticleDocument, kind: String?) -> String
     def decode_page_cursor: (String?) -> page_cursor?
     def month_boundary: (String) -> page_cursor
     def tags_response: (lambda_event) -> lambda_response
@@ -70,7 +70,7 @@ module WeblogAuthoring
     def save_response: (lambda_event, ?page_id: String?, ?status: Integer) -> lambda_response
     def rename_response: (lambda_event) -> lambda_response
     def notify_search_index: () -> void
-    def notify_webmention_publisher: (PageDocument) -> void
+    def notify_webmention_publisher: (ArticleDocument) -> void
     def upload_response: (lambda_event) -> lambda_response
     def issue_mobile_pairing_response: (lambda_event) -> lambda_response
     def exchange_mobile_pairing_response: (lambda_event) -> lambda_response
@@ -104,7 +104,7 @@ module WeblogAuthoring
     def image_inbox: () -> untyped
     def inbox_item_json: (InboxItem, ?usages: Array[InboxItemUsage]) -> Hash[String, untyped]
     def optional_query: (untyped, String) -> String?
-    def page_response: (PageDocument?, event: lambda_event) -> lambda_response
+    def page_response: (ArticleDocument?, event: lambda_event) -> lambda_response
     def related_pages_response: (lambda_event) -> lambda_response
     def diary_navigation_response: (lambda_event) -> lambda_response
     def embed_response: (lambda_event) -> lambda_response
@@ -119,15 +119,15 @@ module WeblogAuthoring
     def page_id_path?: (String) -> bool
     def authoring_page_id_path?: (String) -> bool
     def route_path?: (String) -> bool
-    def page_summary: (PageDocument) -> Hash[String, untyped]
-    def editor_json: (?page: PageDocument?, ?title: String?, ?name: String?, ?body: String?, ?linked_pages_has_more: bool?) -> Hash[String, untyped]
-    def line_updated_at: (PageDocument) -> Array[untyped]
+    def page_summary: (ArticleDocument) -> Hash[String, untyped]
+    def editor_json: (?page: ArticleDocument?, ?title: String?, ?name: String?, ?body: String?, ?linked_pages_has_more: bool?) -> Hash[String, untyped]
+    def line_updated_at: (ArticleDocument) -> Array[untyped]
     def related_page_result: (String, String, ?excluding_id: String?, ?offset: Integer, ?timings: Hash[String, Float]) -> Hash[String, untyped]
-    def recent_tags: (Array[PageDocument]) -> Array[String]
-    def archive_years: (Array[PageDocument]) -> Array[Hash[String, untyped]]
-    def page_excerpt: (PageDocument) -> String
-    def page_image_url: (PageDocument) -> String?
-    def saved_page_json: (PageDocument) -> Hash[String, untyped]
+    def recent_tags: (Array[ArticleDocument]) -> Array[String]
+    def archive_years: (Array[ArticleDocument]) -> Array[Hash[String, untyped]]
+    def page_excerpt: (ArticleDocument) -> String
+    def page_image_url: (ArticleDocument) -> String?
+    def saved_page_json: (ArticleDocument) -> Hash[String, untyped]
     def parse_json: (lambda_event) -> Hash[String, untyped]
     def save_request: (Hash[String, untyped], ?page_id: String?) -> SaveRequest
     def string_array: (Hash[String, untyped], String) -> Array[String]

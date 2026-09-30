@@ -35,6 +35,6 @@ class CoverImageTest < Minitest::Test
   private
 
   def page_document(body, cover_mode: "auto", cover_image_url: nil)
-    WeblogAuthoring::PageDocument.new(body:, links: [], cover_mode:, cover_image_url:)
+    WeblogAuthoring::ArticleDocument.new(body:, links: [], cover_mode:, cover_image_url:)
   end
 end

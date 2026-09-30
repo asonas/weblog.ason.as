@@ -5,7 +5,7 @@ require "sqlite3"
 require "json"
 require "digest"
 require "weblog_authoring/draft_migration"
-require "weblog_authoring/draft_reader"
+require "weblog_authoring/published_article_reader"
 require "weblog_authoring/lambda_api"
 
 class BaselineConnection < WeblogAuthoring::DraftStore::SqliteConnection
@@ -91,8 +91,8 @@ Dir.mktmpdir("list-reads") do |dir|
   db.close
   old_store = baseline_store(path)
   dummy = Object.new
-  old_reader = WeblogAuthoring::DraftReader.new(store: old_store, database: dummy)
-  new_reader = WeblogAuthoring::DraftReader.new(store:, database: dummy)
+  old_reader = WeblogAuthoring::PublishedArticleReader.new(store: old_store, database: dummy)
+  new_reader = WeblogAuthoring::PublishedArticleReader.new(store:, database: dummy)
   old_api = WeblogAuthoring::LambdaApi.new(database: dummy, reader_database: old_reader)
   new_api = WeblogAuthoring::LambdaApi.new(database: dummy, reader_database: new_reader)
   get = lambda do |api, query|

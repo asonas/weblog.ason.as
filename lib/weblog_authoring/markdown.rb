@@ -30,7 +30,7 @@ module WeblogAuthoring
       @pages_by_name = {}
 
       Array(pages).each do |page|
-        next unless page.is_a?(PageDocument)
+        next unless page.is_a?(ArticleDocument)
         next unless page.page_type == "named"
         next if page.name.nil?
 

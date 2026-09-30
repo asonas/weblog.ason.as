@@ -103,7 +103,7 @@ class WebmentionSitePublisherTest < Minitest::Test
   end
 
   def test_publishes_uncreated_hubs_without_overwriting_articles
-    page = WeblogAuthoring::PageDocument.new(
+    page = WeblogAuthoring::ArticleDocument.new(
       id: "page-id", page_type: "named", name: "article", page_date: nil, title: nil,
       status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
       path: Pathname("content/pages/article.md"), body: "[[sub]] [[KORG multi/poly]] [[article]]", links: []
@@ -130,7 +130,7 @@ class WebmentionSitePublisherTest < Minitest::Test
   end
 
   def test_publishes_verifiable_html_before_queuing_the_target_union
-    page = WeblogAuthoring::PageDocument.new(
+    page = WeblogAuthoring::ArticleDocument.new(
       id: "page-id", page_type: "named", name: "記事", page_date: nil, title: nil,
       status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
       path: Pathname("content/pages/article.md"), body: "[Target](https://target.example/post)", links: []
@@ -187,7 +187,7 @@ class WebmentionSitePublisherTest < Minitest::Test
 
   def test_publishes_when_desired_update_matches_at_database_precision
     updated_at = Time.iso8601("2026-09-05T14:07:20.000000000+00:00")
-    page = WeblogAuthoring::PageDocument.new(
+    page = WeblogAuthoring::ArticleDocument.new(
       id: "page-id", page_type: "named", name: "2026-09-05", page_date: nil, title: nil,
       status: "published", created_at: updated_at, updated_at:, published_at: updated_at,
       path: Pathname("content/pages/2026-09-05.md"),
@@ -217,7 +217,7 @@ class WebmentionSitePublisherTest < Minitest::Test
   end
 
   def test_public_article_keeps_media_and_escaped_metadata_without_editor_data
-    page = WeblogAuthoring::PageDocument.new(
+    page = WeblogAuthoring::ArticleDocument.new(
       id: "public-media", page_type: "named", name: '画像 & "動画"', title: nil,
       status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
       path: Pathname("content/pages/media.md"),
@@ -251,13 +251,13 @@ class WebmentionSitePublisherTest < Minitest::Test
 
   def test_public_article_resolves_existing_and_missing_wiki_links
     now = Time.iso8601("2026-09-01T00:00:00Z")
-    page = WeblogAuthoring::PageDocument.new(
+    page = WeblogAuthoring::ArticleDocument.new(
       id: "source", page_type: "named", name: "Source", title: nil,
       status: "published", created_at: now, updated_at: now, published_at: now,
       path: Pathname("content/pages/source.md"),
       body: "[[KORG multi/poly]] [[未作成]]", links: []
     )
-    target = WeblogAuthoring::PageDocument.new(
+    target = WeblogAuthoring::ArticleDocument.new(
       id: "target", page_type: "named", name: "KORG multi/poly", title: nil,
       status: "published", created_at: now, updated_at: now, published_at: now,
       path: Pathname("content/pages/target.md"), body: "公開本文", links: []
@@ -287,7 +287,7 @@ class WebmentionSitePublisherTest < Minitest::Test
 
   def test_skips_an_outbox_for_an_older_page_update
     updated_at = Time.iso8601("2026-09-05T14:07:21+00:00")
-    page = WeblogAuthoring::PageDocument.new(
+    page = WeblogAuthoring::ArticleDocument.new(
       id: "page-id", page_type: "named", name: "2026-09-05", page_date: nil, title: nil,
       status: "published", created_at: updated_at, updated_at:, published_at: updated_at,
       path: Pathname("content/pages/2026-09-05.md"),
@@ -317,7 +317,7 @@ class WebmentionSitePublisherTest < Minitest::Test
   end
 
   def test_unpublished_page_removes_static_routes_and_queues_removal_deliveries
-    page = WeblogAuthoring::PageDocument.new(
+    page = WeblogAuthoring::ArticleDocument.new(
       id: "page-id", page_type: "named", name: "記事", page_date: nil, title: nil,
       status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
       path: Pathname("content/pages/article.md"), body: "", links: []
@@ -354,7 +354,7 @@ class WebmentionSitePublisherTest < Minitest::Test
   end
 
   def test_sender_can_remain_stopped_while_static_publishing_is_enabled
-    page = WeblogAuthoring::PageDocument.new(
+    page = WeblogAuthoring::ArticleDocument.new(
       id: "page-id", page_type: "named", name: "記事", page_date: nil, title: nil,
       status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
       path: Pathname("content/pages/article.md"), body: "[Target](https://target.example/post)", links: []
@@ -383,7 +383,7 @@ class WebmentionSitePublisherTest < Minitest::Test
   end
 
   def test_body_only_refresh_with_the_same_targets_does_not_queue_deliveries
-    page = WeblogAuthoring::PageDocument.new(
+    page = WeblogAuthoring::ArticleDocument.new(
       id: "page-id", page_type: "named", name: "記事", page_date: nil, title: nil,
       status: "published", created_at: Time.now, updated_at: Time.now, published_at: Time.now,
       path: Pathname("content/pages/article.md"), body: "本文", links: []

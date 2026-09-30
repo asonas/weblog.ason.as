@@ -34,7 +34,7 @@ class WebmentionReceiverTest < Minitest::Test
   end
 
   def setup
-    page = WeblogAuthoring::PageDocument.new(
+    page = WeblogAuthoring::ArticleDocument.new(
       id: "article-id", page_type: "named", name: "記事", page_date: nil, title: nil,
       status: "published", created_at: Time.iso8601("2026-08-30T00:00:00Z"),
       updated_at: Time.iso8601("2026-08-30T00:00:00Z"), published_at: Time.iso8601("2026-08-30T00:00:00Z"),
