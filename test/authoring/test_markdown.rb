@@ -6,6 +6,27 @@ require_relative "../../lib/weblog_authoring/markdown"
 class TestMarkdown < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-01-01T00:00:00+09:00")
 
+  def test_public_render_links_bare_urls
+    url = "https://jnbk.app/topics/%E6%97%A5%E8%A8%98%E3%81%AEInbox%E6%A9%9F%E8%83%BD"
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+    assert_includes renderer.render(url, mode: "public").html, %(<a href="#{url}">#{url}</a>)
+
+    html = renderer.render("参照：https://example.com/a_b?q=1&x=2。\n\nSee (http://example.com/a_(b)).", mode: "public").html
+    assert_includes html, '<a href="https://example.com/a_b?q=1&amp;x=2">https://example.com/a_b?q=1&amp;x=2</a>。'
+    assert_includes html, '(<a href="http://example.com/a_(b)">http://example.com/a_(b)</a>).'
+  end
+
+  def test_bare_urls_do_not_create_links_inside_code_or_existing_links
+    url = "https://example.com/path"
+    html = WeblogAuthoring::MarkdownRenderer.new.render(
+      "`#{url}`\n\n```\n#{url}\n```\n\n[#{url}](https://example.org/)\n\n<#{url}>", mode: "public"
+    ).html
+    assert_includes html, "<code>#{url}</code>"
+    assert_includes html, "<pre><code>#{url}\n</code></pre>"
+    assert_includes html, %(<a href="https://example.org/">#{url}</a>)
+    assert_equal 2, html.scan("<a ").length
+  end
+
   def test_renders_uploaded_video_with_av1_and_h264_without_autoplay
     avc = "/assets/uploads/2026/09/11111111-2222-3333-4444-555555555555.mp4"
     av1 = "/assets/uploads/2026/09/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.mp4"

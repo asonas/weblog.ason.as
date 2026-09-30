@@ -10,6 +10,7 @@ require_relative "links"
 require_relative "embed_metadata"
 require_relative "models"
 require_relative "names"
+require_relative "markdown_parser"
 
 module WeblogAuthoring
   RenderedMarkdown = Struct.new(:html, :links, :problems, keyword_init: true) do
@@ -45,7 +46,7 @@ module WeblogAuthoring
       prepared_body, wiki_targets, preparation_problems = prepare_wiki_links(source, links, mode)
       document = Kramdown::Document.new(
         prepared_body,
-        input: "GFM",
+        input: "WeblogGFM",
         parse_block_html: false,
         parse_span_html: false,
         smart_quotes: %w[apos apos quot quot]
