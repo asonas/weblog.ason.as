@@ -1,3 +1,4 @@
+import { MarkdownManager } from "@tiptap/markdown";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -35,6 +36,8 @@ function useOnlineStatus(): boolean {
 
 type DraftPreviewProps = {
   body: string;
+  pieces?: Array<{ id: string; body: string }>;
+  tags?: string[];
   metadata: DraftMetadata;
   pageNames: Array<string>;
   sourceBlockIndex: number;
@@ -42,6 +45,8 @@ type DraftPreviewProps = {
 
 export function DraftPreview({
   body,
+  pieces,
+  tags,
   metadata,
   pageNames,
   sourceBlockIndex,
@@ -63,10 +68,28 @@ export function DraftPreview({
     () => coverImageUrl(body, metadata),
     [body, metadata],
   );
+  const markdown = useMemo(
+    () => new MarkdownManager({ extensions: ARTICLE_PREVIEW_EXTENSIONS }),
+    [],
+  );
+  const pieceDocument = useMemo(() => {
+    if (!pieces) return undefined;
+    const content = pieces.flatMap((piece, index) => [
+      ...(index ? [{ type: "horizontalRule" }] : []),
+      ...(markdown.parse(markdownForEditor(piece.body)).content || []),
+    ]);
+    if (tags?.length)
+      content.push(
+        ...(markdown.parse(
+          markdownForEditor(tags.map((tag) => `[[${tag}]]`).join(" ")),
+        ).content || []),
+      );
+    return { type: "doc", content };
+  }, [pieces, tags, markdown]);
   const editor = useEditor({
     extensions: ARTICLE_PREVIEW_EXTENSIONS,
-    content: markdownForEditor(body),
-    contentType: "markdown",
+    content: pieceDocument || markdownForEditor(body),
+    contentType: pieceDocument ? "json" : "markdown",
     editable: false,
     shouldRerenderOnTransaction: false,
     editorProps: {
@@ -78,12 +101,16 @@ export function DraftPreview({
   });
 
   useEffect(() => {
+    if (editor && pieceDocument) {
+      editor.commands.setContent(pieceDocument, { emitUpdate: false });
+      return;
+    }
     if (!editor || editor.getMarkdown() === markdownForEditor(body)) return;
     editor.commands.setContent(markdownForEditor(body), {
       contentType: "markdown",
       emitUpdate: false,
     });
-  }, [body, editor]);
+  }, [body, editor, pieceDocument]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: body replacement updates the editor DOM before link state is applied.
   useEffect(() => {

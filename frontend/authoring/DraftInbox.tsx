@@ -1,6 +1,7 @@
 import { type RefObject, useCallback, useEffect, useState } from "react";
 import { insertMarkdownBlock } from "./draftMarkdown";
 import type { DraftSession } from "./draftSession";
+import { MemoInbox } from "./MemoInbox";
 import { videoAssetPath } from "./Video";
 
 type InboxSource = "photo" | "video" | "bluesky" | "raindrop";
@@ -241,6 +242,7 @@ export function DraftInbox({
   return (
     <section className="draft-inbox" aria-label="素材">
       <div className="draft-inbox__columns">
+        <MemoInbox session={session} textarea={textarea} />
         {COLUMNS.map(({ source, kind, label }) => {
           const columnItems = items.filter(
             (item) => item.source === source && (!kind || item.kind === kind),

@@ -5,6 +5,14 @@ import {
   type CheckpointDownload,
 } from "./draftCheckpoint";
 import { mergeLocalDraft } from "./draftLocalMerge";
+import {
+  type DraftPieces,
+  type PieceStructure,
+  pieceContent,
+  pieceMarkdown,
+  receiveStructure,
+  sameStructure,
+} from "./draftPieces";
 
 export const DRAFT_BODY_LIMIT = 512 * 1024;
 const LOCAL_ORIGIN = "local-input";
@@ -29,8 +37,9 @@ type Changes = Partial<
   Record<Field, { value: string | null; expected_revision: number }>
 >;
 type MetadataConflicts = Partial<VersionedMetadata>;
-type Pending = { id: string; data: Uint8Array };
+type Pending = { id: string; data: Uint8Array; piece_id?: string };
 type Flight = {
+  format?: "pieces";
   protocol: number;
   generation: number;
   update_id: string;
@@ -41,6 +50,7 @@ type Flight = {
   included: string[];
 };
 export type SavedDraft = {
+  pieces?: DraftPieces;
   state: Uint8Array;
   metadata: DraftMetadata;
   serverMetadata: VersionedMetadata;
@@ -51,6 +61,8 @@ export type SavedDraft = {
   tabConflicts?: Partial<Record<Field, (string | null)[]>>;
 };
 type Page = {
+  format?: "legacy" | "pieces";
+  structure?: PieceStructure;
   protocol: number;
   generation: number;
   metadata: VersionedMetadata;
@@ -71,6 +83,8 @@ type UploadManifest = {
   chunks: number;
 };
 export type PublicationConfirmation = {
+  format?: "pieces";
+  structure_revision?: number;
   protocol: number;
   generation: number;
   head: number;
@@ -233,6 +247,10 @@ export async function readLocalDraftSummaries(): Promise<LocalDraftSummary[]> {
           cursor: saved.cursor,
           pending: Boolean(
             saved.pending.length ||
+              (saved.pieces &&
+                (!sameStructure(saved.pieces.local, saved.pieces.server) ||
+                  saved.pieces.conflicts.length ||
+                  saved.pieces.recovery.length)) ||
               saved.flight ||
               Object.keys(saved.conflicts || {}).length ||
               Object.keys(saved.tabConflicts || {}).length ||
@@ -247,7 +265,10 @@ export async function readLocalDraftSummaries(): Promise<LocalDraftSummary[]> {
           Y.applyUpdate(doc, saved.state);
           const content = new TextEncoder().encode(
             JSON.stringify([
-              doc.getText("body").toString().replaceAll("\r\n", "\n"),
+              (saved.pieces
+                ? pieceMarkdown(doc, saved.pieces.local)
+                : doc.getText("body").toString()
+              ).replaceAll("\r\n", "\n"),
               saved.metadata.title.trim(),
               saved.metadata.page_type,
               saved.metadata.cover_mode,
@@ -258,6 +279,7 @@ export async function readLocalDraftSummaries(): Promise<LocalDraftSummary[]> {
               saved.metadata.page_date
                 ? [saved.metadata.page_date]
                 : []),
+              ...(saved.pieces ? [pieceContent(doc, saved.pieces.local)] : []),
             ]),
           );
           summaries.push(
@@ -295,10 +317,39 @@ class DraftRequestError extends Error {
 
 export class DraftSession extends EventTarget {
   readonly doc = new Y.Doc();
-  readonly body = this.doc.getText("body");
-  readonly undo = new Y.UndoManager(this.body, {
-    trackedOrigins: new Set([LOCAL_ORIGIN]),
-  });
+  pieces?: DraftPieces;
+  activePieceId?: string;
+  get body() {
+    return this.doc.getText(
+      this.pieces
+        ? `piece:${this.activePieceId || this.pieces.local.piece_ids[0]}`
+        : "body",
+    );
+  }
+  get markdown() {
+    return this.pieces
+      ? pieceMarkdown(this.doc, this.pieces.local)
+      : this.body.toString();
+  }
+  get contentPieces() {
+    return this.pieces
+      ? pieceContent(this.doc, this.pieces.local).pieces
+      : undefined;
+  }
+  private undos = new Map<string, Y.UndoManager>();
+  get undo() {
+    const key = this.pieces
+      ? this.activePieceId || this.pieces.local.piece_ids[0] || "empty"
+      : "body";
+    let undo = this.undos.get(key);
+    if (!undo) {
+      undo = new Y.UndoManager(this.body, {
+        trackedOrigins: new Set([LOCAL_ORIGIN]),
+      });
+      this.undos.set(key, undo);
+    }
+    return undo;
+  }
   metadata: DraftMetadata = { ...DEFAULT_METADATA };
   localStatus = "読み込み中";
   serverStatus = "未同期";
@@ -347,6 +398,7 @@ export class DraftSession extends EventTarget {
     id: string,
     csrf: () => Promise<string>,
     isNew = false,
+    piecesEnabled = false,
   ): Promise<DraftSession> {
     if (
       !/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(
@@ -356,6 +408,20 @@ export class DraftSession extends EventTarget {
       throw new Error("下書きのIDが不正です。");
     }
     const session = new DraftSession(id, csrf);
+    if (isNew && piecesEnabled) {
+      const structure: PieceStructure = {
+        revision: 0,
+        piece_ids: [crypto.randomUUID()],
+        deleted_ids: [],
+        tags: [],
+      };
+      session.pieces = {
+        local: structure,
+        server: structuredClone(structure),
+        conflicts: [],
+        recovery: [],
+      };
+    }
     session.pendingOutputs =
       sessionStorage.getItem(`draft-outputs:${id}`) || undefined;
     const pendingPublication = sessionStorage.getItem(
@@ -370,6 +436,7 @@ export class DraftSession extends EventTarget {
       session.database = await openLocalDatabase();
       saved = await localRecord(session.database, id);
       if (saved) {
+        session.pieces = saved.pieces;
         Y.applyUpdate(session.doc, saved.state, REMOTE_ORIGIN);
         session.metadata = saved.metadata;
         session.serverMetadata = saved.serverMetadata;
@@ -379,6 +446,7 @@ export class DraftSession extends EventTarget {
         session.conflicts = saved.conflicts || {};
         session.tabConflicts = saved.tabConflicts || {};
       }
+      session.ensureActivePiece();
       session.baseline = session.snapshot();
       session.localStatus = saved
         ? "端末に保存済み"
@@ -400,9 +468,16 @@ export class DraftSession extends EventTarget {
       session.error =
         error instanceof Error ? error.message : "下書きを読み込めませんでした";
     }
+    void session.undo;
     session.doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (origin === REMOTE_ORIGIN) return;
-      session.pending.push({ id: crypto.randomUUID(), data: update });
+      session.pending.push({
+        id: crypto.randomUUID(),
+        data: update,
+        piece_id: session.pieces
+          ? session.activePieceId || session.pieces.local.piece_ids[0]
+          : undefined,
+      });
       session.changed();
     });
     if (session.hasPendingChanges()) session.schedule();
@@ -427,6 +502,10 @@ export class DraftSession extends EventTarget {
   private hasPendingChanges() {
     return Boolean(
       this.pending.length ||
+        (this.pieces &&
+          (!sameStructure(this.pieces.local, this.pieces.server) ||
+            this.pieces.conflicts.length ||
+            this.pieces.recovery.length)) ||
         this.flight ||
         FIELDS.some(
           (field) => this.metadata[field] !== this.serverMetadata[field].value,
@@ -488,6 +567,7 @@ export class DraftSession extends EventTarget {
       const query = new URLSearchParams({
         protocol: "1",
         generation: "1",
+        format: "auto",
         cursor: String(this.cursor),
       });
       if (through !== undefined) query.set("through", String(through));
@@ -517,6 +597,27 @@ export class DraftSession extends EventTarget {
         throw new Error("保存形式が対応していません。本文を退避してください。");
       if (this.isComposing || this.isClosed) return;
       through = page.through;
+      if (page.format === "pieces" && page.structure) {
+        if (this.pieces) {
+          const recovery = this.pending.flatMap((update) =>
+            update.piece_id &&
+            page.structure?.deleted_ids.includes(update.piece_id)
+              ? [update.piece_id]
+              : [],
+          );
+          this.pieces = receiveStructure(this.pieces, page.structure);
+          this.pieces.recovery = [
+            ...new Set([...this.pieces.recovery, ...recovery]),
+          ];
+        } else
+          this.pieces = {
+            local: page.structure,
+            server: page.structure,
+            conflicts: [],
+            recovery: [],
+          };
+        this.ensureActivePiece();
+      }
       let appliedCheckpoint = false;
       if (page.checkpoint) {
         if (page.cursor !== this.cursor || page.updates.length)
@@ -645,8 +746,194 @@ export class DraftSession extends EventTarget {
     this.changed();
   }
 
+  private ensureActivePiece() {
+    if (!this.pieces) return;
+    if (
+      !this.activePieceId ||
+      !this.pieces.local.piece_ids.includes(this.activePieceId)
+    )
+      this.activePieceId = this.pieces.local.piece_ids[0];
+    void this.undo;
+  }
+
+  selectPiece(id: string) {
+    if (this.isComposing || !this.pieces?.local.piece_ids.includes(id)) return;
+    this.undo.stopCapturing();
+    this.activePieceId = id;
+    this.ensureActivePiece();
+    this.emit();
+  }
+
+  addPiece(body = "") {
+    if (!this.pieces || this.isPublishing || this.isComposing) return;
+    const id = crypto.randomUUID();
+    this.pieces.local = {
+      ...this.pieces.local,
+      piece_ids: [...this.pieces.local.piece_ids, id],
+    };
+    this.selectPiece(id);
+    this.setBody(body);
+    this.changed();
+  }
+
+  movePiece(id: string, direction: -1 | 1) {
+    if (!this.pieces || this.isPublishing || this.isComposing) return;
+    const ids = [...this.pieces.local.piece_ids];
+    const index = ids.indexOf(id);
+    if (index < 0 || index + direction < 0 || index + direction >= ids.length)
+      return;
+    [ids[index], ids[index + direction]] = [ids[index + direction], ids[index]];
+    this.pieces.local = { ...this.pieces.local, piece_ids: ids };
+    this.changed();
+  }
+
+  removePiece(id: string) {
+    if (!this.pieces || this.isPublishing || this.isComposing) return;
+    this.pieces.local = {
+      ...this.pieces.local,
+      piece_ids: this.pieces.local.piece_ids.filter((value) => value !== id),
+      deleted_ids: [...new Set([...this.pieces.local.deleted_ids, id])],
+    };
+    this.pending = this.pending.map((update) =>
+      update.piece_id === id ? { ...update, piece_id: undefined } : update,
+    );
+    this.ensureActivePiece();
+    this.changed();
+  }
+
+  setTags(tags: string[]) {
+    if (!this.pieces || this.isPublishing) return;
+    this.pieces.local = {
+      ...this.pieces.local,
+      tags: [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))],
+    };
+    this.changed();
+  }
+
+  previewPosition(position: number) {
+    if (!this.pieces) return position;
+    const index = this.pieces.local.piece_ids.indexOf(this.activePieceId || "");
+    return this.pieces.local.piece_ids
+      .slice(0, Math.max(0, index))
+      .reduce(
+        (length, id) =>
+          length +
+          this.doc.getText(`piece:${id}`).length +
+          "\n\n---\n\n".length,
+        position,
+      );
+  }
+
+  resolveStructure(choice: "local" | "remote") {
+    if (!this.pieces || this.isPublishing) return;
+    const conflict = this.pieces.conflicts.shift();
+    if (!conflict) return;
+    const previous = this.pieces.local;
+    if (choice === "remote") this.pieces.local = conflict;
+    const deleted = [
+      ...new Set([
+        ...this.pieces.local.piece_ids.filter((id) =>
+          this.pieces?.server.deleted_ids.includes(id),
+        ),
+        ...previous.piece_ids.filter(
+          (id) => !this.pieces?.local.piece_ids.includes(id),
+        ),
+      ]),
+    ];
+    this.pieces.recovery = [...new Set([...this.pieces.recovery, ...deleted])];
+    this.pieces.local = {
+      ...this.pieces.local,
+      piece_ids: this.pieces.local.piece_ids.filter(
+        (id) => !deleted.includes(id),
+      ),
+      deleted_ids: [
+        ...new Set([
+          ...this.pieces.local.deleted_ids,
+          ...this.pieces.server.deleted_ids,
+          ...deleted,
+        ]),
+      ],
+    };
+    this.ensureActivePiece();
+    this.error = "";
+    this.changed();
+  }
+
+  recoverPiece(id: string) {
+    if (!this.pieces?.recovery.includes(id)) return;
+    const body = this.doc.getText(`piece:${id}`).toString();
+    this.pieces.recovery = this.pieces.recovery.filter((value) => value !== id);
+    this.pending = this.pending.map((update) =>
+      update.piece_id === id ? { ...update, piece_id: undefined } : update,
+    );
+    this.addPiece(body);
+  }
+
+  async prepareMemoAdoption(memoId: string, memoRevision: number) {
+    if (!this.pieces || this.isPublishing || this.isComposing)
+      throw new Error("日記の同期が終わってから取り込んでください。");
+    await this.sync();
+    if (this.error || this.hasPendingChanges())
+      throw new Error(
+        this.error || "未送信の変更を保存してから取り込んでください。",
+      );
+    await this.request("", "PUT", {
+      protocol: 1,
+      generation: 1,
+      format: "pieces",
+      piece_id: this.pieces.server.piece_ids[0] || crypto.randomUUID(),
+      tags: this.pieces.server.tags,
+    });
+    return {
+      memo_id: memoId,
+      expected_revision: memoRevision,
+      structure_revision: this.pieces.server.revision,
+      operation_id: crypto.randomUUID(),
+      piece_id: crypto.randomUUID(),
+    };
+  }
+
+  async deleteDraft() {
+    if (!this.pieces || this.isPublishing || this.isComposing) return;
+    await this.sync();
+    if (this.error || this.hasPendingChanges())
+      throw new Error(this.error || "保存を確認してから削除してください。");
+    this.isPublishing = true;
+    this.emit();
+    try {
+      await navigator.locks.request(`draft-sync:${this.id}`, async () => {
+        await this.readShared();
+        await this.request("", "DELETE", {
+          protocol: 1,
+          generation: 1,
+          format: "pieces",
+          head: this.cursor,
+          structure_revision: this.pieces?.server.revision,
+        });
+        await this.writes;
+        const database = this.database;
+        if (database)
+          await new Promise<void>((resolve, reject) => {
+            const transaction = database.transaction("drafts", "readwrite");
+            transaction.objectStore("drafts").delete(this.id);
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+          });
+      });
+      this.close();
+    } catch (error) {
+      this.isPublishing = false;
+      this.emit();
+      throw error;
+    }
+  }
+
   setBody(value: string) {
-    if (this.isPublishing) return;
+    if (
+      this.isPublishing ||
+      (this.pieces && this.pieces.local.piece_ids.length === 0)
+    )
+      return;
     const old = Array.from(this.body.toString());
     const next = Array.from(value);
     let prefix = 0;
@@ -711,6 +998,7 @@ export class DraftSession extends EventTarget {
   private snapshot(): SavedDraft {
     return structuredClone({
       state: Y.encodeStateAsUpdate(this.doc),
+      pieces: this.pieces,
       metadata: this.metadata,
       serverMetadata: this.serverMetadata,
       pending: this.pending,
@@ -722,6 +1010,8 @@ export class DraftSession extends EventTarget {
   }
 
   private adopt(saved: SavedDraft) {
+    this.pieces = saved.pieces;
+    this.ensureActivePiece();
     Y.applyUpdate(this.doc, saved.state, REMOTE_ORIGIN);
     this.metadata = saved.metadata;
     this.serverMetadata = saved.serverMetadata;
@@ -809,7 +1099,7 @@ export class DraftSession extends EventTarget {
     return digest(
       new TextEncoder().encode(
         JSON.stringify([
-          this.body.toString().replaceAll("\r\n", "\n"),
+          this.markdown.replaceAll("\r\n", "\n"),
           this.metadata.title.trim(),
           this.metadata.page_type,
           this.metadata.cover_mode,
@@ -819,6 +1109,7 @@ export class DraftSession extends EventTarget {
           ...(this.metadata.page_type === "date" && this.metadata.page_date
             ? [this.metadata.page_date]
             : []),
+          ...(this.pieces ? [pieceContent(this.doc, this.pieces.local)] : []),
         ]),
       ),
     );
@@ -863,6 +1154,8 @@ export class DraftSession extends EventTarget {
       if (
         confirmation.content_hash !== seen ||
         confirmation.head !== this.cursor ||
+        (this.pieces &&
+          confirmation.structure_revision !== this.pieces.server.revision) ||
         FIELDS.some(
           (field) =>
             confirmation.metadata_revisions[field] !==
@@ -909,7 +1202,7 @@ export class DraftSession extends EventTarget {
           ? "公開版と同じ内容です"
           : "公開を受け付けました。HTMLを配置中";
       this.emit();
-      if (accepted.status !== "unchanged") {
+      if (accepted.status !== "unchanged" || this.pieces) {
         const job = await this.runPublication(accepted.id);
         if (job.status !== "completed" && job.status !== "superseded")
           throw new Error(job.error || "公開処理を再試行してください。");
@@ -1033,17 +1326,53 @@ export class DraftSession extends EventTarget {
     try {
       await this.writes;
       if (this.persistedRevision !== this.revision) return;
-      if (
-        new TextEncoder().encode(this.body.toString()).length > DRAFT_BODY_LIMIT
-      )
+      if (new TextEncoder().encode(this.markdown).length > DRAFT_BODY_LIMIT)
         throw new Error(
           "本文が512 KiBを超えています。端末内には保持していますが、サーバーへは保存できません。",
         );
       if (!this.flight) await this.catchUp(true);
       if (this.isClosed || this.isComposing) return;
       if (this.metadataConflicts.length && !this.flight) return;
+      if (
+        this.pieces &&
+        (this.pieces.conflicts.length || this.pieces.recovery.length)
+      )
+        return;
       if (this.hasPendingChanges())
-        await this.request("", "PUT", { protocol: 1, generation: 1 });
+        await this.request("", "PUT", {
+          protocol: 1,
+          generation: 1,
+          ...(this.pieces
+            ? {
+                format: "pieces",
+                piece_id:
+                  this.pieces.server.piece_ids[0] || crypto.randomUUID(),
+                tags: this.pieces.server.tags,
+              }
+            : {}),
+        });
+      if (
+        this.pieces &&
+        !sameStructure(this.pieces.local, this.pieces.server)
+      ) {
+        const sent = structuredClone(this.pieces.local);
+        const saved = await this.request<PieceStructure>(
+          "/structure",
+          "PATCH",
+          {
+            protocol: 1,
+            generation: 1,
+            format: "pieces",
+            expected_revision: this.pieces.server.revision,
+            piece_ids: sent.piece_ids,
+            deleted_ids: sent.deleted_ids,
+            tags: sent.tags,
+          },
+        );
+        if (sameStructure(sent, this.pieces.local)) this.pieces.local = saved;
+        this.pieces.server = saved;
+        await this.persist();
+      }
       if (!this.flight) {
         const metadata: Changes = {};
         for (const field of FIELDS) {
@@ -1059,12 +1388,13 @@ export class DraftSession extends EventTarget {
             ? Y.mergeUpdates(pending.map((item) => item.data))
             : new Uint8Array([0, 0]);
           const flight: Flight = {
+            ...(this.pieces ? { format: "pieces" as const } : {}),
             protocol: 1,
             generation: 1,
             update_id: crypto.randomUUID(),
             data: encode(binary),
             digest: "",
-            body_bytes: new TextEncoder().encode(this.body.toString()).length,
+            body_bytes: new TextEncoder().encode(this.markdown).length,
             metadata,
             included: pending.map((item) => item.id),
           };
@@ -1161,6 +1491,7 @@ export class DraftSession extends EventTarget {
       "POST",
       {
         protocol: flight.protocol,
+        format: flight.format,
         generation: flight.generation,
         update_id: flight.update_id,
         digest: flight.digest,
@@ -1195,7 +1526,11 @@ export class DraftSession extends EventTarget {
     return this.request<Receipt>(
       `/uploads/${encodeURIComponent(flight.update_id)}/commit`,
       "POST",
-      { protocol: flight.protocol, generation: flight.generation },
+      {
+        protocol: flight.protocol,
+        generation: flight.generation,
+        format: flight.format,
+      },
     );
   }
 

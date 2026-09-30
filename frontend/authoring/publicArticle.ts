@@ -1,4 +1,5 @@
 import { hydrateEmbedCard } from "./EmbedCard";
+import { mountMentionedByDays } from "./mentionedByDays";
 import { installMobileArticleSheet } from "./mobileArticleSheet";
 import { hydrateXPost } from "./XPost";
 
@@ -255,6 +256,7 @@ export function enhancePublicArticle(root: HTMLElement) {
 const article = document.querySelector<HTMLElement>("[data-public-article]");
 if (article) {
   enhancePublicArticle(article);
+  mountMentionedByDays(article, enhancePublicArticle);
   void enhancePublicArticleEditing(article);
   installMobileArticleSheet();
 }

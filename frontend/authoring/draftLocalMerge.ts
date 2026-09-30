@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { mergePieceDrafts } from "./draftPieces";
 import type { DraftMetadata, SavedDraft } from "./draftSession";
 
 const FIELDS: (keyof DraftMetadata)[] = [
@@ -15,6 +16,7 @@ export function mergeLocalDraft(
   stored: SavedDraft,
 ): SavedDraft {
   const result = structuredClone(stored);
+  result.pieces = mergePieceDrafts(base.pieces, incoming.pieces, stored.pieces);
   result.state = Y.mergeUpdates([stored.state, incoming.state]);
   result.cursor = Math.max(stored.cursor, incoming.cursor);
   const oldIds = new Set(base.pending.map(({ id }) => id));

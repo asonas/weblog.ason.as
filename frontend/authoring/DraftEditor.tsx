@@ -34,6 +34,7 @@ import {
 } from "./draftSession";
 import { draftMetadataForTitle, hasCustomDiaryTitle } from "./draftTitle";
 import { prefetchEmbedMetadata } from "./EmbedCard";
+import { DraftPieceControls } from "./PieceControls";
 import type { ProofreadingMessage, ProofreadingResponse } from "./proofreading";
 import "./draftEditor.css";
 import "./authoringTheme.css";
@@ -197,7 +198,13 @@ function DraftStatusIcon({
   );
 }
 
-export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
+export function DraftEditor({
+  csrf,
+  piecesEnabled = false,
+}: {
+  csrf: () => Promise<string>;
+  piecesEnabled?: boolean;
+}) {
   const [session, setSession] = useState<DraftSession>();
   const [previewWidth, setPreviewWidth] = useState(1000);
   const workspace = useRef<HTMLDivElement>(null);
@@ -273,7 +280,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
   useEffect(() => {
     let isActive = true;
     let opened: DraftSession | undefined;
-    void DraftSession.open(id, csrf, isNew)
+    void DraftSession.open(id, csrf, isNew, piecesEnabled)
       .then((value) => {
         if (initialTitle !== null && !value.metadata.title)
           value.setMetadata(draftMetadataForTitle(initialTitle));
@@ -314,7 +321,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       isActive = false;
       opened?.close();
     };
-  }, [id, isNew, initialTitle, recoveryKey, csrf]);
+  }, [id, isNew, initialTitle, recoveryKey, csrf, piecesEnabled]);
 
   useEffect(() => {
     if (!session) return;
@@ -382,7 +389,8 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
         }
       }, 1000);
     };
-    session.body.observe(schedule);
+    const observedBody = session.body;
+    observedBody.observe(schedule);
     const field = textarea.current;
     field?.addEventListener("compositionend", schedule);
     window.addEventListener("online", schedule);
@@ -391,13 +399,13 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     return () => {
       revision += 1;
       clearTimeout(timer);
-      session.body.unobserve(schedule);
+      observedBody.unobserve(schedule);
       field?.removeEventListener("compositionend", schedule);
       window.removeEventListener("online", schedule);
       window.removeEventListener("offline", schedule);
       request?.abort();
     };
-  }, [session, csrf]);
+  }, [session, csrf, session?.activePieceId]);
 
   useEffect(() => {
     const field = textarea.current;
@@ -505,7 +513,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       field.removeEventListener("compositionend", endComposition);
       window.removeEventListener("beforeunload", beforeUnload);
     };
-  }, [session]);
+  }, [session, session?.activePieceId]);
 
   const wikiLinkSuggestions = useMemo(
     () =>
@@ -556,7 +564,10 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     setWikiLinkQuery(query);
     if (!isSameQuery) setActiveWikiLinkSuggestion(0);
     setPreviewBlockIndex(
-      markdownBlockIndexAt(field.value, field.selectionStart),
+      markdownBlockIndexAt(
+        session?.markdown || field.value,
+        session?.previewPosition(field.selectionStart) ?? field.selectionStart,
+      ),
     );
   }
 
@@ -603,7 +614,10 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
       field.setSelectionRange(edit.selectionStart, edit.selectionEnd);
       session.setBody(edit.value);
       setPreviewBlockIndex(
-        markdownBlockIndexAt(edit.value, edit.selectionStart),
+        markdownBlockIndexAt(
+          session.markdown,
+          session.previewPosition(edit.selectionStart),
+        ),
       );
       return;
     }
@@ -780,7 +794,7 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
     window.location.assign(`/draft-editor?id=${nextId}&recovery=1`);
   }
 
-  const bytes = new TextEncoder().encode(session?.body.toString() || "").length;
+  const bytes = new TextEncoder().encode(session?.markdown || "").length;
   return (
     <section className="draft-editor" aria-label="下書き編集">
       <DraftNavigation>
@@ -898,6 +912,34 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
         </div>
       </div>
       <div className="draft-editor__status">
+        {session?.pieces && articleState === "draft" && (
+          <button
+            type="button"
+            disabled={session.isPublishing}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  "未公開の日記全体を削除しますか？取り込み元のメモはInboxへ戻ります。日記内での加筆は削除されます。",
+                )
+              )
+                return;
+              void session
+                .deleteDraft()
+                .then(() => {
+                  window.location.href = "/authoring/articles";
+                })
+                .catch((error: unknown) =>
+                  setPublicationError(
+                    error instanceof Error
+                      ? error.message
+                      : "削除できませんでした",
+                  ),
+                );
+            }}
+          >
+            未公開の下書きを削除
+          </button>
+        )}
         <p id="draft-size">
           {bytes >= DRAFT_BODY_LIMIT * 0.9
             ? `本文 ${Math.ceil(bytes / 1024)} / 512 KiB。上限を超えても本文は削除されません。`
@@ -955,12 +997,18 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
         }}
       >
         <div className="draft-editor__source">
+          {session && <DraftPieceControls session={session} />}
           <textarea
             ref={textarea}
             aria-label="本文"
             aria-describedby="draft-size"
             aria-invalid={bytes > DRAFT_BODY_LIMIT}
-            disabled={!session || session.isPublishing || !!imageUploadStatus}
+            disabled={
+              !session ||
+              session.isPublishing ||
+              !!imageUploadStatus ||
+              session.pieces?.local.piece_ids.length === 0
+            }
             spellCheck={false}
             aria-controls={
               wikiLinkSuggestions.length > 0
@@ -1075,7 +1123,9 @@ export function DraftEditor({ csrf }: { csrf: () => Promise<string> }) {
         >
           {session && (
             <DraftPreview
-              body={session.body.toString()}
+              body={session.markdown}
+              pieces={session.contentPieces}
+              tags={session.pieces?.local.tags}
               metadata={session.metadata}
               pageNames={wikiLinkNames}
               sourceBlockIndex={previewBlockIndex}

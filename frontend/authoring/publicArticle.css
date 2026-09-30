@@ -176,3 +176,43 @@
   margin-inline: auto;
   padding: var(--space-6) clamp(var(--space-4), 5vw, var(--space-12));
 }
+.article-piece {
+  scroll-margin-block-start: 5rem;
+}
+
+.mentioned-by-days {
+  max-inline-size: var(--measure-content);
+  margin: var(--space-12) auto;
+  padding-inline: var(--space-6);
+}
+
+.mentioned-by-days[hidden] {
+  display: none;
+}
+
+.mentioned-by-days h2 {
+  font-size: var(--text-heading-md);
+  font-weight: 400;
+}
+
+.mentioned-by-days__day {
+  margin-block: var(--space-8);
+}
+
+.mentioned-by-days__day h3,
+.mentioned-by-days__piece > a {
+  font-size: var(--text-ui);
+}
+
+.mentioned-by-days__piece {
+  margin-block: var(--space-6);
+}
+
+.mentioned-by-days button {
+  min-block-size: 44px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+}

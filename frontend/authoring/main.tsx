@@ -22,6 +22,7 @@ type AuthState = {
   login: string | null;
   csrf_token: string;
   draft_authoring?: boolean;
+  piece_authoring?: boolean;
 };
 
 const DEFAULT_AUTH_STATE: AuthState = {
@@ -306,7 +307,10 @@ function RootApp({
     return auth.can_edit || isLocalDraft ? (
       <>
         <HeaderSearch />
-        <DraftEditor csrf={draftCsrf} />
+        <DraftEditor
+          csrf={draftCsrf}
+          piecesEnabled={auth.piece_authoring === true}
+        />
       </>
     ) : (
       <p>下書きを編集するにはログインしてください。</p>
