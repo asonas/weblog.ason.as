@@ -1,0 +1,61 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "optparse"
+require "json"
+require "time"
+require_relative "../lib/weblog_authoring/draft_store"
+
+command = ARGV.shift
+options = {}
+parser = OptionParser.new do |args|
+  args.banner = "Usage: rename-article-tables status|snapshot|forward|reverse --sqlite PATH | --host HOST [--confirm-target TARGET --stopped --record PATH]"
+  %w[sqlite host confirm-target record].each { |key| args.on("--#{key} VALUE") { |value| options[key] = value } }
+  args.on("--stopped") { options["stopped"] = true }
+end
+parser.parse!
+raise OptionParser::InvalidArgument, parser.banner unless %w[status snapshot forward reverse].include?(command) && ARGV.empty?
+raise "Choose exactly one of --sqlite or --host" unless options.key?("sqlite") != options.key?("host")
+target = options["host"] || File.expand_path(options.fetch("sqlite"))
+mutating = %w[forward reverse].include?(command)
+if mutating
+  raise "Confirm the exact target and stop all readers/writers first" unless options["confirm-target"] == target && options["stopped"]
+  raise "A progress record path is required" unless options["record"]
+end
+
+operation = lambda do |db|
+  rename = WeblogAuthoring::ArticleTableRename.new(db)
+  if mutating
+    File.open(options.fetch("record"), File::WRONLY | File::CREAT | File::APPEND, 0o600) do |record|
+      raise "Progress record is in use" unless record.flock(File::LOCK_EX | File::LOCK_NB)
+      rename.rename!(direction: command) do |entry|
+        record.puts(JSON.generate(entry.merge("target" => target, "at" => Time.now.utc.iso8601(6))))
+        record.flush
+        record.fsync
+        puts JSON.generate(entry)
+      end
+    end
+  else
+    puts JSON.pretty_generate(command == "status" ? rename.status : rename.snapshot)
+  end
+end
+
+if options["sqlite"]
+  require "sqlite3"
+  raise "SQLite database does not exist: #{target}" unless File.file?(target)
+  connection = SQLite3::Database.new(target)
+  connection.results_as_hash = true
+  connection.busy_timeout = 5_000
+  begin
+    operation.call(WeblogAuthoring::DraftStore::SqliteConnection.new(connection))
+  ensure
+    connection.close
+  end
+else
+  require "openssl"
+  ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
+  require "aurora_dsql_pg"
+  raise "Expected an explicit Aurora DSQL hostname" unless /\A[a-z0-9]+\.dsql\.[a-z0-9-]+\.on\.aws\z/.match?(target)
+  pool = AuroraDsql::Pg.create_pool(host: target, user: "admin", application_name: "article-table-rename", occ_max_retries: 0)
+  pool.with { |connection| operation.call(WeblogAuthoring::DraftStore::PostgresConnection.new(connection)) }
+end

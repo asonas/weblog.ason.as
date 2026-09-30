@@ -9,6 +9,7 @@ resource "aws_lambda_function" "authoring" {
 
   environment {
     variables = merge(local.draft_runtime_environment, {
+      AUTHORING_MAINTENANCE              = tostring(var.authoring_maintenance)
       DSQL_HOST                          = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
       FRONTEND_URL                       = "https://weblog.ason.as"
       GITHUB_ALLOWED_USER_ID             = "630181"

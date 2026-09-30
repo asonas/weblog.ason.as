@@ -25,6 +25,15 @@ module WeblogAuthoring
     module_function
 
     def call(event:, context:)
+      if ENV["AUTHORING_MAINTENANCE"] == "true"
+        raise "Authoring maintenance is active" unless event.dig("requestContext", "http", "method")
+
+        return {
+          "statusCode" => 503,
+          "headers" => { "content-type" => "application/json; charset=utf-8", "cache-control" => "no-store", "retry-after" => "60" },
+          "body" => JSON.generate("error" => "メンテナンス中です。しばらくお待ちください。"),
+        }
+      end
       # Init has no request ID; emit the captured measurements on the first invocation.
       unless @require_timings_logged
         puts(JSON.generate(REQUIRE_TIMING.merge(

@@ -9,8 +9,8 @@ class DsqlBootstrapTest < Minitest::Test
   class Connection
     attr_reader :statements
 
-    def initialize(role_exists: false, mapping_exists: false)
-      @results = [Result.new(role_exists ? 1 : 0), Result.new(mapping_exists ? 1 : 0)]
+    def initialize(role_exists: false, mapping_exists: false, old_tables: false)
+      @results = [Result.new(old_tables ? 1 : 0), Result.new(role_exists ? 1 : 0), Result.new(mapping_exists ? 1 : 0)]
       @statements = []
     end
 
@@ -64,7 +64,7 @@ class DsqlBootstrapTest < Minitest::Test
     assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_sync_runs") })
     assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.inbox_sync_run_sources") })
     %w[
-      draft_articles
+      articles
       draft_working_hashes
       draft_updates
       draft_chunks
@@ -92,6 +92,13 @@ class DsqlBootstrapTest < Minitest::Test
 
     refute_includes connection.statements, "CREATE ROLE weblog_authoring WITH LOGIN"
     refute(connection.statements.any? { |statement| statement.to_s.start_with?("AWS IAM GRANT") })
+  end
+
+  def test_refuses_old_article_tables_before_any_ddl
+    connection = Connection.new(old_tables: true)
+    assert_raises(RuntimeError) { bootstrap(connection).run }
+    assert_equal 2, connection.statements.length
+    assert_equal :closed, connection.statements.last
   end
 
   def test_adds_cover_mode_with_dsql_supported_statements

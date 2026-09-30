@@ -8,6 +8,24 @@ class AuthoringLambdaTest < Minitest::Test
   SecretResponse = Data.define(:parameter)
   Parameter = Data.define(:value)
 
+  def test_maintenance_rejects_reads_writes_and_jobs_before_api_initialization
+    previous = ENV["AUTHORING_MAINTENANCE"]
+    ENV["AUTHORING_MAINTENANCE"] = "true"
+    context = Data.define(:aws_request_id).new("maintenance")
+    %w[GET HEAD POST].each do |method|
+      response = WeblogAuthoring::LambdaHandler.call(
+        event: { "requestContext" => { "http" => { "method" => method } } }, context:
+      )
+      assert_equal 503, response.fetch("statusCode")
+      assert_equal "no-store", response.fetch("headers").fetch("cache-control")
+    end
+    assert_raises(RuntimeError) do
+      WeblogAuthoring::LambdaHandler.call(event: { "action" => "backfill_inbox_thumbnails" }, context:)
+    end
+  ensure
+    ENV["AUTHORING_MAINTENANCE"] = previous
+  end
+
   def test_fresh_process_logs_require_timings_once_without_changing_session_responses
     source = <<~'RUBY'
       require_relative "lambda/authoring"

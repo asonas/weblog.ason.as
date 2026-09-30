@@ -16,7 +16,7 @@ require_relative "../../../lib/weblog_authoring/lambda_api"
 require_relative "../../../lib/weblog_authoring/draft_migration"
 
 SCHEMA = "draft_publish_verify_#{SecureRandom.hex(6)}"
-TABLES = %w[draft_articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks draft_published_versions draft_publication_jobs draft_publication_heads draft_publication_receipts draft_publication_routes draft_publication_clock draft_publication_stages draft_output_heads draft_html_outputs draft_route_reservations draft_redirects draft_rename_batches draft_rename_members draft_migration_state draft_migration_articles draft_atom_ids draft_cutover_state draft_cutover_operations draft_dispatches].freeze
+TABLES = %w[articles draft_updates draft_chunks draft_uploads draft_upload_chunks draft_checkpoint_heads draft_checkpoints draft_checkpoint_chunks article_published_versions article_publication_jobs article_publication_heads article_publication_receipts article_publication_routes article_publication_clock article_publication_stages article_output_heads article_html_outputs article_route_reservations article_redirects article_rename_batches article_rename_members draft_migration_state draft_migration_articles article_atom_ids draft_cutover_state draft_cutover_operations article_publication_dispatches].freeze
 $stdout.sync = true
 
 module IsolatedPublicationSchema
@@ -211,7 +211,7 @@ begin
   old_html_key = store.published_snapshot(id).fetch("html_key")
   reader_thread = Thread.new do
     Thread.current[:after_publication_query] = lambda do |sql|
-      if sql.include?("draft_publication_routes WHERE route")
+      if sql.include?("article_publication_routes WHERE route")
         Thread.current[:after_publication_query] = nil
         paused << true
         resume.pop

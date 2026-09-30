@@ -73,7 +73,7 @@ export class DsqlDraftCheckpointRepository
   async listArticleIds(): Promise<string[]> {
     return this.run(async (db) => {
       const result = await db.query<{ id: string }>(
-        `SELECT id FROM ${this.prefix}draft_articles ORDER BY id`,
+        `SELECT id FROM ${this.prefix}articles ORDER BY id`,
       );
       return result.rows.map((row) => row.id);
     });
@@ -120,7 +120,7 @@ export class DsqlDraftCheckpointRepository
     return this.run(async (db) => {
       const article = (
         await db.query<{ generation: number; head: number }>(
-          `SELECT generation, head FROM ${this.prefix}draft_articles WHERE id = $1`,
+          `SELECT generation, head FROM ${this.prefix}articles WHERE id = $1`,
           [articleId],
         )
       ).rows[0];
@@ -256,7 +256,7 @@ export class DsqlDraftCheckpointRepository
         }
         const article = (
           await db.query<{ head: number }>(
-            `SELECT head FROM ${this.prefix}draft_articles WHERE id = $1`,
+            `SELECT head FROM ${this.prefix}articles WHERE id = $1`,
             [articleId],
           )
         ).rows[0];

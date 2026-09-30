@@ -44,7 +44,7 @@ class ScrapboxHashtagRepairTest < Minitest::Test
     assert_equal 2, @store.read(ID, {}).fetch("head")
     assert_equal 2, @store.publication_revision
     db = SQLite3::Database.new(@root.join("drafts.sqlite3").to_s)
-    assert_equal 0, db.get_first_value("SELECT count(*) FROM draft_webmention_requests")
+    assert_equal 0, db.get_first_value("SELECT count(*) FROM article_webmention_requests")
   ensure
     db&.close
   end

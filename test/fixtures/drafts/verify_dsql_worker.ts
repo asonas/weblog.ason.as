@@ -33,7 +33,7 @@ try {
   await setup.query(`CREATE TABLE ${schema}.draft_cutover_operations (id TEXT PRIMARY KEY, kind TEXT NOT NULL, phase TEXT NOT NULL, started_at TEXT NOT NULL)`);
   await setup.query(`INSERT INTO ${schema}.draft_cutover_state (id, phase) VALUES (1, 'frozen')`);
   await setup.query(
-    `CREATE TABLE ${schema}.draft_articles (id TEXT PRIMARY KEY, generation INTEGER NOT NULL, head INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+    `CREATE TABLE ${schema}.articles (id TEXT PRIMARY KEY, generation INTEGER NOT NULL, head INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   );
   await setup.query(
     `CREATE TABLE ${schema}.draft_updates (article_id TEXT NOT NULL, update_id TEXT NOT NULL, sequence INTEGER NOT NULL, digest TEXT NOT NULL, fingerprint TEXT NOT NULL, receipt TEXT NOT NULL, chunks INTEGER NOT NULL, PRIMARY KEY (article_id, update_id))`,
@@ -75,7 +75,7 @@ try {
   );
   const now = new Date().toISOString();
   await setup.query(
-    `INSERT INTO ${schema}.draft_articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 1, '{}', $2, $2)`,
+    `INSERT INTO ${schema}.articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 1, '{}', $2, $2)`,
     [articleId, now],
   );
   await setup.query(

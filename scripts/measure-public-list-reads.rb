@@ -12,7 +12,7 @@ class BaselineConnection < WeblogAuthoring::DraftStore::SqliteConnection
   private
 
   def published_window_sql(key:, limit:, before:, after:, kind:, month:, timeline:, placeholder:)
-    sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key FROM draft_publication_heads h JOIN draft_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id LEFT JOIN draft_atom_ids a ON a.article_id = h.article_id"
+    sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key FROM article_publication_heads h JOIN article_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id LEFT JOIN article_atom_ids a ON a.article_id = h.article_id"
     conditions = []
     values = []
     conditions << (kind == "diary" ? "v.body LIKE '%[[日記]]%'" : "v.body NOT LIKE '%[[日記]]%'") if kind
@@ -82,10 +82,10 @@ Dir.mktmpdir("list-reads") do |dir|
       route = "Fixture #{n}"
       body = "公開本文" + ("あ" * 400) + (n % 4 == 0 ? " [[日記]]" : "")
       updated_at = "2026-09-%02dT%02d:00:00Z" % [1 + (n % 28), n % 24]
-      db.execute("INSERT INTO draft_published_versions SELECT ?, ?, content_hash, ?, metadata, ?, created_at, article_created_at FROM draft_published_versions WHERE article_id = ?", [version, id, body, route, target_id])
-      db.execute("INSERT INTO draft_publication_heads SELECT ?, ?, ?, published_at, ? FROM draft_publication_heads WHERE article_id = ?", [id, version, version, updated_at, target_id])
-      db.execute("INSERT INTO draft_publication_routes (route, article_id) VALUES (?, ?)", [route, id])
-      db.execute("INSERT INTO draft_atom_ids (article_id, atom_id) VALUES (?, ?)", [id, "https://example.com/#{route}"]) if n % 5 == 0
+      db.execute("INSERT INTO article_published_versions SELECT ?, ?, content_hash, ?, metadata, ?, created_at, article_created_at FROM article_published_versions WHERE article_id = ?", [version, id, body, route, target_id])
+      db.execute("INSERT INTO article_publication_heads SELECT ?, ?, ?, published_at, ? FROM article_publication_heads WHERE article_id = ?", [id, version, version, updated_at, target_id])
+      db.execute("INSERT INTO article_publication_routes (route, article_id) VALUES (?, ?)", [route, id])
+      db.execute("INSERT INTO article_atom_ids (article_id, atom_id) VALUES (?, ?)", [id, "https://example.com/#{route}"]) if n % 5 == 0
     end
   end
   db.close

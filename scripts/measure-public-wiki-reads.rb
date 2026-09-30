@@ -34,12 +34,12 @@ Dir.mktmpdir("wiki-reads") do |dir|
       id = "%032x" % n
       version = "fixture-version-#{n}"
       route = "Fixture #{n}"
-      db.execute("INSERT INTO draft_published_versions SELECT ?, ?, content_hash, body, metadata, ?, created_at, article_created_at FROM draft_published_versions WHERE article_id = ?", [version, id, route, target_id])
-      db.execute("INSERT INTO draft_publication_heads SELECT ?, ?, ?, published_at, updated_at FROM draft_publication_heads WHERE article_id = ?", [id, version, version, target_id])
-      db.execute("INSERT INTO draft_publication_routes (route, article_id) VALUES (?, ?)", [route, id])
+      db.execute("INSERT INTO article_published_versions SELECT ?, ?, content_hash, body, metadata, ?, created_at, article_created_at FROM article_published_versions WHERE article_id = ?", [version, id, route, target_id])
+      db.execute("INSERT INTO article_publication_heads SELECT ?, ?, ?, published_at, updated_at FROM article_publication_heads WHERE article_id = ?", [id, version, version, target_id])
+      db.execute("INSERT INTO article_publication_routes (route, article_id) VALUES (?, ?)", [route, id])
     end
   end
-  plan = db.execute("EXPLAIN QUERY PLAN SELECT v.*, h.published_at, h.updated_at FROM draft_publication_routes r JOIN draft_publication_heads h ON h.article_id = r.article_id JOIN draft_published_versions v ON v.id = h.active_id AND v.article_id = h.article_id WHERE r.route IN (?) AND v.route = r.route", ["KORG multi/poly"])
+  plan = db.execute("EXPLAIN QUERY PLAN SELECT v.*, h.published_at, h.updated_at FROM article_publication_routes r JOIN article_publication_heads h ON h.article_id = r.article_id JOIN article_published_versions v ON v.id = h.active_id AND v.article_id = h.article_id WHERE r.route IN (?) AND v.route = r.route", ["KORG multi/poly"])
   db.close
 
   reader = WeblogAuthoring::PublishedArticleReader.new(store:, database: Database.new)

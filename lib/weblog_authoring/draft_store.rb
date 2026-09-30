@@ -4,6 +4,7 @@ require "base64"
 require "digest"
 require "json"
 require "time"
+require_relative "article_table_rename"
 require_relative "cover_image"
 require_relative "draft_publications"
 require_relative "draft_output_store"
@@ -79,13 +80,14 @@ module WeblogAuthoring
 
     def setup!
       @connect.call do |db|
+        ArticleTableRename.new(db).require_current_schema!
         setup_publications(db)
         setup_outputs(db)
         setup_renames(db)
         setup_migration(db)
         setup_dispatches(db)
         setup_webmentions(db)
-        db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_articles (id TEXT PRIMARY KEY, generation INTEGER NOT NULL, head INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
+        db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}articles (id TEXT PRIMARY KEY, generation INTEGER NOT NULL, head INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_working_hashes (article_id TEXT PRIMARY KEY, head INTEGER NOT NULL, content_hash TEXT NOT NULL)")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_updates (article_id TEXT NOT NULL, update_id TEXT NOT NULL, sequence INTEGER NOT NULL, digest TEXT NOT NULL, fingerprint TEXT NOT NULL, receipt TEXT NOT NULL, chunks INTEGER NOT NULL, PRIMARY KEY (article_id, update_id))")
         db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_chunks (article_id TEXT NOT NULL, update_id TEXT NOT NULL, position INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (article_id, update_id, position))")
@@ -103,7 +105,7 @@ module WeblogAuthoring
         db.transaction do
           metadata = DEFAULT_METADATA.transform_values { |value| { "value" => value, "revision" => 0 } }
           now = Time.now.utc.iso8601(6)
-          db.query("INSERT INTO #{db.prefix}draft_articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING", [id, JSON.generate(metadata), now])
+          db.query("INSERT INTO #{db.prefix}articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING", [id, JSON.generate(metadata), now])
           document(db, id)
         end
       end
@@ -119,7 +121,7 @@ module WeblogAuthoring
 
     def administration_page(cursor = nil)
       @connect.call do |db|
-        sql = "SELECT a.id, a.head, a.metadata, a.created_at, a.updated_at, h.published_at, h.latest_id, v.route AS public_route, v.content_hash AS public_hash, w.head AS working_hash_head, w.content_hash AS working_hash FROM #{db.prefix}draft_articles a LEFT JOIN #{db.prefix}draft_publication_heads h ON h.article_id = a.id LEFT JOIN #{db.prefix}draft_published_versions v ON v.id = h.active_id LEFT JOIN #{db.prefix}draft_working_hashes w ON w.article_id = a.id"
+        sql = "SELECT a.id, a.head, a.metadata, a.created_at, a.updated_at, h.published_at, h.latest_id, v.route AS public_route, v.content_hash AS public_hash, w.head AS working_hash_head, w.content_hash AS working_hash FROM #{db.prefix}articles a LEFT JOIN #{db.prefix}article_publication_heads h ON h.article_id = a.id LEFT JOIN #{db.prefix}article_published_versions v ON v.id = h.active_id LEFT JOIN #{db.prefix}draft_working_hashes w ON w.article_id = a.id"
         params = []
         if cursor
           sql += " WHERE a.updated_at < $1 OR (a.updated_at = $1 AND a.id > $2)"
@@ -148,16 +150,16 @@ module WeblogAuthoring
         db.transaction do
           owner = db.query(<<~SQL, [date]).first
             SELECT routes.article_id
-            FROM #{db.prefix}draft_publication_routes routes
-            JOIN #{db.prefix}draft_publication_heads heads ON heads.article_id = routes.article_id
-            JOIN #{db.prefix}draft_published_versions versions ON versions.id = heads.active_id
+            FROM #{db.prefix}article_publication_routes routes
+            JOIN #{db.prefix}article_publication_heads heads ON heads.article_id = routes.article_id
+            JOIN #{db.prefix}article_published_versions versions ON versions.id = heads.active_id
             WHERE routes.route = $1 AND versions.route = $1
           SQL
           next owner.fetch("article_id") if owner
           cursor = ""
           found = nil
           loop do
-            rows = db.query("SELECT id, metadata FROM #{db.prefix}draft_articles WHERE id > $1 ORDER BY id LIMIT 25", [cursor])
+            rows = db.query("SELECT id, metadata FROM #{db.prefix}articles WHERE id > $1 ORDER BY id LIMIT 25", [cursor])
             found = rows.find do |row|
               metadata = JSON.parse(row.fetch("metadata")).transform_values { |field| field.fetch("value") }
               metadata["page_type"] == "date" && self.class.working_route(metadata) == date
@@ -172,7 +174,7 @@ module WeblogAuthoring
           loop do
             hex = Digest::SHA256.hexdigest("draft-diary:#{date}:#{attempt}")[0, 32]
             id = [hex[0, 8], hex[8, 4], hex[12, 4], hex[16, 4], hex[20, 12]].join("-")
-            db.query("INSERT INTO #{db.prefix}draft_articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING", [id, JSON.generate(metadata), now])
+            db.query("INSERT INTO #{db.prefix}articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING", [id, JSON.generate(metadata), now])
             stored = document(db, id).fetch("metadata").transform_values { |field| field.fetch("value") }
             break id if stored["page_type"] == "date" && self.class.working_route(stored) == date
             # A previous daily draft may have been renamed before publication.
@@ -280,12 +282,12 @@ module WeblogAuthoring
           end
 
           metadata = merge_metadata(current.fetch("metadata"), changes)
-          if (changes.keys & %w[title page_type page_date]).any? && db.query("SELECT active_id FROM #{db.prefix}draft_publication_heads WHERE article_id = $1 AND active_id IS NOT NULL", [id]).any?
+          if (changes.keys & %w[title page_type page_date]).any? && db.query("SELECT active_id FROM #{db.prefix}article_publication_heads WHERE article_id = $1 AND active_id IS NOT NULL", [id]).any?
             reserve_working_route(db, id, self.class.working_route(metadata.transform_values { |field| field.fetch("value") }))
           end
           sequence = current.fetch("head") + 1
           now = Time.now.utc.iso8601(6)
-          rows = db.query("UPDATE #{db.prefix}draft_articles SET head = $1, metadata = $2, updated_at = $3 WHERE id = $4 AND head = $5 RETURNING head", [sequence, JSON.generate(metadata), now, id, sequence - 1])
+          rows = db.query("UPDATE #{db.prefix}articles SET head = $1, metadata = $2, updated_at = $3 WHERE id = $4 AND head = $5 RETURNING head", [sequence, JSON.generate(metadata), now, id, sequence - 1])
           raise Error.new("Draft changed; retry this update", 409) if rows.empty?
           receipt = { "update_id" => update_id, "digest" => digest, "sequence" => sequence, "generation" => 1, "metadata" => metadata }
           chunks = (data.bytesize + CHUNK_BYTES - 1) / CHUNK_BYTES
@@ -526,7 +528,7 @@ module WeblogAuthoring
     end
 
     def document(db, id)
-      row = db.query("SELECT * FROM #{db.prefix}draft_articles WHERE id = $1", [id]).first
+      row = db.query("SELECT * FROM #{db.prefix}articles WHERE id = $1", [id]).first
       raise Error.new("Draft not found", 404) unless row
       { "id" => id, "generation" => row.fetch("generation").to_i, "protocol" => 1, "head" => row.fetch("head").to_i,
         "metadata" => DEFAULT_METADATA.transform_values { |value| { "value" => value, "revision" => 0 } }.merge(JSON.parse(row.fetch("metadata"))), "created_at" => row.fetch("created_at"), "updated_at" => row.fetch("updated_at"), }
@@ -555,6 +557,7 @@ module WeblogAuthoring
     class SqliteConnection
       def initialize(connection) = @connection = connection
       def prefix = ""
+      def table_names = query("SELECT name FROM sqlite_master WHERE type = 'table'").map { |row| row.fetch("name") }
       def query(sql, values = []) = @connection.execute(sql, values)
       def transaction(&block) = @connection.transaction(:immediate, &block)
 
@@ -580,7 +583,7 @@ module WeblogAuthoring
       end
 
       def published_window_sql(key:, limit:, before:, after:, kind:, month:, timeline:, placeholder:)
-        from = "FROM draft_publication_heads h JOIN draft_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id"
+        from = "FROM article_publication_heads h JOIN article_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id"
         conditions = []
         values = []
         if kind
@@ -603,10 +606,10 @@ module WeblogAuthoring
         if limit
           values << limit
           sql = "WITH selected AS (SELECT v.id, v.article_id, h.published_at, h.updated_at, #{key} AS listing_key #{from}#{where} ORDER BY listing_key #{order}, v.article_id #{order} LIMIT #{placeholder}) "
-          sql += "SELECT v.*, selected.published_at, selected.updated_at, a.atom_id, selected.listing_key FROM selected JOIN draft_published_versions v ON v.id = selected.id LEFT JOIN draft_atom_ids a ON a.article_id = selected.article_id"
+          sql += "SELECT v.*, selected.published_at, selected.updated_at, a.atom_id, selected.listing_key FROM selected JOIN article_published_versions v ON v.id = selected.id LEFT JOIN article_atom_ids a ON a.article_id = selected.article_id"
           sql += " ORDER BY selected.listing_key #{order}, selected.article_id #{order}"
         else
-          sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key #{from} LEFT JOIN draft_atom_ids a ON a.article_id = h.article_id#{where}"
+          sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key #{from} LEFT JOIN article_atom_ids a ON a.article_id = h.article_id#{where}"
           sql += " ORDER BY #{key} #{order}, v.article_id #{order}"
         end
         [sql, values]
@@ -616,6 +619,7 @@ module WeblogAuthoring
     class PostgresConnection
       def initialize(connection) = @connection = connection
       def prefix = "weblog_authoring."
+      def table_names = query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'weblog_authoring'").map { |row| row.fetch("table_name") }
       def query(sql, values = []) = @connection.exec_params(sql, values).to_a
       def transaction(&block) = @connection.transaction(&block)
 
@@ -652,16 +656,16 @@ module WeblogAuthoring
           values.concat([cursor_key, cursor.fetch(:id)])
           conditions << "(#{key} #{operator} $#{values.length - 1} OR (#{key} = $#{values.length - 1} AND v.article_id #{operator} $#{values.length}))"
         end
-        from = "FROM weblog_authoring.draft_publication_heads h JOIN weblog_authoring.draft_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id"
+        from = "FROM weblog_authoring.article_publication_heads h JOIN weblog_authoring.article_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id"
         where = conditions.empty? ? "" : " WHERE #{conditions.join(' AND ')}"
         order = after ? "ASC" : "DESC"
         if limit
           values << limit
           sql = "WITH selected AS (SELECT v.id, v.article_id, h.published_at, h.updated_at, #{key} AS listing_key #{from}#{where} ORDER BY listing_key #{order}, v.article_id #{order} LIMIT $#{values.length}) "
-          sql += "SELECT v.*, selected.published_at, selected.updated_at, a.atom_id, selected.listing_key FROM selected JOIN weblog_authoring.draft_published_versions v ON v.id = selected.id LEFT JOIN weblog_authoring.draft_atom_ids a ON a.article_id = selected.article_id"
+          sql += "SELECT v.*, selected.published_at, selected.updated_at, a.atom_id, selected.listing_key FROM selected JOIN weblog_authoring.article_published_versions v ON v.id = selected.id LEFT JOIN weblog_authoring.article_atom_ids a ON a.article_id = selected.article_id"
           sql += " ORDER BY selected.listing_key #{order}, selected.article_id #{order}"
         else
-          sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key #{from} LEFT JOIN weblog_authoring.draft_atom_ids a ON a.article_id = h.article_id#{where}"
+          sql = "SELECT v.*, h.published_at, h.updated_at, a.atom_id, #{key} AS listing_key #{from} LEFT JOIN weblog_authoring.article_atom_ids a ON a.article_id = h.article_id#{where}"
           sql += " ORDER BY #{key} #{order}, v.article_id #{order}"
         end
         rows = @connection.exec_params(sql, values).to_a

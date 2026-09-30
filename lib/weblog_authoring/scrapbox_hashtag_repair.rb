@@ -65,7 +65,7 @@ module WeblogAuthoring
       @connect.call do |db|
         db.transaction do
           current = document(db, id)
-          head = db.query("SELECT * FROM #{db.prefix}draft_publication_heads WHERE article_id = $1", [id]).first
+          head = db.query("SELECT * FROM #{db.prefix}article_publication_heads WHERE article_id = $1", [id]).first
           if head && head["active_id"] == version
             repaired = snapshot_from(db, id, version)
             raise Error, "Repair version differs" unless repaired.fetch("body") == plan.fetch("body") && repaired.fetch("content_hash") == plan.fetch("content_hash")
@@ -79,7 +79,7 @@ module WeblogAuthoring
           raise Error.new("Published body changed", 409) unless stored.except("html_key", "html_digest", "updated_at", "published_at") == original.except("html_key", "html_digest", "updated_at", "published_at")
           sequence = current.fetch("head") + 1
           # Representation repairs preserve article chronology in both working and published heads.
-          changed = db.query("UPDATE #{db.prefix}draft_articles SET head = $1 WHERE id = $2 AND head = $3 RETURNING head", [sequence, id, current.fetch("head")])
+          changed = db.query("UPDATE #{db.prefix}articles SET head = $1 WHERE id = $2 AND head = $3 RETURNING head", [sequence, id, current.fetch("head")])
           raise Error.new("Draft changed", 409) if changed.empty?
           receipt = { "update_id" => version, "digest" => update.fetch("digest"), "sequence" => sequence, "generation" => 1, "metadata" => current.fetch("metadata") }
           chunks = (data.bytesize + CHUNK_BYTES - 1) / CHUNK_BYTES
@@ -88,12 +88,12 @@ module WeblogAuthoring
           end
           fingerprint = update_fingerprint(update.fetch("digest"), update.fetch("body_bytes"), {})
           db.query("INSERT INTO #{db.prefix}draft_updates (article_id, update_id, sequence, digest, fingerprint, receipt, chunks) VALUES ($1, $2, $3, $4, $5, $6, $7)", [id, version, sequence, update.fetch("digest"), fingerprint, JSON.generate(receipt), chunks])
-          db.query("INSERT INTO #{db.prefix}draft_published_versions (id, article_id, content_hash, body, metadata, route, created_at, article_created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [version, id, plan.fetch("content_hash"), plan.fetch("body"), JSON.generate(original.fetch("metadata")), original.fetch("route"), original.fetch("created_at"), original.fetch("article_created_at")])
-          db.query("UPDATE #{db.prefix}draft_publication_heads SET active_id = $1, latest_id = $1 WHERE article_id = $2", [version, id])
-          db.query("INSERT INTO #{db.prefix}draft_publication_jobs (id, article_id, status, html_key) VALUES ($1, $2, 'completed', $3)", [version, id, artifact.fetch("html_key")])
-          db.query("INSERT INTO #{db.prefix}draft_html_outputs (article_id, version_id, html_key, html_digest) VALUES ($1, $2, $3, $4) ON CONFLICT (article_id) DO UPDATE SET version_id = $2, html_key = $3, html_digest = $4", [id, version, artifact.fetch("html_key"), artifact.fetch("html_digest")])
+          db.query("INSERT INTO #{db.prefix}article_published_versions (id, article_id, content_hash, body, metadata, route, created_at, article_created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [version, id, plan.fetch("content_hash"), plan.fetch("body"), JSON.generate(original.fetch("metadata")), original.fetch("route"), original.fetch("created_at"), original.fetch("article_created_at")])
+          db.query("UPDATE #{db.prefix}article_publication_heads SET active_id = $1, latest_id = $1 WHERE article_id = $2", [version, id])
+          db.query("INSERT INTO #{db.prefix}article_publication_jobs (id, article_id, status, html_key) VALUES ($1, $2, 'completed', $3)", [version, id, artifact.fetch("html_key")])
+          db.query("INSERT INTO #{db.prefix}article_html_outputs (article_id, version_id, html_key, html_digest) VALUES ($1, $2, $3, $4) ON CONFLICT (article_id) DO UPDATE SET version_id = $2, html_key = $3, html_digest = $4", [id, version, artifact.fetch("html_key"), artifact.fetch("html_digest")])
           db.query("INSERT INTO #{db.prefix}draft_working_hashes (article_id, head, content_hash) VALUES ($1, $2, $3) ON CONFLICT (article_id) DO UPDATE SET head = $2, content_hash = $3", [id, sequence, plan.fetch("content_hash")])
-          db.query("UPDATE #{db.prefix}draft_publication_clock SET revision = revision + 1 WHERE id = 1")
+          db.query("UPDATE #{db.prefix}article_publication_clock SET revision = revision + 1 WHERE id = 1")
           "repaired"
         end
       end

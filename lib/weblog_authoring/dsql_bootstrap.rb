@@ -5,6 +5,7 @@ require "openssl"
 ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
 
 require "aurora_dsql_pg"
+require_relative "article_table_rename"
 
 module WeblogAuthoring
   class DsqlBootstrap
@@ -19,6 +20,14 @@ module WeblogAuthoring
 
     def run
       connection = @connector.connect(host: @host)
+      old_tables = ArticleTableRename::TABLES.keys
+      placeholders = old_tables.each_index.map { |index| "$#{index + 2}" }.join(", ")
+      if connection.exec_params(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name IN (#{placeholders})",
+        [SCHEMA, *old_tables]
+      ).ntuples.positive?
+        raise "Article tables need an explicit rename; run bin/rename-article-tables before bootstrap"
+      end
       create_database_role(connection)
       grant_iam_role(connection)
       create_schema(connection)
@@ -246,7 +255,7 @@ module WeblogAuthoring
         )
       SQL
       connection.exec(<<~SQL)
-        CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_articles (
+        CREATE TABLE IF NOT EXISTS #{SCHEMA}.articles (
           id TEXT PRIMARY KEY,
           generation INTEGER NOT NULL,
           head INTEGER NOT NULL,
@@ -255,22 +264,22 @@ module WeblogAuthoring
           updated_at TEXT NOT NULL
         )
       SQL
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_published_versions (id TEXT PRIMARY KEY, article_id TEXT NOT NULL, content_hash TEXT NOT NULL, body TEXT NOT NULL, metadata TEXT NOT NULL, route TEXT NOT NULL, created_at TEXT NOT NULL, article_created_at TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_published_versions (id TEXT PRIMARY KEY, article_id TEXT NOT NULL, content_hash TEXT NOT NULL, body TEXT NOT NULL, metadata TEXT NOT NULL, route TEXT NOT NULL, created_at TEXT NOT NULL, article_created_at TEXT NOT NULL)")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_working_hashes (article_id TEXT PRIMARY KEY, head INTEGER NOT NULL, content_hash TEXT NOT NULL)")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_publication_jobs (id TEXT PRIMARY KEY, article_id TEXT NOT NULL, status TEXT NOT NULL, html_key TEXT, error TEXT)")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_webmention_requests (article_id TEXT NOT NULL, version_id TEXT NOT NULL, targets TEXT, status TEXT NOT NULL, PRIMARY KEY (article_id, version_id))")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_publication_heads (article_id TEXT PRIMARY KEY, latest_id TEXT NOT NULL, active_id TEXT, published_at TEXT, updated_at TEXT)")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_publication_receipts (article_id TEXT NOT NULL, request_id TEXT NOT NULL, fingerprint TEXT NOT NULL, response TEXT NOT NULL, PRIMARY KEY (article_id, request_id))")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_publication_routes (route TEXT PRIMARY KEY, article_id TEXT NOT NULL)")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_publication_clock (id INTEGER PRIMARY KEY, revision INTEGER NOT NULL)")
-      connection.exec("INSERT INTO #{SCHEMA}.draft_publication_clock (id, revision) VALUES (1, 0) ON CONFLICT (id) DO NOTHING")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_publication_stages (article_id TEXT NOT NULL, version_id TEXT NOT NULL, stage TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL, token TEXT NOT NULL, next_attempt_at TEXT, error TEXT, completed_at TEXT, PRIMARY KEY (article_id, version_id, stage))")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_output_heads (stage TEXT PRIMARY KEY, revision INTEGER NOT NULL, object_key TEXT NOT NULL, digest TEXT NOT NULL)")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_html_outputs (article_id TEXT PRIMARY KEY, version_id TEXT NOT NULL, html_key TEXT NOT NULL, html_digest TEXT NOT NULL)")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_route_reservations (route TEXT PRIMARY KEY, article_id TEXT NOT NULL)")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_redirects (route TEXT PRIMARY KEY, article_id TEXT NOT NULL)")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_rename_batches (id TEXT PRIMARY KEY, revision INTEGER NOT NULL)")
-      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_rename_members (batch_id TEXT NOT NULL, article_id TEXT NOT NULL, version_id TEXT NOT NULL, previous_id TEXT NOT NULL, html_key TEXT, PRIMARY KEY (batch_id, article_id))")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_jobs (id TEXT PRIMARY KEY, article_id TEXT NOT NULL, status TEXT NOT NULL, html_key TEXT, error TEXT)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_webmention_requests (article_id TEXT NOT NULL, version_id TEXT NOT NULL, targets TEXT, status TEXT NOT NULL, PRIMARY KEY (article_id, version_id))")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_heads (article_id TEXT PRIMARY KEY, latest_id TEXT NOT NULL, active_id TEXT, published_at TEXT, updated_at TEXT)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_receipts (article_id TEXT NOT NULL, request_id TEXT NOT NULL, fingerprint TEXT NOT NULL, response TEXT NOT NULL, PRIMARY KEY (article_id, request_id))")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_routes (route TEXT PRIMARY KEY, article_id TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_clock (id INTEGER PRIMARY KEY, revision INTEGER NOT NULL)")
+      connection.exec("INSERT INTO #{SCHEMA}.article_publication_clock (id, revision) VALUES (1, 0) ON CONFLICT (id) DO NOTHING")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_stages (article_id TEXT NOT NULL, version_id TEXT NOT NULL, stage TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL, token TEXT NOT NULL, next_attempt_at TEXT, error TEXT, completed_at TEXT, PRIMARY KEY (article_id, version_id, stage))")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_output_heads (stage TEXT PRIMARY KEY, revision INTEGER NOT NULL, object_key TEXT NOT NULL, digest TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_html_outputs (article_id TEXT PRIMARY KEY, version_id TEXT NOT NULL, html_key TEXT NOT NULL, html_digest TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_route_reservations (route TEXT PRIMARY KEY, article_id TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_redirects (route TEXT PRIMARY KEY, article_id TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_rename_batches (id TEXT PRIMARY KEY, revision INTEGER NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_rename_members (batch_id TEXT NOT NULL, article_id TEXT NOT NULL, version_id TEXT NOT NULL, previous_id TEXT NOT NULL, html_key TEXT, PRIMARY KEY (batch_id, article_id))")
       connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.draft_updates (
           article_id TEXT NOT NULL,

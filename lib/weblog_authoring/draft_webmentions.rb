@@ -5,33 +5,33 @@ require_relative "webmention_targets"
 module WeblogAuthoring
   module DraftWebmentionStore
     def setup_webmentions(db)
-      db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}draft_webmention_requests (article_id TEXT NOT NULL, version_id TEXT NOT NULL, targets TEXT, status TEXT NOT NULL, PRIMARY KEY (article_id, version_id))")
+      db.query("CREATE TABLE IF NOT EXISTS #{db.prefix}article_webmention_requests (article_id TEXT NOT NULL, version_id TEXT NOT NULL, targets TEXT, status TEXT NOT NULL, PRIMARY KEY (article_id, version_id))")
     end
 
     def webmention_requests(id = nil)
       @connect.call do |db|
-        db.query("SELECT * FROM #{db.prefix}draft_webmention_requests" + (id ? " WHERE article_id = $1" : " WHERE status = 'pending' LIMIT 100"), id ? [id] : [])
+        db.query("SELECT * FROM #{db.prefix}article_webmention_requests" + (id ? " WHERE article_id = $1" : " WHERE status = 'pending' LIMIT 100"), id ? [id] : [])
       end
     end
 
     def request_webmentions(id, version_id, targets)
       @connect.call do |db|
         db.transaction do
-          head = db.query("SELECT active_id FROM #{db.prefix}draft_publication_heads WHERE article_id = $1", [id]).first
+          head = db.query("SELECT active_id FROM #{db.prefix}article_publication_heads WHERE article_id = $1", [id]).first
           raise DraftStore::Error.new("公開版が変わりました。記事を保存してから送信してください。", 409) unless head && head["active_id"] == version_id
-          db.query("UPDATE #{db.prefix}draft_publication_heads SET active_id = active_id WHERE article_id = $1", [id])
-          db.query("INSERT INTO #{db.prefix}draft_webmention_requests (article_id, version_id, targets, status) VALUES ($1, $2, $3, 'pending') ON CONFLICT (article_id, version_id) DO NOTHING", [id, version_id, JSON.generate(targets)])
+          db.query("UPDATE #{db.prefix}article_publication_heads SET active_id = active_id WHERE article_id = $1", [id])
+          db.query("INSERT INTO #{db.prefix}article_webmention_requests (article_id, version_id, targets, status) VALUES ($1, $2, $3, 'pending') ON CONFLICT (article_id, version_id) DO NOTHING", [id, version_id, JSON.generate(targets)])
         end
       end
     end
 
     def complete_webmention_request(id, version_id)
-      @connect.call { |db| db.query("UPDATE #{db.prefix}draft_webmention_requests SET status = 'queued' WHERE article_id = $1 AND version_id = $2", [id, version_id]) }
+      @connect.call { |db| db.query("UPDATE #{db.prefix}article_webmention_requests SET status = 'queued' WHERE article_id = $1 AND version_id = $2", [id, version_id]) }
     end
 
     def first_published_snapshot(id)
       @connect.call do |db|
-        row = db.query("SELECT v.id FROM #{db.prefix}draft_published_versions v JOIN #{db.prefix}draft_publication_jobs j ON j.id = v.id WHERE v.article_id = $1 AND j.status = 'completed' ORDER BY v.created_at, v.id LIMIT 1", [id]).first
+        row = db.query("SELECT v.id FROM #{db.prefix}article_published_versions v JOIN #{db.prefix}article_publication_jobs j ON j.id = v.id WHERE v.article_id = $1 AND j.status = 'completed' ORDER BY v.created_at, v.id LIMIT 1", [id]).first
         row && snapshot_from(db, id, row.fetch("id"))
       end
     end
