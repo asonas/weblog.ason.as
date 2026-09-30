@@ -15,6 +15,7 @@ struct SettingsView: View {
           if paired {
             Label("接続済み", systemImage: "checkmark.circle.fill")
               .foregroundStyle(.green)
+            Button("接続し直す") { paired = false }
           } else {
             TextField("12文字のペアリングコード", text: $pairingCode)
               .textInputAutocapitalization(.characters)

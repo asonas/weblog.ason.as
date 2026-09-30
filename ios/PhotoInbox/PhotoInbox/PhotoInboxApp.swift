@@ -36,8 +36,13 @@ struct PhotoInboxApp: App {
 
   var body: some Scene {
     WindowGroup {
-      PhotoGridView(library: library, uploads: uploads, selection: selection)
-        .task { await uploads.restoreAndRetry() }
+      TabView {
+        PhotoGridView(library: library, uploads: uploads, selection: selection)
+          .tabItem { Label("写真", systemImage: "photo") }
+        MemoListView()
+          .tabItem { Label("メモ", systemImage: "note.text") }
+      }
+      .task { await uploads.restoreAndRetry() }
     }
   }
 }

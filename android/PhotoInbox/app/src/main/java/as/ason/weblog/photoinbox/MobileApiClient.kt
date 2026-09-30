@@ -80,11 +80,23 @@ class MobileApiClient(
         post("api/mobile/uploads/$uploadId/complete", "{}", true)
     }
 
-    private suspend fun post(path: String, json: String, authenticated: Boolean): String =
+    suspend fun memos(): List<RemoteMemo> =
+        problemJson.decodeFromString<MemoListResponse>(post("api/mobile/memos", "", true, "GET")).memos
+
+    suspend fun saveMemo(id: String, operation: MemoOperation): MemoReceipt {
+        val payload = buildJsonObject {
+            put("operation_id", operation.operationId)
+            put("expected_revision", operation.expectedRevision)
+            if (!operation.deleting) put("body", operation.body)
+        }
+        return problemJson.decodeFromString(post("api/mobile/memos/$id", payload.toString(), true, if (operation.deleting) "DELETE" else "PUT"))
+    }
+
+    private suspend fun post(path: String, json: String, authenticated: Boolean, method: String = "POST"): String =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(baseUrl.resolve(path) ?: throw MobileApiException("Invalid API path"))
-                .post(json.toRequestBody(JSON_MEDIA_TYPE))
+                .method(method, if (method == "GET") null else json.toRequestBody(JSON_MEDIA_TYPE))
                 .header("Accept", "application/json, application/problem+json")
                 .apply {
                     if (authenticated) {
@@ -97,7 +109,8 @@ class MobileApiClient(
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     val problem = runCatching { problemJson.decodeFromString<ProblemDetails>(body) }.getOrNull()
-                    throw MobileApiException(problemMessage(problem?.code), response.code, problem)
+                    val message = if (path.startsWith("api/mobile/memos")) "メモの通信を確認できませんでした（${response.code}）。" else problemMessage(problem?.code)
+                    throw MobileApiException(message, response.code, problem)
                 }
                 body
             }

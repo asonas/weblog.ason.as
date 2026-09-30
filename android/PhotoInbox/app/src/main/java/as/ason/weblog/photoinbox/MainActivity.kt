@@ -8,6 +8,10 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.widget.Toast
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -41,7 +45,25 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        val memoPanel = MemoPanel(this) { showPairing() }.apply { visibility = View.GONE }
+        val pages = FrameLayout(this).apply {
+            addView(binding.root)
+            addView(memoPanel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        }
+        val tabs = LinearLayout(this)
+        tabs.addView(Button(this).apply {
+            text = "写真"
+            setOnClickListener { binding.root.visibility = View.VISIBLE; memoPanel.visibility = View.GONE }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        tabs.addView(Button(this).apply {
+            text = "メモ"
+            setOnClickListener { binding.root.visibility = View.GONE; memoPanel.visibility = View.VISIBLE }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        setContentView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(pages, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(tabs)
+        })
         selection = PhotoSelectionStore(this)
         adapter = PhotoAdapter(this, lifecycleScope, selection::status, { failures[it] }, { isSending }) {
             if (failures.containsKey(it)) showFailure(it) else {
