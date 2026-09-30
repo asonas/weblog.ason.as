@@ -60,6 +60,8 @@ The PostgreSQL adapter accepts an Aurora DSQL pool with OCC retries. The canonic
 
 - API integration: `mise exec -- ruby -S bundle exec ruby -Itest test/authoring/test_drafts.rb`
 - Browser integration: `mise exec -- node test/browser/draft_editor.mjs`
+- Cover image selection and persistence: `mise exec -- node test/browser/draft_cover.mjs`
+- Inbox video visibility: `mise exec -- node test/browser/draft_inbox.mjs`
 - Type checks: `mise exec -- npm run typecheck` and `mise exec -- ruby -S bundle exec steep check`
 
 The browser test requires installed Chrome and permission to bind loopback ports 18082 and 15182. It starts an isolated temporary SQLite backend and Vite, verifies IndexedDB and fresh-browser recovery, selective local Undo/Redo, delayed acknowledgment with intervening edits, resumable upload identity, explicit recovery into a new isolated draft, oversized-input retention and public-data isolation, then stops its child servers. It does not contact AWS or use the author's real draft database.

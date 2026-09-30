@@ -245,6 +245,7 @@ export function DraftInbox({
           const columnItems = items.filter(
             (item) => item.source === source && (!kind || item.kind === kind),
           );
+          if (source === "video" && columnItems.length === 0) return null;
           return (
             <section
               className="draft-inbox__column"

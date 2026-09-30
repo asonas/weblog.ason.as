@@ -596,6 +596,42 @@ html[data-draft-workspace="true"] body {
   object-fit: cover;
   margin-block-start: var(--space-4);
 }
+.draft-cover-settings .draft-cover-settings__choices {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+}
+.draft-cover-settings__choices legend {
+  font-size: 0.875rem;
+}
+.draft-cover-settings__choices p {
+  grid-column: 1 / -1;
+  font-size: 0.875rem;
+  margin: 0;
+}
+.draft-cover-settings .draft-cover-settings__choice {
+  align-items: start;
+  border: 1px solid var(--separator);
+  border-radius: 4px;
+}
+.draft-cover-settings__choice[data-selected="true"] {
+  outline: 2px solid var(--authoring-ink);
+  outline-offset: -2px;
+}
+.draft-cover-settings__choice:focus-within {
+  outline: 2px solid var(--authoring-ink);
+  outline-offset: 2px;
+}
+.draft-cover-settings__choice:has(input:disabled) {
+  cursor: default;
+}
+.draft-cover-settings__choice img {
+  display: block;
+  inline-size: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  background: var(--quiet-fill);
+}
 html[data-draft-workspace="true"] .draft-preview__document .site-header {
   position: relative;
   z-index: 4;
