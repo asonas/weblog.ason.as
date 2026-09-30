@@ -2,29 +2,32 @@ package com.asonas.weblog.photoinbox
 
 import android.content.Context
 import android.net.Uri
+import android.graphics.BitmapFactory
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
 class UploadWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result {
-        val token = Credentials(applicationContext).loadToken() ?: return Result.failure()
         val store = queueStore(applicationContext)
+        val items = store.items().filter { it.shouldAttemptAutomatically }
+        if (items.isEmpty()) return Result.success()
+        val token = Credentials(applicationContext).loadToken() ?: return Result.failure()
         val api = MobileApiClient(API_BASE_URL.toHttpUrl(), token)
         var failed = false
-        for (item in store.items()) {
+        for (item in items) {
             try {
                 process(item, store, api)
             } catch (error: Exception) {
-                store.updateStage(
-                    item.clientUploadId,
-                    UploadStage.FAILED,
-                    uploadId = item.uploadId,
-                    errorMessage = error.message ?: error.javaClass.simpleName,
-                )
-                failed = true
+                if (error is CancellationException) throw error
+                val failure = UploadFailure.from(error)
+                store.updateFailure(item.clientUploadId, failure)
+                failed = failed || failure.automaticallyRetryable
             }
+            setProgress(workDataOf("updated_at" to System.nanoTime()))
         }
         return if (failed) Result.retry() else Result.success()
     }
@@ -50,6 +53,8 @@ class UploadWorker(context: Context, parameters: WorkerParameters) : CoroutineWo
                     contentType = photo.contentType,
                     size = photo.size,
                     sha256 = photo.sha256,
+                    width = photo.width,
+                    height = photo.height,
                 ),
             )
         }
@@ -61,6 +66,8 @@ class UploadWorker(context: Context, parameters: WorkerParameters) : CoroutineWo
                 sha256 = prepared.sha256,
                 capturedAt = original.capturedAt,
                 capturedAtSource = original.capturedAtSource,
+                width = prepared.width,
+                height = prepared.height,
             ),
         )
         store.updateStage(original.clientUploadId, UploadStage.UPLOADING, signed.uploadId)
@@ -79,11 +86,15 @@ class UploadWorker(context: Context, parameters: WorkerParameters) : CoroutineWo
     private fun restoredPhoto(item: UploadItem): PreparedPhoto? {
         val file = item.preparedFilePath?.let(::File) ?: return null
         if (!file.exists()) return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        if (item.width == null || item.height == null) BitmapFactory.decodeFile(file.path, bounds)
         return PreparedPhoto(
             file,
             item.contentType ?: return null,
             item.size ?: return null,
             item.sha256 ?: return null,
+            item.width ?: bounds.outWidth.takeIf { it > 0 },
+            item.height ?: bounds.outHeight.takeIf { it > 0 },
         )
     }
 

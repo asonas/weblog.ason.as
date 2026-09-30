@@ -15,9 +15,11 @@ data class PreparedPhoto(
     val contentType: String,
     val size: Long,
     val sha256: String,
+    val width: Int? = null,
+    val height: Int? = null,
 )
 
-class ImagePreparer(private val context: Context) {
+class ImagePreparer(private val context: Context, private val maxBytes: Long = 25L * 1024 * 1024) {
     fun prepare(source: Uri, directory: File, id: UUID): PreparedPhoto {
         val bytes = context.contentResolver.openInputStream(source)?.use { it.readBytes() }
             ?: throw ImagePreparationException("Image is unavailable")
@@ -28,18 +30,32 @@ class ImagePreparer(private val context: Context) {
         val extension = if (hasAlpha) "png" else "jpg"
         val contentType = if (hasAlpha) "image/png" else "image/jpeg"
         val format = if (hasAlpha) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
-        val quality = if (hasAlpha) 100 else 88
         directory.mkdirs()
         val output = File(directory, "${id}.$extension")
-        val compressed = output.outputStream().use { oriented.compress(format, quality, it) }
-        if (!compressed) throw ImagePreparationException("Image conversion failed")
-        val digest = MessageDigest.getInstance("SHA-256").digest(output.readBytes())
-        return PreparedPhoto(
-            file = output,
-            contentType = contentType,
-            size = output.length(),
-            sha256 = digest.joinToString("") { "%02x".format(it) },
-        )
+        try {
+            for (scale in listOf(1.0, 0.85, 0.7, 0.55)) {
+                val image = if (scale == 1.0) oriented else Bitmap.createScaledBitmap(
+                    oriented, maxOf(1, (oriented.width * scale).toInt()), maxOf(1, (oriented.height * scale).toInt()), true,
+                )
+                try {
+                    for (quality in if (hasAlpha) listOf(100) else listOf(82, 70, 58)) {
+                        if (!output.outputStream().use { image.compress(format, quality, it) }) throw ImagePreparationException("Image conversion failed")
+                        if (output.length() > maxBytes) continue
+                        val digest = MessageDigest.getInstance("SHA-256").digest(output.readBytes())
+                        return PreparedPhoto(output, contentType, output.length(), digest.joinToString("") { "%02x".format(it) }, image.width, image.height)
+                    }
+                } finally {
+                    if (image !== oriented) image.recycle()
+                }
+            }
+            throw ImagePreparationException("Image exceeds upload size limit")
+        } catch (error: Exception) {
+            output.delete()
+            throw error
+        } finally {
+            if (oriented !== bitmap) oriented.recycle()
+            bitmap.recycle()
+        }
     }
 
     private fun applyOrientation(bitmap: Bitmap, bytes: ByteArray): Bitmap {

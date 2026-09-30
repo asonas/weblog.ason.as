@@ -3,6 +3,7 @@ package com.asonas.weblog.photoinbox
 import java.io.File
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -28,11 +29,15 @@ data class UploadItem(
     val contentType: String? = null,
     val size: Long? = null,
     val sha256: String? = null,
-)
+    val width: Int? = null,
+    val height: Int? = null,
+    val failure: UploadFailure? = null,
+) {
+    val shouldAttemptAutomatically: Boolean get() = failure?.automaticallyRetryable ?: true
+}
 
 class UploadQueueStore(private val file: File) {
-    private val mutex = Mutex()
-    private var cached: List<UploadItem>? = null
+    private val mutex = locks.computeIfAbsent(file.canonicalPath) { Mutex() }
     private val json = Json { prettyPrint = true }
 
     suspend fun items(): List<UploadItem> = mutex.withLock { load() }
@@ -75,12 +80,33 @@ class UploadQueueStore(private val file: File) {
         save(load().filterNot { it.clientUploadId == id })
     }
 
+    suspend fun updateFailure(id: UUID, failure: UploadFailure) = mutex.withLock {
+        save(load().map { if (it.clientUploadId == id) it.copy(stage = UploadStage.FAILED, errorMessage = failure.message, failure = failure) else it })
+    }
+
+    suspend fun retry(id: UUID) = mutex.withLock {
+        save(load().map { item ->
+            if (item.clientUploadId != id) item else {
+                val reset = item.failure?.requiresRepreparation == true
+                if (reset) item.preparedFilePath?.let { File(it).delete() }
+                item.copy(
+                    clientUploadId = if (reset) UUID.randomUUID() else item.clientUploadId,
+                    stage = UploadStage.PENDING, uploadId = null, errorMessage = null, failure = null,
+                    preparedFilePath = if (reset) null else item.preparedFilePath,
+                    contentType = if (reset) null else item.contentType,
+                    size = if (reset) null else item.size,
+                    sha256 = if (reset) null else item.sha256,
+                    width = if (reset) null else item.width,
+                    height = if (reset) null else item.height,
+                )
+            }
+        })
+    }
+
     private fun load(): List<UploadItem> {
-        cached?.let { return it }
-        if (!file.exists()) return emptyList<UploadItem>().also { cached = it }
+        if (!file.exists()) return emptyList()
         return json.decodeFromString<List<StoredUploadItem>>(file.readText())
             .map(StoredUploadItem::toUploadItem)
-            .also { cached = it }
     }
 
     private fun save(items: List<UploadItem>) {
@@ -91,7 +117,10 @@ class UploadQueueStore(private val file: File) {
             temporary.copyTo(file, overwrite = true)
             temporary.delete()
         }
-        cached = items
+    }
+
+    companion object {
+        private val locks = ConcurrentHashMap<String, Mutex>()
     }
 }
 
@@ -108,6 +137,9 @@ private data class StoredUploadItem(
     val contentType: String? = null,
     val size: Long? = null,
     val sha256: String? = null,
+    val width: Int? = null,
+    val height: Int? = null,
+    val failure: UploadFailure? = null,
 ) {
     fun toUploadItem() = UploadItem(
         clientUploadId = UUID.fromString(clientUploadId),
@@ -121,6 +153,7 @@ private data class StoredUploadItem(
         contentType = contentType,
         size = size,
         sha256 = sha256,
+        width = width, height = height, failure = failure,
     )
 
     companion object {
@@ -136,6 +169,7 @@ private data class StoredUploadItem(
             contentType = item.contentType,
             size = item.size,
             sha256 = item.sha256,
+            width = item.width, height = item.height, failure = item.failure,
         )
     }
 }

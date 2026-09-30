@@ -31,6 +31,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var selection: PhotoSelectionStore
     private var photos: List<LibraryPhoto> = emptyList()
     private lateinit var adapter: PhotoAdapter
+    private var failures: Map<String, UploadFailure> = emptyMap()
+    private var pendingCount = 0
+    private var isSending = false
     private val permission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         if (grants.values.any { it }) loadPhotos() else renderPermissionRequired()
     }
@@ -40,17 +43,29 @@ class MainActivity : ComponentActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         selection = PhotoSelectionStore(this)
-        adapter = PhotoAdapter(this, lifecycleScope, selection::status) {
-            selection.toggle(it)
-            renderSelectionCount()
+        adapter = PhotoAdapter(this, lifecycleScope, selection::status, { failures[it] }, { isSending }) {
+            if (failures.containsKey(it)) showFailure(it) else {
+                selection.toggle(it)
+                renderSelectionCount()
+            }
         }
         binding.photoGrid.layoutManager = GridLayoutManager(this, 3)
         binding.photoGrid.adapter = adapter
+        binding.photoGrid.addOnLayoutChangeListener { view, _, _, _, _, oldLeft, _, oldRight, _ ->
+            val grid = binding.photoGrid.layoutManager as GridLayoutManager
+            val columns = maxOf(1, (view.width / (112 * resources.displayMetrics.density)).toInt())
+            if (grid.spanCount != columns || view.width != oldRight - oldLeft) {
+                grid.spanCount = columns
+                adapter.notifyItemRangeChanged(0, adapter.itemCount)
+            }
+        }
         binding.settingsButton.setOnClickListener { showPairing() }
         binding.sendButton.setOnClickListener { enqueueSelected() }
+        binding.failureButton.setOnClickListener { showFailures() }
         WorkManager.getInstance(this).getWorkInfosForUniqueWorkLiveData(UploadWorker.UNIQUE_WORK_NAME)
             .observe(this) { work ->
-                if (work.any { it.state == WorkInfo.State.SUCCEEDED }) loadPhotos()
+                isSending = work.any { it.state == WorkInfo.State.RUNNING }
+                loadPhotos()
             }
         ensurePermission()
         scheduleUploads()
@@ -66,18 +81,26 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadPhotos() {
+        if (!hasPhotoPermission()) {
+            renderPermissionRequired()
+            return
+        }
         lifecycleScope.launch {
-            photos = withContext(Dispatchers.IO) { PhotoRepository(this@MainActivity).loadToday() }
+            photos = withContext(Dispatchers.IO) { PhotoRepository(this@MainActivity).loadRecentPhotos() }
             selection.updatePhotos(photos)
+            val queue = UploadWorker.queueStore(this@MainActivity).items()
+            pendingCount = queue.size
+            failures = queue.mapNotNull { item -> item.failure?.let { item.assetUri to it } }.toMap()
             adapter.submitList(photos)
             binding.photoGrid.visibility = android.view.View.VISIBLE
             binding.emptyMessage.visibility = if (photos.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
-            if (photos.isEmpty()) binding.emptyMessage.setText(R.string.no_photos_today)
+            if (photos.isEmpty()) binding.emptyMessage.setText(R.string.no_recent_photos)
             renderSelectionCount()
         }
     }
 
     private fun enqueueSelected() {
+        if (isSending) return
         val selected = selection.selectedUris()
         val items = photos.filter { it.uri.toString() in selected }.map {
             UploadItem(assetUri = it.uri.toString(), capturedAt = it.capturedAt, capturedAtSource = it.capturedAtSource)
@@ -85,6 +108,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             UploadWorker.queueStore(this@MainActivity).enqueue(items)
             scheduleUploads()
+            loadPhotos()
             Toast.makeText(this@MainActivity, getString(R.string.queued_photos, items.size), Toast.LENGTH_SHORT).show()
         }
     }
@@ -125,6 +149,7 @@ class MainActivity : ComponentActivity() {
                         val paired = MobileApiClient(UploadWorker.API_BASE_URL.toHttpUrl(), null)
                             .exchangePairing(code, deviceName)
                         credentials.saveToken(paired.token)
+                        renderSelectionCount()
                         dialog.dismiss()
                         scheduleUploads()
                         Toast.makeText(this@MainActivity, R.string.pairing_succeeded, Toast.LENGTH_SHORT).show()
@@ -141,7 +166,50 @@ class MainActivity : ComponentActivity() {
     private fun renderSelectionCount() {
         val count = selection.selectedUris().size
         binding.selectionCount.text = getString(R.string.photo_count, count)
-        binding.sendButton.isEnabled = count > 0 && Credentials(this).loadToken() != null
+        binding.sendButton.isEnabled = count > 0 && Credentials(this).loadToken() != null && !isSending
+        binding.sendButton.setText(if (isSending) R.string.sending else R.string.send_all)
+        binding.uploadStatus.text = getString(R.string.upload_status, selection.uploadedCount(photos), maxOf(0, pendingCount - failures.size))
+        binding.failureButton.text = getString(R.string.failed_count, failures.size)
+        binding.failureButton.isEnabled = failures.isNotEmpty() && !isSending
+    }
+
+    private fun showFailures() {
+        val entries = failures.entries.sortedBy { it.key }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.failed_count, entries.size))
+            .setItems(entries.mapIndexed { index, entry -> "${index + 1}: ${entry.value.message}" }.toTypedArray()) { _, index -> showFailure(entries[index].key) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showFailure(uri: String) {
+        if (isSending) return
+        val failure = failures[uri] ?: return
+        val message = failure.message + (failure.requestId?.let { "\n${getString(R.string.request_id, it)}" } ?: "")
+        AlertDialog.Builder(this)
+            .setTitle(R.string.upload_failed)
+            .setMessage(message)
+            .setPositiveButton(R.string.retry) { _, _ ->
+                lifecycleScope.launch {
+                    val store = UploadWorker.queueStore(this@MainActivity)
+                    store.items().firstOrNull { it.assetUri == uri }?.let { store.retry(it.clientUploadId) }
+                    loadPhotos()
+                    scheduleUploads()
+                }
+            }
+            .setNeutralButton(R.string.exclude_upload) { _, _ ->
+                lifecycleScope.launch {
+                    val store = UploadWorker.queueStore(this@MainActivity)
+                    store.items().firstOrNull { it.assetUri == uri }?.let { item ->
+                        item.preparedFilePath?.let { java.io.File(it).delete() }
+                        store.remove(item.clientUploadId)
+                    }
+                    selection.exclude(uri)
+                    loadPhotos()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun renderPermissionRequired() {

@@ -36,6 +36,15 @@ class PhotoSelectionStore(context: Context) {
 
     fun selectedUris(): Set<String> = selected.toSet()
 
+    fun exclude(uri: String) {
+        if (uri in uploaded) return
+        selected -= uri
+        excluded += uri
+        persist()
+    }
+
+    fun uploadedCount(photos: List<LibraryPhoto>): Int = photos.count { it.uri.toString() in uploaded }
+
     fun status(uri: String): PhotoSelectionStatus = when (uri) {
         in uploaded -> PhotoSelectionStatus.UPLOADED
         in selected -> PhotoSelectionStatus.SELECTED

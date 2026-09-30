@@ -1,13 +1,20 @@
 <resources>
     <string name="app_name">Photo Inbox</string>
-    <string name="today_photos">今日の写真</string>
+    <string name="recent_photos">直近7日分の写真</string>
     <string name="settings">設定</string>
     <string name="photo_permission_required">写真へのアクセスを許可してください</string>
-    <string name="no_photos_today">今日の写真はありません</string>
+    <string name="no_recent_photos">直近7日分の写真はありません</string>
+    <string name="sending">送信中</string>
+    <string name="upload_status">送信済み %1$d件・待機 %2$d件</string>
+    <string name="failed_count">失敗 %1$d件</string>
+    <string name="failed_count_zero">失敗 0件</string>
+    <string name="upload_failed">写真を送信できませんでした</string>
+    <string name="request_id">問い合わせID: %1$s</string>
+    <string name="retry">再送</string>
+    <string name="exclude_upload">送信対象から外す</string>
     <string name="photo_count">%1$d枚</string>
     <string name="photo_count_zero">0枚</string>
     <string name="send_all">すべて送る</string>
-    <string name="photo">写真</string>
     <string name="selected">選択</string>
     <string name="excluded">除外</string>
     <string name="uploaded">送信済み</string>

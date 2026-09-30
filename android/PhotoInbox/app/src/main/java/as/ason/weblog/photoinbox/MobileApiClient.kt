@@ -10,6 +10,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -27,6 +29,8 @@ data class CreateUploadRequest(
     val sha256: String,
     val capturedAt: Instant,
     val capturedAtSource: String,
+    val width: Int? = null,
+    val height: Int? = null,
 )
 
 data class SignedUpload(
@@ -60,6 +64,8 @@ class MobileApiClient(
             put("sha256", payload.sha256)
             put("captured_at", payload.capturedAt.toString())
             put("captured_at_source", payload.capturedAtSource)
+            payload.width?.let { put("width", it) }
+            payload.height?.let { put("height", it) }
         }
         val json = Json.parseToJsonElement(post("api/mobile/uploads", body.toString(), true)).jsonObject
         return SignedUpload(
@@ -79,6 +85,7 @@ class MobileApiClient(
             val request = Request.Builder()
                 .url(baseUrl.resolve(path) ?: throw MobileApiException("Invalid API path"))
                 .post(json.toRequestBody(JSON_MEDIA_TYPE))
+                .header("Accept", "application/json, application/problem+json")
                 .apply {
                     if (authenticated) {
                         val value = token ?: throw MobileApiException("Device is not paired")
@@ -87,13 +94,18 @@ class MobileApiClient(
                 }
                 .build()
             http.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw MobileApiException("Server returned ${response.code}")
-                response.body?.string().orEmpty()
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    val problem = runCatching { problemJson.decodeFromString<ProblemDetails>(body) }.getOrNull()
+                    throw MobileApiException(problemMessage(problem?.code), response.code, problem)
+                }
+                body
             }
         }
 
     private companion object {
         val JSON_MEDIA_TYPE = "application/json".toMediaType()
+        val problemJson = Json { ignoreUnknownKeys = true }
     }
 }
 
@@ -109,9 +121,23 @@ class MultipartUploader(private val http: OkHttpClient = OkHttpClient()) {
         }.build()
         val request = Request.Builder().url(signed.uploadUrl).post(body).build()
         http.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("Upload returned ${response.code}")
+            if (!response.isSuccessful) throw UploadHttpException(response.code)
         }
     }
 }
 
-class MobileApiException(message: String) : Exception(message)
+@Serializable
+data class ProblemDetails(val code: String? = null, val field: String? = null, @SerialName("request_id") val requestId: String? = null)
+
+private fun problemMessage(code: String?) = when (code) {
+    "invalid_client_upload_id" -> "写真の送信情報が不正です。もう一度選び直してください。"
+    "unsupported_content_type" -> "この写真形式には対応していません。"
+    "invalid_upload_size" -> "写真のサイズ情報が不正です。もう一度選び直してください。"
+    "invalid_sha256" -> "写真データの確認に失敗しました。もう一度選び直してください。"
+    "invalid_captured_at_source" -> "写真の撮影日時情報が不正です。"
+    "invalid_json_body", "invalid_content_type" -> "写真の送信情報を作成できませんでした。"
+    else -> "写真を送信できませんでした。"
+}
+
+class MobileApiException(message: String, val status: Int? = null, val problem: ProblemDetails? = null) : Exception(message)
+class UploadHttpException(val status: Int) : IOException("Upload returned $status")

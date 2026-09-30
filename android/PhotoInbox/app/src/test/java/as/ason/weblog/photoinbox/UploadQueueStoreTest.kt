@@ -46,4 +46,58 @@ class UploadQueueStoreTest {
         capturedAt = Instant.parse("2026-08-28T01:02:03Z"),
         capturedAtSource = "photos",
     )
+
+    @Test
+    fun `invalid prepared data remains stopped until manual retry regenerates it`() = runTest {
+        val file = File(temporaryFolder.root, "queue.json")
+        val prepared = temporaryFolder.newFile("prepared.jpg").apply { writeText("invalid") }
+        val original = item("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "content://media/1").copy(
+            preparedFilePath = prepared.path, contentType = "image/jpeg", size = 7, sha256 = "wrong", width = 640, height = 480,
+        )
+        val store = UploadQueueStore(file)
+        store.enqueue(listOf(original))
+        store.updateFailure(original.clientUploadId, UploadFailure("不正なデータ", false, "invalid_sha256", requestId = "req-123"))
+        val reopened = UploadQueueStore(file)
+        val failed = reopened.items().single()
+        assertEquals(false, failed.shouldAttemptAutomatically)
+        assertEquals("req-123", failed.failure?.requestId)
+        assertEquals(640, failed.width)
+        reopened.retry(original.clientUploadId)
+        val retry = reopened.items().single()
+        assertTrue(retry.shouldAttemptAutomatically)
+        assertTrue(retry.clientUploadId != original.clientUploadId)
+        assertEquals(UploadStage.PENDING, retry.stage)
+        assertEquals(null, retry.preparedFilePath)
+        assertEquals(null, retry.sha256)
+        assertEquals(null, retry.size)
+        assertEquals(null, retry.width)
+        assertEquals(null, retry.height)
+        assertEquals(false, prepared.exists())
+    }
+
+    @Test
+    fun `network retry preserves prepared data and upload identity`() = runTest {
+        val store = UploadQueueStore(File(temporaryFolder.root, "queue.json"))
+        val original = item("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "content://media/1").copy(preparedFilePath = "prepared.jpg", sha256 = "sha")
+        store.enqueue(listOf(original))
+        store.updateFailure(original.clientUploadId, UploadFailure("offline", true))
+        assertTrue(store.items().single().shouldAttemptAutomatically)
+        store.retry(original.clientUploadId)
+        assertEquals(original, store.items().single())
+    }
+
+    @Test
+    fun `screen and worker stores see each other's changes without losing queued photos`() = runTest {
+        val file = File(temporaryFolder.root, "queue.json")
+        val screen = UploadQueueStore(file)
+        val worker = UploadQueueStore(file)
+        assertTrue(screen.items().isEmpty())
+        val first = item("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "content://media/1")
+        val second = item("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "content://media/2")
+        worker.enqueue(listOf(first))
+        screen.enqueue(listOf(second))
+        worker.updateFailure(first.clientUploadId, UploadFailure("拒否", false))
+        assertEquals(listOf(first.assetUri, second.assetUri), screen.items().map { it.assetUri })
+        assertEquals("拒否", screen.items().first().failure?.message)
+    }
 }

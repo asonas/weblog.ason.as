@@ -14,9 +14,9 @@ data class LibraryPhoto(
 )
 
 class PhotoRepository(private val context: Context) {
-    fun loadToday(now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<LibraryPhoto> {
+    fun loadRecentPhotos(now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<LibraryPhoto> {
         val today = now.atZone(zone).toLocalDate()
-        val start = today.atStartOfDay(zone).toInstant().toEpochMilli()
+        val start = today.minusDays(6).atStartOfDay(zone).toInstant().toEpochMilli()
         val end = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
@@ -38,7 +38,7 @@ class PhotoRepository(private val context: Context) {
             projection,
             selection,
             arguments,
-            "${MediaStore.Images.Media.DATE_TAKEN} DESC",
+            "CASE WHEN $taken > 0 THEN $taken ELSE $added * 1000 END DESC",
         )?.use { cursor ->
             val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
             val takenIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)

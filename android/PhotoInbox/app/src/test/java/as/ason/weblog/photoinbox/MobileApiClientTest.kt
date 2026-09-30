@@ -26,7 +26,7 @@ class MobileApiClientTest {
     fun setUp() {
         server = MockWebServer()
         server.start()
-        http = OkHttpClient()
+        http = OkHttpClient.Builder().retryOnConnectionFailure(false).build()
     }
 
     @After
@@ -65,6 +65,8 @@ class MobileApiClientTest {
                 sha256 = "abc123",
                 capturedAt = Instant.parse("2026-08-28T01:02:03Z"),
                 capturedAtSource = "photos",
+                width = 640,
+                height = 480,
             ),
         )
         client.complete(signed.uploadId)
@@ -73,7 +75,7 @@ class MobileApiClientTest {
         assertEquals("Bearer mobile-token", create.getHeader("Authorization"))
         assertEquals("/api/mobile/uploads", create.path)
         assertEquals(
-            """{"client_upload_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","content_type":"image/jpeg","size":123,"sha256":"abc123","captured_at":"2026-08-28T01:02:03Z","captured_at_source":"photos"}""",
+            """{"client_upload_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","content_type":"image/jpeg","size":123,"sha256":"abc123","captured_at":"2026-08-28T01:02:03Z","captured_at_source":"photos","width":640,"height":480}""",
             create.body.readUtf8(),
         )
         assertEquals("/api/mobile/uploads/server-id/complete", server.takeRequest().path)
@@ -107,4 +109,26 @@ class MobileApiClientTest {
           "expires_at":"2026-08-28T02:02:03Z"
         }
     """.trimIndent()
+
+    @Test
+    fun `server failures preserve problem details and classify retries`() = runTest {
+        for ((status, retryable) in listOf(400 to false, 401 to false, 403 to false, 408 to true, 429 to true, 500 to true)) {
+            server.enqueue(MockResponse().setResponseCode(status).setBody(
+                """{"title":"Invalid upload","status":$status,"code":"invalid_sha256","field":"sha256","request_id":"request-123"}""",
+            ))
+            val error = try {
+                MobileApiClient(server.url("/"), "token", http).complete("upload-id")
+                throw AssertionError("Expected server failure")
+            } catch (error: MobileApiException) { error }
+            val failure = UploadFailure.from(error)
+            assertEquals("invalid_sha256", failure.code)
+            assertEquals("sha256", failure.field)
+            assertEquals("request-123", failure.requestId)
+            assertEquals("写真データの確認に失敗しました。もう一度選び直してください。", failure.message)
+            assertEquals(retryable, failure.automaticallyRetryable)
+            assertEquals(retryable, UploadFailure.from(UploadHttpException(status)).automaticallyRetryable)
+        }
+        assertTrue(UploadFailure.from(java.io.IOException("offline")).automaticallyRetryable)
+        assertEquals(false, UploadFailure.from(ImagePreparationException("unavailable")).automaticallyRetryable)
+    }
 }
