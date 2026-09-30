@@ -6,6 +6,9 @@ ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
 
 require "aurora_dsql_pg"
 require_relative "article_table_rename"
+require_relative "inbox_memos"
+require_relative "article_structure"
+require_relative "piece_mentions"
 
 module WeblogAuthoring
   class DsqlBootstrap
@@ -58,6 +61,9 @@ module WeblogAuthoring
 
     def create_schema(connection)
       connection.exec("CREATE SCHEMA IF NOT EXISTS #{SCHEMA}")
+      InboxMemos.schema("#{SCHEMA}.").each { |statement| connection.exec(statement) }
+      connection.exec(ArticleStructure.schema("#{SCHEMA}."))
+      connection.exec(PieceMentions.schema("#{SCHEMA}."))
       connection.exec(<<~SQL)
         CREATE TABLE IF NOT EXISTS #{SCHEMA}.pages (
           id TEXT PRIMARY KEY,

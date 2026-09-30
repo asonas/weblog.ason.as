@@ -37,7 +37,7 @@ class ArticleTableRenameTest < Minitest::Test
     assert_equal Time.iso8601("2026-09-01T01:00:00Z"), article.created_at
     assert_equal expected, @rename.rename!(direction: "reverse")
     assert_equal expected, @rename.rename!(direction: "reverse")
-    assert_equal before, database_contents
+    assert_equal before, database_contents.slice(*before.keys)
   end
 
   def test_resumes_after_interrupted_ddl_and_reverses_completed_tables

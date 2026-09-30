@@ -5,6 +5,7 @@ module WeblogAuthoring
     def daily: (untyped) -> Hash[String, untyped]
   end
   class DraftPublication
+    def adopt_memo: (String, Hash[String, untyped]) -> Hash[String, untyped]
     def prepare: (String) -> Hash[String, untyped]
     def accept: (String, Hash[String, untyped]) -> Hash[String, untyped]
   end

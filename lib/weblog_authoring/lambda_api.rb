@@ -159,6 +159,9 @@ module WeblogAuthoring
 
       method = event.dig("requestContext", "http", "method").to_s
       path = event.fetch("rawPath", "")
+      if %r{\A/api/(?:inbox|mobile)/memos(?:/[^/]+)?\z}.match?(path)
+        return memo_response(event, method, path)
+      end
       return proofreading_response(event) if method == "POST" && path == "/api/authoring/proofread"
       return draft_response(event, method, path) if path == "/api/authoring/drafts" || path.start_with?("/api/authoring/drafts/")
       outputs = @draft_outputs
@@ -220,6 +223,12 @@ module WeblogAuthoring
       end
       return search_response(event) if method == "GET" && path == "/api/search"
       return pages_response(event) if method == "GET" && path == "/api/pages"
+      if method == "GET" && path == "/api/mentioned-by-days"
+        store = @draft_store
+        return json_response(503, error: "Draft store is unavailable") unless store
+        query = event["queryStringParameters"] || {}
+        return json_response(200, MentionedByDays.new(store:, database: @database).call(query.fetch("route", ""), before: query["before"]))
+      end
       return tags_response(event) if method == "GET" && path == "/api/tags"
       return archive_response(event) if method == "GET" && path == "/api/archive"
       return page_names_response(event) if method == "GET" && path == "/api/page-names"
@@ -289,6 +298,7 @@ module WeblogAuthoring
         "authentication_required" => true,
         "can_edit" => can_edit,
         "draft_authoring" => !@draft_store.nil?,
+        "piece_authoring" => @draft_store&.pieces_enabled? || false,
         "login" => session&.fetch("login", nil),
         "csrf_token" => can_edit && session ? session.fetch("csrf_token", "").to_s : ""
       )
@@ -516,6 +526,16 @@ module WeblogAuthoring
         end
         return json_response(404, error: "Not Found")
       end
+      structure = %r{\A/api/authoring/drafts/([^/]+)/structure\z}.match(path)
+      if structure && method == "PATCH"
+        return json_response(200, store.update_structure(structure[1].to_s, parse_json(event)))
+      end
+      adoption = %r{\A/api/authoring/drafts/([^/]+)/memos\z}.match(path)
+      if adoption && method == "POST"
+        publication = @draft_publication
+        return json_response(503, error: "Piece initialization is unavailable") unless publication
+        return json_response(200, publication.adopt_memo(adoption[1].to_s, parse_json(event)))
+      end
       mentions = %r{\A/api/authoring/drafts/([^/]+)/webmentions\z}.match(path)
       if mentions
         sender = @draft_webmentions
@@ -561,6 +581,8 @@ module WeblogAuthoring
                   store.commit_upload(id, update_id, parse_json(event))
                 elsif method == "GET" && resource.nil?
                   store.read(id, event["queryStringParameters"] || {})
+                elsif method == "DELETE" && resource.nil?
+                  store.delete_piece_draft(id, parse_json(event))
                 else
                   return json_response(404, error: "Not Found")
                 end
@@ -682,6 +704,30 @@ module WeblogAuthoring
       raise InputError.new("device_name is required", field: "device_name") if device_name.nil?
 
       json_response(201, mobile_upload.exchange_pairing(code:, device_name:))
+    end
+
+    def memo_response(event, method, path)
+      store = @draft_store
+      return json_response(404, error: "Not Found") unless store
+      if path.start_with?("/api/mobile/")
+        return json_response(401, error: "A valid device token is required") unless mobile_upload.authenticate(bearer_token(event))
+      else
+        session = read_cookie(event, AUTH_COOKIE, kind: "session")
+        return json_response(401, error: "GitHub login is required") unless session
+        return json_response(403, error: "Editing is not allowed") unless allowed_session?(session)
+        if method != "GET" && !secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
+          return json_response(403, error: "CSRF token mismatch")
+        end
+      end
+      id = path.split("/")[4]
+      return json_response(200, "memos" => store.list_memos) if method == "GET" && !id
+      return json_response(404, error: "Not Found") unless id
+      case method
+      when "GET" then json_response(200, store.find_memo(id))
+      when "PUT" then json_response(200, store.save_memo(id, parse_json(event)))
+      when "DELETE" then json_response(200, store.delete_memo(id, parse_json(event)))
+      else json_response(404, error: "Not Found")
+      end
     end
 
     def mobile_upload
@@ -1510,7 +1556,8 @@ module WeblogAuthoring
       path = event.fetch("rawPath", "")
       return response if method.empty?
       draft_response = path == "/api/authoring/drafts" || path.start_with?("/api/authoring/drafts/")
-      authentication_response = draft_response || path.start_with?("/api/auth/") || path == "/api/inbox/sources/bluesky/callback"
+      memo_response = %r{\A/api/(?:inbox|mobile)/memos(?:/|\z)}.match?(path)
+      authentication_response = draft_response || memo_response || path == "/api/mentioned-by-days" || path.start_with?("/api/auth/") || path == "/api/inbox/sources/bluesky/callback"
       return response unless authentication_response || !%w[GET HEAD OPTIONS].include?(method)
 
       existing_headers = response.fetch(:headers, EMPTY_HASH) # @type var existing_headers: Hash[String, String]

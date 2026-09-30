@@ -18,7 +18,8 @@ module WeblogAuthoring
       reconstruct_many = lambda do |jobs|
         invoke.call("operation" => "publication_batch", "article_ids" => jobs.map { |job| job.fetch("article_id") })
       end
-      new(store:, reconstruct_many:) do |job|
+      seed_piece = ->(piece_id, body) { invoke.call("operation" => "seed_piece", "piece_id" => piece_id, "body" => body) }
+      new(store:, reconstruct_many:, seed_piece:) do |job|
         invoke.call("operation" => "publication", "article_id" => job.fetch("article_id"))
       end
     end
@@ -26,11 +27,13 @@ module WeblogAuthoring
     def self.local(store:)
       root = File.expand_path("../..", __dir__)
       tsx = resolve_local_dependency(root, "node_modules/tsx/dist/cli.mjs")
-      new(store:) do |job|
+      invoke = lambda do |job|
         output, error, status = Open3.capture3("node", tsx, File.join(root, "lambda/draft_worker/local.ts"), stdin_data: JSON.generate(job))
         raise DraftStore::Error.new("公開版の復元に失敗しました: #{error[0, 200]}", 503) unless status.success?
         JSON.parse(output)
       end
+      seed_piece = ->(piece_id, body) { invoke.call("operation" => "seed_piece", "piece_id" => piece_id, "body" => body) }
+      new(store:, seed_piece:, &invoke)
     end
 
     def self.resolve_local_dependency(root, relative_path)
@@ -41,10 +44,26 @@ module WeblogAuthoring
       File.join(root, relative_path)
     end
 
-    def initialize(store:, reconstruct_many: nil, &reconstruct)
+    def initialize(store:, reconstruct_many: nil, seed_piece: nil, &reconstruct)
       @store = store
       @reconstruct = reconstruct
       @reconstruct_many = reconstruct_many
+      @seed_piece = seed_piece
+    end
+
+    def adopt_memo(article_id, payload)
+      request = payload.slice("memo_id", "operation_id", "expected_revision", "structure_revision", "piece_id").merge("article_id" => article_id)
+      id = request["memo_id"]
+      unless request["piece_id"].is_a?(String) && /\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/.match?(request["piece_id"])
+        raise DraftStore::Error, "Invalid piece ID"
+      end
+      previous = @store.memo_receipt(id, "adopt", request)
+      return previous if previous
+      memo = @store.find_memo(id)
+      raise DraftStore::Error.new("メモが更新されています。最新の本文を確認してください。", 409) unless memo.fetch("revision").to_i == request["expected_revision"]
+      raise DraftStore::Error.new("Piece initialization is unavailable", 503) unless @seed_piece
+      seed = @seed_piece.call(request.fetch("piece_id"), memo.fetch("body"))
+      @store.adopt_memo(id, request, seed)
     end
 
     def prepare(id)
@@ -59,7 +78,7 @@ module WeblogAuthoring
               end
       { "protocol" => 1, "generation" => 1, "head" => verified.fetch("through"),
         "metadata_revisions" => verified.fetch("metadata_revisions"), "content_hash" => verified.fetch("content_hash"),
-        "article_state" => state, "rename" => @store.rename_impact(id, verified.fetch("route")), }
+        "article_state" => state, "rename" => @store.rename_impact(id, verified.fetch("route")), }.merge(verified.slice("format", "structure_revision"))
     end
 
     # Listing must compare the same normalized content as publication, without
@@ -79,7 +98,7 @@ module WeblogAuthoring
     end
 
     def accept(id, request)
-      request = request.slice("protocol", "generation", "head", "metadata_revisions", "content_hash", "request_id", "rename")
+      request = request.slice("protocol", "generation", "head", "metadata_revisions", "content_hash", "request_id", "rename", "format", "structure_revision")
       raise DraftStore::Error, "Invalid publication ID" unless request["request_id"].is_a?(String) && /\A[a-zA-Z0-9-]{1,80}\z/.match?(request["request_id"])
       fingerprint = Digest::SHA256.hexdigest(JSON.generate(request.sort.to_h))
       previous = @store.publication_receipt(id, request.fetch("request_id"), fingerprint)
@@ -126,7 +145,7 @@ module WeblogAuthoring
       cursor = job.fetch("expected_checkpoint")
       updates = []
       while cursor < job.fetch("through")
-        page = @store.read(id, { "cursor" => cursor.to_s, "through" => job.fetch("through").to_s })
+        page = @store.read(id, { "cursor" => cursor.to_s, "through" => job.fetch("through").to_s, "format" => job.fetch("format", "legacy") })
         if page["checkpoint"] || page.fetch("cursor") <= cursor
           raise DraftStore::Error.new("保存履歴が整理されました。もう一度公開内容を確認してください。", 409)
         end
@@ -145,15 +164,24 @@ module WeblogAuthoring
       metadata = job.fetch("metadata").transform_values { |field| field.fetch("value") }
       metadata["title"] = metadata.fetch("title").strip
       metadata["cover_image_url"] = nil unless metadata.fetch("cover_mode") == "explicit"
+      structure = job["structure"]
+      if job["format"] == "pieces"
+        unless result["format"] == "pieces" && result["structure"] == structure && result["pieces"].is_a?(Array) && result["pieces"].map { |piece| piece["id"] } == structure.fetch("piece_ids")
+          raise DraftStore::Error.new("かけらの構成が変更されました。もう一度確認してください。", 409)
+        end
+        metadata["content"] = { "format" => "pieces", "pieces" => result.fetch("pieces"), "tags" => structure.fetch("tags") }
+        metadata["draft_head"] = job.fetch("through")
+      end
       route = WeblogAuthoring.validate_page_name(DraftStore.working_route(metadata))
       raise DraftStore::Error, "このURLはシステムが使用しています。" if %w[draft-editor draft-offline.js published].include?(route.split("/").first)
       raise DraftStore::Error, "日記の日付はYYYY-MM-DDで指定してください。" if metadata.fetch("page_type") == "date" && !WeblogAuthoring::DATE_NAME.match?(route)
       Date.iso8601(route) if metadata.fetch("page_type") == "date"
       content = [body, *metadata.values_at("title", "page_type", "cover_mode", "cover_image_url")]
       content << metadata["page_date"] if metadata["page_type"] == "date" && !metadata["page_date"].to_s.empty?
+      content << metadata["content"] if metadata["content"]
       hash = Digest::SHA256.hexdigest(JSON.generate(content))
       { "body" => body, "metadata" => metadata, "route" => route, "content_hash" => hash,
-        "through" => job.fetch("through"), "metadata_revisions" => job.fetch("metadata").transform_values { |field| field.fetch("revision") }, }
+        "through" => job.fetch("through"), "metadata_revisions" => job.fetch("metadata").transform_values { |field| field.fetch("revision") }, }.merge(structure ? { "format" => "pieces", "structure_revision" => structure.fetch("revision") } : {})
     rescue ArgumentError => error
       raise DraftStore::Error, error.message
     end

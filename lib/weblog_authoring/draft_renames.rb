@@ -35,14 +35,25 @@ module WeblogAuthoring
         source = publication_snapshot(reference.fetch("article_id"), reference.fetch("version_id"))
         body = WeblogAuthoring.replace_wiki_links(source.fetch("body"), old_name: impact.fetch("from"), new_name: impact.fetch("to"))
         metadata = source.fetch("metadata")
+        if metadata.dig("content", "format") == "pieces"
+          metadata.fetch("content").fetch("pieces").each do |piece|
+            piece["body"] = WeblogAuthoring.replace_wiki_links(piece.fetch("body"), old_name: impact.fetch("from"), new_name: impact.fetch("to"))
+          end
+          metadata.fetch("content")["tags"] = metadata.fetch("content").fetch("tags").map { |tag| tag == impact.fetch("from") ? impact.fetch("to") : tag }.uniq
+          pieces_body = metadata.fetch("content").fetch("pieces").map { |piece| piece.fetch("body") }.join("\n\n---\n\n")
+          tags_body = metadata.fetch("content").fetch("tags").map { |tag| "[[#{tag}]]" }.join(" ")
+          body = [pieces_body, tags_body].reject(&:empty?).join("\n\n").gsub("\r\n", "\n")
+        end
         content = [body, *metadata.values_at("title", "page_type", "cover_mode", "cover_image_url")]
         content << metadata["page_date"] if metadata["page_type"] == "date" && !metadata["page_date"].to_s.empty?
+        content << metadata["content"] if metadata["content"]
         hash = Digest::SHA256.hexdigest(JSON.generate(content))
         replacement = SecureRandom.uuid
         # Bodies commit individually; acceptance and activation only touch pointers.
         @connect.call do |db|
           db.transaction do
             db.query("INSERT INTO #{db.prefix}article_published_versions (id, article_id, content_hash, body, metadata, route, created_at, article_created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [replacement, source.fetch("article_id"), hash, body, JSON.generate(metadata), source.fetch("route"), Time.now.utc.iso8601(6), source.fetch("article_created_at")])
+            index_piece_mentions(db, source.fetch("article_id"), replacement, metadata)
             db.query("INSERT INTO #{db.prefix}article_rename_members (batch_id, article_id, version_id, previous_id) VALUES ($1, $2, $3, $4)", [batch_id, source.fetch("article_id"), replacement, source.fetch("id")])
           end
         end

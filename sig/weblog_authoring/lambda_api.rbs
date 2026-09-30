@@ -75,6 +75,7 @@ module WeblogAuthoring
     def issue_mobile_pairing_response: (lambda_event) -> lambda_response
     def exchange_mobile_pairing_response: (lambda_event) -> lambda_response
     def mobile_upload: () -> untyped
+    def memo_response: (lambda_event, String, String) -> lambda_response
     def inbox_thumbnail: () -> untyped
     def create_mobile_upload_response: (lambda_event) -> lambda_response
     def bearer_token: (lambda_event) -> String?

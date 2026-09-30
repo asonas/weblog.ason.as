@@ -1,9 +1,16 @@
 locals {
   draft_runtime_environment = {
     DRAFT_CUTOVER_ENABLED           = "true"
+    ARTICLE_PIECES_ENABLED          = tostring(var.article_pieces_enabled)
     DRAFT_WORKER_FUNCTION_NAME      = aws_lambda_function.draft_worker.function_name
     DRAFT_PUBLICATION_FUNCTION_NAME = "weblog-search-indexer-production"
   }
+}
+
+variable "article_pieces_enabled" {
+  description = "Create new articles with pieces after the API, worker, editor and published rendering are ready."
+  type        = bool
+  default     = false
 }
 
 data "aws_iam_policy_document" "draft_runtime" {

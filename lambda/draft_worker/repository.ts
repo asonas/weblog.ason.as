@@ -3,6 +3,7 @@ import { DsqlSigner } from "@aws-sdk/dsql-signer";
 import { Client, type QueryResultRow } from "pg";
 
 import type { ReconstructionInput } from "./reconstruct.js";
+import { parsePieceStructure } from "./reconstruct.js";
 
 const STORAGE_CHUNK_BYTES = 128 * 1024;
 const UPDATE_LIMIT = 2 * 1024 * 1024;
@@ -125,6 +126,28 @@ export class DsqlDraftCheckpointRepository
         )
       ).rows[0];
       if (!article) throw new Error("Draft not found");
+      const content = (
+        await db.query<{
+          format: string;
+          revision: number;
+          piece_ids: string;
+          deleted_ids: string;
+          tags: string;
+        }>(
+          `SELECT format, revision, piece_ids, deleted_ids, tags FROM ${this.prefix}article_structures WHERE article_id = $1`,
+          [articleId],
+        )
+      ).rows[0];
+      const format = content?.format === "pieces" ? "pieces" : "legacy";
+      const structure =
+        format === "pieces"
+          ? parsePieceStructure({
+              revision: Number(content.revision),
+              piece_ids: JSON.parse(content.piece_ids),
+              deleted_ids: JSON.parse(content.deleted_ids),
+              tags: JSON.parse(content.tags),
+            })
+          : undefined;
       if (Number(article.generation) !== 1)
         throw new Error("Unsupported draft format");
       const pointer = (
@@ -170,6 +193,8 @@ export class DsqlDraftCheckpointRepository
       }
       return {
         articleId,
+        format,
+        structure,
         protocol: 1,
         generation: 1,
         through: Number(article.head),

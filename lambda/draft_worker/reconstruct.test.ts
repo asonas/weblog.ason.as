@@ -17,6 +17,39 @@ function history() {
   return { doc, updates, body: doc.getText("body") };
 }
 
+test("piece checkpoints preserve retired text while publication uses only the ordered active pieces", () => {
+  const first = "00000000-0000-4000-8000-000000000001";
+  const second = "00000000-0000-4000-8000-000000000002";
+  const doc = new Y.Doc({ gc: false });
+  doc.getText(`piece:${first}`).insert(0, "同じかけら\n\n---\n\n続き");
+  doc.getText(`piece:${second}`).insert(0, "取り除いた本文");
+  const result = reconstructDraft({
+    protocol: 1,
+    generation: 1,
+    through: 1,
+    format: "pieces",
+    structure: {
+      revision: 2,
+      piece_ids: [first],
+      deleted_ids: [second],
+      tags: ["日記"],
+    },
+    updates: [{ sequence: 1, ...payload(Y.encodeStateAsUpdate(doc)) }],
+  });
+  assert.deepEqual(result.pieces, [
+    { id: first, body: "同じかけら\n\n---\n\n続き" },
+  ]);
+  assert.equal(result.markdown, "同じかけら\n\n---\n\n続き\n\n[[日記]]");
+  const restored = new Y.Doc({ gc: false });
+  Y.applyUpdate(restored, result.data);
+  assert.equal(
+    restored.getText(`piece:${second}`).toString(),
+    "取り除いた本文",
+  );
+  doc.destroy();
+  restored.destroy();
+});
+
 test("checkpoint retains deletion-only updates and merges an old offline client and later suffix", () => {
   const source = history();
   source.body.insert(0, "残す消す");

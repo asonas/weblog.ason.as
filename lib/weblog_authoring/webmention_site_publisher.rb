@@ -153,6 +153,16 @@ module WeblogAuthoring
         page.body, mode: "public", progressive: true,
         image_dimensions: ->(src) { dimensions.fetch(src) { dimensions[src] = @database.find_image_dimensions(src) } }
       )
+      body_html = rendered.html.chomp
+      if page.pieces
+        renderer = MarkdownRenderer.new(pages: @database.find_pages_by_routes(names))
+        body_html = page.pieces.map do |piece|
+          piece_html = renderer.render(piece.fetch("body"), mode: "public", progressive: true, image_dimensions: ->(src) { dimensions.fetch(src) { dimensions[src] = @database.find_image_dimensions(src) } }).html
+          %(<section class="article-piece" id="piece-#{CGI.escapeHTML(piece.fetch('id'))}">#{piece_html}</section>)
+        end.join("\n<hr>\n")
+        tags = Array(page.tags).map { |tag| "[[#{tag}]]" }.join(" ")
+        body_html += renderer.render(tags, mode: "public", progressive: true).html unless tags.empty?
+      end
       mentions = @database.approved_webmentions_for_page(page.id)
       escaped_source_url = CGI.escapeHTML(source_url)
       author_url = CGI.escapeHTML(URI.join(source_url, "/").to_s)
@@ -168,7 +178,7 @@ module WeblogAuthoring
             <span class="p-author h-card" hidden=""><a class="p-name u-url" href="#{author_url}">asonas</a></span>
           </header>
           <div class="editor-canvas"><div class="e-content ProseMirror public-article-body">
-            #{rendered.html.chomp}
+            #{body_html}
           </div>
           </div>
           #{render_mentions(mentions)}

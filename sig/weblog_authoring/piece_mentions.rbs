@@ -1,0 +1,6 @@
+module WeblogAuthoring
+  class MentionedByDays
+    def initialize: (store: untyped, database: untyped) -> void
+    def call: (String, ?before: String?) -> Hash[String, untyped]
+  end
+end

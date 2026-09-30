@@ -5,6 +5,9 @@ require "digest"
 require "json"
 require "time"
 require_relative "article_table_rename"
+require_relative "inbox_memos"
+require_relative "article_structure"
+require_relative "piece_mentions"
 require_relative "cover_image"
 require_relative "draft_publications"
 require_relative "draft_output_store"
@@ -16,6 +19,9 @@ require_relative "draft_webmentions"
 
 module WeblogAuthoring
   class DraftStore
+    include InboxMemos
+    include ArticleStructure
+    include PieceMentions
     include DraftPublications
     include DraftOutputStore
     include DraftRenames
@@ -56,9 +62,9 @@ module WeblogAuthoring
       metadata.fetch("title")
     end
 
-    def self.sqlite(path)
+    def self.sqlite(path, pieces_enabled: ENV["ARTICLE_PIECES_ENABLED"] == "true")
       require "sqlite3"
-      new do |&block|
+      new(pieces_enabled:) do |&block|
         connection = SQLite3::Database.new(path.to_s)
         connection.results_as_hash = true
         connection.busy_timeout = 5_000
@@ -74,13 +80,19 @@ module WeblogAuthoring
       end
     end
 
-    def initialize(&connect)
+    def initialize(pieces_enabled: ENV["ARTICLE_PIECES_ENABLED"] == "true", &connect)
       @connect = connect
+      @pieces_enabled = pieces_enabled
     end
+
+    def pieces_enabled? = @pieces_enabled
 
     def setup!
       @connect.call do |db|
         ArticleTableRename.new(db).require_current_schema!
+        InboxMemos.schema(db.prefix).each { |statement| db.query(statement) }
+        db.query(ArticleStructure.schema(db.prefix))
+        db.query(PieceMentions.schema(db.prefix))
         setup_publications(db)
         setup_outputs(db)
         setup_renames(db)
@@ -101,12 +113,26 @@ module WeblogAuthoring
 
     def create(id, payload)
       validate_scope!(id, payload)
+      format = payload.fetch("format", "legacy")
+      raise Error, "Unsupported article format" unless %w[legacy pieces].include?(format)
+      ids, tags = format == "pieces" ? validate_structure!([payload["piece_id"]], payload.fetch("tags", [])) : [[], []]
       @connect.call do |db|
         db.transaction do
+          if db.query("SELECT article_id FROM #{db.prefix}article_structures WHERE article_id = $1 AND format = 'deleted'", [id]).any?
+            raise Error.new("Draft was deleted; preserve local edits as a new draft", 410)
+          end
+          if db.query("SELECT id FROM #{db.prefix}articles WHERE id = $1", [id]).empty? && (format == "pieces") != @pieces_enabled
+            raise Error.new("New article format changed; keep local edits and reload the editor", 409)
+          end
           metadata = DEFAULT_METADATA.transform_values { |value| { "value" => value, "revision" => 0 } }
           now = Time.now.utc.iso8601(6)
-          db.query("INSERT INTO #{db.prefix}articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING", [id, JSON.generate(metadata), now])
-          document(db, id)
+          inserted = db.query("INSERT INTO #{db.prefix}articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING RETURNING id", [id, JSON.generate(metadata), now])
+          unless inserted.empty?
+            db.query("INSERT INTO #{db.prefix}article_structures (article_id, format, revision, piece_ids, deleted_ids, tags) VALUES ($1, $2, 0, $3, '[]', $4)", [id, format, JSON.generate(ids), JSON.generate(tags)])
+          end
+          current = document(db, id)
+          require_content_format!(current, payload)
+          current
         end
       end
     end
@@ -145,7 +171,7 @@ module WeblogAuthoring
       end
     end
 
-    def daily_draft(date)
+    def daily_draft(date, tags: [])
       @connect.call do |db|
         db.transaction do
           owner = db.query(<<~SQL, [date]).first
@@ -155,7 +181,7 @@ module WeblogAuthoring
             JOIN #{db.prefix}article_published_versions versions ON versions.id = heads.active_id
             WHERE routes.route = $1 AND versions.route = $1
           SQL
-          next owner.fetch("article_id") if owner
+          next document(db, owner.fetch("article_id")) if owner
           cursor = ""
           found = nil
           loop do
@@ -167,16 +193,24 @@ module WeblogAuthoring
             break if found || rows.length < 25
             cursor = rows.last.fetch("id")
           end
-          next found.fetch("id") if found
+          next document(db, found.fetch("id")) if found
           metadata = DEFAULT_METADATA.merge("title" => date, "page_type" => "date", "page_date" => date).transform_values { |value| { "value" => value, "revision" => 0 } }
           now = Time.now.utc.iso8601(6)
           attempt = 0
           loop do
             hex = Digest::SHA256.hexdigest("draft-diary:#{date}:#{attempt}")[0, 32]
             id = [hex[0, 8], hex[8, 4], hex[12, 4], hex[16, 4], hex[20, 12]].join("-")
-            db.query("INSERT INTO #{db.prefix}articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING", [id, JSON.generate(metadata), now])
+            if db.query("SELECT article_id FROM #{db.prefix}article_structures WHERE article_id = $1 AND format = 'deleted'", [id]).any?
+              attempt += 1
+              next
+            end
+            inserted = db.query("INSERT INTO #{db.prefix}articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3) ON CONFLICT (id) DO NOTHING RETURNING id", [id, JSON.generate(metadata), now])
+            if @pieces_enabled && !inserted.empty?
+              ids, validated_tags = validate_structure!([SecureRandom.uuid], tags)
+              db.query("INSERT INTO #{db.prefix}article_structures (article_id, format, revision, piece_ids, deleted_ids, tags) VALUES ($1, 'pieces', 0, $2, '[]', $3)", [id, JSON.generate(ids), JSON.generate(validated_tags)])
+            end
             stored = document(db, id).fetch("metadata").transform_values { |field| field.fetch("value") }
-            break id if stored["page_type"] == "date" && self.class.working_route(stored) == date
+            break document(db, id) if stored["page_type"] == "date" && self.class.working_route(stored) == date
             # A previous daily draft may have been renamed before publication.
             attempt += 1
           end
@@ -192,7 +226,7 @@ module WeblogAuthoring
       raise Error, "Invalid upload manifest" unless chunks.is_a?(Integer) && (1..max_chunks).cover?(chunks)
       fingerprint = update_fingerprint(digest, body_bytes, changes)
       @connect.call do |db|
-        document(db, id)
+        require_content_format!(document(db, id), payload)
         previous = db.query("SELECT fingerprint, receipt FROM #{db.prefix}draft_updates WHERE article_id = $1 AND update_id = $2", [id, update_id]).first
         if previous
           raise Error.new("Update ID already contains different content", 409) unless previous.fetch("fingerprint") == fingerprint
@@ -254,7 +288,7 @@ module WeblogAuthoring
         end.join
         raise Error.new("Update exceeds limit", 409) if binary.empty? || binary.bytesize > UPDATE_LIMIT
         raise Error.new("Update digest mismatch", 409) unless Digest::SHA256.hexdigest(binary) == stored.fetch("digest")
-        [{ "protocol" => 1, "generation" => 1, "update_id" => update_id, "digest" => stored.fetch("digest"),
+        [{ "protocol" => 1, "generation" => 1, "format" => payload.fetch("format", "legacy"), "update_id" => update_id, "digest" => stored.fetch("digest"),
            "body_bytes" => stored.fetch("body_bytes").to_i, "metadata" => JSON.parse(stored.fetch("metadata")), }, binary,]
       end
       return manifest unless data
@@ -267,38 +301,39 @@ module WeblogAuthoring
       receipt
     end
 
-    def append_data(id, payload, data)
+    def append_data(id, payload, data, connection: nil)
       update_id, digest, body_bytes, changes = validate_update_manifest(payload)
       raise Error, "Update exceeds limit" if data.bytesize > UPDATE_LIMIT || data.empty?
       raise Error, "Update digest mismatch" unless Digest::SHA256.hexdigest(data) == digest
       fingerprint = update_fingerprint(digest, body_bytes, changes)
-      @connect.call do |db|
-        db.transaction do
-          current = document(db, id)
-          previous = db.query("SELECT fingerprint, receipt FROM #{db.prefix}draft_updates WHERE article_id = $1 AND update_id = $2", [id, update_id]).first
-          if previous
-            raise Error.new("Update ID already contains different content", 409) unless previous.fetch("fingerprint") == fingerprint
-            next JSON.parse(previous.fetch("receipt"))
-          end
-
-          metadata = merge_metadata(current.fetch("metadata"), changes)
-          if (changes.keys & %w[title page_type page_date]).any? && db.query("SELECT active_id FROM #{db.prefix}article_publication_heads WHERE article_id = $1 AND active_id IS NOT NULL", [id]).any?
-            reserve_working_route(db, id, self.class.working_route(metadata.transform_values { |field| field.fetch("value") }))
-          end
-          sequence = current.fetch("head") + 1
-          now = Time.now.utc.iso8601(6)
-          rows = db.query("UPDATE #{db.prefix}articles SET head = $1, metadata = $2, updated_at = $3 WHERE id = $4 AND head = $5 RETURNING head", [sequence, JSON.generate(metadata), now, id, sequence - 1])
-          raise Error.new("Draft changed; retry this update", 409) if rows.empty?
-          receipt = { "update_id" => update_id, "digest" => digest, "sequence" => sequence, "generation" => 1, "metadata" => metadata }
-          chunks = (data.bytesize + CHUNK_BYTES - 1) / CHUNK_BYTES
-          chunks.times do |position|
-            chunk = Base64.strict_encode64(data.byteslice(position * CHUNK_BYTES, CHUNK_BYTES))
-            db.query("INSERT INTO #{db.prefix}draft_chunks (article_id, update_id, position, data) VALUES ($1, $2, $3, $4)", [id, update_id, position, chunk])
-          end
-          db.query("INSERT INTO #{db.prefix}draft_updates (article_id, update_id, sequence, digest, fingerprint, receipt, chunks) VALUES ($1, $2, $3, $4, $5, $6, $7)", [id, update_id, sequence, digest, fingerprint, JSON.generate(receipt), chunks])
-          receipt
+      operation = lambda do |db|
+        current = document(db, id)
+        require_content_format!(current, payload)
+        previous = db.query("SELECT fingerprint, receipt FROM #{db.prefix}draft_updates WHERE article_id = $1 AND update_id = $2", [id, update_id]).first
+        if previous
+          raise Error.new("Update ID already contains different content", 409) unless previous.fetch("fingerprint") == fingerprint
+          next JSON.parse(previous.fetch("receipt"))
         end
+
+        metadata = merge_metadata(current.fetch("metadata"), changes)
+        if (changes.keys & %w[title page_type page_date]).any? && db.query("SELECT active_id FROM #{db.prefix}article_publication_heads WHERE article_id = $1 AND active_id IS NOT NULL", [id]).any?
+          reserve_working_route(db, id, self.class.working_route(metadata.transform_values { |field| field.fetch("value") }))
+        end
+        sequence = current.fetch("head") + 1
+        now = Time.now.utc.iso8601(6)
+        rows = db.query("UPDATE #{db.prefix}articles SET head = $1, metadata = $2, updated_at = $3 WHERE id = $4 AND head = $5 RETURNING head", [sequence, JSON.generate(metadata), now, id, sequence - 1])
+        raise Error.new("Draft changed; retry this update", 409) if rows.empty?
+        receipt = { "update_id" => update_id, "digest" => digest, "sequence" => sequence, "generation" => 1, "metadata" => metadata }
+        chunks = (data.bytesize + CHUNK_BYTES - 1) / CHUNK_BYTES
+        chunks.times do |position|
+          chunk = Base64.strict_encode64(data.byteslice(position * CHUNK_BYTES, CHUNK_BYTES))
+          db.query("INSERT INTO #{db.prefix}draft_chunks (article_id, update_id, position, data) VALUES ($1, $2, $3, $4)", [id, update_id, position, chunk])
+        end
+        db.query("INSERT INTO #{db.prefix}draft_updates (article_id, update_id, sequence, digest, fingerprint, receipt, chunks) VALUES ($1, $2, $3, $4, $5, $6, $7)", [id, update_id, sequence, digest, fingerprint, JSON.generate(receipt), chunks])
+        receipt
       end
+      return operation.call(connection) if connection
+      @connect.call { |db| db.transaction { operation.call(db) } }
     end
     private :append_data
 
@@ -307,6 +342,7 @@ module WeblogAuthoring
       cursor = integer(query.fetch("cursor", "0"))
       @connect.call do |db|
         current = document(db, id)
+        require_content_format!(current, query) unless query["format"] == "auto"
         high_water = query.key?("through") ? integer(query["through"]) : current.fetch("head")
         raise Error, "Invalid cursor" unless cursor >= 0 && cursor <= high_water && high_water <= current.fetch("head")
         checkpoint = if query.key?("checkpoint_through")
@@ -350,7 +386,7 @@ module WeblogAuthoring
           { "article_id" => id, "generation" => current.fetch("generation"), "protocol" => 1,
             "metadata" => current.fetch("metadata"),
             "through" => current.fetch("head"), "expected_checkpoint" => checkpoint ? checkpoint.fetch("through") : 0,
-            "checkpoint" => checkpoint, }
+            "checkpoint" => checkpoint, }.merge(current.slice("format", "structure"))
         end
       end
     end
@@ -362,7 +398,7 @@ module WeblogAuthoring
       updates = []
       bytes = 0
       while cursor < job.fetch("through")
-        page = read(id, { "cursor" => cursor.to_s, "through" => job.fetch("through").to_s })
+        page = read(id, { "cursor" => cursor.to_s, "through" => job.fetch("through").to_s, "format" => job.fetch("format", "legacy") })
         page.fetch("updates").each do |update|
           bytes += Base64.strict_decode64(update.fetch("data")).bytesize
           updates << update
@@ -531,7 +567,7 @@ module WeblogAuthoring
       row = db.query("SELECT * FROM #{db.prefix}articles WHERE id = $1", [id]).first
       raise Error.new("Draft not found", 404) unless row
       { "id" => id, "generation" => row.fetch("generation").to_i, "protocol" => 1, "head" => row.fetch("head").to_i,
-        "metadata" => DEFAULT_METADATA.transform_values { |value| { "value" => value, "revision" => 0 } }.merge(JSON.parse(row.fetch("metadata"))), "created_at" => row.fetch("created_at"), "updated_at" => row.fetch("updated_at"), }
+        "metadata" => DEFAULT_METADATA.transform_values { |value| { "value" => value, "revision" => 0 } }.merge(JSON.parse(row.fetch("metadata"))), "created_at" => row.fetch("created_at"), "updated_at" => row.fetch("updated_at"), }.merge(content_structure(db, id))
     end
 
     def merge_metadata(current, changes)

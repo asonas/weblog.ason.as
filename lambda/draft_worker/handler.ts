@@ -1,13 +1,16 @@
 import type { Handler, ScheduledEvent } from "aws-lambda";
 import { maintainDraftCheckpoints } from "./maintenance.js";
-import { reconstructDraft } from "./reconstruct.js";
+import { reconstructDraft, seedPiece } from "./reconstruct.js";
 import { DsqlDraftCheckpointRepository } from "./repository.js";
 
 export const handler: Handler<
   | ScheduledEvent
   | { operation: "publication"; article_id: string }
   | { operation: "publication_batch"; article_ids: string[] }
+  | { operation: "seed_piece"; piece_id: string; body: string }
 > = async (event) => {
+  if ("operation" in event && event.operation === "seed_piece")
+    return seedPiece(event.piece_id, event.body);
   if (
     "operation" in event &&
     (event.operation === "publication" ||
@@ -28,6 +31,10 @@ export const handler: Handler<
         through: result.through,
         markdown: result.markdown,
         markdownDigest: result.markdownDigest,
+        format: result.format,
+        structure: result.structure,
+        pieces: result.pieces,
+        tags: result.tags,
       };
     };
     if (event.operation === "publication_batch") {

@@ -187,6 +187,13 @@ module WeblogAuthoring
       body
     end
 
+    get "/api/mentioned-by-days" do
+      content_type :json
+      headers "Cache-Control" => "no-store"
+      halt 503, JSON.generate(error: "Draft store is unavailable") unless settings.draft_store
+      JSON.generate(MentionedByDays.new(store: settings.draft_store, database: settings.database).call(params.fetch("route", ""), before: params["before"]))
+    end
+
     get "/api/tags" do
       json_response({ "tags" => recent_tags(settings.database.list_pages) })
     end
@@ -432,6 +439,18 @@ module WeblogAuthoring
       json_response(settings.draft_store.read(params.fetch("id"), params))
     end
 
+    patch "/api/authoring/drafts/:id/structure" do
+      api_response { |payload| settings.draft_store.update_structure(params.fetch("id"), payload) }
+    end
+
+    post "/api/authoring/drafts/:id/memos" do
+      api_response { |payload| settings.draft_publication.adopt_memo(params.fetch("id"), payload) }
+    end
+
+    delete "/api/authoring/drafts/:id" do
+      api_response { |payload| settings.draft_store.delete_piece_draft(params.fetch("id"), payload) }
+    end
+
     error DraftStore::Error do
       error = env.fetch("sinatra.error")
       json_error(error.status, error.message)
@@ -524,6 +543,18 @@ module WeblogAuthoring
 
         { "revoked" => true }
       end
+    end
+
+    get %r{/api/(inbox|mobile)/memos(?:/([^/]+))?} do
+      memo_api_response
+    end
+
+    put %r{/api/(inbox|mobile)/memos/([^/]+)} do
+      memo_api_response
+    end
+
+    delete %r{/api/(inbox|mobile)/memos/([^/]+)} do
+      memo_api_response
     end
 
     get "/api/inbox" do
@@ -742,7 +773,28 @@ module WeblogAuthoring
     end
 
     def mobile_device_request?
-      request.path_info == "/api/mobile/pairings/exchange" || request.path_info.start_with?("/api/mobile/uploads")
+      request.path_info == "/api/mobile/pairings/exchange" || request.path_info.start_with?("/api/mobile/uploads", "/api/mobile/memos")
+    end
+
+    def memo_api_response
+      headers "Cache-Control" => "private, no-store"
+      halt 404 unless settings.draft_store
+      if request.path_info.start_with?("/api/mobile/")
+        halt 401, json_error(401, "A valid device token is required") unless mobile_upload.authenticate(mobile_bearer_token)
+      elsif settings.authentication_required
+        require_authenticated!
+        require_csrf! if mutation_request?
+      end
+      id = request.path_info.split("/")[4]
+      return json_response({ "memos" => settings.draft_store.list_memos }) if request.get? && !id
+      result = case request.request_method
+               when "GET" then settings.draft_store.find_memo(id)
+               when "PUT" then settings.draft_store.save_memo(id, parse_json)
+               when "DELETE" then settings.draft_store.delete_memo(id, parse_json)
+               end
+      json_response(result)
+    rescue DevelopmentInputError => error
+      json_error(error.status, error.message)
     end
 
     def mobile_bearer_token
@@ -894,6 +946,7 @@ module WeblogAuthoring
         "authentication_required" => settings.authentication_required,
         "can_edit" => !settings.authentication_required || !user.nil?,
         "draft_authoring" => !settings.draft_store.nil?,
+        "piece_authoring" => settings.draft_store&.pieces_enabled? || false,
         "login" => user&.fetch("login", nil),
         "csrf_token" => csrf_token,
       }

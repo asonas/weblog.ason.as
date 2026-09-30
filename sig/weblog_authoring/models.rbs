@@ -16,7 +16,7 @@ module WeblogAuthoring
 
   class ArticleDocument < Struct[untyped]
     def self.from_published_version: (Hash[String, untyped]?) -> ArticleDocument?
-    def self.new: (id: String, page_type: page_type, name: String?, page_date: Date?, title: String?, status: page_status, created_at: Time, updated_at: Time, published_at: Time?, ?path: Pathname, body: String, links: Array[WikiLink], cover_mode: String?, cover_image_url: String?) -> ArticleDocument
+    def self.new: (id: String, page_type: page_type, name: String?, page_date: Date?, title: String?, status: page_status, created_at: Time, updated_at: Time, published_at: Time?, ?path: Pathname, body: String, ?pieces: Array[Hash[String, String]]?, ?tags: Array[String]?, links: Array[WikiLink], cover_mode: String?, cover_image_url: String?) -> ArticleDocument
     attr_reader id: String
     attr_reader page_type: page_type
     attr_reader name: String?
@@ -28,6 +28,8 @@ module WeblogAuthoring
     attr_reader published_at: Time?
     attr_reader path: Pathname
     attr_reader body: String
+    attr_reader pieces: Array[Hash[String, String]]?
+    attr_reader tags: Array[String]?
     attr_reader links: Array[WikiLink]
     attr_reader cover_mode: String
     attr_reader cover_image_url: String?

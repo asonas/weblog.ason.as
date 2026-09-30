@@ -33,6 +33,9 @@ module WeblogAuthoring
       end
       job = @store.publication_job(id, version_id)
       if job.fetch("status") == "completed" && @store.published_snapshot(id)&.fetch("id") == version_id
+        if @store.published_memos_pending?(id, version_id)
+          perform(id, version_id, "memos", retry_now:, rebuild: true) { @store.delete_published_memo_bodies(id, version_id); nil }
+        end
         %w[atom search].each do |stage|
           begin
             is_current = @outputs.current?(stage)
@@ -64,6 +67,7 @@ module WeblogAuthoring
           stages = @store.publication_stages(id, version)
           unfinished = stages.length < 3 || stages.any? { |stage| !%w[completed superseded].include?(stage.fetch("status")) }
           active = version == head["active_id"]
+          unfinished ||= active && @store.published_memos_pending?(id, version)
           begin
             repair_html = active && !@publisher.current?(@store.published_snapshot(id))
           rescue StandardError

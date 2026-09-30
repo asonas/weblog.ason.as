@@ -1,5 +1,12 @@
 module WeblogAuthoring
   class DraftStore
+    def pieces_enabled?: () -> bool
+    def update_structure: (String, Hash[String, untyped]) -> Hash[String, untyped]
+    def delete_piece_draft: (String, Hash[String, untyped]) -> Hash[String, untyped]
+    def list_memos: () -> Array[Hash[String, untyped]]
+    def find_memo: (String) -> Hash[String, untyped]
+    def save_memo: (String, Hash[String, untyped]) -> Hash[String, untyped]
+    def delete_memo: (String, Hash[String, untyped]) -> Hash[String, untyped]
     def publication_dispatch: (String, String, String) -> Hash[String, untyped]
     def published_redirect: (String) -> String?
     def resolve_published_route: (String) -> Hash[String, untyped]

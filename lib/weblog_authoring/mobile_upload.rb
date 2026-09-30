@@ -170,6 +170,7 @@ module WeblogAuthoring
         Rack::Utils.secure_compare(device.fetch("token_digest"), candidate)
       end
     end
+    public :authenticate
 
     def upload_attributes(payload)
       client_upload_id = payload["client_upload_id"].to_s

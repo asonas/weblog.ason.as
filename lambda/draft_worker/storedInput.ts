@@ -1,4 +1,4 @@
-import { reconstructDraft } from "./reconstruct.js";
+import { parsePieceStructure, reconstructDraft } from "./reconstruct.js";
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -27,11 +27,22 @@ function payload(value: Record<string, unknown>, limit: number) {
 
 export function reconstructStoredDraft(value: unknown) {
   const input = record(value);
+  if (
+    input.format !== undefined &&
+    input.format !== "legacy" &&
+    input.format !== "pieces"
+  )
+    throw new Error("Unsupported article format");
   if (typeof input.article_id !== "string" || !Array.isArray(input.updates))
     throw new Error("Invalid stored job");
   const checkpoint =
     input.checkpoint == null ? undefined : record(input.checkpoint);
   const result = reconstructDraft({
+    format: input.format === "pieces" ? "pieces" : "legacy",
+    structure:
+      input.format === "pieces"
+        ? parsePieceStructure(input.structure)
+        : undefined,
     protocol: integer(input.protocol),
     generation: integer(input.generation),
     through: integer(input.through),

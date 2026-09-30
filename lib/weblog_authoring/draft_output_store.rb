@@ -86,7 +86,7 @@ module WeblogAuthoring
     end
 
     def begin_publication_stage(id, version_id, stage, now:, retry_now: false, rebuild: false)
-      raise DraftStore::Error, "Unknown publication stage" unless %w[html atom search].include?(stage)
+      raise DraftStore::Error, "Unknown publication stage" unless %w[html atom search memos].include?(stage)
       @connect.call do |db|
         db.transaction do
           job = db.query("SELECT * FROM #{db.prefix}article_publication_jobs WHERE article_id = $1 AND id = $2", [id, version_id]).first

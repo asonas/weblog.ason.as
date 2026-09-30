@@ -26,6 +26,10 @@ module WeblogAuthoring
           previous = publication_receipt_from(db, id, request.fetch("request_id"), fingerprint)
           next previous if previous
           current = document(db, id)
+          require_content_format!(current, request)
+          if current["structure"] && (current.dig("structure", "revision") != request["structure_revision"] || current.dig("structure", "revision") != verified["structure_revision"])
+            raise DraftStore::Error.new("確認後にかけらやタグが変更されました。内容を再確認してください。", 409)
+          end
           revisions = current.fetch("metadata").transform_values { |field| field.fetch("revision") }
           unless current.fetch("head") == request["head"] && revisions == request["metadata_revisions"] && verified.fetch("content_hash") == request["content_hash"] && verified.fetch("through") == current.fetch("head")
             raise DraftStore::Error.new("確認後に記事が変更されました。内容を再確認してください。", 409)
@@ -47,12 +51,14 @@ module WeblogAuthoring
             raise DraftStore::Error.new("このURLは別の記事で使用中です。", 409) unless owner.fetch("article_id") == id
             version_id = verified["batch_id"] || SecureRandom.uuid
             db.query("INSERT INTO #{db.prefix}article_published_versions (id, article_id, content_hash, body, metadata, route, created_at, article_created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [version_id, id, verified.fetch("content_hash"), verified.fetch("body"), JSON.generate(verified.fetch("metadata")), route, now, current.fetch("created_at")])
+            index_piece_mentions(db, id, version_id, verified.fetch("metadata"))
             db.query("INSERT INTO #{db.prefix}article_publication_jobs (id, article_id, status) VALUES ($1, $2, 'accepted')", [version_id, id])
             db.query("INSERT INTO #{db.prefix}article_publication_heads (article_id, latest_id) VALUES ($1, $2) ON CONFLICT (article_id) DO UPDATE SET latest_id = $2", [id, version_id])
             accept_rename_batch(db, id, version_id, active, verified.fetch("rename")) if verified["rename"]
             response = { "id" => version_id, "status" => "accepted" }
           end
           # Touch the working head so DSQL detects a concurrent edit at commit.
+          response["head"] = current.fetch("head") if current["structure"]
           db.query("UPDATE #{db.prefix}articles SET head = head WHERE id = $1", [id])
           db.query("INSERT INTO #{db.prefix}article_publication_receipts (article_id, request_id, fingerprint, response) VALUES ($1, $2, $3, $4)", [id, request.fetch("request_id"), fingerprint, JSON.generate(response)])
           response
