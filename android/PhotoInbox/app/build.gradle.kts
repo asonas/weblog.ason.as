@@ -5,15 +5,35 @@ plugins {
 
 android {
     namespace = "com.asonas.weblog.photoinbox"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.asonas.weblog.PhotoInbox"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 1
+        targetSdk = 36
+        versionCode = providers.gradleProperty("ciVersionCode").orElse("1").get().toInt()
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (System.getenv("ANDROID_KEYSTORE_PATH") != null) {
+            create("ci") {
+                storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                storeType = "PKCS12"
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = "upload"
+                keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (signingConfigs.findByName("ci") != null) {
+                signingConfig = signingConfigs.getByName("ci")
+            }
+        }
     }
 
     buildFeatures {

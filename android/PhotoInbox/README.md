@@ -18,7 +18,7 @@ winget install --id jdx.mise --exact
 ```
 
 次にリポジトリのルートで以下を実行します。Temurin JDK 17、Android
-SDK Command-line Tools、SDK 35、Build Tools 36.0.0、Platform Toolsが
+SDK Command-line Tools、SDK 36、Build Tools 36.0.0、Platform Toolsが
 インストールされます。
 
 ```powershell
@@ -70,8 +70,21 @@ mise run android:test
 
 ## 配布
 
-配布方法はGoogle Play Consoleの内部テストとします。Android Studioの
-「Generate Signed App Bundle or APK」から署名済みAABを生成し、内部テストトラックへ登録します。内部テスターの実機で次を確認してから段階的に配布します。
+配布方法はGoogle Play Consoleの内部テストとします。
+`android/PhotoInbox/` または `.github/workflows/android-internal.yml` の変更を
+mainへpushすると、GitHub Actionsが単体テスト、署名済みAABのビルド、内部テストへの配布を実行します。
+Actionsの「Android internal testing」からmainを指定して手動実行することもできます。
+
+Google Playの認証にはWorkload Identity Federationを使います。
+`weblog-ason-as` の `github-actions` プールは、このリポジトリのmainブランチに限定されています。
+配布先は `com.asonas.weblog.PhotoInbox` の内部テストトラックです。
+GitHub Secretsの `ANDROID_KEYSTORE_BASE64` にPKCS12形式のアップロード鍵、
+`ANDROID_KEYSTORE_PASSWORD` に鍵のパスワードを登録します。鍵のエイリアスは `upload` です。
+`versionCode` はworkflowの実行番号と再実行番号から生成します。
+
+手動配布する場合は、Android Studioの「Generate Signed App Bundle or APK」で
+同じアップロード鍵を使い、既存リリースより大きい `versionCode` のAABを内部テストへ登録します。
+内部テスターの実機で次を確認してから段階的に配布します。
 
 1. ペアリング後に写真を送信できる。
 2. Webの写真インボックスに同じ写真が1件だけ表示される。

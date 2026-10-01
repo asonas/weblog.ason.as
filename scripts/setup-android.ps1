@@ -6,7 +6,7 @@ if (-not $env:ANDROID_HOME) {
 
 $packages = @(
     @{ Name = "platform-tools"; Path = "platform-tools\adb.exe" },
-    @{ Name = "platforms/android-35"; Path = "platforms\android-35\android.jar" },
+    @{ Name = "platforms/android-36"; Path = "platforms\android-36\android.jar" },
     @{ Name = "build-tools/36.0.0"; Path = "build-tools\36.0.0\aapt2.exe" }
 )
 

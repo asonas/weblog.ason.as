@@ -1,0 +1,16 @@
+default_platform(:android)
+
+platform :android do
+  lane :internal do
+    upload_to_play_store(
+      package_name: "com.asonas.weblog.PhotoInbox",
+      aab: "app/build/outputs/bundle/release/app-release.aab",
+      track: "internal",
+      release_status: "completed",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true
+    )
+  end
+end
