@@ -181,8 +181,10 @@ export function reconstructDraft(input: ReconstructionInput) {
             (id) => name === `piece:${id}`,
           )
         : name === "body";
-      if (!permitted) throw new Error("Draft contains an unknown text field");
       const text = doc.getText(name);
+      // A migrated diary retains the empty legacy field in its Yjs history.
+      if (!permitted && !(structure && name === "body" && text.length === 0))
+        throw new Error("Draft contains an unknown text field");
       if (
         Object.keys(text.getAttributes()).length ||
         text
