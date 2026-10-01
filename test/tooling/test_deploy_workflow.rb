@@ -2,6 +2,10 @@
 
 require "minitest/autorun"
 require "yaml"
+require "json"
+require "open3"
+require "tmpdir"
+require "rbconfig"
 
 class DeployWorkflowTest < Minitest::Test
   ROOT = File.expand_path("../..", __dir__)
@@ -94,7 +98,7 @@ class DeployWorkflowTest < Minitest::Test
     assert_includes infrastructure, "ResourceNotFoundException"
     assert_includes infrastructure, "exit 1"
     webmention_deploy = steps.find { |step| step["name"] == "Deploy Webmention Lambda image" }
-    assert_includes webmention_deploy.fetch("if"), "needs.build-authoring.outputs.deploy == 'true'"
+    refute_includes webmention_deploy.fetch("if"), "needs.build-authoring.outputs.deploy"
     assert_includes webmention_deploy.fetch("run"), "@${AUTHORING_DIGEST}"
     %w[receiver worker publisher cleanup].each do |service|
       assert_includes webmention_deploy.fetch("run"), "steps.infra.outputs.#{service}"
@@ -106,6 +110,46 @@ class DeployWorkflowTest < Minitest::Test
     schema = steps.find { |step| step["name"] == "Apply database schema" }
     assert_includes recheck.fetch("run"), "git/ref/heads/main"
     assert_equal "steps.current.outputs.current == 'true'", schema.fetch("if")
+  end
+
+  def test_shared_image_functions_update_after_authoring_was_predeployed
+    steps = @workflow.dig("jobs", "deploy", "steps")
+    selected = ["Deploy authoring performance Lambda image", "Deploy Webmention Lambda image"].map do |name|
+      step = steps.find { |item| item["name"] == name }
+      refute_includes step.fetch("if"), "needs.build-authoring.outputs.deploy"
+      step.fetch("run").gsub(/\$\{\{ steps\.infra\.outputs\.\w+ \}\}/, "true")
+    end
+    environment = @workflow.fetch("env")
+    target = "#{environment.fetch('AWS_ACCOUNT_ID')}.dkr.ecr.#{environment.fetch('AWS_REGION')}.amazonaws.com/#{environment.fetch('ECR_REPOSITORY')}@sha256:new"
+    current = { environment.fetch("WEBMENTION_WORKER_LAMBDA_FUNCTION") => target }
+    Dir.mktmpdir("deploy-aws") do |directory|
+      executable = File.join(directory, "aws")
+      calls = File.join(directory, "calls.jsonl")
+      File.write(executable, <<~RUBY)
+        #!#{RbConfig.ruby}
+        require "json"
+        File.open(ENV.fetch("AWS_CALLS"), "a") { |file| file.puts(JSON.generate(ARGV)) }
+        case ARGV[1]
+        when "get-function"
+          name = ARGV.fetch(ARGV.index("--function-name") + 1)
+          puts JSON.parse(ENV.fetch("CURRENT_IMAGES")).fetch(name, "old-image")
+        when "update-function-code", "wait"
+          puts "{}"
+        else
+          abort "Unexpected AWS operation"
+        end
+      RUBY
+      File.chmod(0o755, executable)
+      output, error, status = Open3.capture3(
+        environment.merge("PATH" => "#{directory}:#{ENV.fetch('PATH')}", "AUTHORING_DIGEST" => "sha256:new", "AWS_CALLS" => calls, "CURRENT_IMAGES" => JSON.generate(current)),
+        "bash", "-e", "-o", "pipefail", "-c", selected.join("\n")
+      )
+      assert status.success?, "#{output}\n#{error}"
+      updates = File.readlines(calls).map { |line| JSON.parse(line) }.select { |call| call[1] == "update-function-code" }
+      expected = %w[AUTHORING_PERFORMANCE_LAMBDA_FUNCTION WEBMENTION_RECEIVER_LAMBDA_FUNCTION WEBMENTION_PUBLISHER_LAMBDA_FUNCTION WEBMENTION_CLEANUP_LAMBDA_FUNCTION].map { |key| environment.fetch(key) }
+      assert_equal(expected, updates.map { |call| call.fetch(call.index("--function-name") + 1) })
+      assert(updates.all? { |call| call.fetch(call.index("--image-uri") + 1) == target })
+    end
   end
 
   def test_new_images_receive_a_service_calver_tag

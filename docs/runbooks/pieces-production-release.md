@@ -203,3 +203,61 @@ get-recovery-point-restore-metadataで実データを取得してから、復元
 snapshotを読み取り確認する。稼働中の本番との比較は時点差があり得るため、
 停止後の同一バックアップ時点での照合を最終条件とする。
 復元クラスタの削除は対象ARNを記録し、2026-10-01の終了後削除の承認範囲で行う。
+
+## 先行maintenanceイメージの準備（2026-10-01）
+
+既存のDockerfile.lambdaからローカルDocker Desktopでlinux/arm64イメージを作成した。
+ビルド対象SHAは`a5c6ca48f02abfac4442410855280215cf6d787e`。
+Parameter Store拡張は既存スクリプトで固定layer ARNとSHA-256を検証して取得した。
+
+- repository: `282782318939.dkr.ecr.ap-northeast-1.amazonaws.com/weblog-authoring-production`
+- digest: `sha256:10f61f0f95e090c4be494e9e420f32e43e802f98c2ee51cf674a0f3668b82480`
+- CalVer tag: `authoring.2026-10-01.1`
+- content tag: `content-07adcd60d274493e3551aa0fe52b949393fda7af12261ff090952a2615fc0b45`
+- ECRの圧縮サイズ: 343,860,373 bytes。登録したイメージは1件、tagは2個。
+
+content hashは既存workflowと同じgit ls-tree対象・linux/arm64の計算を使った。
+後続の通常デプロイでもビルド入力が変わらなければ同じイメージを再利用できる。
+ECR登録はLambda更新を行わない。登録後、本番Lambdaが旧digest
+`sha256:ddadc2b139c5c8806a0036bb2c0b9f003016e64eefad6cad1a13645392e62ba9`のまま
+Active / Successfulであることを読み取り確認した。一時ECR資格情報は削除済み。
+
+### イメージの検証
+
+- test_authoring_lambda.rb: 4 tests / 43 assertions成功。
+- 実イメージをnetwork=none、DB・AWS資格情報なしで起動した。
+  AUTHORING_MAINTENANCE=trueでGET、HEAD、POST、DELETEの4要求が503 / no-storeとなり、
+  定期ジョブもmaintenance例外で停止することを確認した。
+- 上記はローカルの実イメージ確認であり、本番Lambdaの503確認はまだ未実施。
+  イメージ自体に停止フラグを固定していない。配備時の環境変数設定が必要。
+
+### 先行配備のplan
+
+本番rootをfresh initし、authoring Lambdaをtargetとする保存planを作成した。
+差分はauthoringの環境変数1リソース更新のみ。AUTHORING_MAINTENANCE=trueと
+ARTICLE_PIECES_ENABLED=falseを追加し、既存のWebmentionフラグを維持する。
+このplanはまだapplyしていない。通常の全体planを改名前に適用しない。
+
+本番の停止・配備時には、まずcutoverをpausedへ変更し起動元を停止・排出する。
+停止承認後にfresh init・保存planを再取得し、そのplanを適用する。
+この環境変数を無視する旧イメージから、上記のdigestへauthoring Lambdaだけを
+update-function-codeで更新し、function-updated-v2を待つ。RevisionIdを指定して
+意図しない同時更新を検出する。Lambda/API Gatewayへの直接HTTP要求で503を確認する。
+Terraformのapply後は毎回全体planを再取得し、予定済みの未適用差分と照合する。
+
+ここまでの作業では、本番の停止・DB改名・main push・Lambda更新を行っていない。
+
+### 先行配備後の通常デプロイ
+
+authoringだけ先行配備すると、build-authoringのdeploy出力はfalseになり得る。
+その出力でWebmentionとperformanceの更新まで省略しないようworkflowを修正した。
+これらは各LambdaのResolvedImageUriを調べ、固定digestが違う場合だけ更新する。
+authoringが更新済みでも、旧イメージの利用元を更新できることと、同じdigestの
+Lambdaを再更新しないことを、AWS CLIを外部境界で置き換えたプロセステストで確認した。
+workflowテストは11 tests / 165 assertions成功。
+
+通常デプロイは全Lambda更新とsite配信の後に本番smokeを実行する。
+maintenance=trueのままではAPI smokeが失敗し得るため、全利用元の更新完了を確認した
+段階で停止設定を解除する。workflowの配信・Lambda更新段階を確認してから、
+fresh Terraform planで解除し、cutoverの復帰とsmokeを完了する。
+503中のsmoke失敗をデプロイ成功として記録しない。

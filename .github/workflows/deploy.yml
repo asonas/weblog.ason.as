@@ -323,31 +323,43 @@ jobs:
           image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}@${AUTHORING_DIGEST}"
           aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" --image-uri "$image_uri"
           aws lambda wait function-updated-v2 --function-name "$LAMBDA_FUNCTION"
+
+      - name: Deploy authoring performance Lambda image
+        if: steps.current.outputs.current == 'true'
+        run: |
+          image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}@${AUTHORING_DIGEST}"
           if aws lambda get-function --function-name "$AUTHORING_PERFORMANCE_LAMBDA_FUNCTION" >/dev/null 2>&1; then
-            aws lambda update-function-code --function-name "$AUTHORING_PERFORMANCE_LAMBDA_FUNCTION" --image-uri "$image_uri"
-            aws lambda wait function-updated-v2 --function-name "$AUTHORING_PERFORMANCE_LAMBDA_FUNCTION"
+            current_uri="$(aws lambda get-function --function-name "$AUTHORING_PERFORMANCE_LAMBDA_FUNCTION" --query 'Code.ResolvedImageUri' --output text)"
+            if [[ "$current_uri" != "$image_uri" ]]; then
+              aws lambda update-function-code --function-name "$AUTHORING_PERFORMANCE_LAMBDA_FUNCTION" --image-uri "$image_uri"
+              aws lambda wait function-updated-v2 --function-name "$AUTHORING_PERFORMANCE_LAMBDA_FUNCTION"
+            fi
           fi
 
       - name: Deploy Webmention Lambda image
-        if: steps.current.outputs.current == 'true' && needs.build-authoring.outputs.deploy == 'true' && (steps.infra.outputs.receiver == 'true' || steps.infra.outputs.worker == 'true' || steps.infra.outputs.publisher == 'true' || steps.infra.outputs.cleanup == 'true')
+        if: steps.current.outputs.current == 'true' && (steps.infra.outputs.receiver == 'true' || steps.infra.outputs.worker == 'true' || steps.infra.outputs.publisher == 'true' || steps.infra.outputs.cleanup == 'true')
         run: |
           image_uri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}@${AUTHORING_DIGEST}"
+          functions=()
           if [[ "${{ steps.infra.outputs.receiver }}" == "true" ]]; then
-            aws lambda update-function-code --function-name "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION" --image-uri "$image_uri"
-            aws lambda wait function-updated-v2 --function-name "$WEBMENTION_RECEIVER_LAMBDA_FUNCTION"
+            functions+=("$WEBMENTION_RECEIVER_LAMBDA_FUNCTION")
           fi
           if [[ "${{ steps.infra.outputs.worker }}" == "true" ]]; then
-            aws lambda update-function-code --function-name "$WEBMENTION_WORKER_LAMBDA_FUNCTION" --image-uri "$image_uri"
-            aws lambda wait function-updated-v2 --function-name "$WEBMENTION_WORKER_LAMBDA_FUNCTION"
+            functions+=("$WEBMENTION_WORKER_LAMBDA_FUNCTION")
           fi
           if [[ "${{ steps.infra.outputs.publisher }}" == "true" ]]; then
-            aws lambda update-function-code --function-name "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION" --image-uri "$image_uri"
-            aws lambda wait function-updated-v2 --function-name "$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION"
+            functions+=("$WEBMENTION_PUBLISHER_LAMBDA_FUNCTION")
           fi
           if [[ "${{ steps.infra.outputs.cleanup }}" == "true" ]]; then
-            aws lambda update-function-code --function-name "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION" --image-uri "$image_uri"
-            aws lambda wait function-updated-v2 --function-name "$WEBMENTION_CLEANUP_LAMBDA_FUNCTION"
+            functions+=("$WEBMENTION_CLEANUP_LAMBDA_FUNCTION")
           fi
+          for function_name in "${functions[@]}"; do
+            current_uri="$(aws lambda get-function --function-name "$function_name" --query 'Code.ResolvedImageUri' --output text)"
+            if [[ "$current_uri" != "$image_uri" ]]; then
+              aws lambda update-function-code --function-name "$function_name" --image-uri "$image_uri"
+              aws lambda wait function-updated-v2 --function-name "$function_name"
+            fi
+          done
 
       - name: Deploy search indexer Lambda image
         if: steps.current.outputs.current == 'true' && needs.build-search.outputs.deploy == 'true'
