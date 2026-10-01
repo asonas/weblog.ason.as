@@ -110,11 +110,12 @@ function MemoCard({
             }
             onClick={() => void act("adopt")}
           >
-            日記に取り込む
+            かけらとして取り込む
           </button>
         )}
         <button
           type="button"
+          className="memo-inbox__delete"
           disabled={busy || saving || Boolean(memo.flight)}
           onClick={() => {
             if (window.confirm("このメモを削除しますか？")) void act("delete");
@@ -183,19 +184,21 @@ export function MemoInbox({
       opened?.close();
     };
   }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Switching pieces changes the textarea referenced by the ref.
   useEffect(() => {
     const field = textarea.current;
     const update = () =>
       setSelection(
         field?.value.slice(field.selectionStart, field.selectionEnd) || "",
       );
+    update();
     field?.addEventListener("select", update);
     field?.addEventListener("input", update);
     return () => {
       field?.removeEventListener("select", update);
       field?.removeEventListener("input", update);
     };
-  }, [textarea]);
+  }, [textarea, session.activePieceId]);
   const run = async (action: () => Promise<unknown>) => {
     try {
       await action();
@@ -212,17 +215,47 @@ export function MemoInbox({
         <h3>メモ</h3>
         <button
           type="button"
+          className="draft-inbox__reload"
+          aria-label="メモを追加"
+          title="メモを追加"
           disabled={!store}
           onClick={() => store && void run(() => store.add())}
         >
-          追加
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
         </button>
         <button
           type="button"
+          className="draft-inbox__reload"
+          aria-label="メモを同期"
+          title="メモを同期"
           disabled={!store}
           onClick={() => store && void run(() => store.sync())}
         >
-          同期
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            {/* Regen Icons, MIT: ./regen-icons-LICENSE.txt */}
+            <path d="M17.66 17.66A8 8 0 1 1 12 4M12 4Q17 4 19.5 8.5M14 9L19 9A1 1 0 0 0 20 8L20 3" />
+          </svg>
         </button>
       </header>
       {selection && (
@@ -247,7 +280,6 @@ export function MemoInbox({
             />
           ))}
       </div>
-      {!memos.length && <p>思いついたことをメモできます。</p>}
     </section>
   );
 }

@@ -202,12 +202,104 @@ html[data-draft-workspace="true"] body {
   min-block-size: 0;
 }
 
-.draft-editor__source:has(.draft-pieces) {
+.draft-editor__source--pieces {
+  overflow-y: auto;
+  display: block;
+  padding-block-end: 24px;
+}
+
+.draft-editor:has(.draft-editor__source--pieces) .draft-editor__workspace {
+  min-block-size: 10rem;
+}
+
+.draft-editor:has(.draft-editor__source--pieces) .draft-editor__inbox {
+  flex-shrink: 1;
+}
+
+.draft-piece-editor {
+  position: relative;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.draft-editor__source:not(.draft-editor__source--pieces) > .draft-piece-editor {
+  block-size: 100%;
+}
+
+.draft-editor__source--pieces .draft-piece-editor {
+  border-inline-start: 2px solid transparent;
+}
+
+.draft-editor__source--pieces .draft-piece-editor + .draft-piece-editor {
+  border-block-start: 1px solid var(--separator);
+}
+
+.draft-editor__source--pieces .draft-piece-editor.is-active {
+  border-inline-start: 2px solid var(--authoring-nav-selected);
+}
+
+.draft-editor__source--pieces .draft-piece-editor textarea {
+  min-block-size: 6rem;
+  block-size: auto;
+  padding-inline-start: 48px;
+  padding-block-end: 24px;
+  field-sizing: content;
+}
+
+.draft-piece-editor__tools {
+  position: absolute;
+  inset-inline-start: 2px;
+  inset-block-start: 16px;
+  display: none;
+  z-index: 1;
+}
+
+.draft-piece-editor.is-active .draft-piece-editor__tools {
+  display: grid;
+}
+
+.draft-piece-editor__tools button {
+  padding: 0;
+  inline-size: 40px;
+  block-size: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-ink);
+  font-size: 18px;
+}
+
+.draft-piece-editor__tools svg {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.draft-piece-editor__tools button[draggable] {
+  cursor: grab;
+  touch-action: none;
+}
+
+.draft-piece-editor__tools button[draggable] svg {
+  transform: rotate(90deg);
+}
+
+.draft-piece-editor__tools button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -4px;
+}
+
+.draft-piece-editor.is-drop-target {
+  box-shadow: inset 0 2px var(--authoring-nav-selected);
+}
+
+.draft-editor__source:not(.draft-editor__source--pieces):has(.draft-pieces) {
   display: flex;
   flex-direction: column;
 }
 
-.draft-editor__source:has(.draft-pieces) > textarea {
+.draft-editor__source:not(.draft-editor__source--pieces):has(.draft-pieces)
+  > .draft-piece-editor {
   flex: 1;
   min-block-size: 8rem;
   block-size: auto;
@@ -218,6 +310,11 @@ html[data-draft-workspace="true"] body {
   border-block-end: 1px solid var(--authoring-stone);
   max-block-size: 40%;
   overflow-y: auto;
+}
+
+.draft-editor__source--pieces .draft-pieces {
+  border-block: 1px solid var(--authoring-stone);
+  max-block-size: none;
 }
 
 .draft-pieces__list {
@@ -302,6 +399,23 @@ html[data-draft-workspace="true"] body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.memo-inbox__actions button {
+  min-block-size: 40px;
+  padding: 4px 8px;
+  border: 1px solid var(--authoring-stone);
+  border-radius: 4px;
+  background: var(--authoring-linen);
+  color: var(--authoring-ink);
+  font-size: 13px;
+}
+
+.memo-inbox__actions .memo-inbox__delete {
+  margin-inline-start: auto;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted-ink);
 }
 
 .draft-editor__source textarea {

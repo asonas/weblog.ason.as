@@ -480,6 +480,13 @@ export class DraftSession extends EventTarget {
       });
       session.changed();
     });
+    if (
+      session.pieces &&
+      session.metadata.page_type === "named" &&
+      session.pieces.local.piece_ids.length === 0
+    ) {
+      session.addPiece();
+    }
     if (session.hasPendingChanges()) session.schedule();
     session.pollTimer = setInterval(session.refresh, 10_000);
     session.channel = new BroadcastChannel(`draft:${id}`);
@@ -776,6 +783,20 @@ export class DraftSession extends EventTarget {
     this.changed();
   }
 
+  splitActivePiece(before: string, after: string) {
+    if (!this.pieces || this.isPublishing || this.isComposing) return;
+    const index = this.pieces.local.piece_ids.indexOf(this.activePieceId || "");
+    if (index < 0) return;
+    this.setBody(before);
+    const id = crypto.randomUUID();
+    const ids = [...this.pieces.local.piece_ids];
+    ids.splice(index + 1, 0, id);
+    this.pieces.local = { ...this.pieces.local, piece_ids: ids };
+    this.selectPiece(id);
+    this.setBody(after);
+    this.changed();
+  }
+
   movePiece(id: string, direction: -1 | 1) {
     if (!this.pieces || this.isPublishing || this.isComposing) return;
     const ids = [...this.pieces.local.piece_ids];
@@ -783,6 +804,18 @@ export class DraftSession extends EventTarget {
     if (index < 0 || index + direction < 0 || index + direction >= ids.length)
       return;
     [ids[index], ids[index + direction]] = [ids[index + direction], ids[index]];
+    this.pieces.local = { ...this.pieces.local, piece_ids: ids };
+    this.changed();
+  }
+
+  movePieceTo(id: string, target: string) {
+    if (!this.pieces || this.isPublishing || this.isComposing) return;
+    const ids = [...this.pieces.local.piece_ids];
+    const from = ids.indexOf(id);
+    const to = ids.indexOf(target);
+    if (from < 0 || to < 0 || from === to) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, id);
     this.pieces.local = { ...this.pieces.local, piece_ids: ids };
     this.changed();
   }

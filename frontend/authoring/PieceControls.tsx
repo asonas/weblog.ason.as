@@ -58,58 +58,6 @@ export function DraftPieceControls({ session }: { session: DraftSession }) {
       ))}
       {diary && (
         <>
-          <ol className="draft-pieces__list">
-            {pieces.local.piece_ids.map((id, index) => (
-              <li key={id}>
-                <button
-                  type="button"
-                  aria-pressed={id === session.activePieceId}
-                  onClick={() => session.selectPiece(id)}
-                  disabled={session.isPublishing}
-                >
-                  <span>{index + 1}.</span>{" "}
-                  {session.doc
-                    .getText(`piece:${id}`)
-                    .toString()
-                    .split("\n")[0]
-                    .slice(0, 80) || "空のかけら"}
-                </button>
-                <button
-                  type="button"
-                  aria-label={`${index + 1}番目のかけらを上へ`}
-                  disabled={index === 0 || session.isPublishing}
-                  onClick={() => session.movePiece(id, -1)}
-                >
-                  上へ
-                </button>
-                <button
-                  type="button"
-                  aria-label={`${index + 1}番目のかけらを下へ`}
-                  disabled={
-                    index === pieces.local.piece_ids.length - 1 ||
-                    session.isPublishing
-                  }
-                  onClick={() => session.movePiece(id, 1)}
-                >
-                  下へ
-                </button>
-                <button
-                  type="button"
-                  disabled={session.isPublishing}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "このかけらを日記から削除しますか？Inboxには戻りません。",
-                      )
-                    )
-                      session.removePiece(id);
-                  }}
-                >
-                  削除
-                </button>
-              </li>
-            ))}
-          </ol>
           <button
             type="button"
             disabled={session.isPublishing}
