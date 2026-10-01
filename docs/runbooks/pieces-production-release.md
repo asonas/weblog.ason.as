@@ -261,3 +261,48 @@ maintenance=trueのままではAPI smokeが失敗し得るため、全利用元�
 段階で停止設定を解除する。workflowの配信・Lambda更新段階を確認してから、
 fresh Terraform planで解除し、cutoverの復帰とsmokeを完了する。
 503中のsmoke失敗をデプロイ成功として記録しない。
+
+## 本番切り替え結果（2026-10-01）
+
+ユーザーから書き込み停止・最終バックアップ・改名・push/配備・復帰の承認を受け、
+`c46be43729cf855add3819707ea8ed6ea9314792`を本番へ配備した。
+
+- cutoverをpausedにし、元々有効だった5ルール・1イベントソースを停止した。
+  APIを含む9利用元の同時実行数を0にし、OAuthも同じDB内の照合安定化のため停止した。
+  APIだけ新maintenanceイメージ更新後に復帰し、Lambda直接・API Gateway直接・
+  公開APIのGET/POSTで503 / no-storeを確認した。
+- 最長タイムアウト300秒の経過後、receiptが0件であることを確認した。
+  停止後に2回取得した54テーブル・26,547行の件数・全列SHA-256は一致した。
+- 最終BackupJobId: `4341d2e4-b77c-4c1e-9f17-642329a11780`。
+  RecoveryPointArn: `arn:aws:backup:ap-northeast-1:282782318939:recovery-point:11a9265a-cfbe-4900-9cc9-14c813263f63`。
+  16:46 JSTにCOMPLETED、サイズ11,843,914 bytes。
+  7日保持で2026-10-08 16:42 JSTに自動削除予定。追加の復元は行わなかった。
+- 17テーブルを改名した。改名前後の17テーブルsnapshotと、名前を正規化した
+  全54テーブル・26,547行の内容が一致した。同期・cutoverも維持した。
+- mainをpushし、[Validate](https://github.com/asonas/weblog.ason.as/actions/runs/36832471966)が成功した。
+  [Deploy](https://github.com/asonas/weblog.ason.as/actions/runs/36832856135)でbootstrap、
+  Lambda、公開asset・HTML・display releaseを更新した。
+  最初のsmokeはmaintenanceの503で失敗した。停止解除後の再実行は成功した。
+- 全12 Lambdaの実digestとLastUpdateStatusを配備結果と照合した。
+  performanceだけDeployロールの対象ARNから漏れ、workflowで更新が省略されていた。
+  今回は記録したrevisionを指定して同じauthoring digestへ手動更新した。
+- 復帰planは9ルート追加・18更新・削除0。既存のWebmention設定を維持した。
+  公開HTML・asset・pages APIのsmoke、言及APIの200、未認証メモAPIの401を確認した。
+  cutoverをopenに戻し、起動元と同時実行数を元の記録へ復帰した。
+- Piece有効化は別の保存planで行い、3 LambdaのARTICLE_PIECES_ENABLEDだけをtrueにした。
+  本番ブラウザで未公開の確認用下書きを作成し、`---`による2 Pieceへの分割、
+  区切り文字の除去、プレビューの水平線、サーバー保存、再読み込みを確認した。
+  DB上でも別々のPiece IDを確認した。確認用下書きは公開せず削除した。
+- 同時実行数・全7ルール・全3イベントソース・既存Webmentionフラグは元の値と一致した。
+  productionの再planは差分なし。現在はmaintenance=false、article_pieces_enabled=true。
+
+performanceへの配備権限漏れは、既存WeblogGitHubDeployのDeployLambda文に
+`weblog-authoring-performance-production`の単一ARNを追加して修正した。
+GetFunction / GetFunctionConfiguration / UpdateFunctionCodeの既存3権限だけを適用する。
+自動承認レビューが対象を明示した承認不足で最初のapplyを拒否したため、
+ユーザーからこの1個・3権限の明示承認を受けた後、fresh init・保存plan確認・applyを行った。
+更新は1ポリシーのみ、追加削除0。bootstrapの再planは差分なし、3操作のIAM判定はallowed。
+
+開発DBは本番へコピーしていない。既存日記は旧形式を維持し、開発専用の変換CLIは
+本番で実行していない。iOS/Androidの実機確認・配布、未公開確認では実証できない
+新Pieceの公開・Inbox取り込み・引用の一連の実操作は別の受け入れ確認として残る。

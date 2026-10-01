@@ -85,6 +85,7 @@ data "aws_iam_policy_document" "github_deploy" {
     ]
     resources = [
       "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-authoring-production",
+      "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-authoring-performance-production",
       "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-search-indexer-production",
       "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-inbox-sync-production",
       "arn:aws:lambda:ap-northeast-1:${data.aws_caller_identity.current.account_id}:function:weblog-matrix-notifier-production",
