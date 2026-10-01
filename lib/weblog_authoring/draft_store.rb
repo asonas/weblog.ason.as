@@ -621,6 +621,7 @@ module WeblogAuthoring
       def published_window_sql(key:, limit:, before:, after:, kind:, month:, timeline:, placeholder:)
         from = "FROM article_publication_heads h JOIN article_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id"
         conditions = []
+        conditions << "trim(v.body) <> ''" if timeline
         values = []
         if kind
           conditions << (kind == "diary" ? "v.body LIKE '%[[日記]]%'" : "v.body NOT LIKE '%[[日記]]%'")
@@ -676,6 +677,7 @@ module WeblogAuthoring
                 kind == "diary" ? "v.article_created_at" : "h.updated_at"
               end
         conditions = []
+        conditions << "btrim(v.body) <> ''" if timeline
         values = []
         if kind
           conditions << (kind == "diary" ? "v.body LIKE '%[[日記]]%'" : "v.body NOT LIKE '%[[日記]]%'")

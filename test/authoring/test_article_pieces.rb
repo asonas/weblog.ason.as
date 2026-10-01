@@ -167,7 +167,7 @@ class ArticlePiecesTest < Minitest::Test
     first = diary.dig("structure", "piece_ids").first
     second = SecureRandom.uuid
     @store.update_structure(@id, SCOPE.merge("expected_revision" => 0, "piece_ids" => [first, second], "tags" => ["タグだけ"]))
-    append_piece(first, "[[未作成のテーマ]] [[未作成のテーマ]]\n\n> 引用文\n\n`[[コードのみ]]`\n\n```\n[[コードのみ]]\n```\n\n[[2026-10-03]]")
+    append_piece(first, "[[未作成のテーマ]] [[未作成のテーマ]] [[0915]] [[202609]] [[月曜日]]\n\n> 引用文\n\n`[[コードのみ]]`\n\n```\n[[コードのみ]]\n```\n\n[[2026-10-03]]")
     append_piece(second, "写真と[[未作成のテーマ]]\n\n![写真](/assets/example.webp)")
     assert_empty @store.mentioned_by_days("未作成のテーマ").fetch("days")
     publish
@@ -175,7 +175,7 @@ class ArticlePiecesTest < Minitest::Test
     assert_equal(["2026-10-03"], result.fetch("days").map { |day| day.fetch("day") })
     assert_equal([first, second], result.dig("days", 0, "pieces").map { |piece| piece.fetch("id") })
     assert_equal "/2026-10-03#piece-#{first}", result.dig("days", 0, "pieces", 0, "href")
-    %w[タグだけ コードのみ 2026-10-03].each { |name| assert_empty @store.mentioned_by_days(name).fetch("days"), name }
+    %w[タグだけ コードのみ 2026-10-03 0915 202609 月曜日].each { |name| assert_empty @store.mentioned_by_days(name).fetch("days"), name }
     database = WeblogAuthoring::DevelopmentDatabase.new(@root.join("legacy.sqlite3"), content_dir: @root.join("content"))
     database.setup!
     renderer = WeblogAuthoring::WebmentionSitePublisher.new(database:, s3_client: nil, site_bucket: nil, sqs_client: nil, delivery_queue_url: nil)
@@ -225,7 +225,7 @@ class ArticlePiecesTest < Minitest::Test
     existing = @store.published_snapshot(@id)
     diary = @store.daily_draft("2040-01-03", tags: ["タグのみ"])
     @id = diary.fetch("id")
-    append_piece(diary.dig("structure", "piece_ids").first, "[[猫]] [[猫]] [[2026-10-01]] `[[コードのみ]]`\n\n```\n[[コードのみ]]\n```\n\n[[api]]")
+    append_piece(diary.dig("structure", "piece_ids").first, "[[猫]] [[猫]] [[2026-10-01]] [[0915]] [[202609]] [[月曜日]] `[[コードのみ]]`\n\n```\n[[コードのみ]]\n```\n\n[[api]]")
     database = WeblogAuthoring::DevelopmentDatabase.new(@root.join("legacy.sqlite3"), content_dir: @root.join("content"))
     database.setup!
     publisher = WeblogAuthoring::DraftPublisher.local(publication: @publication, database:, root: @root.join("published"), shell: -> { '<html><head></head><div id="authoring-root"></div></html>' }, site_url: "https://example.com")
@@ -234,6 +234,10 @@ class ArticlePiecesTest < Minitest::Test
     assert_nil @store.published_route("猫")
     publisher.run(@id, version.fetch("id"))
     target = @store.published_route("猫")
+    %w[0915 202609 月曜日].each do |route|
+      assert_nil @store.published_route(route)
+      assert_empty @store.mentioned_by_days(route).fetch("days")
+    end
     assert_equal "", target.fetch("body")
     assert_equal "猫", target.dig("metadata", "title")
     assert_includes publisher.read(target), 'data-public-article="1"'

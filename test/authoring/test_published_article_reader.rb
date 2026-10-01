@@ -140,6 +140,24 @@ class PublishedArticleReaderTest < Minitest::Test
     assert_empty reader.list_timeline_pages(limit: 4, month: "2026-08")
   end
 
+  def test_home_timeline_skips_empty_pages_but_keeps_them_accessible_by_route
+    store = WeblogAuthoring::DraftStore.sqlite(@root.join("empty-pages.sqlite3"))
+    store.setup!
+    articles = @source.fetch("articles")
+    template = articles.first
+    14.times do |index|
+      articles << template.merge("id" => format("%032x", index + 1), "route" => "空ページ#{index}", "title" => "空ページ#{index}", "page_type" => "named", "body" => "", "updated_at" => "2026-09-04T01:00:00Z")
+    end
+    WeblogAuthoring::DraftMigration.new(store:).import(@source)
+    reader = WeblogAuthoring::PublishedArticleReader.new(store:, database: @legacy)
+    api = WeblogAuthoring::LambdaApi.new(database: @legacy, draft_store: store, reader_database: reader)
+    payload = JSON.parse(get(api, "/api/pages", query: { "kind" => "timeline" }).fetch(:body))
+    assert_equal [ID], payload.fetch("pages").map { |page| page.fetch("id") }
+    refute payload.fetch("has_older")
+    refute payload.fetch("has_newer")
+    assert reader.find_route("空ページ0").empty?
+  end
+
   private
 
   def get(api, path, query: {}, parameters: {})

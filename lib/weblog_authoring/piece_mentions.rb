@@ -2,6 +2,7 @@
 
 require_relative "links"
 require_relative "markdown"
+require "date"
 
 module WeblogAuthoring
   module PieceMentions
@@ -22,9 +23,20 @@ module WeblogAuthoring
       names.reject(&:empty?).uniq
     end
 
+    def self.calendar_name?(name)
+      return true if %w[月曜日 火曜日 水曜日 木曜日 金曜日 土曜日 日曜日].include?(name)
+      return true if /\A\d{4}(?:0[1-9]|1[0-2])\z/.match?(name)
+      return false unless /\A\d{4}\z/.match?(name)
+      Date.strptime("2000#{name}", "%Y%m%d")
+      true
+    rescue Date::Error
+      false
+    end
+
     def mentioned_by_days(route, before: nil)
       WeblogAuthoring.validate_page_name(route)
       raise DraftStore::Error, "Invalid day cursor" if before && !/\A\d{4}-\d{2}-\d{2}\z/.match?(before)
+      return { "days" => [], "cursor" => nil } if PieceMentions.calendar_name?(route)
       @connect.call do |db|
         db.transaction do
           owner = db.query("SELECT article_id FROM #{db.prefix}article_publication_routes WHERE route = $1", [route]).first
@@ -56,7 +68,7 @@ module WeblogAuthoring
       return unless metadata["page_type"] == "date" && content && content["format"] == "pieces"
       day = metadata["page_date"].to_s.empty? ? metadata.fetch("title") : metadata.fetch("page_date")
       content.fetch("pieces").each_with_index do |piece, position|
-        names = PieceMentions.names(piece.fetch("body"))
+        names = PieceMentions.names(piece.fetch("body")).reject { |name| PieceMentions.calendar_name?(name) }
         names.each do |name|
           db.query("INSERT INTO #{db.prefix}article_piece_links (version_id, article_id, piece_id, target_name, day, position) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (version_id, piece_id, target_name) DO NOTHING", [version_id, article_id, piece.fetch("id"), name, day, position])
         end
