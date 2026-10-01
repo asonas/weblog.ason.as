@@ -4,6 +4,7 @@ import {
   type CheckpointChunk,
   type CheckpointDownload,
 } from "./draftCheckpoint";
+import { draftCoverMetadata } from "./draftCoverMetadata";
 import { recoverLegacyFormat } from "./draftFormatRecovery";
 import { mergeLocalDraft } from "./draftLocalMerge";
 import {
@@ -1019,7 +1020,7 @@ export class DraftSession extends EventTarget {
       // Older drafts stored the diary date only in the title.
       values = { page_date: this.metadata.title, ...values };
     }
-    this.metadata = { ...this.metadata, ...values };
+    this.metadata = draftCoverMetadata({ ...this.metadata, ...values });
     this.changed();
   }
 
@@ -1424,6 +1425,7 @@ export class DraftSession extends EventTarget {
         await this.persist();
       }
       if (!this.flight) {
+        this.metadata = draftCoverMetadata(this.metadata);
         const metadata: Changes = {};
         for (const field of FIELDS) {
           if (this.metadata[field] !== this.serverMetadata[field].value)
@@ -1473,7 +1475,20 @@ export class DraftSession extends EventTarget {
             this.error = "";
             return;
           }
-          // Only an explicit metadata rejection proves that this flight was not committed.
+          if (
+            error instanceof DraftRequestError &&
+            (error.status === 400 || error.status === 422) &&
+            (error.message.startsWith("cover_image_url ") ||
+              error.message.startsWith("cover_mode ") ||
+              error.message === "Invalid cover mode")
+          ) {
+            this.flight = undefined;
+            await this.persist();
+            throw new Error(
+              "カバー設定を保存できません。カバー設定で「自動」「なし」、またはアップロード済みの画像を選んでください。本文は端末に保持しています。",
+            );
+          }
+          // Metadata validation rejects the transaction before recording the update.
           if (
             error instanceof DraftRequestError &&
             error.status === 409 &&
