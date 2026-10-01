@@ -100,3 +100,50 @@ APIと検索Lambdaの`WEBMENTION_SENDER_ENABLED=true`、公開Workerの同フラ
 改名後、通常利用の再開前に戻す場合は`reverse`と比較snapshot照合を行い、
 記録した旧イメージへ戻す。データ破損時は別クラスタへの復元と接続先切り替えが
 必要になるため、復元リハーサル完了前に本番の停止・改名へ進まない。
+
+## バックアップ基盤の適用準備
+
+`infra/production/backup.tf`をvalidateし、本番をrefreshした全体planと
+先行バックアップ基盤だけのplanを保存した。先行planは以下の3件追加のみで、
+既存リソースの変更・削除は0件。
+
+- vault: `weblog-article-migration-production`（force_destroy=false）
+- IAM role: `WeblogArticleMigrationBackup`（AWS Backupサービスのみ引受け）
+- inline policy: `DSQLMigrationBackup`
+
+バックアップ対象は本番DSQLのARNに限定する。復元先は新クラスタになるため、
+作成・復元権限は東京リージョンの同一アカウント内cluster/*へ許可する。
+KMS操作は`kms:ViaService=dsql.ap-northeast-1.amazonaws.com`に限定する。
+SQL接続権限やDB行の更新・削除権限は、このサービスロールに付与しない。
+権限は[AWSのバックアップ用ポリシー](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AWSBackupServiceRolePolicyForBackup.html)
+と[復元用ポリシー](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AWSBackupServiceRolePolicyForRestores.html)
+のDSQL関連部分を参照した。実際のバックアップ・復元成功はまだ未検証。
+
+全体planはAPIルート9件追加、Lambda環境変数3件更新も含むため、改名前には適用しない。
+先行適用ではvaultとrole policyをtargetに指定した保存planを使う。
+これは移行準備の例外的な段階適用であり、完了後に必ず全体planを再取得する。
+本番変数はreceiver=true、verification=true、publisher=false、sender=trueを維持する。
+
+2026-10-01の先行applyは、自動承認レビューにより具体的な本番権限変更の承認不足で
+拒否された。適用は実行されておらず、バックアップ・復元ジョブも開始していない。
+保存planはローカル運用記録にあるが、承認後はinitとfresh planから再確認する。
+
+基盤適用後のオンデマンドバックアップは次のコマンドで開始する。
+保存期間は7日とし、本番の停止・改名直前にも最新バックアップを取得する。
+
+```sh
+mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
+  mise exec -- aws backup start-backup-job --region ap-northeast-1 \
+  --backup-vault-name weblog-article-migration-production \
+  --resource-arn arn:aws:dsql:ap-northeast-1:282782318939:cluster/zjuauvwetzvab4i3bdfd47e3yu \
+  --iam-role-arn arn:aws:iam::282782318939:role/WeblogArticleMigrationBackup \
+  --lifecycle DeleteAfterDays=7
+```
+
+BackupJobIdでdescribe-backup-jobを確認し、COMPLETEDとRecoveryPointArnを記録する。
+get-recovery-point-restore-metadataで実データを取得してから、復元先は単一の東京
+リージョン・AWS管理キー・削除保護ありの別クラスタとしてstart-restore-jobを実行する。
+復元先を本番ホストへ自動切り替えしない。作成されたクラスタのホストでstatusと
+snapshotを読み取り確認する。稼働中の本番との比較は時点差があり得るため、
+停止後の同一バックアップ時点での照合を最終条件とする。
+復元クラスタの削除は対象ARNを記録し、別途承認を得てから行う。
