@@ -905,6 +905,39 @@ export function DraftEditor({
           }}
         />
         <div className="draft-editor__controls">
+          {session?.pieces && articleState === "draft" && (
+            <button
+              className="draft-editor__icon-button draft-editor__delete"
+              title="未公開の下書きを削除"
+              aria-label="未公開の下書きを削除"
+              type="button"
+              disabled={session.isPublishing}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "未公開の日記全体を削除しますか？取り込み元のメモはInboxへ戻ります。日記内での加筆は削除されます。",
+                  )
+                )
+                  return;
+                void session
+                  .deleteDraft()
+                  .then(() => {
+                    window.location.href = "/authoring/articles";
+                  })
+                  .catch((error: unknown) =>
+                    setPublicationError(
+                      error instanceof Error
+                        ? error.message
+                        : "削除できませんでした",
+                    ),
+                  );
+              }}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l.8 11h7.4l.8-11M8.5 8v6M11.5 8v6" />
+              </svg>
+            </button>
+          )}
           {session && <DraftCoverSettings session={session} />}
           <div className="draft-editor__sync-status" role="status">
             {session ? (
@@ -965,34 +998,6 @@ export function DraftEditor({
         </div>
       </div>
       <div className="draft-editor__status">
-        {session?.pieces && articleState === "draft" && (
-          <button
-            type="button"
-            disabled={session.isPublishing}
-            onClick={() => {
-              if (
-                !window.confirm(
-                  "未公開の日記全体を削除しますか？取り込み元のメモはInboxへ戻ります。日記内での加筆は削除されます。",
-                )
-              )
-                return;
-              void session
-                .deleteDraft()
-                .then(() => {
-                  window.location.href = "/authoring/articles";
-                })
-                .catch((error: unknown) =>
-                  setPublicationError(
-                    error instanceof Error
-                      ? error.message
-                      : "削除できませんでした",
-                  ),
-                );
-            }}
-          >
-            未公開の下書きを削除
-          </button>
-        )}
         <p id="draft-size">
           {bytes >= DRAFT_BODY_LIMIT * 0.9
             ? `本文 ${Math.ceil(bytes / 1024)} / 512 KiB。上限を超えても本文は削除されません。`

@@ -83,7 +83,28 @@ export function DesignSystemPage() {
           </ul>
         </PatternSection>
 
-        <PatternSection title="Ableton color references">
+        <PatternSection title="Ableton — Original palette">
+          <p>原典の配色です。追加参考色とは区別して保持します。</p>
+          <ul className="design-system__swatches">
+            {[
+              ["Signal Blue", "#0000ff", "Brand · インタラクティブな文字"],
+              ["Coral", "#ff8389", "Accent · カテゴリーの塗り"],
+              ["Teal", "#00d2be", "Accent · カテゴリーの塗り"],
+              ["Ink", "#000000", "Neutral · 本文・見出し・アイコン"],
+              ["Fog", "#eeeeee", "Neutral · 控えめな補助面"],
+              ["Paper", "#ffffff", "Neutral · ページの背景"],
+            ].map(([label, color, role]) => (
+              <li key={label}>
+                <span style={{ background: color }} aria-hidden="true" />
+                <strong>{label}</strong>
+                <code>{color}</code>
+                <small>{role}</small>
+              </li>
+            ))}
+          </ul>
+        </PatternSection>
+
+        <PatternSection title="Ableton — Additional color references">
           <p>
             ページのベタ背景から選んだ参考パレットです。引用には淡い黄緑を使い、他の色は用途を固定せず残します。
           </p>
@@ -95,7 +116,7 @@ export function DesignSystemPage() {
                 "Live",
                 "https://www.ableton.com/ja/live/",
               ],
-              ["Coral", "#FFC3A5", "Shop", "https://www.ableton.com/ja/shop/"],
+              ["Peach", "#FFC3A5", "Shop", "https://www.ableton.com/ja/shop/"],
               [
                 "Pale yellow",
                 "#FDFFD9",
@@ -115,7 +136,12 @@ export function DesignSystemPage() {
                 "https://www.ableton.com/ja/live/",
               ],
               ["Green", "#41CE97", "Push", "https://www.ableton.com/ja/push/"],
-              ["Teal", "#8EFBD8", "Note", "https://www.ableton.com/ja/note/"],
+              [
+                "Mint teal",
+                "#8EFBD8",
+                "Note",
+                "https://www.ableton.com/ja/note/",
+              ],
               [
                 "Near black",
                 "#030512",

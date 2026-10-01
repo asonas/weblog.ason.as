@@ -37,16 +37,34 @@
 
 カバー上の文字は白を基本とし、画像へ暗いオーバーレイを重ねます。状態を色だけで伝えず、文字、枠、形、読み上げ状態を併用します。
 
-### 参考パレット
+### Ableton — 原典パレット
+
+ユーザー提供の「Ableton — Style Reference」を原典として保持します。
+白い紙面・黒い文字・青いリンクを基本に、CoralとTealはカテゴリーの塗りに使います。
+これらの値を追加参考色で置き換えません。公開サイトへの適用は用途別トークンで行います。
+
+| 名前 | 値 | 原典トークン | 用途 |
+| --- | --- | --- | --- |
+| Signal Blue | `#0000ff` | `--color-signal-blue` | リンクなどインタラクティブな文字。塗りの主CTA色にはしない |
+| Coral | `#ff8389` | `--color-coral` | カテゴリーの塗り（Downloads、News） |
+| Teal | `#00d2be` | `--color-teal` | カテゴリーの塗り（Tutorials、Videos） |
+| Ink | `#000000` | `--color-ink` | 本文・見出し・ナビゲーション・アイコン |
+| Fog | `#eeeeee` | `--color-fog` | 入力欄や控えめな補助面 |
+| Paper | `#ffffff` | `--color-paper` | ページとカードの背景、写真上の文字 |
+
+### Ableton — 追加参考パレット
 
 以下は2026-10-01にAbletonの各ページのCSSから確認したベタ色です。用途未定の参考色として保持し、採用する場合に用途別の意味トークンへ割り当てます。
 
 | 色 | 値 | 出典 |
 | --- | --- | --- |
+| ラベンダー | `#CDBEFD` | [Live](https://www.ableton.com/ja/live/) |
+| ピーチ | `#FFC3A5` | [Shop](https://www.ableton.com/ja/shop/) |
+| 淡い黄色 | `#FDFFD9` | [Note](https://www.ableton.com/ja/note/) |
 | 明るい黄緑 | `#B6FFC0` | [Live](https://www.ableton.com/ja/live/)の更新告知 |
 | 淡い黄緑 | `#EBF0DC` | [Live](https://www.ableton.com/ja/live/)の「無限に溢れ出すアイデア」 |
 | 緑 | `#41CE97` | [Push](https://www.ableton.com/ja/push/)の機能アコーディオン |
-| ティール | `#8EFBD8` | [Note](https://www.ableton.com/ja/note/)の「Liveでさらに発展させる」 |
+| ミントティール | `#8EFBD8` | [Note](https://www.ableton.com/ja/note/)の「Liveでさらに発展させる」 |
 | 黒に近い紺 | `#030512` | [Push](https://www.ableton.com/ja/push/)のアーティスト見出し |
 | 黒・白・グレーの組 | `#000000` / `#FFFFFF` / `#818181` | [Push](https://www.ableton.com/ja/push/)のアーティスト選択領域 |
 
@@ -97,7 +115,7 @@ WYSIWYG内部の細かな挙動、ユニバース、管理画面はこの規範�
 
 記事への言及は「Mentioned by days」として、かけらごとに全文と写真を表示します。各引用の上に日付リンクを置き、元の日記の該当かけらへ移動できるようにします。日付見出しと出典リンクを重複させません。
 
-引用領域の背景には `--quotation-surface` を使います。2026-10-01に[Ableton Live](https://www.ableton.com/ja/live/)の「無限に溢れ出すアイデア」領域のCSSから確認したベタ色 `#EBF0DC` を採用しました。ラベンダー `#CDBEFD`、[Shop](https://www.ableton.com/ja/shop/)のコーラル `#FFC3A5`、[Note](https://www.ableton.com/ja/note/)の淡い黄色 `#FDFFD9` も参考パレットとして残します。画像やスクリーンショットからの採色ではありません。
+引用領域の背景には `--quotation-surface` を使います。2026-10-01に[Ableton Live](https://www.ableton.com/ja/live/)の「無限に溢れ出すアイデア」領域のCSSから確認したベタ色 `#EBF0DC` を採用しました。ラベンダー `#CDBEFD`、[Shop](https://www.ableton.com/ja/shop/)のピーチ `#FFC3A5`、[Note](https://www.ableton.com/ja/note/)の淡い黄色 `#FDFFD9` も参考パレットとして残します。画像やスクリーンショットからの採色ではありません。
 
 引用は本文と同じ文字サイズ・行高を使い、左側の細い `--muted-ink` の線と `--space-4` の余白で示します。日付も背景上のコントラストを確保するため `--ink` を使い、小さい文字サイズで補助情報として示します。引用同士は `--space-8` の余白で区切り、写真は引用の幅に収めます。本文が空の記事では本文用の余白を確保せず、引用をタイトルの下に続けます。
 
