@@ -943,7 +943,7 @@ export class DraftSession extends EventTarget {
   }
 
   async deleteDraft() {
-    if (!this.pieces || this.isPublishing || this.isComposing) return;
+    if (this.isPublishing || this.isComposing) return;
     await this.sync();
     if (this.error || this.hasPendingChanges())
       throw new Error(this.error || "保存を確認してから削除してください。");
@@ -955,7 +955,7 @@ export class DraftSession extends EventTarget {
         await this.request("", "DELETE", {
           protocol: 1,
           generation: 1,
-          format: "pieces",
+          format: this.pieces ? "pieces" : "legacy",
           head: this.cursor,
           structure_revision: this.pieces?.server.revision,
         });

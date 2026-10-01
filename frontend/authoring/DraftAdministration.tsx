@@ -5,6 +5,7 @@ import { DraftNavigation } from "./DraftNavigation";
 import { storeDraftInitialBody } from "./draftInitialBody";
 import {
   type DraftMetadata,
+  DraftSession,
   draftRoute,
   type LocalDraftSummary,
   readLocalDraftSummaries,
@@ -313,6 +314,34 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
     }
   }
 
+  async function remove(row: Row) {
+    if (busy || row.state !== "draft") return;
+    const title = row.local?.metadata.title || row.metadata.title;
+    if (
+      !window.confirm(
+        `「${title}」の未公開の下書きを削除しますか？\nこの操作は取り消せません。端末の未送信の内容も削除されます。`,
+      )
+    )
+      return;
+    setBusy(true);
+    setError("");
+    let session: DraftSession | undefined;
+    try {
+      session = await DraftSession.open(row.id, csrf);
+      await session.deleteDraft();
+      await reload();
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "下書きを削除できませんでした。",
+      );
+    } finally {
+      session?.close();
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="draft-admin">
       <a className="draft-admin-skip" href="#draft-admin-ledger">
@@ -437,6 +466,11 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                       editHref={editHref}
                       busy={busy}
                       onRetry={retryable ? () => void retry(row) : undefined}
+                      onDelete={
+                        row.state === "draft"
+                          ? () => void remove(row)
+                          : undefined
+                      }
                     />
                   </td>
                   <td

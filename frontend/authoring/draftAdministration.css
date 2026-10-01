@@ -421,6 +421,9 @@ body:has(.draft-admin) .page-shell {
 .draft-article-menu__popup :is(a, button):hover {
   background: var(--quiet-fill);
 }
+.draft-article-menu__popup .draft-article-menu__delete {
+  color: var(--authoring-status-error);
+}
 .draft-admin .draft-admin-more {
   display: block;
   margin: 1.5rem auto 0;

@@ -25,7 +25,7 @@ Dir.mktmpdir("draft-browser-test") do |root|
   if ENV["DRAFT_TEST_LEGACY_DIARY"] == "1"
     id = "dc802ad0b89946aeb6b7623c2ba7bc79"
     scope = { "protocol" => 1, "generation" => 1 }
-    store = WeblogAuthoring::DraftStore.sqlite(File.join(root, "data/development/drafts.sqlite3"))
+    store = WeblogAuthoring::DraftStore.sqlite(File.join(root, "data/development/drafts.sqlite3"), pieces_enabled: false)
     store.create(id, scope)
     date = Time.now.getlocal("+09:00").strftime("%Y-%m-%d")
     store.append(id, scope.merge("update_id" => "legacy-diary", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,

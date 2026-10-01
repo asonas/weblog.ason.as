@@ -55,7 +55,6 @@ module WeblogAuthoring
 
     def delete_piece_draft(id, payload)
       validate_scope!(id, payload)
-      raise DraftStore::Error, "Only a piece draft can be deleted here" unless payload["format"] == "pieces"
       @connect.call do |db|
         db.transaction do
           format = db.query("SELECT format FROM #{db.prefix}article_structures WHERE article_id = $1", [id]).first
@@ -74,7 +73,11 @@ module WeblogAuthoring
           end
           db.query("DELETE FROM #{db.prefix}article_piece_links WHERE article_id = $1", [id])
           db.query("DELETE FROM #{db.prefix}articles WHERE id = $1", [id])
-          db.query("UPDATE #{db.prefix}article_structures SET format = 'deleted', piece_ids = '[]', deleted_ids = '[]', tags = '[]', revision = revision + 1 WHERE article_id = $1", [id])
+          if format
+            db.query("UPDATE #{db.prefix}article_structures SET format = 'deleted', piece_ids = '[]', deleted_ids = '[]', tags = '[]', revision = revision + 1 WHERE article_id = $1", [id])
+          else
+            db.query("INSERT INTO #{db.prefix}article_structures (article_id, format, revision, piece_ids, deleted_ids, tags) VALUES ($1, 'deleted', 0, '[]', '[]', '[]')", [id])
+          end
           { "deleted" => true }
         end
       end

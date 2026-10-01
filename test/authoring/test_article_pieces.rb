@@ -112,6 +112,25 @@ class ArticlePiecesTest < Minitest::Test
     assert_equal 410, assert_raises(WeblogAuthoring::DraftStore::Error) { @store.create(@id, SCOPE.merge("piece_id" => @first)) }.status
   end
 
+  def test_deleting_a_legacy_draft_checks_its_version_and_prevents_recreation
+    legacy_store = WeblogAuthoring::DraftStore.sqlite(@root.join("drafts.sqlite3"), pieces_enabled: false)
+    id = SecureRandom.uuid
+    scope = { "protocol" => 1, "generation" => 1, "format" => "legacy" }
+    legacy_store.create(id, scope)
+    assert_equal 409, assert_raises(WeblogAuthoring::DraftStore::Error) { legacy_store.delete_piece_draft(id, scope.merge("head" => 1)) }.status
+    assert_equal({ "deleted" => true }, legacy_store.delete_piece_draft(id, scope.merge("head" => 0)))
+    assert_equal({ "deleted" => true }, legacy_store.delete_piece_draft(id, scope.merge("head" => 0)))
+    assert_equal 410, assert_raises(WeblogAuthoring::DraftStore::Error) { legacy_store.create(id, scope) }.status
+  end
+
+  def test_deletion_rejects_published_articles
+    publish
+    saved = @store.read(@id, { "format" => "pieces" })
+    request = SCOPE.merge("head" => saved.fetch("head"), "structure_revision" => saved.dig("structure", "revision"))
+    assert_equal 409, assert_raises(WeblogAuthoring::DraftStore::Error) { @store.delete_piece_draft(@id, request) }.status
+    assert @store.published_snapshot(@id)
+  end
+
   def test_unchanged_publication_also_releases_memos_removed_from_the_working_draft
     publish
     memo_id = SecureRandom.uuid

@@ -6,11 +6,13 @@ export function DraftArticleMenu({
   editHref,
   busy,
   onRetry,
+  onDelete,
 }: {
   title: string;
   editHref: string;
   busy: boolean;
   onRetry?: () => void;
+  onDelete?: () => void;
 }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -107,6 +109,22 @@ export function DraftArticleMenu({
           >
             <AuthoringIcon name="refresh" />
             公開処理を再試行
+          </button>
+        )}
+        {onDelete && (
+          <button
+            role="menuitem"
+            tabIndex={-1}
+            type="button"
+            className="draft-article-menu__delete"
+            disabled={busy}
+            onClick={() => {
+              close();
+              onDelete();
+            }}
+          >
+            <AuthoringIcon name="trash" />
+            削除
           </button>
         )}
       </div>

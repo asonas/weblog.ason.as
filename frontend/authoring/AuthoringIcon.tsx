@@ -2,6 +2,7 @@
 // https://github.com/kazdenc/regen-icons/tree/main/svg/outline
 const paths = {
   close: "M6 6L18 18M6 18L18 6",
+  trash: "M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7",
   search: "M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0ZM15 15L21 21",
   check: "M4 12L7.59 15.59A2 2 0 0 0 10.41 15.59L20 6",
   dots: "M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0ZM11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0ZM18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0Z",
