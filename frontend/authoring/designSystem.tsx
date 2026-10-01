@@ -184,20 +184,36 @@ export function DesignSystemPage() {
               aria-labelledby="quotation-example-heading"
             >
               <h2 id="quotation-example-heading">Mentioned by days</h2>
-              <figure className="mentioned-by-days__piece">
-                <figcaption>
-                  <a href="/2026-10-01" aria-label="2026-10-01の日記へ">
-                    <time dateTime="2026-10-01">2026-10-01</time>
-                  </a>
-                </figcaption>
-                <blockquote cite="/2026-10-01">
-                  <div className="ProseMirror public-article-body">
-                    <p>
-                      最近、新しいキーボードを使い始めた。毎日書く場所が少し心地よくなった。
-                    </p>
-                  </div>
-                </blockquote>
-              </figure>
+              <section className="mentioned-by-days__day">
+                <figure className="mentioned-by-days__piece">
+                  <figcaption>
+                    <a href="/2026-10-01" aria-label="2026-10-01の日記へ">
+                      <time dateTime="2026-10-01">2026-10-01</time>の日記を見る
+                    </a>
+                  </figcaption>
+                  <blockquote cite="/2026-10-01">
+                    <div className="ProseMirror public-article-body">
+                      <p>
+                        最近、新しいキーボードを使い始めた。毎日書く場所が少し心地よくなった。
+                      </p>
+                    </div>
+                  </blockquote>
+                </figure>
+              </section>
+              <section className="mentioned-by-days__day">
+                <figure className="mentioned-by-days__piece">
+                  <figcaption>
+                    <a href="/2026-09-23">
+                      <time dateTime="2026-09-23">2026-09-23</time>の日記を見る
+                    </a>
+                  </figcaption>
+                  <blockquote cite="/2026-09-23">
+                    <div className="ProseMirror public-article-body">
+                      <p>キーボードについて、別の日にも書いていた。</p>
+                    </div>
+                  </blockquote>
+                </figure>
+              </section>
             </section>
           </div>
         </PatternSection>

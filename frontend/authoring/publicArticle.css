@@ -200,6 +200,9 @@
 
 .mentioned-by-days__day + .mentioned-by-days__day {
   margin-block-start: var(--space-8);
+  padding-block-start: var(--space-6);
+  border-block-start: var(--border-width) solid
+    color-mix(in srgb, var(--ink) 25%, transparent);
 }
 
 .mentioned-by-days__piece figcaption {
