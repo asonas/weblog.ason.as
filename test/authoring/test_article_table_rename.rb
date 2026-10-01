@@ -53,7 +53,7 @@ class ArticleTableRenameTest < Minitest::Test
     assert_equal before, database_contents
     @db.query("ALTER TABLE draft_articles RENAME TO articles")
     @rename.rename!(direction: "forward")
-    assert @rename.status.all? { |row| row["current_exists"] && !row["old_exists"] }
+    assert(@rename.status.all? { |row| row["current_exists"] && !row["old_exists"] })
   end
 
   def test_ambiguous_or_missing_tables_stop_before_any_rename

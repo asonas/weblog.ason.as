@@ -18,7 +18,8 @@ class ArticlePiecesTest < Minitest::Test
     @root = Pathname(Dir.mktmpdir("article-pieces"))
     @store = WeblogAuthoring::DraftStore.sqlite(@root.join("drafts.sqlite3"), pieces_enabled: true)
     @store.setup!
-    @id, @first = SecureRandom.uuid, SecureRandom.uuid
+    @id = SecureRandom.uuid
+    @first = SecureRandom.uuid
     @store.create(@id, SCOPE.merge("piece_id" => @first, "tags" => ["日記"]))
     @publication = WeblogAuthoring::DraftPublication.local(store: @store)
     append_piece(@first, "最初の本文\n\n---\n\n同じかけらの続き", metadata: { "title" => { "value" => "2026-10-01", "expected_revision" => 0 } })
@@ -30,14 +31,14 @@ class ArticlePiecesTest < Minitest::Test
 
   def test_order_and_tags_are_published_as_an_immutable_snapshot
     second = SecureRandom.uuid
-    @store.update_structure(@id, SCOPE.merge("expected_revision" => 0, "piece_ids" => [@first, second], "tags" => ["日記", "木曜日"]))
+    @store.update_structure(@id, SCOPE.merge("expected_revision" => 0, "piece_ids" => [@first, second], "tags" => %w[日記 木曜日]))
     append_piece(second, "二つ目 [[テーマ]]")
     confirmation = @publication.prepare(@id)
     @store.update_structure(@id, SCOPE.merge("expected_revision" => 1, "piece_ids" => [second, @first], "tags" => ["日記"]))
     assert_equal 409, assert_raises(WeblogAuthoring::DraftStore::Error) { @publication.accept(@id, confirmation.merge("request_id" => "stale")) }.status
     publish
     snapshot = @store.published_snapshot(@id)
-    assert_equal [second, @first], snapshot.dig("metadata", "content", "pieces").map { |piece| piece.fetch("id") }
+    assert_equal([second, @first], snapshot.dig("metadata", "content", "pieces").map { |piece| piece.fetch("id") })
     assert_equal "最初の本文\n\n---\n\n同じかけらの続き", snapshot.dig("metadata", "content", "pieces", 1, "body")
     assert_equal ["日記"], snapshot.dig("metadata", "content", "tags")
     @store.update_structure(@id, SCOPE.merge("expected_revision" => 2, "piece_ids" => [@first], "tags" => []))
@@ -52,9 +53,9 @@ class ArticlePiecesTest < Minitest::Test
     legacy = legacy_store.daily_draft("2026-09-30")
     assert_equal "legacy", @store.daily_draft("2026-09-30", tags: ["日記"]).fetch("format")
     assert_equal legacy.fetch("id"), @store.daily_draft("2026-09-30").fetch("id")
-    diary = @store.daily_draft("2026-10-02", tags: ["金曜日", "日記"])
+    diary = @store.daily_draft("2026-10-02", tags: %w[金曜日 日記])
     assert_equal "pieces", diary.fetch("format")
-    assert_equal ["金曜日", "日記"], diary.dig("structure", "tags")
+    assert_equal %w[金曜日 日記], diary.dig("structure", "tags")
     assert_equal 1, diary.dig("structure", "piece_ids").length
     assert_equal diary, legacy_store.daily_draft("2026-10-02")
     @store.delete_piece_draft(diary.fetch("id"), SCOPE.merge("head" => 0, "structure_revision" => 0))
@@ -63,7 +64,8 @@ class ArticlePiecesTest < Minitest::Test
   end
 
   def test_import_is_atomic_retryable_and_keeps_original_until_publication
-    memo_id, piece_id = SecureRandom.uuid, SecureRandom.uuid
+    memo_id = SecureRandom.uuid
+    piece_id = SecureRandom.uuid
     @store.save_memo(memo_id, { "operation_id" => SecureRandom.uuid, "expected_revision" => 0, "body" => "持ち込む文章" })
     request = { "memo_id" => memo_id, "piece_id" => piece_id, "operation_id" => SecureRandom.uuid, "expected_revision" => 1, "structure_revision" => 0 }
     result = @publication.adopt_memo(@id, request)
@@ -112,7 +114,8 @@ class ArticlePiecesTest < Minitest::Test
 
   def test_unchanged_publication_also_releases_memos_removed_from_the_working_draft
     publish
-    memo_id, piece_id = SecureRandom.uuid, SecureRandom.uuid
+    memo_id = SecureRandom.uuid
+    piece_id = SecureRandom.uuid
     @store.save_memo(memo_id, { "operation_id" => SecureRandom.uuid, "expected_revision" => 0, "body" => "取り込んだあと削除した文章" })
     @publication.adopt_memo(@id, { "memo_id" => memo_id, "piece_id" => piece_id, "operation_id" => SecureRandom.uuid, "expected_revision" => 1, "structure_revision" => 0 })
     @store.update_structure(@id, SCOPE.merge("expected_revision" => 1, "piece_ids" => [@first], "tags" => ["日記"]))
@@ -150,8 +153,8 @@ class ArticlePiecesTest < Minitest::Test
     assert_empty @store.mentioned_by_days("未作成のテーマ").fetch("days")
     publish
     result = @store.mentioned_by_days("未作成のテーマ")
-    assert_equal ["2026-10-03"], result.fetch("days").map { |day| day.fetch("day") }
-    assert_equal [first, second], result.dig("days", 0, "pieces").map { |piece| piece.fetch("id") }
+    assert_equal(["2026-10-03"], result.fetch("days").map { |day| day.fetch("day") })
+    assert_equal([first, second], result.dig("days", 0, "pieces").map { |piece| piece.fetch("id") })
     assert_equal "/2026-10-03#piece-#{first}", result.dig("days", 0, "pieces", 0, "href")
     %w[タグだけ コードのみ 2026-10-03].each { |name| assert_empty @store.mentioned_by_days(name).fetch("days"), name }
     database = WeblogAuthoring::DevelopmentDatabase.new(@root.join("legacy.sqlite3"), content_dir: @root.join("content"))
@@ -182,9 +185,10 @@ class ArticlePiecesTest < Minitest::Test
     assert_equal "2026-10-11", first.dig("days", 0, "day")
     assert_equal "2026-10-02", first.fetch("cursor")
     last = @store.mentioned_by_days("Old topic", before: first.fetch("cursor"))
-    assert_equal ["2026-10-01"], last.fetch("days").map { |day| day.fetch("day") }
+    assert_equal(["2026-10-01"], last.fetch("days").map { |day| day.fetch("day") })
     assert_nil last.fetch("cursor")
-    @id, target_piece = SecureRandom.uuid, SecureRandom.uuid
+    @id = SecureRandom.uuid
+    target_piece = SecureRandom.uuid
     @store.create(@id, SCOPE.merge("piece_id" => target_piece))
     append_piece(target_piece, "ストックする記事", metadata: { "title" => { "value" => "Old topic", "expected_revision" => 0 } })
     publish
@@ -221,10 +225,11 @@ class ArticlePiecesTest < Minitest::Test
     app.set :authentication_required, false
     app.set :draft_store, @store
     app.set :database, database
+    app.set :reader_database, WeblogAuthoring::PublishedArticleReader.new(store: @store, database:)
     response = Rack::MockRequest.new(app).get("/#{WeblogAuthoring.encoded_route('猫')}", "HTTP_HOST" => "localhost")
     assert_equal 200, response.status
     assert_includes response.body, 'data-public-article="1"'
-    assert_includes response.body, "#{target.fetch('article_id')}"
+    assert_includes response.body, target.fetch("article_id").to_s
     %w[タグのみ コードのみ api].each { |name| assert_nil @store.published_route(name), name }
     assert_equal existing, @store.published_route("2026-10-01")
     publisher.run(@id, version.fetch("id"))

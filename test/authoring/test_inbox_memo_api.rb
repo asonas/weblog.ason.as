@@ -35,7 +35,7 @@ class InboxMemoApiTest < Minitest::Test
     assert_equal 200, saved.fetch(:statusCode)
     listed = call("GET", "/api/inbox/memos", cookies: [@cookie])
     assert_equal "no-store", listed.fetch(:headers).fetch("cache-control")
-    assert_equal ["[[日記のネタ]]"], JSON.parse(listed.fetch(:body)).fetch("memos").map { |memo| memo.fetch("body") }
+    assert_equal(["[[日記のネタ]]"], JSON.parse(listed.fetch(:body)).fetch("memos").map { |memo| memo.fetch("body") })
   end
 
   def test_paired_phone_can_edit_memos_but_cannot_edit_drafts_or_use_revoked_credentials
@@ -69,6 +69,6 @@ class InboxMemoApiTest < Minitest::Test
 
   def call(method, path, cookies: [], headers: {})
     @api.call({ "rawPath" => path, "requestContext" => { "http" => { "method" => method } },
-                "headers" => { "content-type" => "application/json" }.merge(headers), "cookies" => cookies, "body" => JSON.generate(@payload) })
+                "headers" => { "content-type" => "application/json" }.merge(headers), "cookies" => cookies, "body" => JSON.generate(@payload), })
   end
 end

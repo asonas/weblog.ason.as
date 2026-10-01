@@ -40,7 +40,7 @@ module WeblogAuthoring
             { "day" => day, "pieces" => rows.map do |row|
               piece = JSON.parse(row.fetch("metadata")).fetch("content").fetch("pieces").find { |item| item.fetch("id") == row.fetch("piece_id") }
               { "id" => piece.fetch("id"), "body" => piece.fetch("body"), "href" => "/#{WeblogAuthoring.encoded_route(row.fetch('route'))}#piece-#{piece.fetch('id')}" }
-            end }
+            end, }
           end
           { "days" => days, "cursor" => dates.length > 10 ? dates.fetch(9) : nil }
         end
