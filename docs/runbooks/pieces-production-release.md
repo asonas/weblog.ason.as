@@ -42,3 +42,61 @@
 通常デプロイを進めず改名手順の中断・復旧に従う。
 署名付きローカルmain統合、push、Actions成功、本番機能有効化、実機配布を
 別の完了状態として記録する。
+
+## 本番の事前確認（2026-10-01 14:40 JST）
+
+- cutoverは`open`、実行中operationは0件。停止後に再確認する。
+- 17組すべて旧名のみ存在。APIのイメージdigestは
+  `sha256:ddadc2b139c5c8806a0036bb2c0b9f003016e64eefad6cad1a13645392e62ba9`。
+- Lambda 12個のイメージ・revision・同時実行設定と、イベントソース3個・
+  EventBridgeルール7個をローカルの運用記録へ保存した。
+- 対象DSQLのAWS Backup recovery point、東京リージョンのvault、
+  名前にBackupを含むIAMロールはいずれも0件。別方式の退避有無は未確認。
+- `rename-article-tables snapshot`は件数・ハッシュであり、復元用データではない。
+  この記録だけで「バックアップ済み」としない。
+- ローカルDocker daemonは起動していない。イメージビルド用workflowは
+  `workflow_call`専用で、単独dispatchできない。先行maintenanceイメージの
+  作成経路も通常push前に用意する必要がある。
+
+### 停止と復帰の対象
+
+| 種類 | 対象 | 現在値・復帰値 |
+| --- | --- | --- |
+| EventBridge | weblog-draft-worker-production | ENABLED |
+| EventBridge | weblog-inbox-sync-production | ENABLED |
+| EventBridge | weblog-rss-feed-production | ENABLED |
+| EventBridge | weblog-webmention-cleanup-production | ENABLED |
+| EventBridge | weblog-webmention-reverification-production | ENABLED |
+| EventBridge | weblog-search-index-nightly-production | DISABLEDのまま |
+| EventBridge | weblog-webmention-outbox-dispatch-production | DISABLEDのまま |
+| SQS event source | ad3ddd08-e995-4582-9c98-53d6d52f780d（検証Worker） | Enabled |
+| SQS event source | ceb03ccc-b98c-4f5e-b8f1-ef03a521fc4f（公開Worker） | Disabledのまま |
+| SQS event source | 23732515-63bc-4914-a7fe-c54bd33e2613（検索） | Disabledのまま |
+
+API、Draft Worker、Webmention受信・検証・公開・cleanup、performance Lambdaの
+直接起動も止める。キューは削除せず、新規起動を抑止して実行中処理の終了を確認する。
+APIと検索Lambdaの`WEBMENTION_SENDER_ENABLED=true`、公開Workerの同フラグfalseを
+現行値として保持する。過去のcutover evidenceのfalseを現在値として上書きしない。
+
+### 次の実行順序
+
+1. AWS Backup用vault・IAMロールをTerraformで準備する。
+   fresh planの全変更を確認してから適用する。保持期間と復元先の扱いを決める。
+2. 対象DSQLのオンデマンドバックアップを作成し、完了を確認する。
+   別DSQLクラスタへ復元し、読み取りでテーブルとデータを照合して復元経路を実証する。
+   [AWSの手順](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/backup-aurora-dsql.html)
+   では復元時に新クラスタが作成される。既存ホストへそのまま戻る復元ではないため、
+   必要なIAM接続権限と接続先変更の手順も確認する。
+3. 新SHAからauthoringイメージを作成し、digestを記録する。
+4. cutoverをpausedにし、上記の起動元を停止して処理を排出する。
+   maintenanceイメージと設定を先行配備し、APIの503を確認する。
+5. 停止後の最新バックアップと比較snapshotを保存し、17テーブルを改名する。
+   同期・cutoverテーブルを含めて停止前後の内容を照合する。
+6. mainをpushして通常デプロイを実行する。maintenanceを保ち、全利用元と
+   bootstrap完了を確認する。Piece作成フラグはまだfalseとする。
+7. API・cutover・起動元を記録した状態へ戻し、公開・保存を確認する。
+   Pieceフラグを別のfresh Terraform planで有効化して機能を検証する。
+
+改名後、通常利用の再開前に戻す場合は`reverse`と比較snapshot照合を行い、
+記録した旧イメージへ戻す。データ破損時は別クラスタへの復元と接続先切り替えが
+必要になるため、復元リハーサル完了前に本番の停止・改名へ進まない。
