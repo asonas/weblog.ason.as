@@ -16,6 +16,7 @@ export function mergeLocalDraft(
   stored: SavedDraft,
 ): SavedDraft {
   const result = structuredClone(stored);
+  result.legacyRecovery ||= incoming.legacyRecovery;
   result.pieces = mergePieceDrafts(base.pieces, incoming.pieces, stored.pieces);
   result.state = Y.mergeUpdates([stored.state, incoming.state]);
   result.cursor = Math.max(stored.cursor, incoming.cursor);

@@ -1007,6 +1007,20 @@ export function DraftEditor({
         <p role="alert">
           {loadError || publicationError || imageUploadError || session?.error}
         </p>
+        {session?.legacyRecovery && (
+          <details>
+            <summary>形式変換前の端末の本文を確認</summary>
+            <p>
+              未送信の文章を端末に退避しました。必要な変更を下のかけらへコピーしてください。公開済みの記事は維持しています。
+            </p>
+            <textarea
+              aria-label="形式変換前の退避した本文"
+              readOnly
+              rows={8}
+              value={session.legacyRecovery.body}
+            />
+          </details>
+        )}
         {session?.pendingOutputs && (
           <button
             type="button"

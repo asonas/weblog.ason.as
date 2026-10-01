@@ -4,6 +4,7 @@ import {
   type CheckpointChunk,
   type CheckpointDownload,
 } from "./draftCheckpoint";
+import { recoverLegacyFormat } from "./draftFormatRecovery";
 import { mergeLocalDraft } from "./draftLocalMerge";
 import {
   type DraftPieces,
@@ -50,6 +51,7 @@ type Flight = {
   included: string[];
 };
 export type SavedDraft = {
+  legacyRecovery?: { body: string; metadata: DraftMetadata; state: Uint8Array };
   pieces?: DraftPieces;
   state: Uint8Array;
   metadata: DraftMetadata;
@@ -316,6 +318,7 @@ class DraftRequestError extends Error {
 }
 
 export class DraftSession extends EventTarget {
+  legacyRecovery?: SavedDraft["legacyRecovery"];
   readonly doc = new Y.Doc();
   pieces?: DraftPieces;
   activePieceId?: string;
@@ -436,6 +439,7 @@ export class DraftSession extends EventTarget {
       session.database = await openLocalDatabase();
       saved = await localRecord(session.database, id);
       if (saved) {
+        session.legacyRecovery = saved.legacyRecovery;
         session.pieces = saved.pieces;
         Y.applyUpdate(session.doc, saved.state, REMOTE_ORIGIN);
         session.metadata = saved.metadata;
@@ -605,6 +609,17 @@ export class DraftSession extends EventTarget {
       if (this.isComposing || this.isClosed) return;
       through = page.through;
       if (page.format === "pieces" && page.structure) {
+        const recovered = recoverLegacyFormat(this.snapshot());
+        if (
+          recovered.legacyRecovery &&
+          (recovered.pending.length !== this.pending.length ||
+            recovered.flight !== this.flight)
+        ) {
+          this.legacyRecovery = recovered.legacyRecovery;
+          this.pending = recovered.pending;
+          this.flight = recovered.flight;
+          await this.persist();
+        }
         if (this.pieces) {
           const recovery = this.pending.flatMap((update) =>
             update.piece_id &&
@@ -1031,6 +1046,7 @@ export class DraftSession extends EventTarget {
   private snapshot(): SavedDraft {
     return structuredClone({
       state: Y.encodeStateAsUpdate(this.doc),
+      legacyRecovery: this.legacyRecovery,
       pieces: this.pieces,
       metadata: this.metadata,
       serverMetadata: this.serverMetadata,
@@ -1043,6 +1059,7 @@ export class DraftSession extends EventTarget {
   }
 
   private adopt(saved: SavedDraft) {
+    this.legacyRecovery = saved.legacyRecovery;
     this.pieces = saved.pieces;
     this.ensureActivePiece();
     Y.applyUpdate(this.doc, saved.state, REMOTE_ORIGIN);
@@ -1444,6 +1461,18 @@ export class DraftSession extends EventTarget {
         try {
           receipt = await this.uploadFlight(flight);
         } catch (error) {
+          if (
+            error instanceof DraftRequestError &&
+            error.status === 409 &&
+            error.message.startsWith(
+              "Article format requires a compatible editor",
+            ) &&
+            flight.format !== "pieces"
+          ) {
+            await this.catchUp();
+            this.error = "";
+            return;
+          }
           // Only an explicit metadata rejection proves that this flight was not committed.
           if (
             error instanceof DraftRequestError &&
