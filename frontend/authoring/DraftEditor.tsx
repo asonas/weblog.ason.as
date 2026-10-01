@@ -227,9 +227,7 @@ export function DraftEditor({
   const [session, setSession] = useState<DraftSession>();
   const [dropPiece, setDropPiece] = useState<string>();
   const draggedPiece = useRef<string | undefined>(undefined);
-  const pieceDiary = Boolean(
-    session?.pieces && session.metadata.page_type === "date",
-  );
+  const pieceDiary = Boolean(session?.pieces);
   const [previewWidth, setPreviewWidth] = useState(1000);
   const workspace = useRef<HTMLDivElement>(null);
   const publicationDialog = useRef<HTMLDialogElement>(null);
@@ -483,15 +481,14 @@ export function DraftEditor({
     };
     const input = () => {
       if (isComposing || session.body !== observedBody) return;
-      const split =
-        session.pieces && session.metadata.page_type === "date"
-          ? pieceSeparator(
-              field.value,
-              field.selectionStart,
-              observedBody.toString(),
-              previousCaret,
-            )
-          : null;
+      const split = session.pieces
+        ? pieceSeparator(
+            field.value,
+            field.selectionStart,
+            observedBody.toString(),
+            previousCaret,
+          )
+        : null;
       if (split) {
         session.splitActivePiece(split.before, split.after);
         requestAnimationFrame(() => {
@@ -1071,223 +1068,234 @@ export function DraftEditor({
         <div
           className={`draft-editor__source${pieceDiary ? " draft-editor__source--pieces" : ""}`}
         >
-          {(session?.pieces && session.metadata.page_type === "date"
-            ? session.pieces.local.piece_ids
-            : ["body"]
-          ).map((id, index) => (
-            <fieldset
-              key={id}
-              aria-label={
-                pieceDiary ? `${index + 1}番目のかけら` : "本文の編集"
-              }
-              data-piece-id={pieceDiary ? id : undefined}
-              className={`draft-piece-editor${pieceDiary && id === session?.activePieceId ? " is-active" : ""}${dropPiece === id ? " is-drop-target" : ""}`}
-              onDragOver={(event) => {
-                if (
-                  !event.dataTransfer.types.includes(
-                    "application/x-weblog-piece",
-                  )
-                )
-                  return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-                setDropPiece(id);
-              }}
-              onDrop={(event) => {
-                const moved = event.dataTransfer.getData(
-                  "application/x-weblog-piece",
-                );
-                if (!moved) return;
-                event.preventDefault();
-                session?.movePieceTo(moved, id);
-                setDropPiece(undefined);
-              }}
-            >
-              {session?.pieces && session.metadata.page_type === "date" && (
-                <div className="draft-piece-editor__tools">
-                  <button
-                    type="button"
-                    draggable
-                    disabled={session.isPublishing}
-                    aria-label="かけらを移動"
-                    title="ドラッグ、または上下キーで移動"
-                    onKeyDown={(event) => {
-                      if (event.key !== "ArrowUp" && event.key !== "ArrowDown")
-                        return;
-                      event.preventDefault();
-                      session.movePiece(id, event.key === "ArrowUp" ? -1 : 1);
-                    }}
-                    onPointerDown={(event) => {
-                      if (event.pointerType === "mouse") return;
-                      event.currentTarget.setPointerCapture(event.pointerId);
-                      draggedPiece.current = id;
-                    }}
-                    onPointerMove={(event) => {
-                      if (
-                        !event.currentTarget.hasPointerCapture(event.pointerId)
-                      )
-                        return;
-                      const target = document
-                        .elementFromPoint(event.clientX, event.clientY)
-                        ?.closest<HTMLElement>("[data-piece-id]");
-                      setDropPiece(target?.dataset.pieceId);
-                    }}
-                    onPointerUp={(event) => {
-                      if (
-                        !event.currentTarget.hasPointerCapture(event.pointerId)
-                      )
-                        return;
-                      const target = document
-                        .elementFromPoint(event.clientX, event.clientY)
-                        ?.closest<HTMLElement>("[data-piece-id]")
-                        ?.dataset.pieceId;
-                      if (draggedPiece.current && target)
-                        session.movePieceTo(draggedPiece.current, target);
-                      event.currentTarget.releasePointerCapture(
-                        event.pointerId,
-                      );
-                      draggedPiece.current = undefined;
-                      setDropPiece(undefined);
-                    }}
-                    onPointerCancel={() => {
-                      draggedPiece.current = undefined;
-                      setDropPiece(undefined);
-                    }}
-                    onDragEnd={() => setDropPiece(undefined)}
-                    onDragStart={(event) =>
-                      event.dataTransfer.setData(
-                        "application/x-weblog-piece",
-                        id,
-                      )
-                    }
-                  >
-                    <AuthoringIcon name="dots" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={session.isPublishing}
-                    aria-label="かけらを削除"
-                    title="かけらを削除"
-                    onClick={() => {
-                      if (window.confirm("このかけらを削除しますか？")) {
-                        session.removePiece(id);
-                        requestAnimationFrame(() => textarea.current?.focus());
-                      }
-                    }}
-                  >
-                    <AuthoringIcon name="close" />
-                  </button>
-                </div>
-              )}
-              <textarea
-                ref={(field) => {
-                  if (!pieceDiary || session?.activePieceId === id)
-                    textarea.current = field;
-                  else if (field && session)
-                    field.value = session.doc.getText(`piece:${id}`).toString();
-                }}
-                defaultValue={
-                  pieceDiary
-                    ? session?.doc.getText(`piece:${id}`).toString()
-                    : undefined
+          {(session?.pieces ? session.pieces.local.piece_ids : ["body"]).map(
+            (id, index) => (
+              <fieldset
+                key={id}
+                aria-label={
+                  pieceDiary ? `${index + 1}番目のかけら` : "本文の編集"
                 }
-                rows={
-                  pieceDiary
-                    ? Math.max(
-                        3,
-                        (session?.doc
-                          .getText(`piece:${id}`)
-                          .toString()
-                          .split("\n").length || 0) + 1,
-                      )
-                    : undefined
-                }
-                onFocus={() => {
-                  if (pieceDiary && session?.activePieceId !== id)
-                    session?.selectPiece(id);
-                }}
-                aria-label={pieceDiary ? `${index + 1}番目のかけら` : "本文"}
-                aria-describedby="draft-size"
-                aria-invalid={bytes > DRAFT_BODY_LIMIT}
-                disabled={
-                  !session ||
-                  session.isPublishing ||
-                  !!imageUploadStatus ||
-                  session.pieces?.local.piece_ids.length === 0
-                }
-                spellCheck={false}
-                aria-controls={
-                  wikiLinkSuggestions.length > 0
-                    ? "draft-wiki-link-suggestions"
-                    : undefined
-                }
-                aria-activedescendant={
-                  wikiLinkSuggestions.length > 0
-                    ? `draft-wiki-link-suggestion-${activeWikiLinkSuggestion}`
-                    : undefined
-                }
-                onInput={updateCursorContext}
-                onClick={updateCursorContext}
-                onKeyUp={(event) => {
-                  if (
-                    wikiLinkSuggestions.length === 0 ||
-                    !["Tab", "Enter", "Escape"].includes(event.key)
-                  )
-                    updateCursorContext();
-                }}
-                onSelect={updateCursorContext}
-                onKeyDown={(event) => {
-                  handleWikiLinkSuggestionKeyDown(event);
-                  if (
-                    event.defaultPrevented ||
-                    event.metaKey ||
-                    event.ctrlKey ||
-                    event.altKey ||
-                    event.shiftKey ||
-                    composing.current ||
-                    !pieceDiary ||
-                    !session?.pieces
-                  )
-                    return;
-                  const field = event.currentTarget;
-                  if (field.selectionStart !== field.selectionEnd) return;
-                  const direction =
-                    event.key === "ArrowUp" && field.selectionStart === 0
-                      ? -1
-                      : event.key === "ArrowDown" &&
-                          field.selectionStart === field.value.length
-                        ? 1
-                        : 0;
-                  const target =
-                    session.pieces.local.piece_ids[index + direction];
-                  if (!direction || !target) return;
-                  event.preventDefault();
-                  const caret =
-                    direction < 0
-                      ? session.doc.getText(`piece:${target}`).length
-                      : 0;
-                  session.selectPiece(target);
-                  requestAnimationFrame(() => {
-                    textarea.current?.focus();
-                    textarea.current?.setSelectionRange(caret, caret);
-                  });
-                }}
+                data-piece-id={pieceDiary ? id : undefined}
+                className={`draft-piece-editor${pieceDiary && id === session?.activePieceId ? " is-active" : ""}${dropPiece === id ? " is-drop-target" : ""}`}
                 onDragOver={(event) => {
                   if (
-                    Array.from(event.dataTransfer.items).some(
-                      (item) =>
-                        item.kind === "file" && item.type.startsWith("image/"),
+                    !event.dataTransfer.types.includes(
+                      "application/x-weblog-piece",
                     )
-                  ) {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "copy";
-                  }
+                  )
+                    return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDropPiece(id);
                 }}
-                onDrop={(event) => void handleImageDrop(event)}
-                onPaste={(event) => void handleImagePaste(event)}
-              />
-            </fieldset>
-          ))}
+                onDrop={(event) => {
+                  const moved = event.dataTransfer.getData(
+                    "application/x-weblog-piece",
+                  );
+                  if (!moved) return;
+                  event.preventDefault();
+                  session?.movePieceTo(moved, id);
+                  setDropPiece(undefined);
+                }}
+              >
+                {session?.pieces && (
+                  <div className="draft-piece-editor__tools">
+                    <button
+                      type="button"
+                      draggable
+                      disabled={session.isPublishing}
+                      aria-label="かけらを移動"
+                      title="ドラッグ、または上下キーで移動"
+                      onKeyDown={(event) => {
+                        if (
+                          event.key !== "ArrowUp" &&
+                          event.key !== "ArrowDown"
+                        )
+                          return;
+                        event.preventDefault();
+                        session.movePiece(id, event.key === "ArrowUp" ? -1 : 1);
+                      }}
+                      onPointerDown={(event) => {
+                        if (event.pointerType === "mouse") return;
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                        draggedPiece.current = id;
+                      }}
+                      onPointerMove={(event) => {
+                        if (
+                          !event.currentTarget.hasPointerCapture(
+                            event.pointerId,
+                          )
+                        )
+                          return;
+                        const target = document
+                          .elementFromPoint(event.clientX, event.clientY)
+                          ?.closest<HTMLElement>("[data-piece-id]");
+                        setDropPiece(target?.dataset.pieceId);
+                      }}
+                      onPointerUp={(event) => {
+                        if (
+                          !event.currentTarget.hasPointerCapture(
+                            event.pointerId,
+                          )
+                        )
+                          return;
+                        const target = document
+                          .elementFromPoint(event.clientX, event.clientY)
+                          ?.closest<HTMLElement>("[data-piece-id]")
+                          ?.dataset.pieceId;
+                        if (draggedPiece.current && target)
+                          session.movePieceTo(draggedPiece.current, target);
+                        event.currentTarget.releasePointerCapture(
+                          event.pointerId,
+                        );
+                        draggedPiece.current = undefined;
+                        setDropPiece(undefined);
+                      }}
+                      onPointerCancel={() => {
+                        draggedPiece.current = undefined;
+                        setDropPiece(undefined);
+                      }}
+                      onDragEnd={() => setDropPiece(undefined)}
+                      onDragStart={(event) =>
+                        event.dataTransfer.setData(
+                          "application/x-weblog-piece",
+                          id,
+                        )
+                      }
+                    >
+                      <AuthoringIcon name="dots" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={session.isPublishing}
+                      aria-label="かけらを削除"
+                      title="かけらを削除"
+                      onClick={() => {
+                        if (window.confirm("このかけらを削除しますか？")) {
+                          session.removePiece(id);
+                          requestAnimationFrame(() =>
+                            textarea.current?.focus(),
+                          );
+                        }
+                      }}
+                    >
+                      <AuthoringIcon name="close" />
+                    </button>
+                  </div>
+                )}
+                <textarea
+                  ref={(field) => {
+                    if (!pieceDiary || session?.activePieceId === id)
+                      textarea.current = field;
+                    else if (field && session)
+                      field.value = session.doc
+                        .getText(`piece:${id}`)
+                        .toString();
+                  }}
+                  defaultValue={
+                    pieceDiary
+                      ? session?.doc.getText(`piece:${id}`).toString()
+                      : undefined
+                  }
+                  rows={
+                    pieceDiary
+                      ? Math.max(
+                          3,
+                          (session?.doc
+                            .getText(`piece:${id}`)
+                            .toString()
+                            .split("\n").length || 0) + 1,
+                        )
+                      : undefined
+                  }
+                  onFocus={() => {
+                    if (pieceDiary && session?.activePieceId !== id)
+                      session?.selectPiece(id);
+                  }}
+                  aria-label={pieceDiary ? `${index + 1}番目のかけら` : "本文"}
+                  aria-describedby="draft-size"
+                  aria-invalid={bytes > DRAFT_BODY_LIMIT}
+                  disabled={
+                    !session ||
+                    session.isPublishing ||
+                    !!imageUploadStatus ||
+                    session.pieces?.local.piece_ids.length === 0
+                  }
+                  spellCheck={false}
+                  aria-controls={
+                    wikiLinkSuggestions.length > 0
+                      ? "draft-wiki-link-suggestions"
+                      : undefined
+                  }
+                  aria-activedescendant={
+                    wikiLinkSuggestions.length > 0
+                      ? `draft-wiki-link-suggestion-${activeWikiLinkSuggestion}`
+                      : undefined
+                  }
+                  onInput={updateCursorContext}
+                  onClick={updateCursorContext}
+                  onKeyUp={(event) => {
+                    if (
+                      wikiLinkSuggestions.length === 0 ||
+                      !["Tab", "Enter", "Escape"].includes(event.key)
+                    )
+                      updateCursorContext();
+                  }}
+                  onSelect={updateCursorContext}
+                  onKeyDown={(event) => {
+                    handleWikiLinkSuggestionKeyDown(event);
+                    if (
+                      event.defaultPrevented ||
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.altKey ||
+                      event.shiftKey ||
+                      composing.current ||
+                      !pieceDiary ||
+                      !session?.pieces
+                    )
+                      return;
+                    const field = event.currentTarget;
+                    if (field.selectionStart !== field.selectionEnd) return;
+                    const direction =
+                      event.key === "ArrowUp" && field.selectionStart === 0
+                        ? -1
+                        : event.key === "ArrowDown" &&
+                            field.selectionStart === field.value.length
+                          ? 1
+                          : 0;
+                    const target =
+                      session.pieces.local.piece_ids[index + direction];
+                    if (!direction || !target) return;
+                    event.preventDefault();
+                    const caret =
+                      direction < 0
+                        ? session.doc.getText(`piece:${target}`).length
+                        : 0;
+                    session.selectPiece(target);
+                    requestAnimationFrame(() => {
+                      textarea.current?.focus();
+                      textarea.current?.setSelectionRange(caret, caret);
+                    });
+                  }}
+                  onDragOver={(event) => {
+                    if (
+                      Array.from(event.dataTransfer.items).some(
+                        (item) =>
+                          item.kind === "file" &&
+                          item.type.startsWith("image/"),
+                      )
+                    ) {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "copy";
+                    }
+                  }}
+                  onDrop={(event) => void handleImageDrop(event)}
+                  onPaste={(event) => void handleImagePaste(event)}
+                />
+              </fieldset>
+            ),
+          )}
           {session && <DraftPieceControls session={session} />}
           {wikiLinkSuggestions.length > 0 && (
             <div

@@ -29,7 +29,7 @@ export function bodyCoverImages(
 
 export function DraftCoverSettings({ session }: { session: DraftSession }) {
   const { metadata } = session;
-  const body = session.body.toString();
+  const body = session.markdown;
   const images = useMemo(() => bodyCoverImages(body), [body]);
   const firstLocalImage = images.find((image) =>
     /^\/assets\/[^\s]+$/.test(image.src),
@@ -45,7 +45,7 @@ export function DraftCoverSettings({ session }: { session: DraftSession }) {
   ];
   const cover =
     metadata.cover_mode === "auto"
-      ? autoCoverImageUrl(session.body.toString())
+      ? autoCoverImageUrl(body)
       : metadata.cover_mode === "explicit"
         ? metadata.cover_image_url
         : null;
