@@ -633,7 +633,7 @@ module WeblogAuthoring
       page = ArticleDocument.from_published_version(resolution["snapshot"]) || settings.database.find_route(route)
       renderer = WebmentionSitePublisher.new(database: settings.database, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
       shell = ROOT.join("public.html").read
-      html = if page && page.status == "published" && !page.empty?
+      html = if page && page.status == "published" && (resolution["snapshot"] || !page.empty?)
                renderer.render_document(page, shell:, source_url: "#{FRONTEND_ORIGIN}/#{WeblogAuthoring.encoded_route(route)}")
              else
                renderer.render_linked_page(route, shell:)

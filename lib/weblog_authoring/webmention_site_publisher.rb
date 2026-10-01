@@ -177,7 +177,7 @@ module WeblogAuthoring
             <a class="u-url" href="#{escaped_source_url}" hidden="">記事のパーマリンク</a>
             <span class="p-author h-card" hidden=""><a class="p-name u-url" href="#{author_url}">asonas</a></span>
           </header>
-          <div class="editor-canvas"><div class="e-content ProseMirror public-article-body">
+          <div class="editor-canvas"#{body_html.empty? ? ' hidden=""' : ''}><div class="e-content ProseMirror public-article-body">
             #{body_html}
           </div>
           </div>

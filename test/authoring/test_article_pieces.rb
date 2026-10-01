@@ -7,6 +7,9 @@ require "weblog_authoring/draft_publication"
 require "weblog_authoring/development_database"
 require "weblog_authoring/webmention_site_publisher"
 require "weblog_authoring/lambda_api"
+require "weblog_authoring/draft_publisher"
+require "weblog_authoring/development_app"
+require "rack/mock"
 
 class ArticlePiecesTest < Minitest::Test
   SCOPE = { "protocol" => 1, "generation" => 1, "format" => "pieces" }.freeze
@@ -192,6 +195,72 @@ class ArticlePiecesTest < Minitest::Test
     assert_equal 10, renamed.fetch("days").length
     assert_equal "[[New topic]]への言及", renamed.dig("days", 0, "pieces", 0, "body")
     assert_equal renamed, @store.mentioned_by_days("Old topic")
+  end
+
+  def test_publishing_a_diary_creates_editable_empty_link_targets_without_overwriting_existing_articles
+    publish
+    existing = @store.published_snapshot(@id)
+    diary = @store.daily_draft("2040-01-03", tags: ["タグのみ"])
+    @id = diary.fetch("id")
+    append_piece(diary.dig("structure", "piece_ids").first, "[[猫]] [[猫]] [[2026-10-01]] `[[コードのみ]]`\n\n```\n[[コードのみ]]\n```\n\n[[api]]")
+    database = WeblogAuthoring::DevelopmentDatabase.new(@root.join("legacy.sqlite3"), content_dir: @root.join("content"))
+    database.setup!
+    publisher = WeblogAuthoring::DraftPublisher.local(publication: @publication, database:, root: @root.join("published"), shell: -> { '<html><head></head><div id="authoring-root"></div></html>' }, site_url: "https://example.com")
+    assert_nil @store.published_route("猫")
+    version = @publication.accept(@id, @publication.prepare(@id).merge("request_id" => SecureRandom.uuid))
+    assert_nil @store.published_route("猫")
+    publisher.run(@id, version.fetch("id"))
+    target = @store.published_route("猫")
+    assert_equal "", target.fetch("body")
+    assert_equal "猫", target.dig("metadata", "title")
+    assert_includes publisher.read(target), 'data-public-article="1"'
+    assert_includes publisher.read(target), "猫"
+    assert_equal "public", @publication.prepare(target.fetch("article_id")).fetch("article_state")
+    app = Class.new(WeblogAuthoring::DevelopmentApp)
+    app.set :raise_errors, true
+    app.set :authentication_required, false
+    app.set :draft_store, @store
+    app.set :database, database
+    response = Rack::MockRequest.new(app).get("/#{WeblogAuthoring.encoded_route('猫')}", "HTTP_HOST" => "localhost")
+    assert_equal 200, response.status
+    assert_includes response.body, 'data-public-article="1"'
+    assert_includes response.body, "#{target.fetch('article_id')}"
+    %w[タグのみ コードのみ api].each { |name| assert_nil @store.published_route(name), name }
+    assert_equal existing, @store.published_route("2026-10-01")
+    publisher.run(@id, version.fetch("id"))
+    assert_equal target, @store.published_route("猫")
+    @id = target.fetch("article_id")
+    piece = SecureRandom.uuid
+    @store.update_structure(@id, SCOPE.merge("expected_revision" => 0, "piece_ids" => [piece], "tags" => []))
+    append_piece(piece, "あとから書き足した本文")
+    updated = @publication.accept(@id, @publication.prepare(@id).merge("request_id" => SecureRandom.uuid))
+    publisher.run(@id, updated.fetch("id"))
+    assert_equal "あとから書き足した本文", @store.published_route("猫").fetch("body")
+    publisher.run(diary.fetch("id"), version.fetch("id"))
+    assert_equal "あとから書き足した本文", @store.published_route("猫").fetch("body")
+  end
+
+  def test_empty_target_html_placement_can_be_retried_without_creating_another_article
+    diary = @store.daily_draft("2040-01-04")
+    @id = diary.fetch("id")
+    append_piece(diary.dig("structure", "piece_ids").first, "[[再試行する猫]]")
+    database = WeblogAuthoring::DevelopmentDatabase.new(@root.join("legacy.sqlite3"), content_dir: @root.join("content"))
+    database.setup!
+    failed = false
+    publisher = WeblogAuthoring::DraftPublisher.new(publication: @publication, database:, site_url: "https://example.com", shell: -> { '<html><head></head><div id="authoring-root"></div></html>' }, read: ->(_key) { "" }) do |_key, html|
+      if html.include?("<title>再試行する猫") && !failed
+        failed = true
+        raise IOError, "storage unavailable"
+      end
+    end
+    version = @publication.accept(@id, @publication.prepare(@id).merge("request_id" => SecureRandom.uuid))
+    assert_raises(IOError) { publisher.run(@id, version.fetch("id")) }
+    assert_nil @store.published_route("再試行する猫")
+    publisher.run(@id, version.fetch("id"))
+    target = @store.published_route("再試行する猫")
+    refute_nil target
+    publisher.run(@id, version.fetch("id"))
+    assert_equal target, @store.published_route("再試行する猫")
   end
 
   private

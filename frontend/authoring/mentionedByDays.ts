@@ -48,20 +48,25 @@ export function mountMentionedByDays(
       for (const day of result.days) {
         const group = document.createElement("section");
         group.className = "mentioned-by-days__day";
-        const date = document.createElement("h3");
-        date.textContent = day.day;
-        group.append(date);
         for (const piece of day.pieces) {
-          const entry = document.createElement("div");
+          const entry = document.createElement("figure");
           entry.className = "mentioned-by-days__piece";
+          const source = document.createElement("figcaption");
           const link = document.createElement("a");
           link.href = piece.href;
-          link.textContent = `${day.day}の日記へ`;
+          const date = document.createElement("time");
+          date.dateTime = day.day;
+          date.textContent = day.day;
+          link.append(date, "の日記を見る");
+          source.append(link);
+          const quote = document.createElement("blockquote");
+          quote.cite = piece.href;
           const body = document.createElement("div");
           body.className = "ProseMirror public-article-body";
           // HTML is rendered by the same server-side sanitizer as article bodies.
           body.innerHTML = piece.html;
-          entry.append(link, body);
+          quote.append(body);
+          entry.append(source, quote);
           group.append(entry);
           enhance(entry);
         }

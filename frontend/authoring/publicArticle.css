@@ -183,7 +183,9 @@
 .mentioned-by-days {
   max-inline-size: var(--measure-content);
   margin: var(--space-12) auto;
-  padding-inline: var(--space-6);
+  padding-inline: clamp(var(--space-4), 5vw, var(--space-12));
+  padding-block: var(--space-8);
+  background: var(--quotation-surface, var(--surface));
 }
 
 .mentioned-by-days[hidden] {
@@ -191,24 +193,77 @@
 }
 
 .mentioned-by-days h2 {
+  margin: 0 0 var(--space-6);
   font-size: var(--text-heading-md);
   font-weight: 400;
 }
 
-.mentioned-by-days__day {
-  margin-block: var(--space-8);
+.mentioned-by-days__day + .mentioned-by-days__day {
+  margin-block-start: var(--space-8);
 }
 
-.mentioned-by-days__day h3,
-.mentioned-by-days__piece > a {
+.mentioned-by-days__piece figcaption {
   font-size: var(--text-ui);
+  color: var(--ink);
+}
+
+.mentioned-by-days__piece figcaption a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  color: inherit;
+  text-underline-offset: 0.2em;
+}
+
+.mentioned-by-days__piece figcaption a:focus-visible,
+.mentioned-by-days > button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .mentioned-by-days__piece {
-  margin-block: var(--space-6);
+  margin: 0;
 }
 
-.mentioned-by-days button {
+.mentioned-by-days__piece + .mentioned-by-days__piece {
+  margin-block-start: var(--space-8);
+}
+
+.mentioned-by-days__piece > blockquote {
+  margin: 0;
+  padding-inline-start: var(--space-4);
+  border-inline-start: var(--border-width) solid var(--muted-ink);
+}
+
+.article-workspace--reading
+  .mentioned-by-days
+  .mentioned-by-days__piece
+  .public-article-body {
+  margin: 0;
+  padding: 0;
+  max-inline-size: none;
+  font-size: var(--text-body);
+  line-height: 1.75;
+}
+
+.article-workspace--reading
+  .mentioned-by-days
+  .mentioned-by-days__piece
+  .public-article-body
+  > :last-child {
+  margin-block-end: 0;
+}
+
+.mentioned-by-days > [role="status"]:empty {
+  display: none;
+}
+
+.article-workspace--reading .editor-canvas[hidden] {
+  display: none;
+}
+
+.mentioned-by-days > button {
+  margin-block-start: var(--space-6);
   min-block-size: 44px;
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--separator);

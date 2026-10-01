@@ -35,6 +35,7 @@ module WeblogAuthoring
 
     def initialize(publication:, database:, site_url:, shell:, read:, &place)
       @publication = publication
+      @database = database
       @shell = shell
       @place = place
       @read = read
@@ -76,7 +77,7 @@ module WeblogAuthoring
     end
 
     def run(id, version_id)
-      @publication.complete(id, version_id) do |snapshot|
+      result = @publication.complete(id, version_id) do |snapshot|
         shell = @shell.call
         page = ArticleDocument.from_published_version(snapshot)
         html = @renderer.render_document(page, shell:, source_url: "#{@site_url}/#{URI::DEFAULT_PARSER.escape(page.route)}")
@@ -84,6 +85,12 @@ module WeblogAuthoring
         @place.call(key, html)
         key
       end
+      if result.fetch("status") == "completed"
+        @publication.linked_article_publications(id, version_id, database: @database).each do |snapshot|
+          run(snapshot.fetch("article_id"), snapshot.fetch("id"))
+        end
+      end
+      result
     end
   end
 end

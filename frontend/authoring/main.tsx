@@ -505,7 +505,9 @@ function start() {
     if (import.meta.env.DEV && window.location.pathname === "/design-system") {
       document.documentElement.dataset.view = "design-system";
       document.title = "Design system · weblog.ason.as";
-      createRoot(root).render(<DesignSystemPage />);
+      void import("./publicArticle.css").then(() => {
+        createRoot(root).render(<DesignSystemPage />);
+      });
       return;
     }
     const initialBootstrap = data?.textContent

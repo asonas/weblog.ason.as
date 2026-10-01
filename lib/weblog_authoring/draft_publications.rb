@@ -91,6 +91,47 @@ module WeblogAuthoring
       resolve_published_route(route)["snapshot"]
     end
 
+    def linked_article_publications(snapshot, existing_routes: [])
+      metadata = snapshot.fetch("metadata")
+      return [] unless metadata["page_type"] == "date" && metadata.dig("content", "format") == "pieces"
+      names = metadata.fetch("content").fetch("pieces").flat_map { |piece| PieceMentions.names(piece.fetch("body")) }.uniq
+      names.filter_map do |name|
+        next if existing_routes.include?(name)
+        begin
+          route = WeblogAuthoring.validate_page_name(name)
+        rescue ArgumentError
+          next
+        end
+        next if %w[draft-editor draft-offline.js published editor authoring oauth assets search index.html feed.xml 404.html].include?(route.split("/").first)
+        @connect.call do |db|
+          db.transaction do
+            owner = db.query("SELECT article_id FROM #{db.prefix}article_publication_routes WHERE route = $1", [route]).first
+            version_id = Digest::SHA256.hexdigest("linked-article-version:#{route}")[0, 32]
+            if owner
+              head = db.query("SELECT * FROM #{db.prefix}article_publication_heads WHERE article_id = $1", [owner.fetch("article_id")]).first
+              next head && !head["active_id"] && head["latest_id"] == version_id ? snapshot_from(db, owner.fetch("article_id"), version_id) : nil
+            end
+            next if db.query("SELECT article_id FROM #{db.prefix}article_route_reservations WHERE route = $1", [route]).any?
+            id = SecureRandom.uuid
+            now = Time.now.utc.iso8601(6)
+            values = DraftStore::DEFAULT_METADATA.merge("title" => route)
+            content = { "format" => "pieces", "pieces" => [], "tags" => [] }
+            published = values.merge("content" => content, "draft_head" => 0)
+            hash = Digest::SHA256.hexdigest(JSON.generate(["", *values.values_at("title", "page_type", "cover_mode", "cover_image_url"), content]))
+            working = values.transform_values { |value| { "value" => value, "revision" => 0 } }
+            db.query("INSERT INTO #{db.prefix}articles (id, generation, head, metadata, created_at, updated_at) VALUES ($1, 1, 0, $2, $3, $3)", [id, JSON.generate(working), now])
+            db.query("INSERT INTO #{db.prefix}article_structures (article_id, format, revision, piece_ids, deleted_ids, tags) VALUES ($1, 'pieces', 0, '[]', '[]', '[]')", [id])
+            reserve_working_route(db, id, route)
+            db.query("INSERT INTO #{db.prefix}article_publication_routes (route, article_id) VALUES ($1, $2)", [route, id])
+            db.query("INSERT INTO #{db.prefix}article_published_versions (id, article_id, content_hash, body, metadata, route, created_at, article_created_at) VALUES ($1, $2, $3, '', $4, $5, $6, $6)", [version_id, id, hash, JSON.generate(published), route, now])
+            db.query("INSERT INTO #{db.prefix}article_publication_jobs (id, article_id, status) VALUES ($1, $2, 'accepted')", [version_id, id])
+            db.query("INSERT INTO #{db.prefix}article_publication_heads (article_id, latest_id) VALUES ($1, $2)", [id, version_id])
+            snapshot_from(db, id, version_id)
+          end
+        end
+      end
+    end
+
     def finish_publication(id, version_id, html_key)
       @connect.call do |db|
         db.transaction do

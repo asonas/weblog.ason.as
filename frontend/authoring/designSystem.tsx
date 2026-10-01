@@ -10,6 +10,8 @@ const COLOR_TOKENS = [
   ["Separator", "--separator"],
   ["Subtle separator", "--separator-subtle"],
   ["Focus", "--focus-ring"],
+  ["Quiet fill", "--quiet-fill"],
+  ["Quotation", "--quotation-surface"],
 ] as const;
 
 const SPACING_TOKENS = [
@@ -64,6 +66,9 @@ export function DesignSystemPage() {
         </PatternSection>
 
         <PatternSection title="Color roles">
+          <p>
+            公開画面は白・黒・薄いグレーを基本に、リンクとフォーカスに青を使います。
+          </p>
           <ul className="design-system__swatches">
             {COLOR_TOKENS.map(([label, token]) => (
               <li key={token}>
@@ -76,6 +81,99 @@ export function DesignSystemPage() {
               </li>
             ))}
           </ul>
+        </PatternSection>
+
+        <PatternSection title="Ableton color references">
+          <p>
+            ページのベタ背景から選んだ参考パレットです。引用には淡い黄緑を使い、他の色は用途を固定せず残します。
+          </p>
+          <ul className="design-system__swatches">
+            {[
+              [
+                "Lavender",
+                "#CDBEFD",
+                "Live",
+                "https://www.ableton.com/ja/live/",
+              ],
+              ["Coral", "#FFC3A5", "Shop", "https://www.ableton.com/ja/shop/"],
+              [
+                "Pale yellow",
+                "#FDFFD9",
+                "Note",
+                "https://www.ableton.com/ja/note/",
+              ],
+              [
+                "Light green",
+                "#B6FFC0",
+                "Live",
+                "https://www.ableton.com/ja/live/",
+              ],
+              [
+                "Pale yellow-green",
+                "#EBF0DC",
+                "Live",
+                "https://www.ableton.com/ja/live/",
+              ],
+              ["Green", "#41CE97", "Push", "https://www.ableton.com/ja/push/"],
+              ["Teal", "#8EFBD8", "Note", "https://www.ableton.com/ja/note/"],
+              [
+                "Near black",
+                "#030512",
+                "Push · Monochrome",
+                "https://www.ableton.com/ja/push/",
+              ],
+              [
+                "Black",
+                "#000000",
+                "Push · Monochrome",
+                "https://www.ableton.com/ja/push/",
+              ],
+              [
+                "White",
+                "#FFFFFF",
+                "Push · Monochrome",
+                "https://www.ableton.com/ja/push/",
+              ],
+              [
+                "Gray",
+                "#818181",
+                "Push · Monochrome",
+                "https://www.ableton.com/ja/push/",
+              ],
+            ].map(([label, color, source, href]) => (
+              <li key={color}>
+                <span style={{ background: color }} aria-hidden="true" />
+                <strong>{label}</strong>
+                <code>{color}</code>
+                <a href={href}>{source}</a>
+              </li>
+            ))}
+          </ul>
+        </PatternSection>
+
+        <PatternSection title="Diary quotations">
+          <div className="article-workspace--reading design-system__quotation">
+            <section
+              className="mentioned-by-days"
+              aria-labelledby="quotation-example-heading"
+            >
+              <h2 id="quotation-example-heading">Mentioned by days</h2>
+              <figure className="mentioned-by-days__piece">
+                <figcaption>
+                  <a href="/2026-10-01" aria-label="2026-10-01の日記へ">
+                    <time dateTime="2026-10-01">2026-10-01</time>
+                  </a>
+                </figcaption>
+                <blockquote cite="/2026-10-01">
+                  <div className="ProseMirror public-article-body">
+                    <p>
+                      最近、新しいキーボードを使い始めた。毎日書く場所が少し心地よくなった。
+                    </p>
+                  </div>
+                </blockquote>
+              </figure>
+            </section>
+          </div>
         </PatternSection>
 
         <PatternSection title="Spacing and shape">

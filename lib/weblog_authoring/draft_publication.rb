@@ -87,6 +87,16 @@ module WeblogAuthoring
       verified_content(id).slice("content_hash", "through")
     end
 
+    def linked_article_publications(id, version_id, database:)
+      snapshot = @store.published_snapshot(id)
+      return [] unless snapshot && snapshot.fetch("id") == version_id
+      metadata = snapshot.fetch("metadata")
+      return [] unless metadata["page_type"] == "date" && metadata.dig("content", "format") == "pieces"
+      names = metadata.fetch("content").fetch("pieces").flat_map { |piece| PieceMentions.names(piece.fetch("body")) }.uniq
+      existing_routes = database.find_pages_by_routes(names).map(&:route)
+      @store.linked_article_publications(snapshot, existing_routes:)
+    end
+
     def working_content_hashes(ids)
       return ids.to_h { |id| [id, working_content_hash(id)] } unless @reconstruct_many
       # The remote worker loads the history directly from DSQL. Only the
