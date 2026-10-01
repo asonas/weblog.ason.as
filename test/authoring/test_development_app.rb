@@ -565,6 +565,32 @@ class TestDevelopmentApp < Minitest::Test
     assert_includes body, '/frontend/authoring/publicArticle.ts'
     refute_includes body, '/frontend/authoring/main.tsx'
     assert_equal snapshot, store.published_snapshot(article_id)
+
+    publication = WeblogAuthoring::DraftPublication.local(store:)
+    ids = %w[猫 Halo].to_h do |name|
+      id = SecureRandom.uuid
+      text = name == "猫" ? "猫の記事 [[Halo]]" : ""
+      output, error, seeded = Open3.capture3("node", "scripts/seed-draft.mjs", stdin_data: JSON.generate(text))
+      raise error unless seeded.success?
+      scope = { "protocol" => 1, "generation" => 1 }
+      store.create(id, scope)
+      store.append(id, scope.merge(JSON.parse(output), "body_bytes" => text.bytesize, "update_id" => SecureRandom.uuid,
+        "metadata" => { "title" => { "value" => name, "expected_revision" => 0 } }))
+      version = publication.accept(id, publication.prepare(id).merge("request_id" => SecureRandom.uuid))
+      publication.complete(id, version.fetch("id")) { "published/test.html" }
+      [name, id]
+    end
+    status, _headers, body = request_with(draft_app, "GET", "/api/related?route=Halo&excluding_id=#{ids.fetch('Halo')}")
+    assert_equal 200, status
+    assert_includes JSON.parse(body).fetch("pages").map { |page| page.fetch("route") }, "猫"
+    status, _headers, body = request_with(draft_app, "GET", "/api/pages?kind=timeline")
+    assert_equal 200, status
+    assert_includes JSON.parse(body).fetch("pages").map { |page| page.fetch("route") }, "猫"
+    status, _headers, body = request_with(draft_app, "GET", "/api/page-names")
+    assert_equal 200, status
+    assert_includes JSON.parse(body).fetch("names"), "Halo"
+    status, _headers, _body = request_with(draft_app, "POST", "/api/authoring/pages")
+    assert_equal 409, status
   end
 
   def test_daily_button_opens_the_japanese_daily_template

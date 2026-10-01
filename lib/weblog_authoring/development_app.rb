@@ -36,6 +36,7 @@ require_relative "names"
 require_relative "atom_feed"
 require_relative "performance_telemetry"
 require_relative "draft_store"
+require_relative "published_article_reader"
 require_relative "draft_publisher"
 require_relative "draft_jobs"
 require_relative "draft_administration"
@@ -191,19 +192,19 @@ module WeblogAuthoring
       content_type :json
       headers "Cache-Control" => "no-store"
       halt 503, JSON.generate(error: "Draft store is unavailable") unless settings.draft_store
-      JSON.generate(MentionedByDays.new(store: settings.draft_store, database: settings.database).call(params.fetch("route", ""), before: params["before"]))
+      JSON.generate(MentionedByDays.new(store: settings.draft_store, database: settings.reader_database).call(params.fetch("route", ""), before: params["before"]))
     end
 
     get "/api/tags" do
-      json_response({ "tags" => recent_tags(settings.database.list_pages) })
+      json_response({ "tags" => recent_tags(settings.reader_database.list_pages) })
     end
 
     get "/api/archive" do
-      json_response({ "archive" => archive_years(settings.database.list_pages) })
+      json_response({ "archive" => archive_years(settings.reader_database.list_pages) })
     end
 
     get "/api/page-names" do
-      entries = WeblogAuthoring.page_name_entries(settings.database.list_pages)
+      entries = WeblogAuthoring.page_name_entries(settings.reader_database.list_pages)
       conditional_json_response("names" => entries.map { |entry| entry.fetch("name") }, "entries" => entries)
     end
 
@@ -212,8 +213,7 @@ module WeblogAuthoring
     end
 
     get "/api/pages/:id" do
-      page = settings.draft_store && ArticleDocument.from_published_version(settings.draft_store.published_snapshot(params.fetch("id")))
-      page ||= settings.database.find(params.fetch("id"))
+      page = settings.reader_database.find(params.fetch("id"))
       return json_error(404, "ページが見つかりません") if page.nil?
 
       conditional_json_response(editor_json(page))
@@ -233,7 +233,7 @@ module WeblogAuthoring
     end
 
     get "/api/diary-navigation" do
-      conditional_json_response(DiaryNavigation.new(settings.database).neighbors(params.fetch("route", "")))
+      conditional_json_response(DiaryNavigation.new(settings.reader_database).neighbors(params.fetch("route", "")))
     end
 
     get "/api/related" do
@@ -243,7 +243,7 @@ module WeblogAuthoring
       offset = Integer(params.fetch("offset", "0"), 10)
       return json_error(422, "offset が不正です") if offset.negative?
 
-      page = params["excluding_id"].to_s.empty? ? nil : settings.database.find(params["excluding_id"])
+      page = params["excluding_id"].to_s.empty? ? nil : settings.reader_database.find(params["excluding_id"])
       json_response(related_page_result(route, page&.body.to_s, excluding_id: page&.id, offset:))
     rescue ArgumentError
       json_error(422, "offset が不正です")
@@ -264,7 +264,7 @@ module WeblogAuthoring
       if settings.draft_store
         settings.draft_outputs.feed
       else
-        AtomFeed.new(site_url: frontend_url("/").sub(%r{/\z}, "")).render(settings.database.list_pages)
+        AtomFeed.new(site_url: frontend_url("/").sub(%r{/\z}, "")).render(settings.reader_database.list_pages)
       end
     end
 
@@ -457,6 +457,7 @@ module WeblogAuthoring
     end
 
     post "/api/authoring/pages" do
+      halt 409, json_error(409, "移行後の記事は下書きエディタから編集してください。") if settings.draft_store
       api_response(201) do |payload|
         request = save_request(payload)
         page = settings.database.save(request)
@@ -599,6 +600,7 @@ module WeblogAuthoring
     end
 
     patch "/api/authoring/pages/:id" do
+      halt 409, json_error(409, "移行後の記事は下書きエディタから編集してください。") if settings.draft_store
       api_response do |payload|
         request = save_request(payload, page_id: params.fetch("id"))
         page = settings.database.save(request)
@@ -607,6 +609,7 @@ module WeblogAuthoring
     end
 
     post "/api/rename" do
+      halt 409, json_error(409, "移行後の記事は下書きエディタから編集してください。") if settings.draft_store
       api_response do |payload|
         page_id = required_string(payload, "page_id")
         name = required_string(payload, "name")
@@ -630,8 +633,8 @@ module WeblogAuthoring
       destination = resolution["redirect"]
       headers "Cache-Control" => "no-cache" if destination
       redirect "/#{WeblogAuthoring.encoded_route(destination)}", 301 if destination
-      page = ArticleDocument.from_published_version(resolution["snapshot"]) || settings.database.find_route(route)
-      renderer = WebmentionSitePublisher.new(database: settings.database, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
+      page = settings.reader_database.find_route(route)
+      renderer = WebmentionSitePublisher.new(database: settings.reader_database, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
       shell = ROOT.join("public.html").read
       html = if page && page.status == "published" && (resolution["snapshot"] || !page.empty?)
                renderer.render_document(page, shell:, source_url: "#{FRONTEND_ORIGIN}/#{WeblogAuthoring.encoded_route(route)}")
@@ -677,10 +680,12 @@ module WeblogAuthoring
       draft_store = drafts_enabled ? DraftStore.sqlite(development_data.join("drafts.sqlite3")) : nil
       draft_store&.setup!
       app.set :draft_store, draft_store
+      reader = draft_store ? PublishedArticleReader.new(store: draft_store, database:) : database
+      app.set :reader_database, reader
       if draft_store
         publication = DraftPublication.local(store: draft_store)
         app.set :draft_publication, publication
-        publisher = DraftPublisher.local(publication:, database:,
+        publisher = DraftPublisher.local(publication:, database: reader,
           root: development_data.join("publications"),
           shell: -> { ROOT.join("public.html").read }, site_url: FRONTEND_ORIGIN)
         app.set :draft_publisher, publisher
@@ -1038,7 +1043,7 @@ module WeblogAuthoring
     def daily_editor_state
       date = today
       title = date.iso8601
-      page = settings.database.find_route(title)
+      page = settings.reader_database.find_route(title)
       return editor_json(page) unless page.nil?
 
       links = [
@@ -1062,7 +1067,7 @@ module WeblogAuthoring
 
     def editor_state_for_route(raw_route)
       route = WeblogAuthoring.validate_page_name(raw_route)
-      page = settings.database.find_route(route)
+      page = settings.reader_database.find_route(route)
       return editor_json(page) unless page.nil?
 
       editor_json(
@@ -1118,7 +1123,7 @@ module WeblogAuthoring
     end
 
     def related_page_result(route, body, excluding_id: nil, offset: 0)
-      pages = settings.database.list_pages
+      pages = settings.reader_database.list_pages
       outgoing_names = WeblogAuthoring.extract_wiki_links(body.to_s).map(&:name).uniq
       outgoing_urls = WeblogAuthoring.extract_external_urls(body.to_s)
 
@@ -1291,6 +1296,10 @@ module WeblogAuthoring
     end
 
     def line_updated_at(page_id)
+      if settings.draft_store
+        page = settings.reader_database.find(page_id)
+        return page ? Array.new(page.body.split("\n", -1).length, page.updated_at.iso8601(9)) : []
+      end
       settings.database.scrapbox_line_metadata(page_id).map do |line|
         line.fetch(:updated_at)&.iso8601(9)
       end
@@ -1312,7 +1321,7 @@ module WeblogAuthoring
     def page_window(query, timings: {})
       if query["kind"] == "timeline"
         begin
-          window = measure(timings, "db") { HomeTimeline.new(settings.database).window(query) }
+          window = measure(timings, "db") { HomeTimeline.new(settings.reader_database).window(query) }
         rescue ArgumentError => error
           halt 422, error.message
         end
@@ -1327,7 +1336,7 @@ module WeblogAuthoring
       halt 422, "beforeとafterは同時に指定できません" if before && after
 
       pages = measure(timings, "db") do
-        settings.database.list_pages(limit: 31, before:, after:, kind:)
+        settings.reader_database.list_pages(limit: 31, before:, after:, kind:)
       end
       has_more = pages.length > 30
       pages = pages.first(30)
@@ -1344,13 +1353,13 @@ module WeblogAuthoring
       return false if pages.empty? && before.nil?
 
       cursor = pages.empty? ? before : page_cursor(pages.first, kind:)
-      settings.database.list_pages(limit: 1, after: cursor, kind:).any?
+      settings.reader_database.list_pages(limit: 1, after: cursor, kind:).any?
     end
 
     def older_pages?(pages, kind:)
       return false if pages.empty?
 
-      settings.database.list_pages(limit: 1, before: page_cursor(pages.last, kind:), kind:).any?
+      settings.reader_database.list_pages(limit: 1, before: page_cursor(pages.last, kind:), kind:).any?
     end
 
     def page_cursor(page, kind:)

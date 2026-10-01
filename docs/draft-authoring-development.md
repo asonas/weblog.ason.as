@@ -4,6 +4,30 @@ This is the first implementation slice of [the draft authoring specification](ht
 
 ## Explicit publication
 
+### Development reader cutover
+
+With `AUTHORING_DRAFTS_ENABLED=1`, all public article reads use active
+published snapshots: home, related articles, tags, archive, Wiki suggestions,
+diary navigation and article HTML. Unpublished working text stays private.
+Legacy article save and rename APIs return 409; media and Webmention storage
+continue using the development article database.
+
+Before switching an existing environment, stop its API and run:
+
+```sh
+mise exec -- ruby scripts/prepare-development-draft-reader.rb
+mise exec -- ruby scripts/prepare-development-draft-reader.rb --apply
+```
+
+This checks that every legacy published article has an active migrated
+snapshot, backs up both development databases, and seals the verified import
+against overwriting later edits. It does not reimport content or convert
+diaries into pieces. If articles are missing, complete and verify their
+initial `DraftMigration` import before proceeding. Restart the API with
+`AUTHORING_DRAFTS_ENABLED=1`, then verify home, related pages and publication.
+Do not switch back to legacy writers after new edits; preserve both databases
+and repair the published reader forward.
+
 The development editor supports the publication flow from #167. Pressing Publish flushes and acknowledges pending work and completes inbound catch-up. If new content was merged, the author must review it and start again. During confirmation and publication, body, metadata and inbox insertion are disabled. A cancelled confirmation does not publish. The confirmed request key is kept in sessionStorage so an uncertain acceptance can be retried after a tab reload.
 
 `POST /api/authoring/drafts/:id/publications/prepare` returns the persisted head, metadata revisions, normalized content hash and article state. `POST .../publications` atomically stores an immutable snapshot, a job and an idempotency receipt, returning HTTP 202. `GET .../publications/:version_id` reports job status. `POST .../publications/:version_id/run` places HTML at an immutable version-specific key before activating it. Failed placement remains retryable; a superseded completion cannot move the active pointer. No-op publication leaves both first-publication and public-update timestamps unchanged.
