@@ -130,7 +130,7 @@ fresh init・plan・全差分確認後に保存planを適用し、3件追加・�
 適用後の全体planは予定済みのAPIルート9件追加とLambda環境変数3件更新のみ。
 これらのAPI側変更はまだ適用していない。
 
-### バックアップ試行と追加承認待ち
+### バックアップ試行と権限修正
 
 - BackupJobId: `8f203414-940d-4814-8386-1c31b4ecd2d4`
 - 2026-10-01 15:05 JSTに単発・7日保持で開始し、15:06 JSTにFAILED。
@@ -140,9 +140,33 @@ fresh init・plan・全差分確認後に保存planを適用し、3件追加・�
 - `GetBackupJob`と`StopBackupJob`の範囲拡張は自動承認レビューで拒否された。
   `backup.tf`の修正は実際のエラーが出た読み取りの`GetBackupJob`だけに絞った。
   開始・停止権限は本番クラスタARN限定のままとする。
-  この追加範囲の承認前にポリシー更新やジョブ再試行を行わない。
+  その後、ユーザーから`GetBackupJob`だけの拡張を明示承認された。
+  fresh init・保存planの確認後に1ポリシーだけ更新した。開始・停止権限は拡張していない。
+  適用後の全体planは予定済みのAPIルート9件追加・Lambda設定3件更新のみ。
 - 本番の54業務テーブル・26,544行の件数と全列SHA-256を読み取り記録した。
-  DB行やLambda稼働設定、cutoverは変更していない。復元確認は未実施。
+  DB行やLambda稼働設定、cutoverは変更していない。
+
+### 復元リハーサル結果（2026-10-01）
+
+- 再試行BackupJobId: `0029fe56-079c-4712-bbbd-081522bdac87`
+- RecoveryPointArn: `arn:aws:backup:ap-northeast-1:282782318939:recovery-point:21f341ad-cbae-41ec-ab88-5d8aa87bcc9f`
+- バックアップは15:21 JSTにCOMPLETED。サイズ11,843,843 bytes。
+  7日保持で、削除予定は2026-10-08 15:17 JST。
+- RestoreJobId: `59e677d4-9027-4a37-a81d-a1eca892436d`
+- 東京の別クラスタ`izud3b3wyt56vgtzfj5lehtlsy`へ復元し、15:26 JSTにCOMPLETED。
+  54テーブル・26,544行すべての件数と全列SHA-256が、本番の記録と一致した。
+- 照合終了後に上記の確認用クラスタだけの削除保護を解除し、削除を要求した。
+  本番クラスタの削除保護と接続先は維持し、バックアップも保持している。
+  GetClusterがResourceNotFoundを返し、確認用クラスタの削除完了を確認した。
+- 本番は稼働したままのリハーサルである。改名直前の停止後バックアップと
+  同時点の照合は別途必要。17テーブルの改名・main push・本番デプロイは未実施。
+
+`get-recovery-point-restore-metadata`の`cluster_id`と`backup_size_bytes`は
+`start-restore-job`に渡すと入力検証で拒否された。復元入力には
+`aws:backup:request-id`と`regionalConfig`だけを渡し、後者は東京1リージョン・
+削除保護trueとした。metadata検証失敗でもidempotency tokenが使用済みになる。
+metadataを直して新tokenを使う前に、当日のRestoreJobsが0件、本番以外の東京DSQL
+クラスタが0件と読み取り確認した。実際に作成した復元クラスタは1件のみ。
 
 ### 費用の制約
 
