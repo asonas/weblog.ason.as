@@ -23,12 +23,16 @@ data "aws_iam_policy_document" "article_backup" {
   statement {
     actions = [
       "dsql:StartBackupJob",
-      "dsql:GetBackupJob",
       "dsql:StopBackupJob",
       "dsql:GetCluster",
       "dsql:ListTagsForResource",
     ]
     resources = [aws_dsql_cluster.weblog.arn]
+  }
+
+  statement {
+    actions   = ["dsql:GetBackupJob"]
+    resources = ["arn:aws:dsql:${var.aws_region}:${data.aws_caller_identity.current.account_id}:cluster/*"]
   }
 
   statement {
