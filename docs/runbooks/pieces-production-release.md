@@ -21,7 +21,10 @@
      --host zjuauvwetzvab4i3bdfd47e3yu.dsql.ap-northeast-1.on.aws
    ```
 
-   2026-10-01の確認はログイン要求で停止した。改名済みかは未確認。
+   2026-10-01に本番で17組すべての旧テーブルが存在し、新テーブルが存在しないことを確認した。
+   authoring用ロールではLambda設定の参照が拒否されたため、AdministratorAccessで読み取り確認した。
+   APIはActive / Successful、DRAFT_CUTOVER_ENABLEDはtrue。
+   AUTHORING_MAINTENANCEとARTICLE_PIECES_ENABLEDは未設定だった。
    権限不足なら読み取りに必要なロールを確認し、DDLを試して権限を推測しない。
 3. 本番のcutover、Lambdaイメージdigest、設定フラグ、スケジュール、
    イベントソース、実行中処理と退避先を記録する。

@@ -56,6 +56,6 @@ else
   ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
   require "aurora_dsql_pg"
   raise "Expected an explicit Aurora DSQL hostname" unless /\A[a-z0-9]+\.dsql\.[a-z0-9-]+\.on\.aws\z/.match?(target)
-  pool = AuroraDsql::Pg.create_pool(host: target, user: "admin", application_name: "article-table-rename", occ_max_retries: 0)
+  pool = AuroraDsql::Pg.create_pool(host: target, user: "admin", application_name: "article-table-rename", occ_max_retries: 3)
   pool.with { |connection| operation.call(WeblogAuthoring::DraftStore::PostgresConnection.new(connection)) }
 end
