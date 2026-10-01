@@ -152,7 +152,7 @@ class PublishedArticleReaderTest < Minitest::Test
     reader = WeblogAuthoring::PublishedArticleReader.new(store:, database: @legacy)
     api = WeblogAuthoring::LambdaApi.new(database: @legacy, draft_store: store, reader_database: reader)
     payload = JSON.parse(get(api, "/api/pages", query: { "kind" => "timeline" }).fetch(:body))
-    assert_equal [ID], payload.fetch("pages").map { |page| page.fetch("id") }
+    assert_equal [ID], (payload.fetch("pages").map { |page| page.fetch("id") })
     refute payload.fetch("has_older")
     refute payload.fetch("has_newer")
     assert reader.find_route("空ページ0").empty?
