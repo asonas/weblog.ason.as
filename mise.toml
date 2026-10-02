@@ -32,6 +32,10 @@ run = "npm run dev:bluesky-oauth"
 description = "Run the Vite frontend on http://127.0.0.1:5173"
 run = "npm run dev"
 
+[tasks."dev:doctor"]
+description = "Check worktree dependencies and identify the development API without changing them"
+run = "node scripts/dev-doctor.mjs"
+
 [tasks.build]
 description = "Build the production site artifact"
 run = "npm run build"
@@ -172,6 +176,11 @@ run = "xcodegen generate --spec ios/PhotoInbox/project.yml --project ios/PhotoIn
 description = "Format PhotoInbox Swift sources with the Xcode toolchain"
 run = "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift-format format --in-place --recursive ios/PhotoInbox/PhotoInbox ios/PhotoInbox/PhotoInboxTests"
 
+[tasks."ios:build"]
+description = "Build PhotoInbox for iOS Simulator without signing"
+depends = ["ios:generate"]
+run = "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xcodebuild build -quiet -project ios/PhotoInbox/PhotoInbox.xcodeproj -scheme PhotoInbox -sdk iphonesimulator -derivedDataPath ios/PhotoInbox/build CODE_SIGNING_ALLOWED=NO"
+
 [tasks."ios:lint"]
 description = "Check PhotoInbox Swift formatting without modifying files"
 run = "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift-format lint --strict --recursive ios/PhotoInbox/PhotoInbox ios/PhotoInbox/PhotoInboxTests"
@@ -212,6 +221,16 @@ run = ".\\gradlew.bat assembleDebug"
 extends = "android"
 description = "Run PhotoInbox unit tests and lint on Windows"
 run = ".\\gradlew.bat test lint"
+
+[tasks."android:build:unix"]
+extends = "android"
+description = "Build the PhotoInbox debug APK on macOS or Linux"
+run = "sh gradlew assembleDebug"
+
+[tasks."android:test:unix"]
+extends = "android"
+description = "Run PhotoInbox unit tests and lint on macOS or Linux"
+run = "sh gradlew testDebugUnitTest lintDebug"
 
 [tasks."check:portable"]
 description = "Run repository checks that work on Linux and macOS"

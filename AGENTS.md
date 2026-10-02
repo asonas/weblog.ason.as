@@ -1,5 +1,7 @@
 ## Agent skills
 
+コードの変更箇所・テスト・配布経路を探すときは、[READMEの案内](README.md#変更する場所を探す)を入口にする。
+
 ### Issue tracker
 
 Issues are tracked in this repository's GitHub Issues. See `docs/agents/issue-tracker.md`.

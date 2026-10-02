@@ -2,6 +2,31 @@
 
 Scrapbox移行ツールと記事作成画面を管理するリポジトリです。
 
+## 変更する場所を探す
+
+| 目的 | 入口 |
+| --- | --- |
+| 記事編集・端末保存・同期 | [開発ガイド](docs/draft-authoring-development.md)、`frontend/authoring/DraftEditor.tsx`、`draftSession.ts` |
+| 公開版・HTML生成・旧記事の個別移行 | [運用入口](docs/runbooks/pieces-production-release.md)、`lib/weblog_authoring/draft_publication.rb`、`lambda/draft_worker/migrateArticle.ts` |
+| 管理画面の見た目 | [管理画面DESIGN](frontend/authoring/DESIGN.md) |
+| 公開ページ・エディタ内の公開プレビュー | [公開デザイン](docs/design-system.md)、`frontend/authoring/publicArticle.ts`、`DraftPreview.tsx` |
+| メモ・写真のモバイルアプリ | [iOS](ios/PhotoInbox/README.md)、[Android](android/PhotoInbox/README.md) |
+| Scrapboxの変換・修復 | [変換・修復手順](#scrapbox移行静的生成)、`package.json` の `convert:scrapbox:*` |
+| UIの検証 | [ブラウザテスト](docs/browser-testing.md)、`test/browser/`、`test/fixtures/drafts/` |
+
+`frontend/authoring/` がフロントエンドの実装、`lib/weblog_authoring/` がRubyのAPI・公開処理、`lambda/` がサービスごとの実行入口です。
+Nodeの依存関係とコマンドはルートの `package.json`、実行環境と開発タスクは `mise.toml` を参照してください。
+
+## 配布先を確認する
+
+| 対象 | mainへのpush後の経路 | 確認先 |
+| --- | --- | --- |
+| Web・API | GitHub ActionsのValidate → Deploy production | [production runbook](docs/production-runbook.md) |
+| Android | 対象パス変更 → Android internal testing → Google Play内部テスト | [Android配布](android/PhotoInbox/README.md#配布) |
+| iOS | Xcode Cloud → TestFlight | [iOS配布](ios/PhotoInbox/README.md#配布) |
+
+GitHub Actions以外の配布結果もコミットのcheck runsに現れます。push、ビルド成功、配布完了、端末での確認はそれぞれ確認してください。
+
 ## セットアップ
 
 ```sh
@@ -17,6 +42,9 @@ mise run dev
 
 ブラウザで`http://127.0.0.1:5173/`を開きます。
 Frontendとbackendを個別に起動する場合は、`mise run dev:web`と`mise run dev:api`を使います。Webは`127.0.0.1:5173`、APIは`127.0.0.1:8000`を使用し、portが使用中の場合は起動に失敗します。
+
+worktreeでの作業開始時は `mise run dev:doctor` で依存関係とAPIの起動元を確認します。
+別ポートでのプレビューは[開発ガイド](docs/draft-authoring-development.md#worktreeでのプレビュー)を参照してください。
 
 開発環境の記事HTMLは、リクエストごとにバックエンドが公開済みデータと`public.html`からレンダリングします。記事閲覧のためのビルドやHTMLファイルの事前生成は不要です。Viteが記事URLをバックエンドへ渡し、閲覧用のCSS・JavaScriptを開発モードで配信します。
 

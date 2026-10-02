@@ -27,6 +27,15 @@ mise run setup:android
 
 ## 開発
 
+macOS / Linuxでは、リポジトリのルートからmise管理のJDK・SDKで実行します。
+
+```sh
+mise run android:build:unix
+mise run android:test:unix
+```
+
+これらのタスクは `sh gradlew` を使うため、ラッパーの実行属性には依存しません。
+
 Windowsではリポジトリのルートから次のコマンドでビルドします。
 
 ```powershell
