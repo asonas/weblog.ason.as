@@ -157,8 +157,17 @@ html[data-draft-workspace="true"] body {
 
 .draft-editor__titlebar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
+}
+
+.draft-editor__heading-fields {
+  display: flex;
+  flex: 1 1 36rem;
+  flex-wrap: wrap;
+  align-items: center;
+  min-inline-size: 0;
 }
 
 .draft-editor .draft-editor__titlebar input {
@@ -173,6 +182,39 @@ html[data-draft-workspace="true"] body {
 
 .draft-editor .draft-editor__titlebar input:focus-visible {
   outline-offset: -3px;
+}
+
+.draft-editor .draft-editor__heading-fields #draft-title {
+  flex: 1 1 16rem;
+  min-inline-size: min(16rem, 100%);
+}
+
+.draft-editor .draft-editor__titlebar .draft-editor__tags {
+  flex: 1 1 18rem;
+  min-inline-size: min(18rem, 100%);
+  border-inline-start: 1px solid var(--separator);
+  padding-inline: var(--space-3);
+  font-size: 1rem;
+  line-height: 1.5;
+  min-block-size: 2.75rem;
+}
+
+@media (max-width: 72rem) {
+  .draft-editor__heading-fields {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .draft-editor .draft-editor__heading-fields #draft-title,
+  .draft-editor .draft-editor__titlebar .draft-editor__tags {
+    flex: none;
+    inline-size: 100%;
+    min-inline-size: 0;
+  }
+  .draft-editor .draft-editor__titlebar .draft-editor__tags {
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--separator);
+    padding-inline: 0;
+  }
 }
 
 .draft-editor__titlebar button {

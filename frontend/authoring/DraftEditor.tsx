@@ -34,7 +34,7 @@ import {
 } from "./draftSession";
 import { draftMetadataForTitle, hasCustomDiaryTitle } from "./draftTitle";
 import { prefetchEmbedMetadata } from "./EmbedCard";
-import { DraftPieceControls } from "./PieceControls";
+import { DraftPieceControls, DraftTagInput } from "./PieceControls";
 import { pieceSeparator } from "./pieceSeparator";
 import "./draftEditor.css";
 import "./authoringTheme.css";
@@ -910,18 +910,21 @@ export function DraftEditor({
         </section>
       </DraftNavigation>
       <div className="draft-editor__titlebar">
-        <label className="visually-hidden" htmlFor="draft-title">
-          タイトル
-        </label>
-        <input
-          id="draft-title"
-          placeholder="タイトル"
-          value={session?.metadata.title || ""}
-          disabled={!session || session.isPublishing}
-          onChange={(event) => {
-            session?.setMetadata(draftMetadataForTitle(event.target.value));
-          }}
-        />
+        <div className="draft-editor__heading-fields">
+          <label className="visually-hidden" htmlFor="draft-title">
+            タイトル
+          </label>
+          <input
+            id="draft-title"
+            placeholder="タイトル"
+            value={session?.metadata.title || ""}
+            disabled={!session || session.isPublishing}
+            onChange={(event) => {
+              session?.setMetadata(draftMetadataForTitle(event.target.value));
+            }}
+          />
+          {session && <DraftTagInput session={session} />}
+        </div>
         <div className="draft-editor__controls">
           {session?.pieces && articleState === "draft" && (
             <button

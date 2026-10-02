@@ -1,11 +1,27 @@
 import type { DraftSession } from "./draftSession";
 
+export function DraftTagInput({ session }: { session: DraftSession }) {
+  const pieces = session.pieces;
+  if (!pieces || session.metadata.page_type !== "date") return null;
+  return (
+    <input
+      className="draft-editor__tags"
+      aria-label="タグ"
+      placeholder="タグ"
+      key={pieces.local.tags.join(",")}
+      defaultValue={pieces.local.tags.join(", ")}
+      disabled={session.isPublishing}
+      onBlur={(event) =>
+        session.setTags(event.currentTarget.value.split(/[,、]/))
+      }
+    />
+  );
+}
+
 export function DraftPieceControls({ session }: { session: DraftSession }) {
   const pieces = session.pieces;
   if (!pieces) return null;
-  const diary = session.metadata.page_type === "date";
-  if (!diary && !pieces.conflicts.length && !pieces.recovery.length)
-    return null;
+  if (!pieces.conflicts.length && !pieces.recovery.length) return null;
   return (
     <section className="draft-pieces" aria-label="日記のかけら">
       {pieces.conflicts.length > 0 && (
@@ -56,19 +72,6 @@ export function DraftPieceControls({ session }: { session: DraftSession }) {
           </button>
         </div>
       ))}
-      {diary && (
-        <label>
-          タグ（カンマ区切り）
-          <input
-            key={pieces.local.tags.join(",")}
-            defaultValue={pieces.local.tags.join(", ")}
-            disabled={session.isPublishing}
-            onBlur={(event) =>
-              session.setTags(event.currentTarget.value.split(/[,、]/))
-            }
-          />
-        </label>
-      )}
     </section>
   );
 }
