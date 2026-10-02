@@ -60,6 +60,7 @@ private struct MemoEditorView: View {
   let store: MemoStore
   @State private var bodyText: String
   @State private var localID: String
+  @FocusState private var bodyFocused: Bool
 
   init(store: MemoStore, id: String) {
     self.store = store
@@ -70,6 +71,7 @@ private struct MemoEditorView: View {
   var body: some View {
     VStack(alignment: .leading) {
       TextEditor(text: $bodyText).accessibilityLabel("メモ本文")
+        .focused($bodyFocused)
         .onChange(of: bodyText) { previous, value in
           localID = store.edit(id: localID, body: value, previousBody: previous)
         }
@@ -78,5 +80,6 @@ private struct MemoEditorView: View {
     }
     .padding()
     .navigationTitle("メモ")
+    .task { bodyFocused = true }
   }
 }

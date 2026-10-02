@@ -11,6 +11,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -137,5 +139,11 @@ class MemoPanel(private val activity: ComponentActivity, settings: () -> Unit) :
             }
         })
         content.addView(editor, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
+        editor.requestFocus()
+        editor.post {
+            if (editor.isAttachedToWindow && editor.hasFocus()) {
+                WindowInsetsControllerCompat(activity.window, editor).show(WindowInsetsCompat.Type.ime())
+            }
+        }
     }
 }
