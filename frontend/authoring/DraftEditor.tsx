@@ -359,6 +359,7 @@ export function DraftEditor({
 
   useEffect(() => {
     if (!session) return;
+    setProofreadingMessages([]);
     let revision = 0;
     let timer: ReturnType<typeof setTimeout>;
     let request: AbortController | undefined;
@@ -366,10 +367,10 @@ export function DraftEditor({
       revision += 1;
       clearTimeout(timer);
       request?.abort();
-      setProofreadingMessages([]);
       const currentRevision = revision;
       const text = session.body.toString();
       if (!text.trim()) {
+        setProofreadingMessages([]);
         setProofreadingStatus("本文を入力すると確認します");
         return;
       }
@@ -377,9 +378,10 @@ export function DraftEditor({
         setProofreadingStatus("オフラインのため文章の確認を停止しています");
         return;
       }
-      setProofreadingStatus("確認中");
+      setProofreadingStatus("入力が落ち着いたら確認します");
       timer = setTimeout(async () => {
         if (composing.current) return;
+        setProofreadingStatus("確認中");
         const controller = new AbortController();
         request = controller;
         try {
@@ -409,7 +411,7 @@ export function DraftEditor({
             "文章を確認できませんでした。次の入力時に再試行します",
           );
         }
-      }, 1000);
+      }, 7000);
     };
     const observedBody = session.body;
     observedBody.observe(schedule);
@@ -858,13 +860,15 @@ export function DraftEditor({
               <span> {proofreadingMessages.length}件</span>
             )}
           </h2>
-          {proofreadingStatus ? (
+          {proofreadingStatus && (
             <p role={proofreadingStatus === "確認中" ? "status" : undefined}>
               {proofreadingStatus}
             </p>
-          ) : proofreadingMessages.length === 0 ? (
+          )}
+          {!proofreadingStatus && proofreadingMessages.length === 0 && (
             <p>指摘はありません</p>
-          ) : (
+          )}
+          {proofreadingMessages.length > 0 && (
             <ol>
               {proofreadingMessages.map((item) => (
                 <li
