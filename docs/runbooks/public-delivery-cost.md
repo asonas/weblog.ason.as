@@ -86,6 +86,14 @@ CURには請求確定前の修正が入るため、取得日時・対象期間�
 
 関連: GitHub #184（全体）、#189（代表記事）、#190〜#192（拡大）。
 
+## 2026-10-02の設定
+
+CUR `weblog-daily-cost` を作成し、サービスの状態はHEALTHY。
+計測する8 Lambdaに10%採取と `operation_metrics_until=1791552600`
+（2026-10-09 22:30 JST）を設定した。期限延長を伴わないTerraform操作でも、この値を明示して維持する。
+CUR専用バケットの配送権限はAWSの検証に必要なバケット全体へのPutObjectとし、
+配送元サービス・アカウント・export ARNの条件で制限する。
+
 一次資料:
 - https://docs.aws.amazon.com/aurora-dsql/latest/userguide/cloudwatch-monitoring.html
 - https://docs.aws.amazon.com/cur/latest/userguide/dataexports-create.html

@@ -28,7 +28,7 @@ data "aws_iam_policy_document" "cost_export" {
   statement {
     sid       = "CostExportDelivery"
     actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.cost_export.arn}/cur/*"]
+    resources = ["${aws_s3_bucket.cost_export.arn}/*"]
     principals {
       type        = "Service"
       identifiers = ["bcm-data-exports.amazonaws.com"]
