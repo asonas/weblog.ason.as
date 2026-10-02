@@ -1,4 +1,3 @@
-import { parsePieceTags } from "./draftPieces";
 import type { DraftSession } from "./draftSession";
 
 export function DraftPieceControls({ session }: { session: DraftSession }) {
@@ -59,21 +58,14 @@ export function DraftPieceControls({ session }: { session: DraftSession }) {
       ))}
       {diary && (
         <label>
-          タグ
+          タグ（カンマ区切り）
           <input
             key={pieces.local.tags.join(",")}
-            defaultValue={pieces.local.tags
-              .map((tag) => `[[${tag}]]`)
-              .join(" ")}
-            placeholder="[[日記]] [[音楽]]"
+            defaultValue={pieces.local.tags.join(", ")}
             disabled={session.isPublishing}
-            onBlur={(event) => {
-              const tags = parsePieceTags(event.currentTarget.value);
-              session.setTags(tags);
-              event.currentTarget.value = tags
-                .map((tag) => `[[${tag}]]`)
-                .join(" ");
-            }}
+            onBlur={(event) =>
+              session.setTags(event.currentTarget.value.split(/[,、]/))
+            }
           />
         </label>
       )}

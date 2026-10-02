@@ -1,15 +1,5 @@
 import type * as Y from "yjs";
 
-export function parsePieceTags(value: string): string[] {
-  return [
-    ...new Set(
-      Array.from(value.matchAll(/\[\[([^[\]\n]+)\]\]|([^[\],、]+)/g), (match) =>
-        (match[1] ?? match[2]).trim(),
-      ).filter(Boolean),
-    ),
-  ];
-}
-
 export type PieceStructure = {
   revision: number;
   piece_ids: string[];
