@@ -8,7 +8,6 @@ import {
 } from "./articlePreviewEditor";
 import type { DraftMetadata } from "./draftSession";
 import { markdownForEditor } from "./markdown";
-import { PublicArticlePresentation } from "./PublicArticlePresentation";
 
 const MEDIA_PATTERN =
   /!\[[^\]]*\]\(|:::video |https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|speakerdeck\.com|bsky\.app|x\.com|twitter\.com)\//;
@@ -183,25 +182,29 @@ export function DraftPreview({
   return (
     <div ref={root} className="draft-preview__document">
       <div ref={navigation} />
-      <PublicArticlePresentation
-        className="draft-preview__article"
-        coverImageUrl={resolvedCoverImageUrl}
-        title={
-          metadata.title.trim() ||
-          (metadata.page_type === "date" && metadata.page_date) ||
-          "無題"
-        }
-      >
-        <div className="editor-shell">
-          <LineUpdateRail
-            body={body}
-            editor={editor}
-            updates={[]}
-            includesTitle={false}
-          />
-          <EditorContent editor={editor} />
+      <article className="article-workspace article-workspace--reading draft-preview__article">
+        <header
+          className={`article-reading-header${resolvedCoverImageUrl ? " article-reading-header--covered" : ""}`}
+        >
+          {resolvedCoverImageUrl && <img src={resolvedCoverImageUrl} alt="" />}
+          <h1>
+            {metadata.title.trim() ||
+              (metadata.page_type === "date" && metadata.page_date) ||
+              "無題"}
+          </h1>
+        </header>
+        <div className="editor-canvas">
+          <div className="editor-shell">
+            <LineUpdateRail
+              body={body}
+              editor={editor}
+              updates={[]}
+              includesTitle={false}
+            />
+            <EditorContent editor={editor} />
+          </div>
         </div>
-      </PublicArticlePresentation>
+      </article>
       {!isOnline && MEDIA_PATTERN.test(body) && (
         <p className="draft-preview__offline-media" role="status">
           オフラインのため画像や埋め込みを表示できません。本文の表示は更新されています。

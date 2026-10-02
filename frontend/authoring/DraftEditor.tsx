@@ -15,7 +15,6 @@ import { DraftCoverSettings } from "./DraftCoverSettings";
 import { DraftInbox } from "./DraftInbox";
 import { DraftNavigation } from "./DraftNavigation";
 import { DraftPreview } from "./DraftPreview";
-import { articleDocumentTitle } from "./documentTitle";
 import { takeDraftInitialBody } from "./draftInitialBody";
 import {
   insertMarkdownBlock,
@@ -37,9 +36,24 @@ import { draftMetadataForTitle, hasCustomDiaryTitle } from "./draftTitle";
 import { prefetchEmbedMetadata } from "./EmbedCard";
 import { DraftPieceControls } from "./PieceControls";
 import { pieceSeparator } from "./pieceSeparator";
-import type { ProofreadingMessage, ProofreadingResponse } from "./proofreading";
 import "./draftEditor.css";
 import "./authoringTheme.css";
+
+type ProofreadingMessage = {
+  ruleId: string;
+  message: string;
+  line: number;
+  range: readonly [number, number];
+};
+
+type ProofreadingResponse = {
+  messages: ProofreadingMessage[];
+};
+
+function articleDocumentTitle(title: string, environment?: string): string {
+  const pageTitle = title ? `${title} | weblog.ason.as` : "weblog.ason.as";
+  return environment === "development" ? `[dev] ${pageTitle}` : pageTitle;
+}
 
 const FIELD_LABELS: Record<keyof DraftMetadata, string> = {
   title: "タイトル",
