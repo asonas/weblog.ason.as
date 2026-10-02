@@ -1966,6 +1966,7 @@ html[data-universe="on"] .linked-pages {
   --accent-ink: #fff;
   --focus-ring: #0000ff;
   --quotation-surface: #ebf0dc;
+  --blockquote-surface: #fdffd9;
   --separator: #eee;
   --atlas-paper: #fff;
   --atlas-teal: #000;
@@ -2986,7 +2987,7 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
   margin-inline: 0;
   padding: var(--space-4);
   border-inline-start: 2px solid var(--muted-ink);
-  background: var(--quotation-surface, var(--surface));
+  background: var(--blockquote-surface, var(--surface));
   overflow-wrap: anywhere;
 }
 

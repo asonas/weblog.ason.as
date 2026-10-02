@@ -12,6 +12,7 @@ const COLOR_TOKENS = [
   ["Focus", "--focus-ring"],
   ["Quiet fill", "--quiet-fill"],
   ["Quotation", "--quotation-surface"],
+  ["Article quotation", "--blockquote-surface"],
 ] as const;
 
 const SPACING_TOKENS = [
