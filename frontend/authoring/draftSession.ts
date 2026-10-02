@@ -1146,6 +1146,31 @@ export class DraftSession extends EventTarget {
     }
   }
 
+  async migrateIfNeeded() {
+    if (this.pieces) return;
+    await this.sync();
+    if (this.error || this.hasPendingChanges() || this.isSyncing)
+      throw new Error(
+        this.error || "未送信の変更を保存してから移行してください。",
+      );
+    this.isPublishing = true;
+    try {
+      await navigator.locks.request(`draft-sync:${this.id}`, async () => {
+        await this.readShared();
+        if (this.hasPendingChanges())
+          throw new Error("未送信の変更を保存してから移行してください。");
+        await this.request("/migration", "POST", {
+          protocol: 1,
+          generation: 1,
+          head: this.cursor,
+        });
+        await this.catchUp();
+      });
+    } finally {
+      this.isPublishing = false;
+    }
+  }
+
   private contentHash() {
     return digest(
       new TextEncoder().encode(

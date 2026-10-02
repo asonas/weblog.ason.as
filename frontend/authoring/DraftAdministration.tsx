@@ -15,6 +15,7 @@ import "./draftAdministration.css";
 import "./authoringTheme.css";
 
 type Article = {
+  format?: "legacy" | "pieces";
   id: string;
   head: number;
   metadata: DraftMetadata;
@@ -464,6 +465,9 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                     <DraftArticleMenu
                       title={title}
                       editHref={editHref}
+                      migrationRequired={
+                        !row.localOnly && row.format === "legacy"
+                      }
                       busy={busy}
                       onRetry={retryable ? () => void retry(row) : undefined}
                       onDelete={

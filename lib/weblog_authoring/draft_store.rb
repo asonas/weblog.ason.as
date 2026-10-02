@@ -147,7 +147,7 @@ module WeblogAuthoring
 
     def administration_page(cursor = nil)
       @connect.call do |db|
-        sql = "SELECT a.id, a.head, a.metadata, a.created_at, a.updated_at, h.published_at, h.latest_id, v.route AS public_route, v.content_hash AS public_hash, w.head AS working_hash_head, w.content_hash AS working_hash FROM #{db.prefix}articles a LEFT JOIN #{db.prefix}article_publication_heads h ON h.article_id = a.id LEFT JOIN #{db.prefix}article_published_versions v ON v.id = h.active_id LEFT JOIN #{db.prefix}draft_working_hashes w ON w.article_id = a.id"
+        sql = "SELECT a.id, a.head, a.metadata, a.created_at, a.updated_at, s.format, h.published_at, h.latest_id, v.route AS public_route, v.content_hash AS public_hash, w.head AS working_hash_head, w.content_hash AS working_hash FROM #{db.prefix}articles a LEFT JOIN #{db.prefix}article_structures s ON s.article_id = a.id LEFT JOIN #{db.prefix}article_publication_heads h ON h.article_id = a.id LEFT JOIN #{db.prefix}article_published_versions v ON v.id = h.active_id LEFT JOIN #{db.prefix}draft_working_hashes w ON w.article_id = a.id"
         params = []
         if cursor
           sql += " WHERE a.updated_at < $1 OR (a.updated_at = $1 AND a.id > $2)"

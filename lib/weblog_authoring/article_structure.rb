@@ -35,17 +35,17 @@ module WeblogAuthoring
     end
 
     def convert_legacy_diary(id, job, seed)
-      ids, tags = validate_structure!([seed.fetch("piece_id")], seed.fetch("tags", []))
+      ids, tags = validate_structure!(seed.fetch("piece_ids", [seed.fetch("piece_id")]), seed.fetch("tags", []))
       data = decode_update(seed.fetch("data"))
       @connect.call do |db|
         db.transaction do
           current = document(db, id)
           next current if current["format"] == "pieces"
-          unless current.dig("metadata", "page_type", "value") == "date" && current.fetch("head") == job.fetch("through") && current.fetch("metadata") == job.fetch("metadata")
+          unless current.fetch("format") == "legacy" && current.fetch("head") == job.fetch("through") && current.fetch("metadata") == job.fetch("metadata")
             raise DraftStore::Error.new("Diary changed; confirm the migration again", 409)
           end
           db.query("INSERT INTO #{db.prefix}article_structures (article_id, format, revision, piece_ids, deleted_ids, tags) VALUES ($1, 'pieces', 0, $2, '[]', $3) ON CONFLICT (article_id) DO UPDATE SET format = 'pieces', revision = 0, piece_ids = $2, deleted_ids = '[]', tags = $3", [id, JSON.generate(ids), JSON.generate(tags)])
-          append_data(id, seed.merge("format" => "pieces", "update_id" => SecureRandom.uuid, "metadata" => {}), data, connection: db)
+          append_data(id, seed.merge("format" => "pieces", "update_id" => SecureRandom.uuid, "metadata" => seed.fetch("metadata_changes", {})), data, connection: db)
           db.query("UPDATE #{db.prefix}articles SET updated_at = $1 WHERE id = $2", [current.fetch("updated_at"), id])
           db.query("DELETE FROM #{db.prefix}draft_working_hashes WHERE article_id = $1", [id])
           document(db, id)

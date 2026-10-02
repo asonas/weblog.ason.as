@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "open3"
+require "date"
 require "pathname"
 require_relative "draft_store"
 require_relative "names"
@@ -19,7 +20,8 @@ module WeblogAuthoring
         invoke.call("operation" => "publication_batch", "article_ids" => jobs.map { |job| job.fetch("article_id") })
       end
       seed_piece = ->(piece_id, body) { invoke.call("operation" => "seed_piece", "piece_id" => piece_id, "body" => body) }
-      new(store:, reconstruct_many:, seed_piece:) do |job|
+      migrate_article = ->(job, diary) { invoke.call("operation" => "migration", "article_id" => job.fetch("article_id"), "diary" => diary) }
+      new(store:, reconstruct_many:, seed_piece:, migrate_article:) do |job|
         invoke.call("operation" => "publication", "article_id" => job.fetch("article_id"))
       end
     end
@@ -33,7 +35,8 @@ module WeblogAuthoring
         JSON.parse(output)
       end
       seed_piece = ->(piece_id, body) { invoke.call("operation" => "seed_piece", "piece_id" => piece_id, "body" => body) }
-      new(store:, seed_piece:, &invoke)
+      migrate_article = ->(job, diary) { invoke.call(job.merge("operation" => "migration", "diary" => diary)) }
+      new(store:, seed_piece:, migrate_article:, &invoke)
     end
 
     def self.resolve_local_dependency(root, relative_path)
@@ -44,11 +47,36 @@ module WeblogAuthoring
       File.join(root, relative_path)
     end
 
-    def initialize(store:, reconstruct_many: nil, seed_piece: nil, &reconstruct)
+    def initialize(store:, reconstruct_many: nil, seed_piece: nil, migrate_article: nil, &reconstruct)
       @store = store
       @reconstruct = reconstruct
       @reconstruct_many = reconstruct_many
       @seed_piece = seed_piece
+      @migrate_article = migrate_article
+    end
+
+    def migrate_article(id, request)
+      unless request["protocol"] == 1 && request["generation"] == 1
+        raise DraftStore::Error, "Unsupported migration protocol"
+      end
+      job = reconstruction_job(id)
+      return @store.read(id, "format" => "pieces") if job["format"] == "pieces"
+      raise DraftStore::Error.new("記事が更新されました。再読み込みしてください。", 409) unless request["head"] == job.fetch("through")
+      raise DraftStore::Error.new("記事の移行を実行できません。", 503) unless @migrate_article
+      title = job.dig("metadata", "title", "value")
+      date = begin
+        Date.iso8601(title).iso8601 if /\A\d{4}-\d{2}-\d{2}\z/.match?(title.to_s)
+      rescue Date::Error
+        nil
+      end
+      seed = @migrate_article.call(job, !date.nil? || job.dig("metadata", "page_type", "value") == "date")
+      raise DraftStore::Error.new("記事が更新されました。再読み込みしてください。", 409) unless seed["source_head"] == job.fetch("through")
+      if date
+        seed["metadata_changes"] = { "page_type" => "date", "page_date" => date }.to_h do |key, value|
+          [key, { "value" => value, "expected_revision" => job.fetch("metadata").fetch(key).fetch("revision") }]
+        end
+      end
+      @store.convert_legacy_diary(id, job, seed)
     end
 
     def adopt_memo(article_id, payload)

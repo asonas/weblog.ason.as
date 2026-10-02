@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "tmpdir"
+require "open3"
 require "rackup"
 require "rack/handler/puma"
 require_relative "../../../lib/weblog_authoring/development_app"
@@ -28,7 +29,10 @@ Dir.mktmpdir("draft-browser-test") do |root|
     store = WeblogAuthoring::DraftStore.sqlite(File.join(root, "data/development/drafts.sqlite3"), pieces_enabled: false)
     store.create(id, scope)
     date = Time.now.getlocal("+09:00").strftime("%Y-%m-%d")
-    store.append(id, scope.merge("update_id" => "legacy-diary", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
+    body = ENV.fetch("DRAFT_TEST_LEGACY_BODY", "")
+    output, error, status = Open3.capture3("node", "scripts/seed-draft.mjs", stdin_data: JSON.generate(body))
+    raise error unless status.success?
+    store.append(id, scope.merge(JSON.parse(output), "update_id" => "legacy-diary", "body_bytes" => body.bytesize,
                                 "metadata" => { "title" => { "value" => date, "expected_revision" => 0 },
                                                 "page_type" => { "value" => "date", "expected_revision" => 0 },
                                                 "page_date" => { "value" => date, "expected_revision" => 0 }, }))

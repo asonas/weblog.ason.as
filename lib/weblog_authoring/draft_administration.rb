@@ -77,7 +77,7 @@ module WeblogAuthoring
       end
       publication = row["latest_id"] && @store.publication_job(row.fetch("id"), row.fetch("latest_id"))
       publication = publication.merge("stages" => @store.publication_stages(row.fetch("id"), row.fetch("latest_id"))) if publication
-      row.slice("id", "head", "created_at", "updated_at", "published_at", "public_route", "public_hash").merge("metadata" => metadata, "state" => state, "state_error" => error, "publication" => publication)
+      row.slice("id", "head", "created_at", "updated_at", "published_at", "public_route", "public_hash").merge("format" => row["format"] || "legacy", "metadata" => metadata, "state" => state, "state_error" => error, "publication" => publication)
     end
 
     def working_content_hashes(ids)

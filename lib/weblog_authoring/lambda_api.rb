@@ -526,6 +526,12 @@ module WeblogAuthoring
         end
         return json_response(404, error: "Not Found")
       end
+      migration = %r{\A/api/authoring/drafts/([^/]+)/migration\z}.match(path)
+      if migration && method == "POST"
+        service = @draft_publication
+        return json_response(503, error: "記事の移行を実行できません。") unless service
+        return json_response(200, service.migrate_article(migration[1].to_s, parse_json(event)))
+      end
       structure = %r{\A/api/authoring/drafts/([^/]+)/structure\z}.match(path)
       if structure && method == "PATCH"
         return json_response(200, store.update_structure(structure[1].to_s, parse_json(event)))

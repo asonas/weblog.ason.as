@@ -303,7 +303,9 @@ export function DraftEditor({
     let isActive = true;
     let opened: DraftSession | undefined;
     void DraftSession.open(id, csrf, isNew, piecesEnabled)
-      .then((value) => {
+      .then(async (value) => {
+        opened = value;
+        if (!isActive) return value.close();
         if (initialTitle !== null && !value.metadata.title)
           value.setMetadata(draftMetadataForTitle(initialTitle));
         if (hasCustomDiaryTitle(value.metadata))
@@ -327,11 +329,12 @@ export function DraftEditor({
           url.searchParams.delete("recovery");
           window.history.replaceState(null, "", url);
         }
-        opened = value;
+        if (piecesEnabled && !isNew) await value.migrateIfNeeded();
         if (isActive) setSession(value);
         else value.close();
       })
       .catch((error: unknown) => {
+        opened?.close();
         if (isActive) {
           setLoadError(
             error instanceof Error ? error.message : "下書きを開けませんでした",

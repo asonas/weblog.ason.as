@@ -4,12 +4,14 @@ import { AuthoringIcon } from "./AuthoringIcon";
 export function DraftArticleMenu({
   title,
   editHref,
+  migrationRequired,
   busy,
   onRetry,
   onDelete,
 }: {
   title: string;
   editHref: string;
+  migrationRequired?: boolean;
   busy: boolean;
   onRetry?: () => void;
   onDelete?: () => void;
@@ -94,7 +96,7 @@ export function DraftArticleMenu({
       >
         <a role="menuitem" tabIndex={-1} href={editHref}>
           <AuthoringIcon name="edit" />
-          編集
+          {migrationRequired ? "マイグレーションしてから編集" : "編集"}
         </a>
         {onRetry && (
           <button

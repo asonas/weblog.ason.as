@@ -1,5 +1,6 @@
 import type { Handler, ScheduledEvent } from "aws-lambda";
 import { maintainDraftCheckpoints } from "./maintenance.js";
+import { migrateArticle } from "./migrateArticle.js";
 import { reconstructDraft, seedPiece } from "./reconstruct.js";
 import { DsqlDraftCheckpointRepository } from "./repository.js";
 
@@ -8,13 +9,15 @@ export const handler: Handler<
   | { operation: "publication"; article_id: string }
   | { operation: "publication_batch"; article_ids: string[] }
   | { operation: "seed_piece"; piece_id: string; body: string }
+  | { operation: "migration"; article_id: string; diary: boolean }
 > = async (event) => {
   if ("operation" in event && event.operation === "seed_piece")
     return seedPiece(event.piece_id, event.body);
   if (
-    "operation" in event &&
-    (event.operation === "publication" ||
-      event.operation === "publication_batch")
+    ("operation" in event &&
+      (event.operation === "publication" ||
+        event.operation === "publication_batch")) ||
+    ("operation" in event && event.operation === "migration")
   ) {
     const host = process.env.DSQL_HOST;
     if (!host) throw new Error("Draft worker environment is incomplete");
@@ -37,6 +40,14 @@ export const handler: Handler<
         tags: result.tags,
       };
     };
+    if (event.operation === "migration") {
+      const result = reconstructDraft(
+        await repository.loadJob(event.article_id),
+      );
+      if (result.format !== "legacy")
+        throw new Error("Article is already migrated");
+      return migrateArticle(result.data, result.through, event.diary);
+    }
     if (event.operation === "publication_batch") {
       if (event.article_ids.length > 25)
         throw new Error("Publication batch exceeds limit");

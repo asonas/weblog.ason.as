@@ -439,6 +439,10 @@ module WeblogAuthoring
       json_response(settings.draft_store.read(params.fetch("id"), params))
     end
 
+    post "/api/authoring/drafts/:id/migration" do
+      api_response { |payload| settings.draft_publication.migrate_article(params.fetch("id"), payload) }
+    end
+
     patch "/api/authoring/drafts/:id/structure" do
       api_response { |payload| settings.draft_store.update_structure(params.fetch("id"), payload) }
     end
