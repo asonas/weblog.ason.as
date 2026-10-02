@@ -2982,6 +2982,22 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
   border-block-start: var(--border-width) solid var(--separator);
 }
 
+.ProseMirror blockquote {
+  margin-inline: 0;
+  padding: var(--space-4);
+  border-inline-start: 2px solid var(--muted-ink);
+  background: var(--quotation-surface, var(--surface));
+  overflow-wrap: anywhere;
+}
+
+.ProseMirror blockquote > :first-child {
+  margin-block-start: 0;
+}
+
+.ProseMirror blockquote > :last-child {
+  margin-block-end: 0;
+}
+
 .ProseMirror:focus:not(:focus-visible) {
   outline: none;
 }

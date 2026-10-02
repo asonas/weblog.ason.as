@@ -177,6 +177,18 @@ export function DesignSystemPage() {
           </ul>
         </PatternSection>
 
+        <PatternSection title="Article quotations">
+          <div className="ProseMirror public-article-body">
+            <p>本文と引用を、背景色と左の線で区別します。</p>
+            <blockquote>
+              <p>はてなに関する新機能等を発表したときの決まり文句。</p>
+              <p>
+                <a href="https://d.hatena.ne.jp/">引用元へのリンク</a>
+              </p>
+            </blockquote>
+          </div>
+        </PatternSection>
+
         <PatternSection title="Diary quotations">
           <div className="article-workspace--reading design-system__quotation">
             <section
