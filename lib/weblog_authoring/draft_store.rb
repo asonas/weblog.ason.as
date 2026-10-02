@@ -4,6 +4,7 @@ require "base64"
 require "digest"
 require "json"
 require "time"
+require_relative "operation_metrics"
 require_relative "article_table_rename"
 require_relative "inbox_memos"
 require_relative "article_structure"
@@ -76,7 +77,7 @@ module WeblogAuthoring
 
     def self.postgres(pool)
       new do |&block|
-        pool.with(retry_occ: 3) { |connection| block.call(PostgresConnection.new(connection)) }
+        OperationMetrics.with_connection(pool, retry_occ: 3) { |connection| block.call(PostgresConnection.new(connection)) }
       end
     end
 

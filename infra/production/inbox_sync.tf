@@ -45,11 +45,11 @@ resource "aws_lambda_function" "inbox_sync" {
   reserved_concurrent_executions = 1
 
   environment {
-    variables = {
+    variables = merge(local.operation_metrics_environment, {
       DSQL_HOST                   = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
       INBOX_SOURCES_SECRET_ID     = trimprefix(aws_ssm_parameter.inbox_sources.name, "/")
       BLUESKY_OAUTH_FUNCTION_NAME = aws_lambda_function.bluesky_oauth.function_name
-    }
+    })
   }
 
   logging_config {

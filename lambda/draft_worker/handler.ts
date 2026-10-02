@@ -1,16 +1,34 @@
 import type { Handler, ScheduledEvent } from "aws-lambda";
 import { maintainDraftCheckpoints } from "./maintenance.js";
 import { migrateArticle } from "./migrateArticle.js";
+import { measureOperation } from "./operationMetrics.js";
 import { reconstructDraft, seedPiece } from "./reconstruct.js";
 import { DsqlDraftCheckpointRepository } from "./repository.js";
 
-export const handler: Handler<
+type DraftWorkerEvent =
   | ScheduledEvent
   | { operation: "publication"; article_id: string }
   | { operation: "publication_batch"; article_ids: string[] }
   | { operation: "seed_piece"; piece_id: string; body: string }
-  | { operation: "migration"; article_id: string; diary: boolean }
-> = async (event) => {
+  | { operation: "migration"; article_id: string; diary: boolean };
+
+export const handler: Handler<DraftWorkerEvent> = async (event, context) => {
+  const operation = "operation" in event ? event.operation : "maintenance";
+  const workload = [
+    "publication",
+    "publication_batch",
+    "seed_piece",
+    "migration",
+    "maintenance",
+  ].includes(operation)
+    ? `draft_${operation}`
+    : "draft_unknown";
+  return measureOperation(workload, context.awsRequestId, () =>
+    dispatch(event),
+  );
+};
+
+async function dispatch(event: DraftWorkerEvent) {
   if ("operation" in event && event.operation === "seed_piece")
     return seedPiece(event.piece_id, event.body);
   if (
@@ -75,4 +93,4 @@ export const handler: Handler<
   return repository.withCutoverMaintenance(() =>
     maintainDraftCheckpoints(repository),
   );
-};
+}

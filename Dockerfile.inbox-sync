@@ -10,5 +10,7 @@ COPY lambda/inbox_sync.rb ${LAMBDA_TASK_ROOT}/lambda_function.rb
 COPY lambda/matrix_notifier.rb ${LAMBDA_TASK_ROOT}/matrix_notifier.rb
 
 ENV RUBYLIB=${LAMBDA_TASK_ROOT}/lib
+ARG BUILD_CONTENT_HASH=unknown
+ENV BUILD_CONTENT_HASH=${BUILD_CONTENT_HASH}
 
 CMD ["lambda_function.WeblogAuthoring::InboxSyncLambdaHandler.call"]

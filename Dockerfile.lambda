@@ -31,4 +31,7 @@ COPY lambda/ ${LAMBDA_TASK_ROOT}/
 
 ENV RUBYLIB=${LAMBDA_TASK_ROOT}/lib
 
+ARG BUILD_CONTENT_HASH=unknown
+ENV BUILD_CONTENT_HASH=${BUILD_CONTENT_HASH}
+
 CMD ["authoring.WeblogAuthoring::LambdaHandler.call"]

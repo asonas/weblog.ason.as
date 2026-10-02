@@ -12,7 +12,10 @@ module WeblogAuthoring
     module_function
 
     def call(event:, context:)
-      _context = context
+      OperationMetrics.measure(event:, context:, workload: "webmention_publish") { dispatch(event) }
+    end
+
+    def dispatch(event)
       if ENV.fetch("DRAFT_CUTOVER_ENABLED", "false") == "true"
         require "weblog_authoring/draft_runtime"
         (@draft_runtime ||= DraftRuntime.for_environment).legacy_work { publisher.call(event) }

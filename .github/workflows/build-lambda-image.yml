@@ -169,6 +169,8 @@ jobs:
           platforms: linux/arm64
           provenance: false
           push: true
+          build-args: |
+            BUILD_CONTENT_HASH=${{ steps.inspect.outputs.content_hash }}
           tags: |
             ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ inputs.repository }}:content-${{ steps.inspect.outputs.content_hash }}
             ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ inputs.repository }}:${{ steps.inspect.outputs.release_tag }}

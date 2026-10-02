@@ -38,10 +38,10 @@ resource "aws_lambda_function" "draft_worker" {
   reserved_concurrent_executions = 1
 
   environment {
-    variables = {
+    variables = merge(local.operation_metrics_environment, {
       DSQL_HOST             = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
       DRAFT_CUTOVER_ENABLED = "true"
-    }
+    })
   }
 
   logging_config {

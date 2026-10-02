@@ -10,7 +10,11 @@ module WeblogAuthoring
   module SearchIndexerHandler
     module_function
 
-    def call(event:, context:) # rubocop:disable Lint/UnusedMethodArgument
+    def call(event:, context:)
+      OperationMetrics.measure(event:, context:, workload: "publication_jobs") { dispatch(event) }
+    end
+
+    def dispatch(event)
       if ENV.fetch("DRAFT_CUTOVER_ENABLED", "false") == "true"
         require "weblog_authoring/draft_runtime"
         runtime = (@draft_runtime ||= DraftRuntime.for_environment)

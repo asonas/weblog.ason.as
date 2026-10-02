@@ -14,6 +14,7 @@ ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
 require "aurora_dsql_pg"
 
 require_relative "cover_image"
+require_relative "operation_metrics"
 require_relative "links"
 require_relative "models"
 require_relative "names"
@@ -2295,7 +2296,7 @@ module WeblogAuthoring
 
     def with_connection(timings: nil)
       started_at = monotonic_time if timings
-      @pool.with do |connection|
+      OperationMetrics.with_connection(@pool) do |connection|
         record_timing(timings, "db_checkout", started_at)
         yield connection
       end

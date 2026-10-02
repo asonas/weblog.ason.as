@@ -25,6 +25,10 @@ module WeblogAuthoring
     module_function
 
     def call(event:, context:)
+      OperationMetrics.measure(event:, context:) { dispatch(event:, context:) }
+    end
+
+    def dispatch(event:, context:)
       if ENV["AUTHORING_MAINTENANCE"] == "true"
         raise "Authoring maintenance is active" unless event.dig("requestContext", "http", "method")
 

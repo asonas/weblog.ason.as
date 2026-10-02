@@ -12,7 +12,10 @@ module WeblogAuthoring
     module_function
 
     def call(event:, context:)
-      _context = context
+      OperationMetrics.measure(event:, context:, workload: "webmention_delivery") { dispatch(event) }
+    end
+
+    def dispatch(event)
       if event["source"] == "aws.events"
         return { statusCode: 200, body: JSON.generate(revalidator.call) }
       end

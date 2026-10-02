@@ -1,0 +1,5 @@
+module WeblogAuthoring
+  module OperationMetrics
+    def self.with_connection: (untyped pool, **untyped) { (untyped connection) -> untyped } -> untyped
+  end
+end

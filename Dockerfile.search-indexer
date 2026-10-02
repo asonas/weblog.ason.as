@@ -17,5 +17,7 @@ COPY lib/ ${LAMBDA_TASK_ROOT}/lib/
 COPY lambda/search_indexer.rb ${LAMBDA_TASK_ROOT}/lambda_function.rb
 
 ENV RUBYLIB=${LAMBDA_TASK_ROOT}/lib
+ARG BUILD_CONTENT_HASH=unknown
+ENV BUILD_CONTENT_HASH=${BUILD_CONTENT_HASH}
 
 CMD ["lambda_function.WeblogAuthoring::SearchIndexerHandler.call"]

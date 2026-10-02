@@ -13,8 +13,7 @@ module WeblogAuthoring
     module_function
 
     def call(event:, context:)
-      _context = context
-      receiver.call(event)
+      OperationMetrics.measure(event:, context:, workload: "webmention_receive") { receiver.call(event) }
     end
 
     def receiver

@@ -15,9 +15,11 @@ module WeblogAuthoring
   module InboxSyncLambdaHandler
     module_function
 
-    def call(event:, context:, runner: nil) # rubocop:disable Lint/UnusedMethodArgument
-      trigger, run_id, requested_sources = invocation(event)
-      (runner || sync_runner).call(trigger:, run_id:, requested_sources:)
+    def call(event:, context:, runner: nil)
+      OperationMetrics.measure(event:, context:, workload: "inbox_sync") do
+        trigger, run_id, requested_sources = invocation(event)
+        (runner || sync_runner).call(trigger:, run_id:, requested_sources:)
+      end
     end
 
     def sync_runner

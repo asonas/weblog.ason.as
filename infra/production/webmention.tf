@@ -118,12 +118,12 @@ resource "aws_lambda_function" "webmention_receiver" {
   }
 
   environment {
-    variables = {
+    variables = merge(local.operation_metrics_environment, {
       DSQL_HOST                   = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
       SITE_URL                    = "https://weblog.ason.as"
       WEBMENTION_QUEUE_URL        = aws_sqs_queue.webmention.url
       WEBMENTION_RECEIVER_ENABLED = tostring(var.webmention_receiver_enabled)
-    }
+    })
   }
 
   depends_on = [
@@ -212,12 +212,12 @@ resource "aws_lambda_function" "webmention_worker" {
   }
 
   environment {
-    variables = {
+    variables = merge(local.operation_metrics_environment, {
       DSQL_HOST                      = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
       WEBMENTION_QUEUE_URL           = aws_sqs_queue.webmention.url
       WEBMENTION_REVERIFY_AFTER_DAYS = "7"
       WEBMENTION_REVERIFY_BATCH_SIZE = "100"
-    }
+    })
   }
 
   depends_on = [
@@ -429,11 +429,11 @@ resource "aws_lambda_function" "webmention_cleanup" {
   }
 
   environment {
-    variables = {
+    variables = merge(local.operation_metrics_environment, {
       DSQL_HOST                     = "${aws_dsql_cluster.weblog.identifier}.dsql.${var.aws_region}.on.aws"
       WEBMENTION_CLEANUP_BATCH_SIZE = "500"
       WEBMENTION_CLEANUP_DRY_RUN    = "true"
-    }
+    })
   }
 
   depends_on = [

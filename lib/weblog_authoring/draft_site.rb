@@ -5,6 +5,7 @@ require "digest"
 require "json"
 require_relative "draft_publisher"
 require_relative "webmention_site_publisher"
+require_relative "operation_metrics"
 
 module WeblogAuthoring
   class DraftSite
@@ -26,6 +27,7 @@ module WeblogAuthoring
       path = event.fetch("rawPath", "")
       path = path.delete_suffix("/") if path != "/"
       return @api.call(event) unless %w[GET HEAD].include?(method) && !path.start_with?("/api/", "/oauth/")
+      OperationMetrics.delivery("stored")
       read_event = event.merge("rawPath" => path, "requestContext" => event.fetch("requestContext").merge("http" => event.fetch("requestContext").fetch("http").merge("method" => "GET")))
       response = if ["/", "/index.html", "/search", "/authoring/articles", "/authoring/webmentions", "/draft-editor"].include?(path)
                    object("index.html", "text/html; charset=utf-8")
@@ -44,6 +46,7 @@ module WeblogAuthoring
           shell = object("static/authoring/public.html", "text/html; charset=utf-8")
           html = renderer.render_linked_page(route, shell: shell.fetch(:body))
           response = shell.merge(body: html) if html
+          OperationMetrics.delivery("linked") if html
         end
         response = response.merge(headers: response.fetch(:headers, {}).merge("cache-control" => "no-store")) if response.fetch(:statusCode) == 404
       end
@@ -73,6 +76,7 @@ module WeblogAuthoring
       renderer = WebmentionSitePublisher.new(database: @reader, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
       page = ArticleDocument.from_published_version(snapshot)
       html = renderer.render_document(page, shell:, source_url: "#{@site_url}/#{WeblogAuthoring.encoded_route(page.route)}")
+      OperationMetrics.delivery("dynamic", release: id)
       etag = %("#{Digest::SHA256.hexdigest("#{id}\0#{html}")}")
       if event.fetch("headers", {})["if-none-match"] == etag
         return { statusCode: 304, headers: { "cache-control" => PUBLIC_HTML_CACHE_CONTROL, "etag" => etag }, body: "" }

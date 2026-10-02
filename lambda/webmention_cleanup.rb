@@ -9,10 +9,10 @@ module WeblogAuthoring
     module_function
 
     def call(event:, context:)
-      _event = event
-      _context = context
-      results = cleanup.call
-      { statusCode: 200, body: JSON.generate("results" => results) }
+      OperationMetrics.measure(event:, context:, workload: "webmention_cleanup") do
+        results = cleanup.call
+        { statusCode: 200, body: JSON.generate("results" => results) }
+      end
     end
 
     def cleanup

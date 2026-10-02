@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { DsqlSigner } from "@aws-sdk/dsql-signer";
 import { Client, type QueryResultRow } from "pg";
+import { measureQuery } from "./operationMetrics.js";
 
 import type { ReconstructionInput } from "./reconstruct.js";
 import { parsePieceStructure } from "./reconstruct.js";
@@ -457,7 +458,10 @@ export class DsqlDraftCheckpointRepository
   private async run<T>(callback: (db: Queryable) => Promise<T>): Promise<T> {
     const db = await this.connect();
     try {
-      return await callback(db);
+      return await callback({
+        query: (text, values) =>
+          measureQuery(text, () => db.query(text, values)),
+      });
     } finally {
       if (db instanceof Client) await db.end();
     }

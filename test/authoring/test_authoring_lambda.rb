@@ -49,6 +49,8 @@ class AuthoringLambdaTest < Minitest::Test
         "GITHUB_REDIRECT_URI" => "https://example.com/callback",
         "FRONTEND_URL" => "https://example.com", "GITHUB_ALLOWED_USER_ID" => "1"
       }.each { |key, value| ENV[key] = value }
+      ENV["OPERATION_METRICS_SAMPLE_RATE"] = "1"
+      ENV["OPERATION_METRICS_UNTIL"] = (Time.now.to_i + 60).to_s
       2.times do |index|
         response = WeblogAuthoring::LambdaHandler.call(
           event: { "rawPath" => "/api/auth/session", "requestContext" => {
@@ -77,6 +79,10 @@ class AuthoringLambdaTest < Minitest::Test
     assert(entry.fetch("timings").values.all? { |value| value.is_a?(Numeric) && value >= 0 })
     assert_operator entry.fetch("require_total_ms") + 0.01, :>=, entry.fetch("timings").values.sum
     assert_equal(1, entries.count { |item| item["event"] == "cold_api_timing" })
+    operations = entries.select { |item| item["event"] == "operation_metrics" }
+    assert_equal(%w[lambda-0 lambda-1], operations.map { |item| item.fetch("request_id") })
+    assert_equal(%w[auth auth], operations.map { |item| item.fetch("workload") })
+    assert(operations.all? { |item| item.fetch("sql_count").zero? })
     responses = entries.filter_map { |item| item["response"] }
     assert_equal 2, responses.length
     assert_equal responses.first, responses.last
