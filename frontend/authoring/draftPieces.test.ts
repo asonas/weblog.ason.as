@@ -4,10 +4,21 @@ import * as Y from "yjs";
 import {
   type DraftPieces,
   mergePieceDrafts,
+  parsePieceTags,
   pieceMarkdown,
   receiveStructure,
 } from "./draftPieces";
 import { acceptMemoSave, type LocalMemo, memoNeedsSave } from "./memoStore";
+
+test("tag input accepts wiki links and converts existing comma-separated tags without changing names", () => {
+  assert.deepEqual(parsePieceTags("[[日記]] [[音楽]]"), ["日記", "音楽"]);
+  assert.deepEqual(parsePieceTags("日記, 音楽、日記"), ["日記", "音楽"]);
+  assert.deepEqual(parsePieceTags("[[Earth, Wind & Fire]] [[音楽]]"), [
+    "Earth, Wind & Fire",
+    "音楽",
+  ]);
+  assert.deepEqual(parsePieceTags(""), []);
+});
 
 function initial(): DraftPieces {
   const structure = {

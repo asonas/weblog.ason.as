@@ -1,3 +1,4 @@
+import { parsePieceTags } from "./draftPieces";
 import type { DraftSession } from "./draftSession";
 
 export function DraftPieceControls({ session }: { session: DraftSession }) {
@@ -57,26 +58,24 @@ export function DraftPieceControls({ session }: { session: DraftSession }) {
         </div>
       ))}
       {diary && (
-        <>
-          <button
-            type="button"
+        <label>
+          タグ
+          <input
+            key={pieces.local.tags.join(",")}
+            defaultValue={pieces.local.tags
+              .map((tag) => `[[${tag}]]`)
+              .join(" ")}
+            placeholder="[[日記]] [[音楽]]"
             disabled={session.isPublishing}
-            onClick={() => session.addPiece()}
-          >
-            かけらを追加
-          </button>
-          <label>
-            タグ（カンマ区切り）
-            <input
-              key={pieces.local.tags.join(",")}
-              defaultValue={pieces.local.tags.join(", ")}
-              disabled={session.isPublishing}
-              onBlur={(event) =>
-                session.setTags(event.currentTarget.value.split(/[,、]/))
-              }
-            />
-          </label>
-        </>
+            onBlur={(event) => {
+              const tags = parsePieceTags(event.currentTarget.value);
+              session.setTags(tags);
+              event.currentTarget.value = tags
+                .map((tag) => `[[${tag}]]`)
+                .join(" ");
+            }}
+          />
+        </label>
       )}
     </section>
   );
