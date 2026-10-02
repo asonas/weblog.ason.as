@@ -212,7 +212,9 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
         });
   const matches = (row: Row, value: Filter) =>
     value === "all" ||
-    (value === "attention" ? needsAttention(row) : row.state === value);
+    (value === "attention"
+      ? !(loading && row.localOnly) && needsAttention(row)
+      : row.state === value);
   const visible = rows
     .filter(
       (row) =>
@@ -436,8 +438,15 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                   ? row.local.metadata.title
                   : row.metadata.title) || "無題";
               const editHref = `/draft-editor?id=${encodeURIComponent(row.id)}${row.state === "draft" ? "" : `&state=${row.state}`}`;
-              const attention = needsAttention(row);
-              const saveStatus = serverStatus(row, available);
+              const checking = loading && row.localOnly;
+              const attention = !checking && needsAttention(row);
+              const saveStatus = checking
+                ? {
+                    label: "確認中",
+                    detail: "サーバーの保存状態を確認中",
+                    tone: "checking",
+                  }
+                : serverStatus(row, available);
               const retryable =
                 row.publication &&
                 row.publication.status !== "superseded" &&
@@ -484,7 +493,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                     <div className="draft-admin-row-status">
                       <span
                         className="draft-admin-state"
-                        data-state={row.state}
+                        data-state={checking ? "checking" : row.state}
                       >
                         {row.localOnly
                           ? "端末に保存した記事"

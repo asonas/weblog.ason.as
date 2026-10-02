@@ -45,20 +45,20 @@ try {
       await route.fulfill({ status: 422, contentType: "application/json", body: JSON.stringify({ error: "cover_image_url must be a local asset" }) });
     } else await route.continue();
   });
-  await page.getByRole("button", { name: "カバー設定", exact: true }).click();
+  await page.getByRole("button", { name: "記事の設定", exact: true }).click();
   await page.getByRole("radio", { name: "画像を指定" }).check();
-  await page.getByRole("button", { name: "カバー設定を閉じる" }).click();
+  await page.getByRole("button", { name: "記事の設定を閉じる" }).click();
   await body.fill(edited);
   await until(async () => (await page.locator(".draft-editor__status > [role=alert]").textContent()).includes("カバー設定を保存できません"));
   assert.equal(await body.inputValue(), edited);
-  await page.getByRole("button", { name: "カバー設定", exact: true }).click();
+  await page.getByRole("button", { name: "記事の設定", exact: true }).click();
   await page.getByRole("radio", { name: "自動" }).check();
-  await page.getByRole("button", { name: "カバー設定を閉じる" }).click();
+  await page.getByRole("button", { name: "記事の設定を閉じる" }).click();
   await until(async () => (await saved()).includes("サーバーに保存済み"));
   await page.reload();
   await until(async () => await body.inputValue() === edited);
   assert.equal(page.url(), url);
-  assert.equal(await page.locator("button[title='カバー設定（自動）']").count(), 1);
+  assert.equal(await page.locator("button[title='記事の設定']").count(), 1);
   console.log("PASS: rejected cover metadata can be corrected without losing pending body, changing article ID, or resurrecting the failed request after reload");
 } finally {
   await browser?.close();

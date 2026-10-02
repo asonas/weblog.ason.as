@@ -797,27 +797,64 @@ html[data-draft-workspace="true"] body {
   font-weight: 400;
   font-size: var(--text-meta);
 }
-.draft-cover-settings {
-  inline-size: min(26rem, calc(100vw - 2rem));
+.draft-article-settings {
+  inline-size: min(32rem, calc(100vw - 2rem));
   max-block-size: calc(100dvh - 3rem);
   overflow: auto;
   padding: var(--space-4);
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--separator);
-  border-radius: var(--radius-control);
+  border-radius: 8px;
   box-shadow: 0 8px 32px oklch(0 0 0 / 0.15);
 }
-.draft-cover-settings header {
+.draft-article-settings::backdrop {
+  background: oklch(0 0 0 / 0.45);
+}
+.draft-article-settings header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding-block-end: var(--space-3);
   border-block-end: 1px solid var(--separator);
 }
-.draft-cover-settings h2 {
+.draft-article-settings h2 {
   font-size: 1.1rem;
   margin: 0;
+}
+.draft-article-settings > section {
+  padding-block: var(--space-4);
+}
+.draft-article-settings > section + section {
+  border-block-start: 1px solid var(--separator);
+}
+.draft-article-settings h3 {
+  font-size: 1rem;
+  font-weight: 400;
+  margin: 0 0 var(--space-3);
+}
+.draft-article-settings p {
+  margin: 0 0 var(--space-3);
+}
+.draft-article-settings section > button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-inline-size: 100%;
+  white-space: normal;
+}
+.draft-article-settings button svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+.draft-article-settings [role="alert"] {
+  color: var(--danger);
+  margin-block-start: var(--space-3);
 }
 .draft-cover-settings fieldset {
   display: grid;

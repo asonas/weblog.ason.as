@@ -681,7 +681,7 @@ module WeblogAuthoring
       app = Class.new(self)
       app.set :root_path, root_path
       app.set :database, database
-      draft_store = drafts_enabled ? DraftStore.sqlite(development_data.join("drafts.sqlite3")) : nil
+      draft_store = drafts_enabled ? DraftStore.sqlite(development_data.join("drafts.sqlite3"), pieces_enabled: ENV.fetch("ARTICLE_PIECES_ENABLED", "true") == "true") : nil
       draft_store&.setup!
       app.set :draft_store, draft_store
       reader = draft_store ? PublishedArticleReader.new(store: draft_store, database:) : database

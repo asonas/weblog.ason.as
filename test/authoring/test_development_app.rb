@@ -9,6 +9,25 @@ require "rack/mock"
 class TestDevelopmentApp < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-08-21T12:00:00+09:00")
 
+  def test_development_defaults_to_piece_authoring_and_allows_explicit_legacy_mode
+    previous = ENV["ARTICLE_PIECES_ENABLED"]
+    [[nil, "2026-10-02"], %w[false 2026-10-03], %w[true 2026-10-04]].each do |value, date|
+      value ? ENV["ARTICLE_PIECES_ENABLED"] = value : ENV.delete("ARTICLE_PIECES_ENABLED")
+      application = WeblogAuthoring::DevelopmentApp.application(root:, drafts_enabled: true, oauth_client: nil, inbox_sources: {})
+      status, _headers, body = request_with(application, "GET", "/api/auth/session")
+      assert_equal 200, status
+      assert_equal value != "false", JSON.parse(body).fetch("piece_authoring")
+      status, _headers, body = json_request_with(application, "POST", "/api/authoring/drafts/daily", date:)
+      assert_equal 200, status, body
+      article_id = JSON.parse(body).fetch("id")
+      status, _headers, body = request_with(application, "GET", "/api/authoring/drafts/#{article_id}?format=auto")
+      assert_equal 200, status, body
+      assert_equal value == "false" ? "legacy" : "pieces", JSON.parse(body).fetch("format")
+    end
+  ensure
+    previous ? ENV["ARTICLE_PIECES_ENABLED"] = previous : ENV.delete("ARTICLE_PIECES_ENABLED")
+  end
+
   def test_proofreading_api_runs_node_without_saving_the_text
     status, headers, body = request("POST", "/api/authoring/proofread", payload: { "text" => "見れる。" })
     assert_equal 200, status

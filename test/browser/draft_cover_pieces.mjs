@@ -49,18 +49,48 @@ try {
   await first.press("Enter");
   await first.pressSequentially("s");
   await page.getByRole("textbox", { name: "2番目のかけら", exact: true }).fill("![second](/assets/second.webp)\n\n![duplicate](/assets/first.webp)\n\n```markdown\n![code](/assets/code.webp)\n```");
-  const open = page.getByRole("button", { name: "カバー設定", exact: true });
+  const open = page.getByRole("button", { name: "記事の設定", exact: true });
+  const controls = page.locator(".draft-editor__titlebar");
+  assert.equal(await controls.getByRole("button", { name: "未公開の下書きを削除", exact: true }).count(), 0);
+  assert.equal(await controls.getByRole("button", { name: "Markdownをダウンロード", exact: true }).count(), 0);
+  await open.click();
+  const settings = page.getByRole("dialog", { name: "記事の設定", exact: true });
+  assert.equal(await settings.evaluate(element => element.matches(":modal")), true);
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const box = await settings.boundingBox();
+    assert.ok(box && box.x >= 0 && box.x + box.width <= width);
+    assert.ok(await settings.evaluate(element => element.scrollWidth <= element.clientWidth));
+    await page.screenshot({ path: `/private/tmp/article-settings-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const downloadEvent = page.waitForEvent("download");
+  await settings.getByRole("button", { name: "Markdownをダウンロード" }).click();
+  const stream = await (await downloadEvent).createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const exported = Buffer.concat(chunks).toString("utf8");
+  assert.ok(exported.includes("![first](/assets/first.webp)"));
+  assert.ok(exported.includes("![second](/assets/second.webp)"));
+  let confirmations = 0;
+  let deleteApproved = false;
+  page.on("dialog", async dialog => { confirmations++; await (deleteApproved ? dialog.accept() : dialog.dismiss()); });
+  await settings.getByRole("button", { name: "未公開の下書きを削除", exact: true }).click();
+  assert.equal(confirmations, 1);
+  assert.ok(await settings.isVisible());
+  await page.keyboard.press("Escape");
+  assert.equal(await open.evaluate(element => element === document.activeElement), true);
   await open.click();
   assert.equal(await page.getByAltText("選択中のカバー").getAttribute("src"), "/assets/first.webp");
   await page.getByRole("radio", { name: "画像を指定" }).check();
   const choices = page.locator(".draft-cover-settings__choice img");
   assert.deepEqual(await choices.evaluateAll(images => images.map(image => image.getAttribute("src"))), ["/assets/first.webp", "/assets/second.webp"]);
-  await page.getByRole("button", { name: "カバー設定を閉じる" }).click();
+  await page.getByRole("button", { name: "記事の設定を閉じる" }).click();
   await first.click();
   await open.click();
   assert.deepEqual(await choices.evaluateAll(images => images.map(image => image.getAttribute("src"))), ["/assets/first.webp", "/assets/second.webp"]);
   assert.equal(await page.getByText("選択中のカバーは本文にありません。", { exact: false }).count(), 0);
-  await page.getByRole("button", { name: "カバー設定を閉じる" }).click();
+  await page.getByRole("button", { name: "記事の設定を閉じる" }).click();
   for (const index of [2, 3]) {
     const field = page.getByRole("textbox", { name: `${index}番目のかけら`, exact: true });
     await field.fill(`${index}番目の本文\n\n---\n新しいかけら`);
@@ -73,8 +103,15 @@ try {
   await page.getByRole("textbox", { name: "4番目のかけら", exact: true }).waitFor();
   assert.equal(await page.locator(".draft-piece-editor textarea").count(), 4);
   assert.equal(await third.inputValue(), "3番目のかけらの加筆");
+  const draftId = new URL(page.url()).searchParams.get("id");
+  await open.click();
+  deleteApproved = true;
+  await settings.getByRole("button", { name: "未公開の下書きを削除", exact: true }).click();
+  await page.waitForURL("**/authoring/articles");
+  assert.equal(await page.evaluate(async id => (await fetch(`/api/authoring/drafts/${id}`)).status, draftId), 404);
   console.log("PASS: cover candidates include all pieces in article order, deduplicate images, exclude code, and remain unchanged when changing the active piece");
   console.log("PASS: a named article displays four editable pieces and preserves later-piece edits after reload");
+  console.log("PASS: article settings contains download and guarded deletion, exports all pieces, fits 1280/390/320px, and restores focus on Escape");
 } finally {
   await browser?.close();
   for (const child of children.reverse()) child.kill("SIGTERM");

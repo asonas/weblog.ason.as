@@ -19,6 +19,7 @@ class DraftTestSearchRunner < WeblogAuthoring::SearchIndexer::QmdRunner
 end
 
 Dir.mktmpdir("draft-browser-test") do |root|
+  ENV["ARTICLE_PIECES_ENABLED"] ||= "false"
   search_runner = DraftTestSearchRunner.new
   app = WeblogAuthoring::DevelopmentApp.application(
     root:, oauth_client: nil, inbox_sources: {}, drafts_enabled: true, draft_search_runner: search_runner

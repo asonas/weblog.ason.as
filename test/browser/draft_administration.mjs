@@ -133,7 +133,23 @@ try {
   await body.fill("検索と再開を確認する本文");
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
   const article = page.url();
+  let releaseList;
+  const listGate = new Promise(resolve => { releaseList = resolve; });
+  await page.route("**/api/authoring/drafts?*", async route => {
+    await listGate;
+    await route.fulfill({ status: 503, body: "Unavailable" });
+  });
   await page.getByRole("link", { name: /記事一覧/ }).click();
+  const checkingRow = ledger.locator("tbody tr").filter({ has: page.getByRole("link", { name: "管理画面の実データ", exact: true }) });
+  await checkingRow.getByRole("img", { name: "サーバーの保存状態を確認中", exact: true }).waitFor();
+  assert.equal(await checkingRow.locator('[data-state="unknown"], [data-state="attention"], [data-tone="unknown"]').count(), 0);
+  assert.equal(await checkingRow.getByText("要確認", { exact: true }).count(), 0);
+  releaseList();
+  await checkingRow.getByRole("img", { name: "サーバー保存を未確認", exact: true }).waitFor();
+  await checkingRow.getByText("要確認", { exact: true }).waitFor();
+  await page.unroute("**/api/authoring/drafts?*");
+  await page.getByRole("button", { name: "再読み込み", exact: true }).click();
+  await checkingRow.getByRole("img", { name: "サーバーに保存済み", exact: true }).waitFor();
   const search = page.getByRole("searchbox", { name: "タイトルまたはURLで検索" });
   await search.fill("管理画面");
   const detail = ledger.locator("tbody tr").filter({ has: page.getByRole("link", { name: "管理画面の実データ", exact: true }) });

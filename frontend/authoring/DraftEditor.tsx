@@ -11,7 +11,7 @@ import {
 } from "react";
 import * as Y from "yjs";
 import { AuthoringIcon } from "./AuthoringIcon";
-import { DraftCoverSettings } from "./DraftCoverSettings";
+import { DraftArticleSettings } from "./DraftArticleSettings";
 import { DraftInbox } from "./DraftInbox";
 import { DraftNavigation } from "./DraftNavigation";
 import { DraftPreview } from "./DraftPreview";
@@ -734,10 +734,9 @@ export function DraftEditor({
   }
 
   function exportMarkdown() {
-    const blob = new Blob(
-      [textarea.current?.value || session?.body.toString() || ""],
-      { type: "text/markdown;charset=utf-8" },
-    );
+    const blob = new Blob([session?.markdown || ""], {
+      type: "text/markdown;charset=utf-8",
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -926,40 +925,26 @@ export function DraftEditor({
           {session && <DraftTagInput session={session} />}
         </div>
         <div className="draft-editor__controls">
-          {session?.pieces && articleState === "draft" && (
-            <button
-              className="draft-editor__icon-button draft-editor__delete"
-              title="未公開の下書きを削除"
-              aria-label="未公開の下書きを削除"
-              type="button"
-              disabled={session.isPublishing}
-              onClick={() => {
-                if (
-                  !window.confirm(
-                    "未公開の日記全体を削除しますか？取り込み元のメモはInboxへ戻ります。日記内での加筆は削除されます。",
-                  )
-                )
-                  return;
-                void session
-                  .deleteDraft()
-                  .then(() => {
-                    window.location.href = "/authoring/articles";
-                  })
-                  .catch((error: unknown) =>
-                    setPublicationError(
-                      error instanceof Error
-                        ? error.message
-                        : "削除できませんでした",
-                    ),
-                  );
-              }}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l.8 11h7.4l.8-11M8.5 8v6M11.5 8v6" />
-              </svg>
-            </button>
+          {session && (
+            <DraftArticleSettings
+              session={session}
+              onDownload={exportMarkdown}
+              onDelete={
+                articleState === "draft"
+                  ? async () => {
+                      if (
+                        !window.confirm(
+                          "未公開の下書き全体を削除しますか？取り込み元のメモはInboxへ戻ります。下書き内での加筆は削除されます。この操作は取り消せません。",
+                        )
+                      )
+                        return;
+                      await session.deleteDraft();
+                      window.location.href = "/authoring/articles";
+                    }
+                  : undefined
+              }
+            />
           )}
-          {session && <DraftCoverSettings session={session} />}
           <div className="draft-editor__sync-status" role="status">
             {session ? (
               <>
@@ -982,18 +967,6 @@ export function DraftEditor({
                 サーバー保存を再試行
               </button>
             )}
-            <button
-              className="draft-editor__icon-button"
-              type="button"
-              disabled={!session}
-              title="本文をダウンロード"
-              aria-label="本文をダウンロード"
-              onClick={exportMarkdown}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M10 3.5v9m0 0L6.5 9M10 12.5 13.5 9M4 15.5h12" />
-              </svg>
-            </button>
             {session?.error && (
               <button type="button" onClick={recoverAsNewDraft}>
                 内容を新しい下書きへ復旧

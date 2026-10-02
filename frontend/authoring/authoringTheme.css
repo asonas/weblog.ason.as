@@ -56,12 +56,12 @@ html[data-draft-workspace="true"] body,
   border-color: var(--separator);
   border-radius: 4px;
 }
-.draft-editor :is(.draft-cover-settings, .draft-publication-dialog) {
+.draft-editor :is(.draft-article-settings, .draft-publication-dialog) {
   border-radius: 8px;
 }
 .draft-editor
   :is(
-    .draft-cover-settings h2,
+    .draft-article-settings h2,
     .draft-publication-dialog h2,
     .draft-inbox__column h2
   ) {

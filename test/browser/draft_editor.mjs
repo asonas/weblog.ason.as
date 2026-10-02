@@ -281,14 +281,15 @@ try {
     true,
   );
   assert.equal(await page.getByLabel("日記の日付（URL）").count(), 0);
-  const coverButton = page.getByRole("button", { name: "カバー設定", exact: true });
-  const downloadButton = page.getByRole("button", { name: "本文をダウンロード" });
-  const [coverBox, downloadBox] = await Promise.all([
+  const coverButton = page.getByRole("button", { name: "記事の設定", exact: true });
+  const publishButton = page.getByRole("button", { name: "公開する", exact: true });
+  const [coverBox, publishBox] = await Promise.all([
     coverButton.boundingBox(),
-    downloadButton.boundingBox(),
+    publishButton.boundingBox(),
   ]);
-  assert.ok(coverBox && downloadBox);
-  assert.ok(coverBox.x < downloadBox.x && Math.abs(coverBox.y - downloadBox.y) < 4);
+  assert.ok(coverBox && publishBox);
+  assert.ok(coverBox.x < publishBox.x && Math.abs(coverBox.y - publishBox.y) < 4);
+  assert.equal(await page.locator(".draft-editor__controls").getByRole("button", { name: "Markdownをダウンロード" }).count(), 0);
   assert.equal(
     await page.getByRole("button", { name: "サーバー保存を再試行" }).count(),
     0,
@@ -690,15 +691,15 @@ end
 
   await page.route("**/api/authoring/drafts/**", (route) => route.abort("internetdisconnected"));
   await page.getByLabel("タイトル", { exact: true }).fill("別項目の変更とは競合しないタイトル");
-  await competingPage.getByRole("button", { name: "カバー設定", exact: true }).click();
+  await competingPage.getByRole("button", { name: "記事の設定", exact: true }).click();
   await competingPage.getByRole("radio", { name: "なし", exact: false }).check();
-  await competingPage.getByRole("button", { name: "カバー設定を閉じる" }).click();
+  await competingPage.getByRole("button", { name: "記事の設定を閉じる" }).click();
   await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
   await page.unroute("**/api/authoring/drafts/**");
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
   assert.equal(await conflict.count(), 0);
-  assert.equal(await page.locator("button[title='カバー設定（なし）']").count(), 1);
+  assert.equal(await page.locator("button[title='記事の設定']").count(), 1);
   await competingPage.reload();
   await until(async () => await competingPage.getByLabel("タイトル", { exact: true }).inputValue() === "別項目の変更とは競合しないタイトル");
   await competing.close();
@@ -798,12 +799,14 @@ end
   await until(async () => (await storagePage.getByRole("status").textContent()).includes("端末に保存できません"));
   assert.equal(await storageBody.inputValue(), retainedText);
   const downloadPromise = storagePage.waitForEvent("download");
-  await storagePage.getByRole("button", { name: "本文をダウンロード" }).click();
+  await storagePage.getByRole("button", { name: "記事の設定", exact: true }).click();
+  await storagePage.getByRole("button", { name: "Markdownをダウンロード" }).click();
   const stream = await (await downloadPromise).createReadStream();
   const chunks = [];
   for await (const chunk of stream) chunks.push(chunk);
   assert.equal(Buffer.concat(chunks).toString("utf8"), retainedText);
   assert.equal(storageSends, 0);
+  await storagePage.getByRole("button", { name: "記事の設定を閉じる" }).click();
   await storagePage.evaluate(() => globalThis.restoreDraftStorage());
   await storagePage.getByRole("button", { name: "サーバー保存を再試行" }).click();
   await until(async () => (await storagePage.getByRole("status").textContent()).includes("サーバーに保存済み"));

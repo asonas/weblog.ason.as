@@ -308,6 +308,9 @@ body:has(.draft-admin) .page-shell {
 .draft-admin-save-status[data-tone="unknown"]::before {
   background: var(--authoring-status-error);
 }
+.draft-admin-save-status[data-tone="checking"]::before {
+  background: var(--muted-ink);
+}
 .draft-admin-publication {
   font-size: 0.75rem;
   color: var(--muted-ink);

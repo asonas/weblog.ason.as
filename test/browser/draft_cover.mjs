@@ -66,8 +66,12 @@ try {
   const body = page.getByRole("textbox", { name: "本文", exact: true });
   const source = "![花](/assets/cover-flower.webp)\n\n![海](/assets/cover-sea.webp)";
   await body.fill(source);
-  await page.getByRole("button", { name: "カバー設定", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "カバー設定", exact: true });
+  await page.getByRole("button", { name: "記事の設定", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "記事の設定", exact: true });
+  assert.ok(await dialog.getByRole("button", { name: "未公開の下書きを削除", exact: true }).isVisible());
+  page.once("dialog", async confirmation => confirmation.dismiss());
+  await dialog.getByRole("button", { name: "未公開の下書きを削除", exact: true }).click();
+  assert.equal(await body.inputValue(), source);
   await dialog.getByRole("radio", { name: "画像を指定 本文の画像から選ぶ" }).check();
   const flower = dialog.getByRole("radio", { name: "画像1：花", exact: true });
   const sea = dialog.getByRole("radio", { name: "画像2：海", exact: true });
@@ -95,8 +99,8 @@ try {
   const reopenedContext = await browser.newContext();
   const reopened = await openPage(reopenedContext, url);
   await until(async () => await reopened.getByRole("textbox", { name: "本文", exact: true }).inputValue() === source, "Body was not restored from server");
-  await reopened.getByRole("button", { name: "カバー設定", exact: true }).click();
-  const restoredDialog = reopened.getByRole("dialog", { name: "カバー設定", exact: true });
+  await reopened.getByRole("button", { name: "記事の設定", exact: true }).click();
+  const restoredDialog = reopened.getByRole("dialog", { name: "記事の設定", exact: true });
   assert.ok(await restoredDialog.getByRole("radio", { name: "画像2：海", exact: true }).isChecked());
   const restoredCover = reopened.locator(".draft-preview__document .article-reading-header > img");
   assert.equal(await restoredCover.getAttribute("src"), "/assets/cover-sea.webp");
