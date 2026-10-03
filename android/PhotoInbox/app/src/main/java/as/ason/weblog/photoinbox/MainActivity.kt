@@ -15,6 +15,9 @@ import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.work.Constraints
@@ -44,6 +47,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityMainBinding.inflate(layoutInflater)
         val memoPanel = MemoPanel(this) { showPairing() }.apply { visibility = View.GONE }
         val pages = FrameLayout(this).apply {
@@ -59,11 +63,22 @@ class MainActivity : ComponentActivity() {
             text = "メモ"
             setOnClickListener { binding.root.visibility = View.GONE; memoPanel.visibility = View.VISIBLE }
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        setContentView(LinearLayout(this).apply {
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(pages, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
             addView(tabs)
-        })
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, windowInsets ->
+            val insets = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.displayCutout() or
+                    WindowInsetsCompat.Type.ime(),
+            )
+            view.setPadding(insets.left, insets.top, insets.right, insets.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
+        setContentView(root)
+        ViewCompat.requestApplyInsets(root)
         selection = PhotoSelectionStore(this)
         adapter = PhotoAdapter(this, lifecycleScope, selection::status, { failures[it] }, { isSending }) {
             if (failures.containsKey(it)) showFailure(it) else {

@@ -4,10 +4,16 @@ import android.Manifest
 import android.app.Application
 import android.content.ContentUris
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.os.Looper
 import android.provider.MediaStore
+import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
@@ -59,6 +65,55 @@ class MainActivityTest {
 
     @After
     fun tearDown() { provider.database.close() }
+
+    @Test
+    @Config(sdk = [30, 35])
+    fun `photo and memo controls stay inside system bars cutouts and keyboard`() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup().visible()
+        try {
+            val activity = controller.get()
+            val root = activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as ViewGroup
+            val tabs = root.getChildAt(1) as ViewGroup
+            fun bounds(view: View) = Rect(0, 0, view.width, view.height).also {
+                root.offsetDescendantRectToMyCoords(view, it)
+            }
+            fun applyInsets(width: Int, height: Int, bars: Insets, cutout: Insets, keyboard: Int) {
+                val insets = WindowInsetsCompat.Builder()
+                    .setInsets(WindowInsetsCompat.Type.systemBars(), bars)
+                    .setInsets(WindowInsetsCompat.Type.displayCutout(), cutout)
+                    .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, keyboard))
+                    .build()
+                repeat(2) { ViewCompat.dispatchApplyWindowInsets(root, insets) }
+                root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+                root.layout(0, 0, width, height)
+                assertEquals(maxOf(bars.left, cutout.left), root.paddingLeft)
+                assertEquals(maxOf(bars.top, cutout.top), root.paddingTop)
+                assertEquals(maxOf(bars.right, cutout.right), root.paddingRight)
+                assertEquals(maxOf(bars.bottom, cutout.bottom, keyboard), root.paddingBottom)
+                assertTrue(bounds(tabs).bottom <= height - root.paddingBottom)
+            }
+
+            applyInsets(1080, 2400, Insets.of(0, 72, 0, 48), Insets.NONE, 0)
+            val settings = activity.findViewById<Button>(R.id.settingsButton)
+            assertTrue(bounds(settings).top >= 72)
+            assertTrue(bounds(activity.findViewById(R.id.sendButton)).bottom <= bounds(tabs).top)
+            settings.performClick()
+            assertTrue(ShadowAlertDialog.getLatestAlertDialog().isShowing)
+            ShadowAlertDialog.getLatestAlertDialog().dismiss()
+
+            applyInsets(2400, 1080, Insets.of(0, 72, 96, 0), Insets.of(120, 0, 0, 0), 0)
+            assertTrue(bounds(settings).right <= 2304)
+            assertTrue(bounds(tabs).left >= 120)
+            (tabs.getChildAt(1) as Button).performClick()
+            val pages = root.getChildAt(0) as ViewGroup
+            val memo = pages.getChildAt(1) as MemoPanel
+            assertEquals(View.VISIBLE, memo.visibility)
+            applyInsets(1080, 2400, Insets.of(0, 72, 0, 48), Insets.NONE, 800)
+            assertTrue(bounds(memo).top >= 72)
+            assertTrue(bounds(memo).bottom <= bounds(tabs).top)
+            applyInsets(1080, 2400, Insets.of(0, 72, 0, 48), Insets.NONE, 0)
+        } finally { controller.pause().stop().destroy() }
+    }
 
     @Test
     fun `failed upload exposes reason and request id and can be manually retried`() {
