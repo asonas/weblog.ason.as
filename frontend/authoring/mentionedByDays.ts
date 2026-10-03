@@ -11,8 +11,14 @@ export function mountMentionedByDays(
 ) {
   const universe = article.querySelector<HTMLElement>("[data-public-universe]");
   if (!universe?.dataset.publicUniverse) return;
-  const route: unknown = JSON.parse(universe.dataset.publicUniverse).route;
+  const { route, wiki } = JSON.parse(universe.dataset.publicUniverse);
   if (typeof route !== "string") return;
+  if (
+    /^\d{4}-\d{2}-\d{2}$/.test(route) &&
+    Array.isArray(wiki) &&
+    wiki.includes("日記")
+  )
+    return;
   const section = document.createElement("section");
   section.className = "mentioned-by-days";
   section.setAttribute("aria-labelledby", "mentioned-by-days-heading");
