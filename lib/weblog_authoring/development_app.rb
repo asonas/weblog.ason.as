@@ -519,7 +519,7 @@ module WeblogAuthoring
 
     get "/api/mobile/devices" do
       require_authenticated! if settings.authentication_required
-      json_response("devices" => mobile_upload.devices)
+      json_response({ "devices" => mobile_upload.devices })
     end
 
     post "/api/mobile/uploads" do

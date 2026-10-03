@@ -29,7 +29,7 @@ module WeblogAuthoring
       return @api.call(event) unless %w[GET HEAD].include?(method) && !path.start_with?("/api/", "/oauth/")
       OperationMetrics.delivery("stored")
       read_event = event.merge("rawPath" => path, "requestContext" => event.fetch("requestContext").merge("http" => event.fetch("requestContext").fetch("http").merge("method" => "GET")))
-      response = if ["/", "/index.html", "/search", "/authoring/articles", "/authoring/webmentions", "/draft-editor"].include?(path)
+      response = if ["/", "/index.html", "/search", "/authoring/articles", "/authoring/webmentions", "/authoring/devices", "/draft-editor"].include?(path)
                    object("index.html", "text/html; charset=utf-8")
                  elsif @published
                    dynamic_article(path, event) || @api.call(read_event)

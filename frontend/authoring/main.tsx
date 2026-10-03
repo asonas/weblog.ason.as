@@ -9,6 +9,7 @@ import { DesignSystemPage } from "./designSystem";
 import { resolveDraftRoute } from "./draftRoute";
 import { HomeCardsSkeleton } from "./HomeCards";
 import { HomeTags } from "./HomeTags";
+import { MobileDevices } from "./MobileDevices";
 import { SearchPage, SiteSearch } from "./search";
 import { WebmentionModerationPage } from "./webmentions";
 import "./homeLoading.css";
@@ -318,6 +319,15 @@ function RootApp({
   }
   if (window.location.pathname === "/authoring/webmentions") {
     return <WebmentionModerationPage canEdit={auth.can_edit} />;
+  }
+  if (window.location.pathname === "/authoring/devices") {
+    if (authenticationPending)
+      return <p role="status">ログイン状態を確認しています…</p>;
+    return auth.can_edit ? (
+      <MobileDevices csrf={draftCsrf} />
+    ) : (
+      <p>端末を管理するにはログインしてください。</p>
+    );
   }
   return <App initialBootstrap={initialBootstrap} auth={auth} />;
 }

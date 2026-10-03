@@ -12,6 +12,18 @@
         android:paddingBottom="12dp"
         android:text="@string/not_connected" />
 
+    <Button
+        android:id="@+id/scanPairingCode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/scan_pairing_code" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingVertical="12dp"
+        android:text="@string/pairing_instructions" />
+
     <EditText
         android:id="@+id/pairingCode"
         android:layout_width="match_parent"

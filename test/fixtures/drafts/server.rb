@@ -22,7 +22,8 @@ Dir.mktmpdir("draft-browser-test") do |root|
   ENV["ARTICLE_PIECES_ENABLED"] ||= "false"
   search_runner = DraftTestSearchRunner.new
   app = WeblogAuthoring::DevelopmentApp.application(
-    root:, oauth_client: nil, inbox_sources: {}, drafts_enabled: true, draft_search_runner: search_runner
+    root:, oauth_client: nil, inbox_sources: {}, drafts_enabled: true, draft_search_runner: search_runner,
+    s3_client: Aws::S3::Client.new(region: "ap-northeast-1", stub_responses: true)
   )
   if ENV["DRAFT_TEST_LEGACY_DIARY"] == "1"
     id = "dc802ad0b89946aeb6b7623c2ba7bc79"

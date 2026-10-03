@@ -9,6 +9,18 @@ require "weblog_authoring/published_article_reader"
 require "weblog_authoring/local_publication_objects"
 
 class DraftSiteTest < Minitest::Test
+  def test_mobile_device_settings_serves_the_application_shell
+    s3 = Aws::S3::Client.new(stub_responses: true)
+    s3.stub_responses(:get_object, body: "<html>management</html>")
+    site = WeblogAuthoring::DraftSite.new(api: nil, reader: nil, s3_client: s3, bucket: "site", published: true)
+    event = { "rawPath" => "/authoring/devices", "requestContext" => { "http" => { "method" => "GET" } } }
+
+    response = site.call(event)
+    assert_equal 200, response.fetch(:statusCode)
+    assert_equal "<html>management</html>", response.fetch(:body)
+    assert_equal "index.html", s3.api_requests.last.fetch(:params).fetch(:key)
+  end
+
   def test_linked_topics_render_their_title_and_backlinks_in_the_public_shell
     Dir.mktmpdir("draft-site") do |directory|
       root = Pathname(directory)

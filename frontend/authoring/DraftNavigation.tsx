@@ -33,6 +33,13 @@ const LINKS = [
     path: "M8.5 15.5L6 18A3.54 3.54 0 0 1 1 13L5 9A3.54 3.54 0 0 1 10 9M15.5 8.5L18 6A3.54 3.54 0 0 1 23 11L19 15A3.54 3.54 0 0 1 14 15M8 12H16",
   },
   {
+    key: "devices",
+    href: "/authoring/devices",
+    label: "端末",
+    name: "端末を管理",
+    path: "M8 3H16A2 2 0 0 1 18 5V19A2 2 0 0 1 16 21H8A2 2 0 0 1 6 19V5A2 2 0 0 1 8 3ZM10 17H14",
+  },
+  {
     key: "home",
     href: "/",
     label: "ホーム",
@@ -42,7 +49,7 @@ const LINKS = [
 ];
 
 export function DraftNavigation({ children }: { children?: ReactNode }) {
-  const links = [LINKS[1], LINKS[0], LINKS[2], LINKS[3], LINKS[4]];
+  const links = [LINKS[1], LINKS[0], LINKS[2], LINKS[3], LINKS[4], LINKS[5]];
   return (
     <nav
       className="draft-navigation draft-navigation--expanded"

@@ -21,6 +21,11 @@
     <string name="not_connected">未接続</string>
     <string name="connected">接続済み</string>
     <string name="pairing_code_hint">12文字のペアリングコード</string>
+    <string name="scan_pairing_code">QRコードを読み取る</string>
+    <string name="pairing_instructions">管理画面の「端末」で「新たにペアリング」を押し、QRコードを読み取ってください。コードの手入力でも接続できます。</string>
+    <string name="pairing_qr_invalid">無効または期限切れのQRコードです。管理画面で発行し直してください。</string>
+    <string name="pairing_scan_failed">カメラを起動できませんでした。通信とGoogle Play開発者サービスを確認して再度お試しいただくか、コードを手入力してください。</string>
+    <string name="pairing_connecting">接続しています…</string>
     <string name="cancel">キャンセル</string>
     <string name="connect">接続</string>
     <string name="pairing_code_error">12文字で入力してください</string>

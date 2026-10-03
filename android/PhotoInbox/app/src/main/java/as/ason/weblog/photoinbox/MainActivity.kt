@@ -28,6 +28,10 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.asonas.weblog.photoinbox.databinding.ActivityMainBinding
 import com.asonas.weblog.photoinbox.databinding.DialogPairingBinding
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -172,13 +176,17 @@ class MainActivity : ComponentActivity() {
             .setPositiveButton(R.string.connect, null)
             .create()
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val code = dialogBinding.pairingCode.text.toString().filter(Char::isLetterOrDigit)
-                if (code.length != 12) {
-                    dialogBinding.pairingCode.error = getString(R.string.pairing_code_error)
-                    return@setOnClickListener
-                }
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
+            var busy = false
+            fun setBusy(value: Boolean) {
+                busy = value
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = !value
+                dialogBinding.scanPairingCode.isEnabled = !value
+                dialogBinding.pairingCode.isEnabled = !value
+            }
+            fun connect(code: String) {
+                if (busy) return
+                setBusy(true)
+                dialogBinding.pairingStatus.setText(R.string.pairing_connecting)
                 lifecycleScope.launch {
                     try {
                         val deviceName = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)
@@ -190,11 +198,56 @@ class MainActivity : ComponentActivity() {
                         dialog.dismiss()
                         scheduleUploads()
                         Toast.makeText(this@MainActivity, R.string.pairing_succeeded, Toast.LENGTH_SHORT).show()
-                    } catch (_: Exception) {
+                    } catch (error: Exception) {
+                        if (error is CancellationException) throw error
                         dialogBinding.pairingStatus.setText(R.string.pairing_failed)
-                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = true
+                    } finally {
+                        setBusy(false)
                     }
                 }
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val code = dialogBinding.pairingCode.text.toString().filter(Char::isLetterOrDigit)
+                if (code.length != 12) {
+                    dialogBinding.pairingCode.error = getString(R.string.pairing_code_error)
+                } else {
+                    connect(code)
+                }
+            }
+            dialogBinding.scanPairingCode.setOnClickListener {
+                if (busy) return@setOnClickListener
+                setBusy(true)
+                val options = GmsBarcodeScannerOptions.Builder()
+                    .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                    .enableAutoZoom()
+                    .build()
+                GmsBarcodeScanning.getClient(this, options).startScan()
+                    .addOnSuccessListener { barcode ->
+                        if (isDestroyed || !dialog.isShowing) return@addOnSuccessListener
+                        setBusy(false)
+                        val code = try {
+                            PairingQr.code(barcode.rawValue.orEmpty())
+                        } catch (_: IllegalArgumentException) {
+                            null
+                        } catch (_: NoSuchElementException) {
+                            null
+                        } catch (_: java.time.format.DateTimeParseException) {
+                            null
+                        }
+                        if (code == null) {
+                            dialogBinding.pairingStatus.setText(R.string.pairing_qr_invalid)
+                        } else {
+                            dialogBinding.pairingCode.setText(code)
+                            connect(code)
+                        }
+                    }
+                    .addOnCanceledListener { if (!isDestroyed) setBusy(false) }
+                    .addOnFailureListener {
+                        if (!isDestroyed && dialog.isShowing) {
+                            setBusy(false)
+                            dialogBinding.pairingStatus.setText(R.string.pairing_scan_failed)
+                        }
+                    }
             }
         }
         dialog.show()

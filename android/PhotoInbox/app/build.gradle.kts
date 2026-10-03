@@ -55,6 +55,11 @@ android {
 }
 
 dependencies {
+    constraints {
+        implementation("androidx.fragment:fragment:1.8.5") {
+            because("Code Scanner pulls Fragment 1.0.0, which is incompatible with Activity Result APIs")
+        }
+    }
     implementation("androidx.activity:activity-ktx:1.10.0")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
@@ -62,6 +67,7 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
