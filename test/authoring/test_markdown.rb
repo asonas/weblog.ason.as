@@ -236,6 +236,16 @@ class TestMarkdown < Minitest::Test
     assert_includes rendered.problems, "image omitted: data:image/png;base64,abc"
   end
 
+  def test_progressive_images_use_alt_as_escaped_caption_and_skip_empty_alt
+    html = WeblogAuthoring::MarkdownRenderer.new.render(
+      "![左手 &lt;device&gt; & 写真](/assets/photo.jpg)\n\n![](/assets/empty.jpg)",
+      mode: "public", progressive: true
+    ).html
+    assert_includes html, 'alt="左手 &lt;device&gt; &amp; 写真"'
+    assert_includes html, '<span class="article-image__caption">左手 &lt;device&gt; &amp; 写真</span>'
+    assert_equal 1, html.scan('class="article-image__caption"').length
+  end
+
   def test_attribute_injection_is_stripped_across_block_inline_table_and_code_paths
     renderer = WeblogAuthoring::MarkdownRenderer.new
 

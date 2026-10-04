@@ -284,7 +284,8 @@ module WeblogAuthoring
             dimensions = [width, height].all? { |value| value.to_s.match?(/\A[1-9]\d{0,4}\z/) }
             size = dimensions ? %( width="#{width}" height="#{height}") : ""
             style = dimensions ? %( style="--image-width: #{width}px") : ""
-            return %(<span class="article-image"#{style}><img#{html_attributes('src' => src, 'alt' => alt)}#{size} loading="#{loading}" decoding="async" /></span>)
+            caption = alt.strip.empty? ? "" : %(<span class="article-image__caption">#{CGI.escapeHTML(CGI.unescapeHTML(alt))}</span>)
+            return %(<span class="article-image"#{style}><img#{html_attributes('src' => src, 'alt' => alt)}#{size} loading="#{loading}" decoding="async" />#{caption}</span>)
           end
           return "<img#{html_attributes('src' => src, 'alt' => alt)} />"
         end

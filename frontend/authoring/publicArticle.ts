@@ -141,6 +141,16 @@ function enhanceArticleImages(root: HTMLElement) {
 
   for (const image of images) {
     const container = image.parentElement;
+    if (
+      container &&
+      image.alt.trim() &&
+      !container.querySelector(".article-image__caption")
+    ) {
+      const caption = document.createElement("span");
+      caption.className = "article-image__caption";
+      caption.textContent = image.alt;
+      container.append(caption);
+    }
     if (!container || container.closest("a")) continue;
     const updateSourceWidth = () => {
       const width = image.naturalWidth || Number(image.getAttribute("width"));

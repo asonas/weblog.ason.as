@@ -4,6 +4,17 @@ import { Plugin, Selection, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
 export const SelectableImage = Image.extend({
+  renderHTML({ HTMLAttributes }) {
+    const alt = HTMLAttributes.alt;
+    return [
+      "span",
+      { class: "article-image" },
+      ["img", HTMLAttributes],
+      ...(typeof alt === "string" && alt.trim()
+        ? [["span", { class: "article-image__caption" }, alt]]
+        : []),
+    ];
+  },
   addNodeView() {
     return ({ node, editor, decorations }) => {
       const dom = document.createElement("div");

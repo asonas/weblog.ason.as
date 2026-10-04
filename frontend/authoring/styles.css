@@ -3160,7 +3160,7 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
   position: relative;
 }
 
-.selectable-image--selected > img {
+.selectable-image--selected > .article-image {
   /* Keep the image's space so dragging does not move the text below it. */
   visibility: hidden;
 }

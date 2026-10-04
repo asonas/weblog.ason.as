@@ -90,6 +90,12 @@ test("article photos use source width and Escape collapses inline expansion", as
       ".article-image__zoom",
     );
     assert.equal(buttons.length, 3);
+    assert.equal(article.querySelectorAll(".article-image__caption").length, 4);
+    assert.equal(
+      article.querySelector(".article-image__caption")?.textContent,
+      "夕焼け",
+    );
+    assert.equal(buttons[0]?.querySelector("img")?.alt, "夕焼け");
     assert.equal(document.querySelector("dialog"), null);
     assert.equal(
       article.querySelector("a > .article-image > img")?.getAttribute("src"),
