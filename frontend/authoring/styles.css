@@ -3160,6 +3160,17 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
   position: relative;
 }
 
+.article-image__caption {
+  display: block;
+  margin-block-start: var(--space-2);
+  font-size: var(--text-ui, 0.875rem);
+  font-kerning: normal;
+  font-feature-settings: "palt";
+  line-height: 1.6;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .selectable-image--selected > .article-image {
   /* Keep the image's space so dragging does not move the text below it. */
   visibility: hidden;
