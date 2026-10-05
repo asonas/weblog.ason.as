@@ -17,6 +17,7 @@ class PhotoSelectionStore(context: Context) {
     }
 
     fun toggle(uri: String) {
+        reloadPersistedState()
         if (uri in uploaded) return
         if (!selected.remove(uri)) {
             selected += uri
@@ -28,6 +29,7 @@ class PhotoSelectionStore(context: Context) {
     }
 
     fun markUploaded(uri: String) {
+        reloadPersistedState()
         uploaded += uri
         selected -= uri
         excluded -= uri
@@ -37,6 +39,7 @@ class PhotoSelectionStore(context: Context) {
     fun selectedUris(): Set<String> = selected.toSet()
 
     fun exclude(uri: String) {
+        reloadPersistedState()
         if (uri in uploaded) return
         selected -= uri
         excluded += uri
