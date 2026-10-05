@@ -2115,8 +2115,13 @@ html[data-universe="on"] .linked-pages {
     font-size: 20px;
   }
 
-  .article-workspace--reading .ProseMirror :is(p, ul, ol, blockquote) {
+  .article-workspace--reading .ProseMirror :is(p, ul, ol, blockquote),
+  .article-workspace--reading .ProseMirror .selectable-image {
     margin-block: 0 30px;
+  }
+
+  .article-workspace--reading .ProseMirror li > :is(p, ul, ol) {
+    margin-block: 0;
   }
 
   a {
@@ -3158,6 +3163,21 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
 
 .selectable-image {
   position: relative;
+}
+
+.article-image {
+  position: relative;
+  display: block;
+  width: 100%;
+  overflow: hidden;
+}
+
+.article-image > img,
+.article-image__zoom img {
+  display: block;
+  max-width: 100%;
+  width: var(--image-width, auto);
+  height: auto;
 }
 
 .article-image__caption {

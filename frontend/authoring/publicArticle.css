@@ -15,19 +15,6 @@
   height: auto;
   background: var(--ink);
 }
-.article-image {
-  position: relative;
-  display: block;
-  width: 100%;
-  overflow: hidden;
-}
-.article-image > img,
-.article-image__zoom img {
-  display: block;
-  max-width: 100%;
-  width: var(--image-width, auto);
-  height: auto;
-}
 .article-image__zoom {
   display: block;
   width: max-content;
