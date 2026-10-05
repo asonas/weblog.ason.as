@@ -1,6 +1,6 @@
+import { spawnSync } from "node:child_process";
 import { accessSync, constants, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 let failed = false;
@@ -9,25 +9,51 @@ function run(command, args) {
 }
 
 console.log(`Worktree: ${root}`);
-console.log(`Branch: ${run("git", ["branch", "--show-current"]).stdout?.trim() || "detached"}`);
+console.log(
+  `Branch: ${run("git", ["branch", "--show-current"]).stdout?.trim() || "detached"}`,
+);
 console.log(`Node: ${process.version} (${process.execPath})`);
 const ruby = run("mise", ["exec", "--", "ruby", "--version"]);
-console.log(`Ruby: ${ruby.status === 0 ? ruby.stdout.trim() : "見つかりません。mise exec経由で実行してください"}`);
+console.log(
+  `Ruby: ${ruby.status === 0 ? ruby.stdout.trim() : "見つかりません。mise exec経由で実行してください"}`,
+);
 if (ruby.status !== 0) failed = true;
 
-for (const entry of ["node_modules/vite/bin/vite.js", "node_modules/tsx/dist/cli.mjs"]) {
+for (const entry of [
+  "node_modules/vite/bin/vite.js",
+  "node_modules/tsx/dist/cli.mjs",
+]) {
   const path = `${root}${entry}`;
   try {
     accessSync(path, constants.R_OK);
     console.log(`OK: ${entry} -> ${realpathSync(path)}`);
   } catch {
     failed = true;
-    console.log(`不足: ${entry}。preview-in-worktreeの依存関係準備手順を実行してください。`);
+    console.log(
+      `不足: ${entry}。preview-in-worktreeの依存関係準備手順を実行してください。`,
+    );
   }
+}
+const dependencies = run("npm", ["ls", "--depth=0", "--json"]);
+if (dependencies.status !== 0) {
+  failed = true;
+  let problems;
+  try {
+    problems = JSON.parse(dependencies.stdout).problems;
+  } catch {
+    /* npm can fail before producing JSON. */
+  }
+  console.log(
+    `Node dependencies: 不足または不整合。mise run setup を実行してください。\n${problems?.join("\n") || dependencies.stderr.trim()}`,
+  );
+} else {
+  console.log("Node dependencies: OK");
 }
 const bundle = run("mise", ["exec", "--", "ruby", "-S", "bundle", "check"]);
 if (bundle.status !== 0) failed = true;
-console.log(`Ruby dependencies: ${bundle.status === 0 ? "OK" : "不足。mise exec -- bundle install を実行してください"}`);
+console.log(
+  `Ruby dependencies: ${bundle.status === 0 ? "OK" : "不足。mise exec -- bundle install を実行してください"}`,
+);
 
 const listeners = run("lsof", ["-nP", "-iTCP:8000", "-sTCP:LISTEN", "-t"]);
 if (listeners.error) {
@@ -37,8 +63,13 @@ if (listeners.error) {
 } else {
   for (const pid of new Set(listeners.stdout.trim().split(/\s+/))) {
     const cwd = run("lsof", ["-a", "-p", pid, "-d", "cwd", "-Fn"]);
-    const directory = cwd.stdout?.split("\n").find(line => line.startsWith("n"))?.slice(1);
-    console.log(`API: PID ${pid}, cwd ${directory || "未確認"}。mainのworktreeか確認してください。`);
+    const directory = cwd.stdout
+      ?.split("\n")
+      .find((line) => line.startsWith("n"))
+      ?.slice(1);
+    console.log(
+      `API: PID ${pid}, cwd ${directory || "未確認"}。mainのworktreeか確認してください。`,
+    );
   }
 }
 process.exitCode = failed ? 1 : 0;

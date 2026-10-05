@@ -32,6 +32,11 @@ jobs:
       - name: Run portable checks and build site
         run: mise run check:portable
 
+      - name: Check editor preview in Chrome
+        run: |
+          mise exec -- npx --yes playwright-core install chrome
+          mise exec -- node test/browser/draft_cover.mjs
+
       - name: Record artifact commit
         run: |
           jq --null-input --arg commit_sha "$GITHUB_SHA" \

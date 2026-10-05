@@ -66,6 +66,10 @@ try {
   const body = page.getByRole("textbox", { name: "本文", exact: true });
   const source = "![花](/assets/cover-flower.webp)\n\n![海](/assets/cover-sea.webp)";
   await body.fill(source);
+  const caption = page.locator(".draft-preview__document .article-image__caption").first();
+  await until(async () => await caption.count() === 1 && await caption.textContent() === "花", "Image caption was not rendered in editor preview");
+  assert.equal(await caption.evaluate(element => getComputedStyle(element).textAlign), "center");
+  assert.equal(await caption.evaluate(element => getComputedStyle(element).display), "block");
   await page.getByRole("button", { name: "記事の設定", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "記事の設定", exact: true });
   assert.ok(await dialog.getByRole("button", { name: "未公開の下書きを削除", exact: true }).isVisible());
@@ -108,7 +112,7 @@ try {
   await until(async () => await restoredCover.count() === 0, "None mode still displays a cover");
   await restoredDialog.getByRole("radio", { name: "自動 本文の最初の画像" }).check();
   await until(async () => await restoredCover.getAttribute("src") === "/assets/cover-flower.webp", "Auto mode did not use the first image");
-  console.log("PASS: visible body thumbnails, selection, public preview, 390/320px layout, server persistence in a fresh browser context, none/auto");
+  console.log("PASS: centered image captions in editor preview, visible body thumbnails, selection, public preview, 390/320px layout, server persistence in a fresh browser context, none/auto");
 } finally {
   await browser?.close();
   for (const child of children) child.kill("SIGTERM");

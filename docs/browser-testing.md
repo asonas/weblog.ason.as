@@ -10,7 +10,7 @@ worktreeのルートで `mise run dev:doctor` を実行し、Node・Rubyと依�
 | 本文入力・保存・再開 | `test/browser/draft_editor.mjs` |
 | 記事一覧・状態表示 | `test/browser/draft_administration.mjs` |
 | 端末一覧・QRペアリング | `test/browser/mobile_pairing.mjs` |
-| カバー選択 | `test/browser/draft_cover.mjs`、`draft_cover_pieces.mjs`、`draft_cover_recovery.mjs` |
+| カバー選択・プレビューの画像キャプション | `test/browser/draft_cover.mjs`、`draft_cover_pieces.mjs`、`draft_cover_recovery.mjs` |
 | 通信断・再接続 | `test/browser/draft_offline.mjs` |
 
 ```sh

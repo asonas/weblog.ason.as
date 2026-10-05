@@ -7,7 +7,11 @@
       "lambda/draft_worker/**/*.ts",
       "scripts/scrapbox-to-weblog.ts",
       "scripts/scrapbox-to-weblog.test.ts",
-      "scripts/repair-scrapbox-draft.ts"
+      "scripts/repair-scrapbox-draft.ts",
+      "scripts/integrate-worktree.mjs",
+      "scripts/integrate-worktree.test.mjs",
+      "scripts/dev-doctor.mjs",
+      "scripts/dev-doctor.test.mjs"
     ]
   },
   "formatter": {

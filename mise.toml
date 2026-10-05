@@ -241,6 +241,8 @@ run = [
   "mise run frontend:lint",
   "mise run frontend:typecheck",
   "mise run frontend:test",
+  "node --test scripts/integrate-worktree.test.mjs scripts/dev-doctor.test.mjs",
+  "npx --yes biome check scripts/integrate-worktree.mjs scripts/integrate-worktree.test.mjs scripts/dev-doctor.mjs scripts/dev-doctor.test.mjs",
   "mise run bluesky-oauth:lint",
   "mise run bluesky-oauth:typecheck",
   "mise run bluesky-oauth:test",

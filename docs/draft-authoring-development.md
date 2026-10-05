@@ -31,6 +31,16 @@ mise exec -- ruby scripts/prepare-development-draft-reader.rb --apply
 この処理は既存の公開記事の移行結果を検証し、両DBを退避して再インポートによる上書きを防ぎます。
 本文の再インポートや、日記のかけら変換は行いません。移行済みの環境で日常的に実行する手順ではありません。
 
+## worktreeのmainへの取り込み
+
+署名済みのコミットとcleanな両worktreeを準備し、mainのworktreeで実行します。`--`以降はrebase後に作業worktreeで実行する検証コマンドです。
+
+```sh
+mise exec -- node scripts/integrate-worktree.mjs <branch> -- mise run frontend:typecheck
+```
+
+専用AIキーでrebaseし、検証の成功・mainが動いていないこと・全対象コミットの署名キーを確認してからfast-forwardします。成功後だけworktreeとブランチを削除します。失敗時は作業worktreeを残します。pushは別操作です。
+
 ## 本番・実装履歴
 
 本番の公開・下書き機構とPieceへの切替は2026-10-01に実施されています。
