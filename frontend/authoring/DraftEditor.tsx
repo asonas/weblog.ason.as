@@ -278,7 +278,7 @@ export function DraftEditor({
   const [proofreadingMessages, setProofreadingMessages] = useState<
     ProofreadingMessage[]
   >([]);
-  const [proofreadingStatus, setProofreadingStatus] = useState(
+  const [proofreadingStatus, setProofreadingStatus] = useState<string | null>(
     "本文を読み込んでいます",
   );
   const [, refresh] = useState(0);
@@ -399,7 +399,7 @@ export function DraftEditor({
         setProofreadingStatus("オフラインのため文章の確認を停止しています");
         return;
       }
-      setProofreadingStatus("入力が落ち着いたら確認します");
+      setProofreadingStatus(null);
       timer = setTimeout(async () => {
         if (composing.current) return;
         setProofreadingStatus("確認中");
@@ -962,7 +962,7 @@ export function DraftEditor({
               {proofreadingStatus}
             </p>
           )}
-          {!proofreadingStatus && proofreadingMessages.length === 0 && (
+          {proofreadingStatus === "" && proofreadingMessages.length === 0 && (
             <p>指摘はありません</p>
           )}
           {proofreadingMessages.length > 0 && (

@@ -66,6 +66,32 @@ class WritingSuggestionsTest < Minitest::Test
     assert(requests.flat_map { |request| request.fetch("questions").keys }.none? { |key| key.start_with?("link_") })
   end
 
+  def test_single_character_article_name_is_suggested_only_in_prose
+    @database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "猫", body: "猫と暮らしている。"))
+    _requests, service = with_api do |payload|
+      payload.fetch("questions").to_h do |key, _question|
+        [key, choice(key.start_with?("link_") ? "page_0" : "different")]
+      end
+    end
+    result = service.call(text: "猫が好き。`猫` [猫](/猫)", article_id: "draft")
+    assert_equal ["[[猫]]"], (result.fetch("links").map { |link| link.fetch("replacement") })
+    assert_equal [[0, 1]], (result.fetch("links").map { |link| link.fetch("range") })
+  end
+
+  def test_existing_wiki_link_suppresses_the_same_target_only_in_the_current_piece
+    requests, service = with_api do |payload|
+      payload.fetch("questions").to_h do |key, _question|
+        [key, choice(key.start_with?("link_") ? "page_0" : "different")]
+      end
+    end
+    result = service.call(text: "[[Cloudflare]]を使った。クラウドフレアは便利。Cloudflare。", article_id: "draft", piece_id: "first")
+    assert_empty result.fetch("links")
+    assert(requests.flat_map { |request| request.fetch("questions").keys }.none? { |key| key.start_with?("link_") })
+
+    other = service.call(text: "Cloudflareを使った。", article_id: "draft", piece_id: "second")
+    assert_equal ["[[Cloudflare]]"], (other.fetch("links").map { |link| link.fetch("replacement") })
+  end
+
   def test_uncertain_or_unknown_answers_do_not_create_links_or_related_results
     _requests, service = with_api do |payload|
       payload.fetch("questions").to_h { |key, _| [key, choice(key.start_with?("link_") ? "invented-page" : "repeated", 0.4)] }

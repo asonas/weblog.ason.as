@@ -72,7 +72,7 @@ export function DraftSuggestions({
         setStatus("オフラインのため候補の確認を停止しています");
         return;
       }
-      setStatus("入力が落ち着いたら候補を探します");
+      setStatus("");
       if (composing) return;
       timer = setTimeout(async () => {
         const controller = new AbortController();
@@ -184,7 +184,7 @@ export function DraftSuggestions({
       className="draft-proofreading draft-suggestions"
       aria-label="執筆の候補"
     >
-      <p role="status">{status}</p>
+      {status && <p role="status">{status}</p>}
       {error && <p role="alert">{error}</p>}
       <h2>リンク候補</h2>
       <p>クリックすると表示されたwikiリンクに置き換えます。</p>

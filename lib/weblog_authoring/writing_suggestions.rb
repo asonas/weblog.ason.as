@@ -3,6 +3,7 @@
 require "set"
 require "uri"
 require_relative "jev"
+require_relative "links"
 
 module WeblogAuthoring
   class WritingSuggestions
@@ -30,7 +31,8 @@ module WeblogAuthoring
 
       pages = @reader.list_pages.select { |page| page.status == "published" && !page.empty? }
       prose = plain_text(text)
-      links = link_candidates(prose, pages.reject { |page| page.id == article_id }, original: text)
+      linked_routes = WeblogAuthoring.extract_wiki_links(text).map(&:name).to_set
+      links = link_candidates(prose, pages.reject { |page| page.id == article_id || linked_routes.include?(page.route) }, original: text)
       passages = passage_candidates(passage_text(text), pages, article_id:, piece_id:)
       questions = {}
       links.each_with_index do |link, index|
@@ -118,7 +120,7 @@ module WeblogAuthoring
     end
 
     def link_candidates(text, pages, original:)
-      pages = pages.select { |page| page.page_type == "named" && page.route.length.between?(2, 100) && !page.route.match?(/[\[\]\r\n]/) }
+      pages = pages.select { |page| page.page_type == "named" && page.route.length.between?(1, 100) && !page.route.match?(/[\[\]\r\n]/) }
       spans = []
       text.to_enum(:scan, /[\p{Katakana}ー]{2,40}|[\p{Han}]{2,30}|[A-Za-zＡ-Ｚａ-ｚ][A-Za-zＡ-Ｚａ-ｚ0-9０-９_.+\/-]{1,39}/).each do
         match = Regexp.last_match
