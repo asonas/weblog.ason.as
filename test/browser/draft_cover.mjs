@@ -11,6 +11,7 @@ function start(args, env = {}) {
   const child = spawn("mise", ["exec", "--", ...args], {
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
   });
   let output = "";
   child.stdout.on("data", (data) => { output += data; });
@@ -115,5 +116,11 @@ try {
   console.log("PASS: centered image captions in editor preview, visible body thumbnails, selection, public preview, 390/320px layout, server persistence in a fresh browser context, none/auto");
 } finally {
   await browser?.close();
-  for (const child of children) child.kill("SIGTERM");
+  for (const child of children) {
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch (error) {
+      if (error.code !== "ESRCH") throw error;
+    }
+  }
 }
