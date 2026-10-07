@@ -220,8 +220,12 @@ module WeblogAuthoring
         standalone_url = standalone_url(el)
         embed_url = explicit_embed_url(standalone_url)
         video = /\A:::video (\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4)(?: (\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4))?(?: ([1-9]\d{0,4})x([1-9]\d{0,4}))? :::\z/.match(standalone_url.to_s)
-        if video
-          avc, av1, width, height = video.captures
+        avc, av1, width, height = video&.captures
+        if !avc && el.children.one? && el.children.first.type == :a
+          href = el.children.first.attr["href"].to_s
+          avc = href if %r{\A/assets/uploads/\d{4}/\d{2}/[a-f0-9-]+\.mp4\z}.match?(href)
+        end
+        if avc
           dimensions = width ? %( width="#{width}" height="#{height}") : ""
           sources = av1 ? %(<source src="#{av1}#t=0.001" type='video/mp4; codecs="av01.0.08M.08"' />) : ""
           player = %(<video controls playsinline preload="metadata"#{dimensions} style="aspect-ratio: #{width || 16} / #{height || 9}" data-avc="#{avc}"#{av1 ? %( data-av1="#{av1}") : ""}>#{sources}<source src="#{avc}#t=0.001" type="video/mp4" /></video>)

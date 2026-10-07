@@ -61,7 +61,16 @@ export function markdownForEditor(source: string): string {
     .map((line) => {
       const fenceMatch = FENCE_PATTERN.exec(line);
       const insideFence = fence !== null || fenceMatch !== null;
-      const converted = insideFence ? line : replaceWikiLinks(line);
+      const uploadedVideo = insideFence
+        ? null
+        : /^ {0,3}\[(?:\\.|[^\]\\\n])*\]\((\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4)\)[ \t]*(\r?\n)?$/.exec(
+            line,
+          );
+      const converted = uploadedVideo
+        ? `:::video ${uploadedVideo[1]} :::${uploadedVideo[2] || ""}`
+        : insideFence
+          ? line
+          : replaceWikiLinks(line);
 
       if (fenceMatch !== null) {
         const marker = fenceMatch[1];

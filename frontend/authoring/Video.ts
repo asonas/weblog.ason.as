@@ -26,7 +26,7 @@ function parseVideo(source: string) {
   };
 }
 
-function videoMarkdown(attrs: Record<string, unknown>) {
+export function videoMarkdown(attrs: Record<string, unknown>) {
   return `:::video ${attrs.avc}${attrs.av1 ? ` ${attrs.av1}` : ""}${attrs.width && attrs.height ? ` ${attrs.width}x${attrs.height}` : ""} :::`;
 }
 

@@ -139,7 +139,7 @@ try {
   });
 
   await until(async () => {
-    const error = await page.locator('[role="alert"]').textContent();
+    const error = (await page.locator('[role="alert"]').allTextContents()).filter(Boolean).join("\n");
     if (error) throw new Error(error);
     return !!registered;
   });
@@ -151,8 +151,10 @@ try {
   assert.equal(registered.height, 64);
   assert.equal(
     await body.inputValue(),
-    `動画の前\n\n[clip\\[1\\].webm](${paths[0]})\n\n動画の後`,
+    `動画の前\n\n:::video ${registered.avc}${registered.av1 ? ` ${registered.av1}` : ""} 64x64 :::\n\n動画の後`,
   );
+  await until(async () => await page.locator('.draft-preview video[data-avc]').count() === 1);
+  assert.equal(await page.locator('.draft-preview video[data-avc]').getAttribute('data-avc'), registered.avc);
   const successful = await body.inputValue();
   shouldFail = true;
   await body.evaluate(async (field) => {
@@ -171,7 +173,7 @@ try {
     );
   });
 
-  await until(async () => (await page.locator('[role="alert"]').textContent()).includes("動画をS3へ送信できませんでした"));
+  await until(async () => ((await page.locator('[role="alert"]').allTextContents()).filter(Boolean).join("\n")).includes("動画をS3へ送信できませんでした"));
   assert.equal(await body.inputValue(), successful);
   assert.equal(await body.isEnabled(), true);
   const requestsBeforeCancel = uploads;
@@ -187,7 +189,7 @@ try {
   await page.getByRole("region", { name: "動画", exact: true }).getByRole("button", { name: "動画を本文へ追加", exact: true }).click();
   await until(async () => (await body.inputValue()).length > successful.length);
   assert.equal(uploads, requestsBeforeCancel, "Material reuse must not upload again");
-  assert.equal((await body.inputValue()).includes(":::video"), false);
+  assert.equal((await body.inputValue()).split(":::video").length, 3);
   assert.equal((await body.inputValue()).split(paths[0]).length, 3);
   console.log(
     "PASS: real conversion and Markdown insertion, failed paste, cancellation and material reuse",

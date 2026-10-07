@@ -43,3 +43,36 @@ test("keeps preview extensions and resolves internal cover images", async () => 
     dom.window.close();
   }
 });
+
+test("renders saved standalone uploaded video links as players", async () => {
+  const dom = new JSDOM("<!doctype html>");
+  Object.assign(globalThis, {
+    document: dom.window.document,
+    window: dom.window,
+  });
+  const { ARTICLE_PREVIEW_EXTENSIONS } = await import("./articlePreviewEditor");
+  const { markdownForEditor } = await import("./markdown");
+  const path = "/assets/uploads/2026/10/abc-123.mp4";
+  const link = `[clip.MOV](${path})`;
+  const editor = new Editor({
+    extensions: ARTICLE_PREVIEW_EXTENSIONS,
+    content: markdownForEditor(link),
+    contentType: "markdown",
+  });
+  try {
+    assert.match(editor.getHTML(), /<video/);
+    assert.ok(editor.getHTML().includes(`data-avc="${path}"`));
+    assert.equal(markdownForEditor(`Download ${link}`), `Download ${link}`);
+    assert.equal(
+      markdownForEditor(`\`\`\`\n${link}\n\`\`\``),
+      `\`\`\`\n${link}\n\`\`\``,
+    );
+    assert.equal(
+      markdownForEditor("[clip](https://example.com/clip.mp4)"),
+      "[clip](https://example.com/clip.mp4)",
+    );
+  } finally {
+    editor.destroy();
+    dom.window.close();
+  }
+});

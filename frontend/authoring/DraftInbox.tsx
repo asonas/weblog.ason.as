@@ -2,7 +2,7 @@ import { type RefObject, useCallback, useEffect, useState } from "react";
 import { insertMarkdownBlock } from "./draftMarkdown";
 import type { DraftSession } from "./draftSession";
 import { MemoInbox } from "./MemoInbox";
-import { videoAssetPath } from "./Video";
+import { videoAssetPath, videoMarkdown } from "./Video";
 
 type InboxSource = "photo" | "video" | "bluesky" | "raindrop";
 
@@ -57,10 +57,12 @@ function itemMarkdown(item: InboxItem): string | null {
   if (item.source === "video") {
     const avc = videoAssetPath(item.payload.avc);
     if (!avc) return null;
-    const name = (payloadString(item, "name") || "動画")
-      .replace(/[\\[\]]/g, "\\$&")
-      .replace(/[\r\n]/g, " ");
-    return `[${name}](${avc})`;
+    return videoMarkdown({
+      avc,
+      av1: videoAssetPath(item.payload.av1),
+      width: item.payload.width,
+      height: item.payload.height,
+    });
   }
   if (item.source === "raindrop" && item.kind === "bookmark")
     return httpUrl(item.payload.url);

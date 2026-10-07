@@ -6,6 +6,20 @@ require_relative "../../lib/weblog_authoring/markdown"
 class TestMarkdown < Minitest::Test
   FIXED_TIME = Time.iso8601("2026-01-01T00:00:00+09:00")
 
+  def test_uploaded_video_links_render_as_players_without_changing_inline_links_or_code
+    path = "/assets/uploads/2026/10/abc-123.mp4"
+    source = "[clip.MOV](#{path})"
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+    %w[local public].each do |mode|
+      html = renderer.render(source, mode:).html
+      assert_includes html, '<video controls playsinline preload="metadata"'
+      assert_includes html, %(src="#{path}#t=0.001")
+      refute_includes renderer.render("Download #{source}", mode:).html, "<video"
+      refute_includes renderer.render("```\n#{source}\n```", mode:).html, "<video"
+      refute_includes renderer.render("[clip](https://example.com/clip.mp4)", mode:).html, "<video"
+    end
+  end
+
   def test_public_render_links_bare_urls
     url = "https://jnbk.app/topics/%E6%97%A5%E8%A8%98%E3%81%AEInbox%E6%A9%9F%E8%83%BD"
     renderer = WeblogAuthoring::MarkdownRenderer.new
