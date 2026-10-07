@@ -42,7 +42,11 @@ class WritingSuggestionsTest < Minitest::Test
     text = "𠮷野ではＣｌｏｕｄｆｌａｒｅのキャッシュを使い、記事の表示が速くなった。"
     requests, service = with_api do |payload|
       payload.fetch("questions").to_h do |key, _question|
-        [key, key.start_with?("link_") ? choice("page_0") : choice("repeated")]
+        value = if key.start_with?("link_") then "page_0"
+                elsif key.start_with?("evidence_") then "writing_0"
+                else "repeated"
+                end
+        [key, choice(value)]
       end
     end
     result = service.call(text:, article_id: "draft")
@@ -52,7 +56,20 @@ class WritingSuggestionsTest < Minitest::Test
     assert_equal @page.id, result.fetch("related").first.fetch("article_id")
     assert_equal "repeated", result.fetch("related").first.fetch("relation")
     assert_includes result.fetch("related").first.fetch("excerpt"), "記事の表示が速くなった"
+    assert_equal text, result.fetch("related").first.fetch("writing_excerpt")
     assert_equal "jev-1.13.0", requests.first.fetch("model")
+  end
+
+  def test_related_content_requires_a_valid_excerpt_from_the_current_writing
+    %w[none invented_excerpt].each do |evidence|
+      _requests, service = with_api do |payload|
+        payload.fetch("questions").to_h do |key, _question|
+          [key, choice(key.start_with?("evidence_") ? evidence : "related")]
+        end
+      end
+      result = service.call(text: "Cloudflareの記事を書いてみよう。", article_id: "draft")
+      assert_empty result.fetch("related")
+    end
   end
 
   def test_code_links_and_urls_are_not_replaced_and_current_article_is_excluded
@@ -96,7 +113,7 @@ class WritingSuggestionsTest < Minitest::Test
     _requests, service = with_api do |payload|
       payload.fetch("questions").to_h { |key, _| [key, choice(key.start_with?("link_") ? "invented-page" : "repeated", 0.4)] }
     end
-    result = service.call(text: "Cloudflareのキャッシュで記事の表示が速くなった", article_id: "draft")
+    result = service.call(text: "Ｃｌｏｕｄｆｌａｒｅのキャッシュで記事の表示が速くなった", article_id: "draft")
     assert_empty result.fetch("links")
     assert_empty result.fetch("related")
   end
@@ -112,8 +129,19 @@ class WritingSuggestionsTest < Minitest::Test
     http = Object.new
     http.define_singleton_method(:start) { |*_args, **_options| raise IOError, "test-key secret response" }
     service = WeblogAuthoring::WritingSuggestions.new(reader: @database, client: WeblogAuthoring::Jev.new(api_key: "test-key", http:))
-    error = assert_raises(WeblogAuthoring::Jev::Unavailable) { service.call(text: "Cloudflare", article_id: "draft") }
+    error = assert_raises(WeblogAuthoring::Jev::Unavailable) { service.call(text: "Ｃｌｏｕｄｆｌａｒｅ", article_id: "draft") }
     refute_includes error.message, "test-key"
     refute_includes error.message, "secret response"
+  end
+
+  def test_exact_sentence_title_keeps_punctuation_without_requiring_model_approval
+    @database.save(WeblogAuthoring::SaveRequest.new(page_type: "named", name: "日本語を含むURLをいれてみます。", body: "![](/assets/test.png)"))
+    _requests, service = with_api { |_| {} }
+    text = "日本語を含むURLをいれてみます。\n\nこれもリンクになってほしい"
+    result = service.call(text:, article_id: "draft")
+    link = result.fetch("links").first
+    assert_equal "日本語を含むURLをいれてみます。", link.fetch("text")
+    assert_equal "[[日本語を含むURLをいれてみます。]]", link.fetch("replacement")
+    assert_equal [0, "日本語を含むURLをいれてみます。".length], link.fetch("range")
   end
 end

@@ -303,7 +303,10 @@ class ArticlePiecesTest < Minitest::Test
     http.define_singleton_method(:start) { |*_args, **_options, &block| block.call(http) }
     http.define_singleton_method(:request) do |request|
       questions = JSON.parse(request.body).fetch("questions")
-      answers = questions.to_h { |id, _question| [id, { "type" => "choice", "choice" => "related", "probabilities" => { "related" => 0.95 } }] }
+      answers = questions.to_h do |id, _question|
+        choice = id.start_with?("evidence_") ? "writing_0" : "related"
+        [id, { "type" => "choice", "choice" => choice, "probabilities" => { choice => 0.95 } }]
+      end
       response = Net::HTTPOK.new("1.1", "200", "OK")
       response.instance_variable_set(:@read, true)
       response.body = JSON.generate("answers" => answers)

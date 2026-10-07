@@ -17,6 +17,7 @@ type RelatedPassage = {
   url: string;
   date: string | null;
   excerpt: string;
+  writing_excerpt: string;
   relation: "repeated" | "related";
 };
 
@@ -24,6 +25,12 @@ type Suggestions = {
   enabled: boolean;
   links: LinkSuggestion[];
   related: RelatedPassage[];
+};
+
+type PieceResult = {
+  suggestions: Suggestions;
+  text: string;
+  pieceId: string;
 };
 
 export function DraftSuggestions({
@@ -37,35 +44,47 @@ export function DraftSuggestions({
   textarea: RefObject<HTMLTextAreaElement | null>;
   csrf: () => Promise<string>;
 }) {
-  const [result, setResult] = useState<{
-    suggestions: Suggestions;
-    text: string;
-    pieceId?: string;
-  }>();
+  const [results, setResults] = useState<PieceResult[]>([]);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const pieceId = session.activePieceId;
+  const pieces = session.contentPieces || [
+    { id: "body", body: session.body.toString() },
+  ];
+  const activePieceId = session.activePieceId || "body";
+  const result = results.find(
+    (item) =>
+      item.pieceId === activePieceId && item.text === session.body.toString(),
+  );
 
   useEffect(() => {
-    const body = session.body;
-    const field = textarea.current;
+    const cache = new Map<string, PieceResult>();
     let timer: ReturnType<typeof setTimeout>;
     let request: AbortController | undefined;
     let revision = 0;
     let composing = false;
-    const schedule = () => {
+    let previousSnapshot = "";
+    const schedule = (force = false) => {
+      const currentPieces = session.contentPieces || [
+        { id: "body", body: session.body.toString() },
+      ];
+      const snapshot = JSON.stringify(currentPieces);
+      if (!force && snapshot === previousSnapshot) return;
+      previousSnapshot = snapshot;
       const currentRevision = ++revision;
       clearTimeout(timer);
       request?.abort();
-      setResult(undefined);
-      setError("");
-      const text = body.toString();
-      if (!text.trim()) {
-        setStatus("本文を入力すると候補を探します");
-        return;
+      for (const [id, item] of cache) {
+        if (
+          !currentPieces.some(
+            (piece) => piece.id === id && piece.body === item.text,
+          )
+        )
+          cache.delete(id);
       }
-      if (Array.from(text).length > 8000) {
-        setStatus("8,000文字以下のかけらで候補を探せます");
+      setResults([...cache.values()]);
+      setError("");
+      if (!currentPieces.some((piece) => piece.body.trim())) {
+        setStatus("本文を入力すると候補を探します");
         return;
       }
       if (!navigator.onLine) {
@@ -74,6 +93,20 @@ export function DraftSuggestions({
       }
       setStatus("");
       if (composing) return;
+      const tooLong = currentPieces.some(
+        (piece) => Array.from(piece.body).length > 8000,
+      );
+      const pending = currentPieces.filter(
+        (piece) =>
+          piece.body.trim() &&
+          Array.from(piece.body).length <= 8000 &&
+          !cache.has(piece.id),
+      );
+      if (!pending.length) {
+        if (tooLong)
+          setStatus("8,000文字を超えるかけらは候補の確認を省略します");
+        return;
+      }
       timer = setTimeout(async () => {
         const controller = new AbortController();
         request = controller;
@@ -81,30 +114,44 @@ export function DraftSuggestions({
         try {
           const token = await csrf();
           controller.signal.throwIfAborted();
-          const response = await fetch("/api/authoring/suggestions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": token,
-            },
-            body: JSON.stringify({
-              text,
-              article_id: articleId,
-              piece_id: pieceId,
-            }),
-            signal: AbortSignal.any([
-              controller.signal,
-              AbortSignal.timeout(30000),
-            ]),
-          });
-          if (!response.ok)
-            throw new Error(
-              "候補を確認できませんでした。次の入力時に再試行します",
-            );
-          const suggestions = (await response.json()) as Suggestions;
-          if (revision !== currentRevision || composing) return;
-          setResult({ suggestions, text, pieceId });
-          setStatus(suggestions.enabled ? "" : "候補の確認は利用できません");
+          for (const piece of pending) {
+            controller.signal.throwIfAborted();
+            const response = await fetch("/api/authoring/suggestions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": token,
+              },
+              body: JSON.stringify({
+                text: piece.body,
+                article_id: articleId,
+                piece_id: session.pieces ? piece.id : undefined,
+              }),
+              signal: AbortSignal.any([
+                controller.signal,
+                AbortSignal.timeout(30000),
+              ]),
+            });
+            if (!response.ok)
+              throw new Error(
+                "候補を確認できませんでした。次の入力時に再試行します",
+              );
+            const suggestions = (await response.json()) as Suggestions;
+            if (revision !== currentRevision || composing) return;
+            cache.set(piece.id, {
+              suggestions,
+              text: piece.body,
+              pieceId: piece.id,
+            });
+            setResults([...cache.values()]);
+            if (!suggestions.enabled) {
+              setStatus("候補の確認は利用できません");
+              return;
+            }
+          }
+          setStatus(
+            tooLong ? "8,000文字を超えるかけらは候補の確認を省略します" : "",
+          );
         } catch {
           if (controller.signal.aborted || revision !== currentRevision) return;
           setStatus("");
@@ -112,49 +159,67 @@ export function DraftSuggestions({
         }
       }, 7000);
     };
-    const compositionStart = () => {
+    const compositionStart = (event: Event) => {
+      if (event.target !== textarea.current) return;
       composing = true;
-      schedule();
+      schedule(true);
     };
     const compositionEnd = () => {
+      if (!composing) return;
       composing = false;
-      schedule();
+      schedule(true);
     };
-    body.observe(schedule);
-    field?.addEventListener("compositionstart", compositionStart);
-    field?.addEventListener("compositionend", compositionEnd);
-    window.addEventListener("online", schedule);
-    window.addEventListener("offline", schedule);
+    const changed = () => schedule();
+    const connectionChanged = () => schedule(true);
+    session.doc.on("update", changed);
+    session.addEventListener("change", changed);
+    document.addEventListener("compositionstart", compositionStart, true);
+    document.addEventListener("compositionend", compositionEnd, true);
+    window.addEventListener("online", connectionChanged);
+    window.addEventListener("offline", connectionChanged);
     schedule();
     return () => {
       revision++;
       clearTimeout(timer);
       request?.abort();
-      body.unobserve(schedule);
-      field?.removeEventListener("compositionstart", compositionStart);
-      field?.removeEventListener("compositionend", compositionEnd);
-      window.removeEventListener("online", schedule);
-      window.removeEventListener("offline", schedule);
+      session.doc.off("update", changed);
+      session.removeEventListener("change", changed);
+      document.removeEventListener("compositionstart", compositionStart, true);
+      document.removeEventListener("compositionend", compositionEnd, true);
+      window.removeEventListener("online", connectionChanged);
+      window.removeEventListener("offline", connectionChanged);
     };
-  }, [session, pieceId, articleId, csrf, textarea]);
+  }, [session, articleId, csrf, textarea]);
 
   const isCurrent = () =>
     result &&
-    result.pieceId === session.activePieceId &&
+    result.pieceId === (session.activePieceId || "body") &&
     result.text === session.body.toString() &&
     !session.isPublishing;
 
-  function applyLink(link: LinkSuggestion) {
-    if (!isCurrent() || !result) return;
+  function applyLink(link: LinkSuggestion, source: PieceResult) {
+    const currentPieces = session.contentPieces || [
+      { id: "body", body: session.body.toString() },
+    ];
+    if (
+      session.isPublishing ||
+      !currentPieces.some(
+        (piece) => piece.id === source.pieceId && piece.body === source.text,
+      )
+    )
+      return;
     const [start, end] = link.range;
-    if (result.text.slice(start, end) !== link.text) return;
+    if (source.text.slice(start, end) !== link.text) return;
+    if (session.pieces) session.selectPiece(source.pieceId);
+    if ((session.activePieceId || "body") !== source.pieceId) return;
     session.undo.stopCapturing();
     session.setBody(
-      result.text.slice(0, start) + link.replacement + result.text.slice(end),
+      source.text.slice(0, start) + link.replacement + source.text.slice(end),
     );
     session.undo.stopCapturing();
     requestAnimationFrame(() => {
       textarea.current?.focus();
+      textarea.current?.scrollIntoView({ block: "nearest" });
       textarea.current?.setSelectionRange(
         start,
         start + link.replacement.length,
@@ -188,44 +253,101 @@ export function DraftSuggestions({
       {error && <p role="alert">{error}</p>}
       <h2>リンク候補</h2>
       <p>クリックすると表示されたwikiリンクに置き換えます。</p>
-      <ol>
-        {result?.suggestions.links.map((link) => (
-          <li key={`${link.range[0]}:${link.target}`}>
-            <button
-              type="button"
-              disabled={session.isPublishing}
-              onClick={() => applyLink(link)}
-            >
-              <span>{link.text}</span>
-              <span>→ {link.replacement}</span>
-            </button>
-          </li>
-        ))}
+      <ol className="draft-link-suggestions">
+        {pieces.flatMap((piece, index) => {
+          const source = results.find(
+            (item) => item.pieceId === piece.id && item.text === piece.body,
+          );
+          return (
+            source?.suggestions.links.map((link) => {
+              const before = source.text.slice(0, link.range[0]);
+              const lines = before.split("\n");
+              const column = Array.from(lines.at(-1) || "").length + 1;
+              return (
+                <li key={`${piece.id}:${link.range[0]}:${link.target}`}>
+                  <button
+                    type="button"
+                    disabled={session.isPublishing}
+                    onClick={() => applyLink(link, source)}
+                  >
+                    <span>
+                      {session.pieces ? `${index + 1}番目のかけら · ` : ""}
+                      {lines.length}行{column}文字目
+                    </span>
+                    <span>
+                      {link.text} → {link.replacement}
+                    </span>
+                  </button>
+                </li>
+              );
+            }) || []
+          );
+        })}
       </ol>
-      {result?.suggestions.enabled && result.suggestions.links.length === 0 && (
-        <p>リンク候補はありません</p>
-      )}
+      {!status &&
+        !error &&
+        pieces
+          .filter((piece) => piece.body.trim())
+          .every((piece) =>
+            results.some(
+              (item) => item.pieceId === piece.id && item.text === piece.body,
+            ),
+          ) &&
+        results.some((item) => item.suggestions.enabled) &&
+        results.every((item) => item.suggestions.links.length === 0) && (
+          <p>リンク候補はありません</p>
+        )}
       <h2>過去に書いた内容</h2>
-      <ol>
+      {session.pieces && (
+        <p>
+          {pieces.findIndex((piece) => piece.id === activePieceId) + 1}
+          番目のかけらと比較
+        </p>
+      )}
+      <ol className="draft-related-passages">
         {result?.suggestions.related.map((passage) => (
           <li key={`${passage.article_id}:${passage.piece_id || ""}`}>
-            <p>
-              {passage.relation === "repeated"
-                ? "以前にも似た内容"
-                : "続き・比較として関連"}
-            </p>
-            <a href={passage.url} target="_blank" rel="noreferrer">
-              {passage.title}
-            </a>
-            {passage.date && <time>{passage.date}</time>}
-            <blockquote>{passage.excerpt}</blockquote>
-            <button
-              type="button"
-              disabled={session.isPublishing}
-              onClick={() => insertReference(passage)}
-            >
-              記事へのリンクを挿入
-            </button>
+            <details>
+              <summary>
+                <span className="draft-related-passages__title">
+                  {passage.title}
+                </span>
+                <span className="draft-related-passages__meta">
+                  {passage.date && (
+                    <time dateTime={passage.date}>{passage.date}</time>
+                  )}
+                  <span>
+                    {passage.relation === "repeated"
+                      ? "似た記述"
+                      : "変化・比較"}
+                  </span>
+                </span>
+                <span className="draft-related-passages__disclosure">
+                  記述を比較
+                </span>
+              </summary>
+              <div className="draft-related-passages__comparison">
+                <p>
+                  {passage.relation === "repeated"
+                    ? "同じ経験・結論を書いている可能性があります。"
+                    : "同じ具体的な話題について、変化や違いを比較できる候補です。"}
+                </p>
+                <h3>今のかけら</h3>
+                <blockquote>{passage.writing_excerpt}</blockquote>
+                <h3>過去の記述</h3>
+                <blockquote>{passage.excerpt}</blockquote>
+                <a href={passage.url} target="_blank" rel="noreferrer">
+                  記事を開く
+                </a>
+                <button
+                  type="button"
+                  disabled={session.isPublishing}
+                  onClick={() => insertReference(passage)}
+                >
+                  本文へリンクを挿入
+                </button>
+              </div>
+            </details>
           </li>
         ))}
       </ol>
