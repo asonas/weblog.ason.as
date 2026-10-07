@@ -257,6 +257,8 @@ export function DraftEditor({
   const [isSendingWebmentions, setIsSendingWebmentions] = useState(false);
   const [imageUploadError, setImageUploadError] = useState("");
   const [imageUploadStatus, setImageUploadStatus] = useState("");
+  const videoUpload = useRef<AbortController | null>(null);
+  useEffect(() => () => videoUpload.current?.abort(), []);
   const [publicationFlow, setPublicationFlow] = useState<
     "idle" | "running" | "success" | "error"
   >("idle");
@@ -784,7 +786,78 @@ export function DraftEditor({
     }
   }
 
+  async function insertVideoFiles(files: Array<File>) {
+    const field = textarea.current;
+    if (
+      !field ||
+      !session ||
+      imageUploadStatus ||
+      videoUpload.current ||
+      session.isPublishing
+    )
+      return;
+    if (files.some((file) => !file.type.startsWith("video/"))) {
+      setImageUploadError("画像と動画は分けて追加してください");
+      return;
+    }
+    const controller = new AbortController();
+    videoUpload.current = controller;
+    const start = field.selectionStart;
+    const end = field.selectionEnd;
+    const body = field.value;
+    const pieceId = session.activePieceId;
+    setImageUploadError("");
+    setImageUploadStatus("動画の変換を準備中…");
+    try {
+      const { uploadVideo } = await import("./uploadVideo");
+      const links: Array<string> = [];
+      for (const file of files) {
+        const video = await uploadVideo(
+          file,
+          csrf,
+          controller.signal,
+          setImageUploadStatus,
+        );
+        window.dispatchEvent(new Event("draft-video-uploaded"));
+        const name = file.name
+          .replace(/[\\[\]]/g, "\\$&")
+          .replace(/[\r\n]/g, " ");
+        links.push(`[${name || "動画"}](${video.avc})`);
+      }
+      controller.signal.throwIfAborted();
+      if (session.activePieceId !== pieceId || field.value !== body)
+        throw new Error(
+          "本文が変更されたため挿入を中止しました。動画は素材一覧から追加できます。",
+        );
+      const next = insertMarkdownBlock(body, start, end, links.join("\n\n"));
+      session.undo.stopCapturing();
+      session.setBody(next.body);
+      session.undo.stopCapturing();
+      requestAnimationFrame(() => {
+        field.focus();
+        field.setSelectionRange(next.caret, next.caret);
+      });
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setImageUploadError(
+          error instanceof Error ? error.message : "動画を追加できませんでした",
+        );
+    } finally {
+      videoUpload.current = null;
+      setImageUploadStatus("");
+    }
+  }
+
   async function handleImageDrop(event: ReactDragEvent<HTMLTextAreaElement>) {
+    if (
+      Array.from(event.dataTransfer.files).some((file) =>
+        file.type.startsWith("video/"),
+      )
+    ) {
+      event.preventDefault();
+      await insertVideoFiles(Array.from(event.dataTransfer.files));
+      return;
+    }
     const files = Array.from(event.dataTransfer.files).filter((file) =>
       file.type.startsWith("image/"),
     );
@@ -798,6 +871,15 @@ export function DraftEditor({
   async function handleImagePaste(
     event: ReactClipboardEvent<HTMLTextAreaElement>,
   ) {
+    if (
+      Array.from(event.clipboardData.files).some((file) =>
+        file.type.startsWith("video/"),
+      )
+    ) {
+      event.preventDefault();
+      await insertVideoFiles(Array.from(event.clipboardData.files));
+      return;
+    }
     const files = Array.from(event.clipboardData.files).filter((file) =>
       file.type.startsWith("image/"),
     );
@@ -976,7 +1058,7 @@ export function DraftEditor({
           <button
             className="draft-editor__publish"
             type="button"
-            disabled={!session || session.isPublishing}
+            disabled={!session || session.isPublishing || !!imageUploadStatus}
             onClick={() => void publish()}
           >
             {session?.isPublishing
@@ -998,6 +1080,11 @@ export function DraftEditor({
             : ""}
         </p>
         <p role="status">{imageUploadStatus}</p>
+        {videoUpload.current && (
+          <button type="button" onClick={() => videoUpload.current?.abort()}>
+            動画の追加をキャンセル
+          </button>
+        )}
         <p role="alert">
           {loadError || publicationError || imageUploadError || session?.error}
         </p>
@@ -1280,7 +1367,8 @@ export function DraftEditor({
                       Array.from(event.dataTransfer.items).some(
                         (item) =>
                           item.kind === "file" &&
-                          item.type.startsWith("image/"),
+                          (item.type.startsWith("image/") ||
+                            item.type.startsWith("video/")),
                       )
                     ) {
                       event.preventDefault();

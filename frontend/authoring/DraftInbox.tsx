@@ -57,17 +57,10 @@ function itemMarkdown(item: InboxItem): string | null {
   if (item.source === "video") {
     const avc = videoAssetPath(item.payload.avc);
     if (!avc) return null;
-    const av1 = videoAssetPath(item.payload.av1);
-    const width = Number(item.payload.width);
-    const height = Number(item.payload.height);
-    const dimensions =
-      Number.isInteger(width) &&
-      width > 0 &&
-      Number.isInteger(height) &&
-      height > 0
-        ? ` ${width}x${height}`
-        : "";
-    return `:::video ${avc}${av1 ? ` ${av1}` : ""}${dimensions} :::`;
+    const name = (payloadString(item, "name") || "動画")
+      .replace(/[\\[\]]/g, "\\$&")
+      .replace(/[\r\n]/g, " ");
+    return `[${name}](${avc})`;
   }
   if (item.source === "raindrop" && item.kind === "bookmark")
     return httpUrl(item.payload.url);
@@ -124,6 +117,9 @@ export function DraftInbox({
 
   useEffect(() => {
     void load();
+    const refresh = () => void load();
+    window.addEventListener("draft-video-uploaded", refresh);
+    return () => window.removeEventListener("draft-video-uploaded", refresh);
   }, [load]);
 
   const sync = useCallback(
