@@ -626,6 +626,28 @@ class LambdaApiTest < Minitest::Test
     assert_equal 404, response.fetch(:statusCode)
   end
 
+  def test_writing_suggestions_require_editor_authentication_and_csrf
+    previous_key = ENV.delete("TYPESAFE_API_KEY")
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    api = WeblogAuthoring::LambdaApi.new(database: @database, session_codec: codec, allowed_github_user_id: 630_181)
+    token = codec.issue(kind: "session", attributes: { "github_user_id" => 630_181, "csrf_token" => "csrf-token" }, ttl: 600)
+    cookies = ["weblog_authoring_session=#{token}"]
+    headers = { "x-csrf-token" => "csrf-token" }
+    payload = { "text" => "Cloudflare", "article_id" => "draft" }
+    path = "/api/authoring/suggestions"
+    assert_equal 401, api.call(json_event("POST", path, payload, headers:)).fetch(:statusCode)
+    assert_equal 403, api.call(json_event("POST", path, payload, cookies:)).fetch(:statusCode)
+    other = codec.issue(kind: "session", attributes: { "github_user_id" => 999, "csrf_token" => "csrf-token" }, ttl: 600)
+    assert_equal 403, api.call(json_event("POST", path, payload, cookies: ["weblog_authoring_session=#{other}"], headers:)).fetch(:statusCode)
+    assert_equal 422, api.call(json_event("POST", path, payload.merge("text" => "あ" * 8001), cookies:, headers:)).fetch(:statusCode)
+    response = api.call(json_event("POST", path, payload, cookies:, headers:))
+    assert_equal 200, response.fetch(:statusCode)
+    assert_equal "no-store", response.fetch(:headers).fetch("cache-control")
+    assert_equal false, JSON.parse(response.fetch(:body)).fetch("enabled")
+  ensure
+    previous_key ? ENV["TYPESAFE_API_KEY"] = previous_key : ENV.delete("TYPESAFE_API_KEY")
+  end
+
   def test_proofreading_requires_editor_authentication_and_csrf_before_invoking_node
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
     result = { "messages" => [{ "ruleId" => "no-dropping-the-ra", "message" => "ら抜き言葉を使用しています。", "line" => 1, "range" => [1, 2] }] }

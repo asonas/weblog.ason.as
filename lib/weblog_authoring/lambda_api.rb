@@ -32,6 +32,7 @@ require_relative "draft_jobs"
 require_relative "draft_administration"
 require_relative "published_article_reader"
 require_relative "proofreading"
+require_relative "writing_suggestions"
 
 module WeblogAuthoring
   class LambdaApi
@@ -163,6 +164,7 @@ module WeblogAuthoring
         return memo_response(event, method, path)
       end
       return proofreading_response(event) if method == "POST" && path == "/api/authoring/proofread"
+      return writing_suggestions_response(event) if method == "POST" && path == "/api/authoring/suggestions"
       return draft_response(event, method, path) if path == "/api/authoring/drafts" || path.start_with?("/api/authoring/drafts/")
       outputs = @draft_outputs
       if method == "GET" && path == "/feed.xml" && outputs
@@ -489,6 +491,20 @@ module WeblogAuthoring
       return daily_editor_response(event) if event.dig("queryStringParameters", "template") == "daily"
 
       json_response(200, editor_json(title: "", name: "", body: ""))
+    end
+
+    def writing_suggestions_response(event)
+      session = read_cookie(event, AUTH_COOKIE, kind: "session")
+      return json_response(401, error: "GitHub login is required") unless session
+      return json_response(403, error: "Editing is not allowed") unless allowed_session?(session)
+      unless secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
+        return json_response(403, error: "CSRF token mismatch")
+      end
+      payload = parse_json(event)
+      json_response(200, WritingSuggestions.new(reader: @reader_database).call(
+        text: payload["text"], article_id: payload["article_id"], piece_id: payload["piece_id"]))
+    rescue Jev::Unavailable => error
+      json_response(503, error: error.message)
     end
 
     def proofreading_response(event)

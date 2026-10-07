@@ -1,0 +1,11 @@
+module WeblogAuthoring
+  class Jev
+    class Unavailable < StandardError
+    end
+  end
+
+  class WritingSuggestions
+    def initialize: (reader: untyped, ?client: untyped) -> void
+    def call: (text: untyped, article_id: untyped, ?piece_id: untyped) -> Hash[String, untyped]
+  end
+end

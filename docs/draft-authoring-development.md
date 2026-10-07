@@ -11,6 +11,33 @@ APIは `AUTHORING_DRAFTS_ENABLED=1` で公開済みsnapshotを読み、編集中
 レスポンスには認証情報も含まれるため、共有するログにはこの2項目だけを抽出してください。
 起動設定の実装は `mise.toml` の `dev:api` と `lib/weblog_authoring/development_app.rb` です。
 
+## 執筆中のリンク候補と過去の記述
+
+開発APIは `envchain` の `weblog-authoring` 名前空間から `TYPESAFE_API_KEY` を受け取ります。初回のみ、自分のターミナルで登録します。
+
+```sh
+envchain --set --noecho weblog-authoring TYPESAFE_API_KEY
+mise run dev
+```
+
+キーは開発APIとその子プロセスにだけ渡ります。Vite用の環境変数やリポジトリのファイルには保存しません。登録・変更後は開発APIを再起動してください。本番の秘密情報の登録や配布設定はこの変更には含まれません。
+
+入力が7秒止まると、編集中のかけらを認証・CSRF付き `POST /api/authoring/suggestions` へ送ります。APIは公開記事を参照し、Jevへ編集中の本文と候補記事の抜粋を送ります。キー未設定・オフライン・通信失敗でも本文編集と保存は続けられます。本文の上限は8,000文字です。
+
+- リンク候補: 全角半角・大小文字・空白を正規化した一致、文字の近さ、記事本文に現れる語句から候補を集めます。Jevが同じ対象の名前・別名と判定したものを最大8件表示します。クリックすると候補に表示された `[[記事名]]` に置き換えます。元の表記を保持する別名付きwikiリンクは追加していません。
+- 過去の記述: 公開記事のかけら、旧記事の段落を最大600文字で区切り、文字2-gramの一致で上位20件を取得します。Jevが「以前にも似た内容」「続き・比較として関連」と判断したものを最大3記事表示します。編集中のかけら自身の公開済みコピーは除外します。埋め込み検索は使わないため、共通する語句がない言い換えは候補から漏れることがあります。
+- 本文はクリック時にだけ変更します。候補を取得した本文・かけらと一致しない場合は適用せず、入力中やIME変換中の古い結果を破棄します。適用は独立したUndoで戻せます。
+
+Jevは `jev-1.13.0` に固定しています。選択確率0.8以上のリンク候補、0.7以上の過去の記述を表示する初期設定で、ブログ全体で精度を校正した値ではありません。判定だけで本文は書き換えません。
+
+実APIへの小さな評価は、合成した記事・入力だけで実行できます。キーや実記事の本文を出力しません。
+
+```sh
+envchain weblog-authoring mise exec ruby -- ruby -rbundler/setup scripts/check-writing-suggestions.rb
+```
+
+ルールとAPI認証の検証は `test/authoring/test_writing_suggestions.rb` と `test_lambda_api.rb`、クリック適用・Undo・古い応答・IME待機の検証は `test/browser/draft_suggestions.mjs` です。後者は隔離DBと候補APIの固定応答を使い、Jevの精度評価とは分けます。
+
 ## worktreeでのプレビュー
 
 1. worktreeのルートで `mise run dev:doctor` を実行する。

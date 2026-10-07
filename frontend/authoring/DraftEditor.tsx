@@ -15,6 +15,7 @@ import { DraftArticleSettings } from "./DraftArticleSettings";
 import { DraftInbox } from "./DraftInbox";
 import { DraftNavigation } from "./DraftNavigation";
 import { DraftPreview } from "./DraftPreview";
+import { DraftSuggestions } from "./DraftSuggestions";
 import { takeDraftInitialBody } from "./draftInitialBody";
 import {
   insertMarkdownBlock,
@@ -987,6 +988,14 @@ export function DraftEditor({
             </ol>
           )}
         </section>
+        {session && (
+          <DraftSuggestions
+            session={session}
+            articleId={id}
+            textarea={textarea}
+            csrf={csrf}
+          />
+        )}
       </DraftNavigation>
       <div className="draft-editor__titlebar">
         <div className="draft-editor__heading-fields">

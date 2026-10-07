@@ -291,6 +291,31 @@ class ArticlePiecesTest < Minitest::Test
     assert_equal target, @store.published_route("再試行する猫")
   end
 
+  def test_writing_suggestions_exclude_the_current_piece_and_link_to_another_published_piece
+    second = SecureRandom.uuid
+    @store.update_structure(@id, SCOPE.merge("expected_revision" => 0, "piece_ids" => [@first, second], "tags" => []))
+    append_piece(second, "同じかけらで以前に書いた続きの本文。")
+    publish
+    database = WeblogAuthoring::DevelopmentDatabase.new(@root.join("articles.sqlite3"), content_dir: @root.join("content"))
+    database.setup!
+    reader = WeblogAuthoring::PublishedArticleReader.new(store: @store, database:)
+    http = Object.new
+    http.define_singleton_method(:start) { |*_args, **_options, &block| block.call(http) }
+    http.define_singleton_method(:request) do |request|
+      questions = JSON.parse(request.body).fetch("questions")
+      answers = questions.to_h { |id, _question| [id, { "type" => "choice", "choice" => "related", "probabilities" => { "related" => 0.95 } }] }
+      response = Net::HTTPOK.new("1.1", "200", "OK")
+      response.instance_variable_set(:@read, true)
+      response.body = JSON.generate("answers" => answers)
+      response
+    end
+    service = WeblogAuthoring::WritingSuggestions.new(reader:, client: WeblogAuthoring::Jev.new(api_key: "test-key", http:))
+    result = service.call(text: "最初の本文。同じかけらの続き。", article_id: @id, piece_id: @first)
+    assert_empty result.fetch("links")
+    assert_equal [second], (result.fetch("related").map { |item| item.fetch("piece_id") })
+    assert result.fetch("related").first.fetch("url").end_with?("#piece-#{second}")
+  end
+
   private
 
   def seed_piece(id, body)

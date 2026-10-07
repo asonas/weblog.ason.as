@@ -41,6 +41,7 @@ require_relative "draft_publisher"
 require_relative "draft_jobs"
 require_relative "draft_administration"
 require_relative "proofreading"
+require_relative "writing_suggestions"
 
 module WeblogAuthoring
   class DevelopmentRequestLog
@@ -370,6 +371,16 @@ module WeblogAuthoring
       headers "Cache-Control" => "no-store"
       api_response { |payload| Proofreading.new.call(payload["text"]) }
     rescue Proofreading::Unavailable => error
+      json_error(503, error.message)
+    end
+
+    post "/api/authoring/suggestions" do
+      headers "Cache-Control" => "no-store"
+      api_response do |payload|
+        WritingSuggestions.new(reader: settings.reader_database).call(
+          text: payload["text"], article_id: payload["article_id"], piece_id: payload["piece_id"])
+      end
+    rescue Jev::Unavailable => error
       json_error(503, error.message)
     end
 

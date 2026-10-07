@@ -1080,3 +1080,24 @@ html[data-draft-workspace="true"]
     font-size: 16px;
   }
 }
+.draft-suggestions h2:not(:first-child) {
+  margin-block-start: 16px;
+}
+
+.draft-suggestions li {
+  overflow-wrap: anywhere;
+}
+
+.draft-suggestions time {
+  display: block;
+  margin-block: 4px;
+  font-size: 12px;
+}
+
+.draft-suggestions blockquote {
+  margin: 8px 0;
+  padding-inline-start: 8px;
+  border-inline-start: 2px solid var(--authoring-stone);
+  font-size: 13px;
+  white-space: pre-wrap;
+}

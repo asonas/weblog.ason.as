@@ -3,6 +3,7 @@ module WeblogAuthoring
   type lambda_response = { statusCode: Integer, ?headers: Hash[String, String], ?cookies: Array[String], body: String }
 
   class LambdaApi
+    def writing_suggestions_response: (lambda_event) -> lambda_response
     @published_reader: PublishedArticleReader?
     @reader_database: DsqlDatabase | PublishedArticleReader
     @proofreader: Proofreading?
