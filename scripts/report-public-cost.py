@@ -60,7 +60,8 @@ def report(operation_files, cost_files, start, end):
                 day = item["line_item_usage_start_date"][:10]
                 if not start <= day < end:
                     continue
-                identity = item["identity_line_item_id"]
+                identity = (item["identity_line_item_id"], item["line_item_usage_start_date"],
+                    item.get("line_item_usage_end_date"))
                 if identity in seen_items:
                     if seen_items[identity] != item:
                         raise ValueError("Conflicting CUR revisions; use files from one manifest only")

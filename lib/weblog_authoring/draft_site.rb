@@ -43,10 +43,17 @@ module WeblogAuthoring
         route = URI::DEFAULT_PARSER.unescape(path.delete_prefix("/"))
         if @reader.list_pages.any? { |page| page.links.any? { |link| link.name == route } }
           renderer = WebmentionSitePublisher.new(database: @reader, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
-          shell = object("static/authoring/public.html", "text/html; charset=utf-8")
-          html = renderer.render_linked_page(route, shell: shell.fetch(:body))
-          response = shell.merge(body: html) if html
-          OperationMetrics.delivery("linked") if html
+          release = display_release if @dynamic_article_routes.include?("*")
+          shell = release ? release.fetch(:shell) : object("static/authoring/public.html", "text/html; charset=utf-8").fetch(:body)
+          html = renderer.render_linked_page(route, shell:)
+          if html
+            response = if release
+                         public_html(html, release.fetch(:id), event)
+                       else
+                         { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => "no-store" }, body: html }
+                       end
+          end
+          OperationMetrics.delivery("linked", release: release&.fetch(:id)) if html
         end
         response = response.merge(headers: response.fetch(:headers, {}).merge("cache-control" => "no-store")) if response.fetch(:statusCode) == 404
       end
@@ -63,27 +70,38 @@ module WeblogAuthoring
 
     def dynamic_article(path, event)
       route = URI::DEFAULT_PARSER.unescape(path.delete_prefix("/"))
-      return nil unless @dynamic_article_routes.include?(route)
+      return nil unless @dynamic_article_routes.include?("*") || @dynamic_article_routes.include?(route)
 
       resolution = @store.resolve_published_route(route)
       snapshot = resolution["snapshot"]
       return nil unless snapshot
 
-      release = JSON.parse(@s3.get_object(bucket: @bucket, key: "display-releases/current.json").body.read)
-      id = release.fetch("id")
-      raise ArgumentError, "Invalid display release" unless /\A[0-9a-f]{40}\z/.match?(id)
-      shell = @s3.get_object(bucket: @bucket, key: "display-releases/#{id}/public.html").body.read.force_encoding(Encoding::UTF_8)
+      release = display_release
+      return nil unless release
+      id, shell = release.values_at(:id, :shell)
       renderer = WebmentionSitePublisher.new(database: @reader, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
       page = ArticleDocument.from_published_version(snapshot)
       html = renderer.render_document(page, shell:, source_url: "#{@site_url}/#{WeblogAuthoring.encoded_route(page.route)}")
       OperationMetrics.delivery("dynamic", release: id)
+      public_html(html, id, event)
+    end
+
+    def display_release
+      release = JSON.parse(@s3.get_object(bucket: @bucket, key: "display-releases/current.json").body.read)
+      id = release.fetch("id")
+      return nil unless /\A[0-9a-f]{40}\z/.match?(id)
+      shell = @s3.get_object(bucket: @bucket, key: "display-releases/#{id}/public.html").body.read.force_encoding(Encoding::UTF_8)
+      { id:, shell: }
+    rescue Aws::S3::Errors::NoSuchKey, JSON::ParserError, KeyError
+      nil
+    end
+
+    def public_html(html, id, event)
       etag = %("#{Digest::SHA256.hexdigest("#{id}\0#{html}")}")
       if event.fetch("headers", {})["if-none-match"] == etag
         return { statusCode: 304, headers: { "cache-control" => PUBLIC_HTML_CACHE_CONTROL, "etag" => etag }, body: "" }
       end
       { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => PUBLIC_HTML_CACHE_CONTROL, "etag" => etag }, body: html }
-    rescue Aws::S3::Errors::NoSuchKey, JSON::ParserError, KeyError
-      nil
     end
 
     def object(key, content_type)

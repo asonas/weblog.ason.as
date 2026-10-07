@@ -44,4 +44,17 @@ class PublicCostReportTest < Minitest::Test
       assert_includes error, "Incomplete log export"
     end
   end
+
+  def test_daily_cur_rows_with_the_same_item_id_remain_distinct
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "daily.csv")
+      File.write(path, "identity_line_item_id,line_item_usage_start_date,line_item_product_code,line_item_resource_id,line_item_usage_type,line_item_line_item_type,pricing_unit,line_item_currency_code,line_item_usage_amount,line_item_unblended_cost\na,2026-10-03T00:00:00Z,AuroraDSQL,cluster,DPU,Usage,DPU,USD,1000,0.01\na,2026-10-04T00:00:00Z,AuroraDSQL,cluster,DPU,Usage,DPU,USD,2000,0.02\n")
+      output, error, status = Open3.capture3("python3", SCRIPT, "--cur", path, "--cur", path,
+        "--start", "2026-10-03", "--end", "2026-10-05")
+      assert status.success?, error
+      rows = JSON.parse(output).fetch("costs")
+      assert_equal %w[2026-10-03 2026-10-04], (rows.map { |row| row.fetch("day") })
+      assert_equal %w[0.01 0.02], (rows.map { |row| row.fetch("unblended_cost") })
+    end
+  end
 end

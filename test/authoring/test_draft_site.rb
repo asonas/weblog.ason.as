@@ -51,8 +51,8 @@ class DraftSiteTest < Minitest::Test
       database.setup!
       store = WeblogAuthoring::DraftStore.sqlite(root.join("drafts.sqlite3"))
       store.setup!
-      ids = %w[dc802ad0b89946aeb6b7623c2ba7bc79 ff802ad0b89946aeb6b7623c2ba7bc79]
-      articles = %w[選定記事 従来記事].each_with_index.map do |route, index|
+      ids = %w[dc802ad0b89946aeb6b7623c2ba7bc79 ff802ad0b89946aeb6b7623c2ba7bc79 ab802ad0b89946aeb6b7623c2ba7bc79]
+      articles = %w[選定記事 従来記事 about].each_with_index.map do |route, index|
         { "id" => ids.fetch(index), "page_type" => "named", "route" => route, "title" => route,
           "body" => index.zero? ? "公開本文 [[従来記事]] ![写真](/assets/photo.jpg)" : "従来本文",
           "cover_mode" => "none", "cover_image_url" => nil, "created_at" => "2026-09-01T01:00:00Z",
@@ -119,8 +119,75 @@ class DraftSiteTest < Minitest::Test
 
       objects.put_object(bucket: "site", key: "display-releases/current.json", body: JSON.generate("id" => release_a))
       assert_equal first, get.call("選定記事")
+
+      all_pages = WeblogAuthoring::DraftSite.new(api:, reader:, s3_client: objects, bucket: "site", published: true,
+        store:, site_url: "https://example.com", dynamic_article_routes: ["*"])
+      %w[選定記事 従来記事 about].each do |route|
+        response = all_pages.call("rawPath" => "/#{WeblogAuthoring.encoded_route(route)}", "requestContext" => { "http" => { "method" => "GET" } })
+        assert_equal 200, response.fetch(:statusCode)
+        assert_includes response.fetch(:body), "public-#{release_a}.js"
+        assert_includes response.fetch(:body), %(<meta property="og:title" content="#{route}")
+        assert_equal WeblogAuthoring::DraftSite::PUBLIC_HTML_CACHE_CONTROL, response.dig(:headers, "cache-control")
+        refute_includes response.fetch(:body), "Saved HTML"
+      end
+      objects.put_object(bucket: "site", key: "index.html", body: "Management and home shell")
+      %w[/ /search /draft-editor /authoring/devices].each do |path|
+        response = all_pages.call("rawPath" => path, "requestContext" => { "http" => { "method" => "GET" } })
+        assert_equal "Management and home shell", response.fetch(:body)
+        assert_equal "no-store", response.dig(:headers, "cache-control")
+      end
       objects.put_object(bucket: "site", key: "display-releases/current.json", body: JSON.generate("id" => "c" * 40))
       assert_includes get.call("選定記事").fetch(:body), "Saved HTML 選定記事"
+      fallback = all_pages.call("rawPath" => "/about", "requestContext" => { "http" => { "method" => "GET" } })
+      assert_equal "Saved HTML about", fallback.fetch(:body)
+      assert_equal "no-store", fallback.dig(:headers, "cache-control")
+    end
+  end
+
+  def test_linked_topics_follow_the_display_release_when_all_articles_are_enabled
+    Dir.mktmpdir("dynamic-linked-site") do |directory|
+      root = Pathname(directory)
+      database = WeblogAuthoring::DevelopmentDatabase.new(root.join("articles.sqlite3"), content_dir: root.join("content"))
+      database.setup!
+      store = WeblogAuthoring::DraftStore.sqlite(root.join("drafts.sqlite3"))
+      store.setup!
+      article = { "id" => "dc802ad0b89946aeb6b7623c2ba7bc79", "page_type" => "named", "route" => "紹介記事", "title" => "紹介記事",
+        "body" => "[[KORG multi/poly]]", "cover_mode" => "none", "cover_image_url" => nil,
+        "created_at" => "2026-09-01T01:00:00Z", "updated_at" => "2026-09-01T01:00:00Z", "published_at" => "2026-09-01T01:00:00Z", }
+      WeblogAuthoring::DraftMigration.new(store:).import("format" => 1, "site_url" => "https://example.com", "articles" => [article])
+      reader = WeblogAuthoring::PublishedArticleReader.new(store:, database:)
+      objects = WeblogAuthoring::LocalPublicationObjects.new(root.join("objects"))
+      old_shell = '<html><head><title>Old</title></head><body><div id="authoring-root"></div></body></html>'
+      objects.put_object(bucket: "site", key: "static/authoring/public.html", body: old_shell)
+      %w[a b].each do |letter|
+        id = letter * 40
+        objects.put_object(bucket: "site", key: "display-releases/#{id}/public.html", body: old_shell.sub("</head>", %(<link rel="stylesheet" href="/#{letter}.css"></head>)))
+      end
+      api = WeblogAuthoring::LambdaApi.new(database:, reader_database: reader, draft_store: store)
+      site = WeblogAuthoring::DraftSite.new(api:, reader:, s3_client: objects, bucket: "site", published: true,
+        store:, site_url: "https://example.com", dynamic_article_routes: ["*"])
+      event = { "rawPath" => "/KORG%20multi%2Fpoly", "requestContext" => { "http" => { "method" => "GET" } } }
+      objects.put_object(bucket: "site", key: "display-releases/current.json", body: JSON.generate("id" => "a" * 40))
+      first = site.call(event)
+      assert_equal 200, first.fetch(:statusCode)
+      assert_includes first.fetch(:body), '<h1 class="p-name">KORG multi/poly</h1>'
+      assert_includes first.fetch(:body), WeblogAuthoring.encoded_route("紹介記事")
+      assert_includes first.fetch(:body), "/a.css"
+      assert_equal WeblogAuthoring::DraftSite::PUBLIC_HTML_CACHE_CONTROL, first.dig(:headers, "cache-control")
+      assert_equal "", site.call(event.merge("requestContext" => { "http" => { "method" => "HEAD" } })).fetch(:body)
+      assert_equal 304, site.call(event.merge("headers" => { "if-none-match" => first.dig(:headers, "etag") })).fetch(:statusCode)
+      objects.put_object(bucket: "site", key: "display-releases/current.json", body: JSON.generate("id" => "b" * 40))
+      second = site.call(event)
+      assert_includes second.fetch(:body), "/b.css"
+      refute_equal first.dig(:headers, "etag"), second.dig(:headers, "etag")
+      missing = site.call(event.merge("rawPath" => "/unknown"))
+      assert_equal 404, missing.fetch(:statusCode)
+      assert_equal "no-store", missing.dig(:headers, "cache-control")
+      objects.put_object(bucket: "site", key: "display-releases/current.json", body: JSON.generate("id" => "c" * 40))
+      fallback = site.call(event)
+      assert_equal 200, fallback.fetch(:statusCode)
+      assert_includes fallback.fetch(:body), "KORG multi/poly"
+      assert_equal "no-store", fallback.dig(:headers, "cache-control")
     end
   end
 end
