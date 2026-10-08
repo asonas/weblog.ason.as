@@ -3180,6 +3180,11 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
   height: auto;
 }
 
+.article-image:has(> .article-image__caption) > img,
+.article-image:has(> .article-image__caption) > .article-image__zoom {
+  margin-inline: auto;
+}
+
 .article-image__caption {
   display: block;
   margin-block-start: var(--space-2);
