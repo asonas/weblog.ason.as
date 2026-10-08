@@ -17,7 +17,7 @@ Windowsにmiseがない場合は、WinGetでインストールしてPowerShell�
 winget install --id jdx.mise --exact
 ```
 
-次にリポジトリのルートで以下を実行します。Temurin JDK 17、Android
+次にリポジトリのルートで以下を実行します。Temurin JDK 21、Android
 SDK Command-line Tools、SDK 36、Build Tools 36.0.0、Platform Toolsが
 インストールされます。
 
@@ -45,7 +45,7 @@ mise run android:build
 生成したAPKは`android/PhotoInbox/app/build/outputs/apk/debug/app-debug.apk`に
 あります。
 
-Android Studioでこのディレクトリを開く場合も、Gradle JDKにはJDK 17を
+Android Studioでこのディレクトリを開く場合も、Gradle JDKにはJDK 21を
 指定してください。miseを使わずに直接ビルドする場合は次のコマンドを使えます。
 
 ```sh
