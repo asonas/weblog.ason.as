@@ -151,7 +151,7 @@ try {
   assert.equal(registered.height, 64);
   assert.equal(
     await body.inputValue(),
-    `動画の前\n\n:::video ${registered.avc}${registered.av1 ? ` ${registered.av1}` : ""} 64x64 :::\n\n動画の後`,
+    `動画の前\n\n[clip\\[1\\].webm](${registered.avc})\n\n動画の後`,
   );
   await until(async () => await page.locator('.draft-preview video[data-avc]').count() === 1);
   assert.equal(await page.locator('.draft-preview video[data-avc]').getAttribute('data-avc'), registered.avc);
@@ -189,8 +189,10 @@ try {
   await page.getByRole("region", { name: "動画", exact: true }).getByRole("button", { name: "動画を本文へ追加", exact: true }).click();
   await until(async () => (await body.inputValue()).length > successful.length);
   assert.equal(uploads, requestsBeforeCancel, "Material reuse must not upload again");
-  assert.equal((await body.inputValue()).split(":::video").length, 3);
+  assert.equal((await body.inputValue()).includes(":::video"), false);
+  assert.equal((await body.inputValue()).split(`[clip\\[1\\].webm](${paths[0]})`).length, 3);
   assert.equal((await body.inputValue()).split(paths[0]).length, 3);
+  await until(async () => await page.locator('.draft-preview video[data-avc]').count() === 2);
   console.log(
     "PASS: real conversion and Markdown insertion, failed paste, cancellation and material reuse",
   );

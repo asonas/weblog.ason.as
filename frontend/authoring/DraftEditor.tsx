@@ -37,7 +37,6 @@ import { draftMetadataForTitle, hasCustomDiaryTitle } from "./draftTitle";
 import { prefetchEmbedMetadata } from "./EmbedCard";
 import { DraftPieceControls, DraftTagInput } from "./PieceControls";
 import { pieceSeparator } from "./pieceSeparator";
-import { videoMarkdown } from "./Video";
 import "./draftEditor.css";
 import "./authoringTheme.css";
 
@@ -821,7 +820,10 @@ export function DraftEditor({
           setImageUploadStatus,
         );
         window.dispatchEvent(new Event("draft-video-uploaded"));
-        links.push(videoMarkdown(video));
+        const name = file.name
+          .replace(/[\\[\]]/g, "\\$&")
+          .replace(/[\r\n]/g, " ");
+        links.push(`[${name || "動画"}](${video.avc})`);
       }
       controller.signal.throwIfAborted();
       if (session.activePieceId !== pieceId || field.value !== body)
