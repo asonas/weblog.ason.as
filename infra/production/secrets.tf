@@ -3,7 +3,7 @@ resource "aws_ssm_parameter" "typesafe" {
   name             = "/weblog-authoring-production/typesafe"
   type             = "SecureString"
   tier             = "Standard"
-  value_wo         = ""
+  value_wo         = " " # SSM rejects empty values; the operator replaces this before use.
   value_wo_version = 1
 }
 
