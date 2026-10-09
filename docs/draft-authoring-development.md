@@ -15,6 +15,8 @@ APIは `AUTHORING_DRAFTS_ENABLED=1` で公開済みsnapshotを読み、編集中
 
 開発APIは `envchain` の `weblog-authoring` 名前空間から `TYPESAFE_API_KEY` を受け取ります。初回のみ、自分のターミナルで登録します。
 
+本番はParameter StoreのSecureString `/weblog-authoring-production/typesafe` を使用します。Terraformは保存先・読み取り権限とLambdaの `TYPESAFE_SECRET_ID` を管理し、キーの値はstateに保存しません。キーの登録・更新は `bash scripts/set-production-jev-key.sh` で行います。LambdaはJevを初めて使う時に復号し、その実行環境で値を保持します。更新したキーを即時利用する場合はLambdaの実行環境を更新してください。
+
 ```sh
 envchain --set --noecho weblog-authoring TYPESAFE_API_KEY
 mise run dev

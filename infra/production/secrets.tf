@@ -1,4 +1,26 @@
 # Values are initialized by operators; write-only bootstrap values keep them out of state.
+resource "aws_ssm_parameter" "typesafe" {
+  name             = "/weblog-authoring-production/typesafe"
+  type             = "SecureString"
+  tier             = "Standard"
+  value_wo         = ""
+  value_wo_version = 1
+}
+
+data "aws_iam_policy_document" "typesafe_secret" {
+  statement {
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.typesafe.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "typesafe_secret" {
+  name   = "ReadTypeSafeSecret"
+  role   = aws_iam_role.authoring_runtime.id
+  policy = data.aws_iam_policy_document.typesafe_secret.json
+}
+
 resource "aws_ssm_parameter" "oauth" {
   name             = "/weblog-authoring-production/oauth"
   type             = "SecureString"
