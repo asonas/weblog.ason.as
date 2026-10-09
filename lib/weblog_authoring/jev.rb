@@ -30,7 +30,7 @@ module WeblogAuthoring
       if !@secret_id.to_s.strip.empty? && !@secret_loaded
         begin
           @api_key = @secret_client.get_parameter(name: "/#{@secret_id.delete_prefix('/')}", with_decryption: true).parameter.value
-        rescue IOError, SystemCallError, Timeout::Error, RuntimeError, JSON::ParserError, KeyError
+        rescue IOError, SystemCallError, RuntimeError, JSON::ParserError, KeyError
           raise Unavailable, "候補の確認を利用できません。時間をおいてお試しください"
         end
         @secret_loaded = true
