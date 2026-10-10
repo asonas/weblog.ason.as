@@ -1,42 +1,43 @@
 .cf-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
   gap: 40px 20px;
 }
 .cf-card {
-  min-width: 0;
+  min-inline-size: 0;
 }
 .cf-card > a {
   color: inherit;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  block-size: 100%;
   text-decoration: none;
 }
 .cf-media {
   position: relative;
   display: flex;
   align-items: end;
-  overflow: hidden;
+  overflow: clip;
   aspect-ratio: 16 / 10;
   flex-shrink: 0;
   background: var(--quiet-fill);
 }
 .cf-photo {
   position: absolute;
-  width: 100%;
-  height: 100%;
+  inline-size: 100%;
+  block-size: 100%;
   object-fit: cover;
 }
 .cf-media:has(.generated-cover) {
   border: 1px solid var(--separator);
 }
 .cf-cover-caption {
-  --cf-fade-from: rgb(0 0 0 / 0.88);
+  --cf-fade-from: oklch(0 0 none / 0.88);
   position: relative;
-  width: 100%;
-  padding: 48px 20px 20px;
-  color: #fff;
+  inline-size: 100%;
+  padding-block: 48px 20px;
+  padding-inline: 20px;
+  color: oklch(1 0 none);
   background: linear-gradient(to top, var(--cf-fade-from), transparent);
   /* tw-easing-gradients: ease-in-out, cubic-bezier(0.42, 0, 0.58, 1), 15 subdivisions. */
   @supports (color: oklch(from red l c h)) {
@@ -202,7 +203,7 @@
   }
 }
 .cf-media:has(.generated-cover) .cf-cover-caption {
-  --cf-fade-from: #fff;
+  --cf-fade-from: oklch(1 0 none);
   color: var(--ink);
 }
 .cf-copy {
@@ -221,7 +222,8 @@
   background: var(--category-teal);
 }
 .cf-title {
-  margin: 10px 0 0;
+  margin-block: 10px 0;
+  margin-inline: 0;
   color: inherit;
   font-size: clamp(28px, 2.25vw, 32px);
   font-weight: 400;
@@ -239,17 +241,14 @@
   overflow: hidden;
   overflow-wrap: anywhere;
 }
-.cf-card a:is(:hover, :focus-visible) .cf-title {
+.cf-card a:focus-visible .cf-title,
+.cf-card a:active .cf-title {
   text-decoration: underline;
   text-underline-offset: 0.2em;
 }
-@media (max-width: 1000px) {
-  .cf-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 600px) {
-  .cf-grid {
-    grid-template-columns: 1fr;
+@media (hover: hover) and (pointer: fine) {
+  .cf-card a:hover .cf-title {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
   }
 }

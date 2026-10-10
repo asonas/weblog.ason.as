@@ -11,30 +11,36 @@
 }
 .e-content video {
   display: block;
-  width: 100%;
-  height: auto;
+  inline-size: 100%;
+  block-size: auto;
   background: var(--ink);
 }
 .article-image__zoom {
   display: block;
-  width: max-content;
-  max-width: 100%;
+  inline-size: max-content;
+  max-inline-size: 100%;
   padding: 0;
   border: 0;
   background: none;
   cursor: zoom-in;
 }
-.article-image__zoom:hover {
+@media (hover: hover) and (pointer: fine) {
+  .article-image__zoom:hover {
+    background: none;
+  }
+}
+.article-image__zoom:active {
   background: none;
+  opacity: 0.85;
 }
 .article-image__zoom:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
 }
 .article-image--expanded {
-  left: 50%;
-  width: calc(100vw - 2 * var(--space-4));
-  max-width: none;
+  inset-inline-start: 50%;
+  inline-size: calc(100vw - 2 * var(--space-4));
+  max-inline-size: none;
   transform: translateX(-50%);
 }
 .article-image--expanded .article-image__zoom {

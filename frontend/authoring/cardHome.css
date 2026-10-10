@@ -1,6 +1,7 @@
 .card-home__content {
-  max-width: 1280px;
-  padding: 40px 40px 80px;
+  max-inline-size: 1280px;
+  padding-block: clamp(32px, 4vw, 40px) clamp(60px, 6vw, 80px);
+  padding-inline: clamp(20px, 4vw, 40px);
   margin: auto;
 }
 
@@ -148,8 +149,10 @@
   font-size: 14px;
   margin-left: 2px;
 }
-.card-home__months a:hover {
-  text-decoration: underline;
+@media (hover: hover) and (pointer: fine) {
+  .card-home__months a:hover {
+    text-decoration: underline;
+  }
 }
 .card-home__months a[aria-current] {
   background: transparent;
@@ -283,10 +286,12 @@
   max-block-size: 2.4em;
   flex-shrink: 0;
 }
-.card-home .cover-journal__lead > strong a:hover {
-  color: white;
-  text-decoration: underline;
-  text-underline-offset: 0.12em;
+@media (hover: hover) and (pointer: fine) {
+  .card-home .cover-journal__lead > strong a:hover {
+    color: white;
+    text-decoration: underline;
+    text-underline-offset: 0.12em;
+  }
 }
 .card-home .cover-journal__lead > small {
   max-inline-size: 660px;
@@ -368,7 +373,6 @@ html[data-header-scrolled="true"] .card-home__about {
     max-inline-size: none;
   }
   .card-home__content {
-    padding: 32px 20px 60px;
     scroll-margin-block-start: 125px;
   }
   .card-home__footer {
