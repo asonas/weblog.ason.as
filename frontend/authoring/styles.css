@@ -3272,6 +3272,71 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
   overflow-wrap: anywhere;
 }
 
+.public-article-body {
+  container: article-body / inline-size;
+  display: flow-root;
+  --portrait-image-block-limit: clamp(0px, 70svh, 40rem);
+}
+
+.public-article-body .article-piece {
+  display: flow-root;
+}
+
+.public-article-body .article-image--portrait:not(.article-image--expanded) {
+  inline-size: min(
+    100%,
+    calc(var(--portrait-image-block-limit) * var(--image-ratio))
+  );
+  margin-inline: auto;
+}
+
+.public-article-body
+  .article-image--portrait:not(.article-image--expanded)
+  img {
+  inline-size: auto;
+  max-inline-size: 100%;
+  max-block-size: var(--portrait-image-block-limit);
+  margin-inline: auto;
+}
+
+.public-article-body:has(.article-image--portrait)
+  :is(
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    hr,
+    pre,
+    blockquote,
+    table,
+    ul,
+    ol,
+    .article-video,
+    .embed-card
+  ) {
+  clear: both;
+}
+
+/* Keep enough room for prose beside the image, including in the editor preview. */
+@container article-body (inline-size >= 40rem) {
+  .public-article-body
+    :is(p, .selectable-image):has(
+      > .article-image--portrait:not(.article-image--expanded)
+    ) {
+    float: inline-start;
+    clear: both;
+    inline-size: 40%;
+    margin-inline: 0 var(--space-8);
+    margin-block: 0 var(--space-6);
+  }
+}
+
+.public-article-body :is(p, .selectable-image):has(> .article-image--expanded) {
+  clear: both;
+}
+
 .selectable-image--selected > .article-image {
   /* Keep the image's space so dragging does not move the text below it. */
   visibility: hidden;

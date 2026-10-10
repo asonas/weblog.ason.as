@@ -22,6 +22,28 @@ export const SelectableImage = Image.extend({
       dom.contentEditable = "false";
       const serializer = DOMSerializer.fromSchema(editor.schema);
       let image = serializer.serializeNode(node);
+      const prepareReadingImage = () => {
+        if (editor.isEditable || !(image instanceof HTMLElement)) return;
+        const container = image;
+        const img = container.querySelector("img");
+        if (!img) return;
+        const update = () => {
+          const width = img.naturalWidth;
+          const height = img.naturalHeight;
+          if (width > 0 && height > 0)
+            container.style.setProperty(
+              "--image-ratio",
+              String(width / height),
+            );
+          container.classList.toggle(
+            "article-image--portrait",
+            width > 0 && height >= width * 1.5,
+          );
+        };
+        img.addEventListener("load", update);
+        update();
+      };
+      prepareReadingImage();
       const markdown = document.createElement("span");
       markdown.className = "selected-image-markdown";
       dom.append(image, markdown);
@@ -43,6 +65,7 @@ export const SelectableImage = Image.extend({
             const nextImage = serializer.serializeNode(nextNode);
             dom.replaceChild(nextImage, image);
             image = nextImage;
+            prepareReadingImage();
           }
           const nextShowsMarkdown = nextDecorations.some(
             (item) => item.spec.imageMarkdown,

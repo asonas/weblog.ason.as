@@ -150,6 +150,72 @@ test("article photos use source width and Escape collapses inline expansion", as
   }
 });
 
+test("only standalone portrait images wrap prose, including images loaded later", async () => {
+  const dom = new JSDOM(
+    `<article>
+    <p><span class="article-image"><img id="portrait" src="/portrait.webp" width="400" height="800" alt="説明"></span></p>
+    <p><span class="article-image"><img id="landscape" width="800" height="400"></span></p>
+    <p>本文<span class="article-image"><img id="inline" width="400" height="800"></span></p>
+    <p><a href="/other"><span class="article-image"><img id="linked" width="400" height="800"></span></a></p>
+    <p><span class="article-image"><img id="loading"></span></p>
+  </article>`,
+    { url: "https://weblog.ason.as/article" },
+  );
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    HTMLElement: dom.window.HTMLElement,
+    HTMLImageElement: dom.window.HTMLImageElement,
+    HTMLVideoElement: dom.window.HTMLVideoElement,
+  });
+  dom.window.scrollTo = () => {};
+  try {
+    const { enhancePublicArticle } = await import("./publicArticle");
+    const article = document.querySelector("article");
+    assert.ok(article);
+    enhancePublicArticle(article);
+    const portrait = document
+      .querySelector("#portrait")
+      ?.closest(".article-image");
+    assert.ok(portrait);
+    assert.ok(portrait.classList.contains("article-image--portrait"));
+    assert.equal(
+      portrait.querySelector(".article-image__caption")?.textContent,
+      "説明",
+    );
+    for (const id of ["landscape", "inline", "linked", "loading"]) {
+      assert.equal(
+        document
+          .getElementById(id)
+          ?.closest(".article-image")
+          ?.classList.contains("article-image--portrait"),
+        false,
+        id,
+      );
+    }
+    const loading = document.getElementById("loading");
+    assert.ok(loading);
+    Object.defineProperties(loading, {
+      naturalWidth: { value: 400 },
+      naturalHeight: { value: 800 },
+    });
+    loading.dispatchEvent(new dom.window.Event("load"));
+    assert.ok(loading.closest(".article-image--portrait"));
+    const button = portrait.querySelector("button");
+    assert.ok(button);
+    button.click();
+    assert.ok(portrait.classList.contains("article-image--expanded"));
+    assert.equal(document.querySelector("dialog"), null);
+    window.dispatchEvent(
+      new dom.window.KeyboardEvent("keydown", { key: "Escape" }),
+    );
+    assert.equal(portrait.classList.contains("article-image--expanded"), false);
+    assert.ok(portrait.classList.contains("article-image--portrait"));
+  } finally {
+    dom.window.close();
+  }
+});
+
 test("authenticated public reading restores the header edit action", async () => {
   const dom = new JSDOM(
     '<header class="site-header"><nav><span class="header-actions"><a href="/feed.xml">Feed</a></span></nav></header><article data-public-article="1" data-editing-href="/draft-editor?id=page-id"></article>',

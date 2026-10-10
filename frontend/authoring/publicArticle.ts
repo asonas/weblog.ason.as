@@ -160,6 +160,18 @@ function enhanceArticleImages(root: HTMLElement) {
         container.style.setProperty("--image-source-width", `${width}px`);
       if (width > 0 && height > 0)
         container.style.setProperty("--image-ratio", String(width / height));
+      const paragraph = container.parentElement;
+      const isStandalone =
+        paragraph?.tagName === "P" &&
+        Array.from(paragraph.childNodes).every(
+          (node) =>
+            node === container ||
+            (node.nodeType === 3 && !node.textContent?.trim()),
+        );
+      container.classList.toggle(
+        "article-image--portrait",
+        Boolean(isStandalone && width > 0 && height >= width * 1.5),
+      );
     };
     image.addEventListener("load", updateSourceWidth);
     updateSourceWidth();

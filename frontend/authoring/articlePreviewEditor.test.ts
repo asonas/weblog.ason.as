@@ -44,6 +44,58 @@ test("keeps preview extensions and resolves internal cover images", async () => 
   }
 });
 
+test("reading preview lays out portrait images without changing Markdown or captions", async () => {
+  const dom = new JSDOM("<!doctype html><div id='editor'></div>");
+  Object.assign(globalThis, {
+    document: dom.window.document,
+    window: dom.window,
+    HTMLElement: dom.window.HTMLElement,
+    Element: dom.window.Element,
+    Node: dom.window.Node,
+    getComputedStyle: dom.window.getComputedStyle,
+  });
+  const { ARTICLE_PREVIEW_EXTENSIONS } = await import("./articlePreviewEditor");
+  const element = document.getElementById("editor");
+  assert.ok(element);
+  const source = "![ゲームの画面](/portrait.webp)\n\n本文";
+  const editor = new Editor({
+    element,
+    editable: false,
+    extensions: ARTICLE_PREVIEW_EXTENSIONS,
+    content: source,
+    contentType: "markdown",
+  });
+  try {
+    const image = element.querySelector("img");
+    assert.ok(image);
+    Object.defineProperties(image, {
+      naturalWidth: { value: 400 },
+      naturalHeight: { value: 800 },
+    });
+    image.dispatchEvent(new dom.window.Event("load"));
+    assert.ok(image.closest(".article-image--portrait"));
+    assert.equal(
+      element.querySelector(".article-image__caption")?.textContent,
+      "ゲームの画面",
+    );
+    assert.equal(editor.getMarkdown(), source);
+    editor.commands.setContent("![横長の写真](/landscape.webp)", {
+      contentType: "markdown",
+    });
+    const replacement = element.querySelector("img");
+    assert.ok(replacement);
+    Object.defineProperties(replacement, {
+      naturalWidth: { value: 800 },
+      naturalHeight: { value: 400 },
+    });
+    replacement.dispatchEvent(new dom.window.Event("load"));
+    assert.equal(element.querySelector(".article-image--portrait"), null);
+  } finally {
+    editor.destroy();
+    dom.window.close();
+  }
+});
+
 test("renders saved standalone uploaded video links as players", async () => {
   const dom = new JSDOM("<!doctype html>");
   Object.assign(globalThis, {
