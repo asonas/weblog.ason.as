@@ -3278,7 +3278,7 @@ html[data-view="article-editing"]:has(.legacy-save-rejection) .site-header {
   --portrait-image-block-limit: clamp(0px, 70svh, 40rem);
 }
 
-.public-article-body .article-piece {
+.public-article-body :is(.article-piece, .article-image-text-group) {
   display: flow-root;
 }
 

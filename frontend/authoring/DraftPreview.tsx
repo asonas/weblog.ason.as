@@ -2,12 +2,21 @@ import { MarkdownManager } from "@tiptap/markdown";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArticleImageTextGroup,
+  groupPreviewImageText,
+} from "./ArticleImageTextGroup";
+import {
   ARTICLE_PREVIEW_EXTENSIONS,
   autoCoverImageUrl,
   LineUpdateRail,
 } from "./articlePreviewEditor";
 import type { DraftMetadata } from "./draftSession";
 import { markdownForEditor } from "./markdown";
+
+const READING_PREVIEW_EXTENSIONS = [
+  ...ARTICLE_PREVIEW_EXTENSIONS,
+  ArticleImageTextGroup,
+];
 
 const MEDIA_PATTERN =
   /!\[[^\]]*\]\(|:::video |https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|speakerdeck\.com|bsky\.app|x\.com|twitter\.com)\//;
@@ -68,7 +77,7 @@ export function DraftPreview({
     [body, metadata],
   );
   const markdown = useMemo(
-    () => new MarkdownManager({ extensions: ARTICLE_PREVIEW_EXTENSIONS }),
+    () => new MarkdownManager({ extensions: READING_PREVIEW_EXTENSIONS }),
     [],
   );
   const pieceDocument = useMemo(() => {
@@ -83,12 +92,17 @@ export function DraftPreview({
           markdownForEditor(tags.map((tag) => `[[${tag}]]`).join(" ")),
         ).content || []),
       );
-    return { type: "doc", content };
+    return groupPreviewImageText({ type: "doc", content });
   }, [pieces, tags, markdown]);
+  const previewDocument = useMemo(
+    () =>
+      pieceDocument ||
+      groupPreviewImageText(markdown.parse(markdownForEditor(body))),
+    [body, markdown, pieceDocument],
+  );
   const editor = useEditor({
-    extensions: ARTICLE_PREVIEW_EXTENSIONS,
-    content: pieceDocument || markdownForEditor(body),
-    contentType: pieceDocument ? "json" : "markdown",
+    extensions: READING_PREVIEW_EXTENSIONS,
+    content: previewDocument,
     editable: false,
     shouldRerenderOnTransaction: false,
     editorProps: {
@@ -100,16 +114,8 @@ export function DraftPreview({
   });
 
   useEffect(() => {
-    if (editor && pieceDocument) {
-      editor.commands.setContent(pieceDocument, { emitUpdate: false });
-      return;
-    }
-    if (!editor || editor.getMarkdown() === markdownForEditor(body)) return;
-    editor.commands.setContent(markdownForEditor(body), {
-      contentType: "markdown",
-      emitUpdate: false,
-    });
-  }, [body, editor, pieceDocument]);
+    editor?.commands.setContent(previewDocument, { emitUpdate: false });
+  }, [editor, previewDocument]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: body replacement updates the editor DOM before link state is applied.
   useEffect(() => {
@@ -137,7 +143,7 @@ export function DraftPreview({
     const container = root.current;
     const scroller = container?.closest<HTMLElement>(".draft-preview");
     const blocks = container?.querySelectorAll<HTMLElement>(
-      ".public-article-body > *",
+      ".public-article-body > :not(.article-image-text-group), .public-article-body > .article-image-text-group > *",
     );
     if (!container || !scroller || !blocks || blocks.length === 0) return;
     const target = blocks[Math.min(sourceBlockIndex, blocks.length - 1)];

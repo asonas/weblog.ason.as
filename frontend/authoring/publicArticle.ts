@@ -1,3 +1,4 @@
+import { groupPublicImageText } from "./articleImageTextGroups";
 import { hydrateEmbedCard } from "./EmbedCard";
 import { mountMentionedByDays } from "./mentionedByDays";
 import { installMobileArticleSheet } from "./mobileArticleSheet";
@@ -209,6 +210,7 @@ function enhanceArticleImages(root: HTMLElement) {
 }
 
 export function enhancePublicArticle(root: HTMLElement) {
+  groupPublicImageText(root);
   window.addEventListener("message", (event) => {
     if (event.origin !== "https://embed.bsky.app") return;
     const { id, height } = event.data ?? {};
