@@ -112,6 +112,8 @@ resource "aws_cloudwatch_log_delivery" "representative_articles" {
     "time",
     "cs-method",
     "cs-uri-stem",
+    "cs(User-Agent)",
+    "c-ip",
     "sc-status",
     "x-edge-result-type",
     "x-edge-request-id",

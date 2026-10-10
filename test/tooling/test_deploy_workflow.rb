@@ -5,6 +5,7 @@ require "yaml"
 require "json"
 require "open3"
 require "tmpdir"
+require "fileutils"
 require "rbconfig"
 
 class DeployWorkflowTest < Minitest::Test
@@ -79,6 +80,36 @@ class DeployWorkflowTest < Minitest::Test
     assert_equal "linux/arm64", image.dig("with", "platforms")
     assert_equal "type=gha,scope=${{ inputs.service }}", image.dig("with", "cache-from")
     assert_equal "type=gha,mode=max,scope=${{ inputs.service }}", image.dig("with", "cache-to")
+  end
+
+  def test_stable_assets_upload_robots_as_cacheable_plain_text
+    script = @workflow.dig("jobs", "deploy", "steps").find { |step| step["name"] == "Publish stable site assets" }.fetch("run")
+    Dir.mktmpdir("deploy-robots") do |directory|
+      FileUtils.mkdir_p(File.join(directory, "dist/site/static/authoring"))
+      %w[static/authoring/app.js static/authoring/app.css draft-offline.js robots.txt].each do |asset|
+        File.write(File.join(directory, "dist/site", asset), asset)
+      end
+      executable = File.join(directory, "aws")
+      calls = File.join(directory, "calls.jsonl")
+      File.write(executable, <<~RUBY)
+        #!#{RbConfig.ruby}
+        require "json"
+        abort "Missing upload source" unless ARGV[0, 2] == ["s3", "cp"] && File.file?(ARGV[2])
+        File.open(ENV.fetch("AWS_CALLS"), "a") { |file| file.puts(JSON.generate(ARGV)) }
+      RUBY
+      File.chmod(0o755, executable)
+      output, error, status = Open3.capture3(
+        { "PATH" => "#{directory}:#{ENV.fetch('PATH')}", "SITE_BUCKET" => "test-site", "AWS_CALLS" => calls },
+        "bash", "-e", "-o", "pipefail", "-c", script, chdir: directory
+      )
+      assert status.success?, "#{output}\n#{error}"
+      uploads = File.readlines(calls).map { |line| JSON.parse(line) }
+      robots = uploads.find { |arguments| arguments[3] == "s3://test-site/robots.txt" }
+      refute_nil robots
+      assert_equal "dist/site/robots.txt", robots[2]
+      assert_equal "text/plain; charset=utf-8", robots.fetch(robots.index("--content-type") + 1)
+      assert_equal "public,max-age=300", robots.fetch(robots.index("--cache-control") + 1)
+    end
   end
 
   def test_images_are_reused_by_content_hash_and_deployed_by_digest

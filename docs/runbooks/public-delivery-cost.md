@@ -7,6 +7,9 @@ CloudFront invalidation、追加のカスタムメトリクス、常時監視ダ
 ## 取得量と費用
 
 - 既存CloudFrontログは全distributionが対象。`representative_article_logs` を再利用する。
+- Botの調査にはUser-Agentと接続元IPも記録する。公開閲覧と管理・APIを分け、Botを名乗るアクセス、同じ接続元の頻度、キャッシュMissを集計する。User-Agentだけで正規Botと確定せず、必要なら公式IP範囲と照合する。
+- アクセスログは非公開S3で30日保持する。IPは集計結果へ掲載せず、Cookie・Referer・クエリ文字列は記録しない。2026-10-10の項目追加後は、まず3日分を観測して追加ログ量とBotの割合を確認する。
+- `public/robots.txt` はbuild成果物と通常のdeploymentに含め、S3から配信する。公開記事の巡回を許可し、管理・API・認証への巡回を避けてもらう。robots.txtはアクセス制御ではなく、従わないBotの拒否は観測結果に基づいて別途判断する。
 - `operation_metrics` はLambda呼び出しの10%だけに1行出す。リクエストIDのハッシュで採取する。
 - `operation_metrics_until` はUnix秒。有効期限は一度の観測につき最大7日先とし、延長は観測結果を見て判断する。
   未設定・期限切れなら追加ログを出さない。デプロイで期限を自動更新しない。

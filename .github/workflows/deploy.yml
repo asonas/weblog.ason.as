@@ -215,6 +215,7 @@ jobs:
           [[ -f dist/site/index.html ]]
           [[ -f dist/site/public.html ]]
           [[ -f dist/site/404.html ]]
+          [[ -f dist/site/robots.txt ]]
           [[ -f dist/site/static/authoring/app.js ]]
           [[ -f dist/site/static/authoring/app.css ]]
           find dist/site/static/authoring/assets -type f -print -quit | grep -q .
@@ -416,6 +417,8 @@ jobs:
             --content-type 'text/css; charset=utf-8' --cache-control 'public,max-age=0,must-revalidate'
           aws s3 cp dist/site/draft-offline.js "s3://${SITE_BUCKET}/draft-offline.js" --only-show-errors \
             --content-type 'text/javascript; charset=utf-8' --cache-control 'no-cache'
+          aws s3 cp dist/site/robots.txt "s3://${SITE_BUCKET}/robots.txt" --only-show-errors \
+            --content-type 'text/plain; charset=utf-8' --cache-control 'public,max-age=300'
       - name: Publish site HTML
         if: steps.current.outputs.current == 'true'
         run: |
