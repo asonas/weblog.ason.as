@@ -493,7 +493,7 @@ export class DraftSession extends EventTarget {
       session.addPiece();
     }
     if (session.hasPendingChanges()) session.schedule();
-    session.pollTimer = setInterval(session.refresh, 10_000);
+    session.pollTimer = setInterval(session.refresh, 60_000);
     session.channel = new BroadcastChannel(`draft:${id}`);
     session.channel.onmessage = () => {
       if (!session.isSyncing && !session.isComposing && !session.isPublishing)

@@ -103,8 +103,8 @@ run "dynamic_api_caching_disabled" {
   }
 
   assert {
-    condition     = one([for behavior in aws_cloudfront_distribution.weblog.ordered_cache_behavior : behavior if behavior.path_pattern == "/feed.xml"]).cache_policy_id == data.aws_cloudfront_cache_policy.caching_disabled.id
-    error_message = "the public Atom feed must retain its previous uncached behavior"
+    condition     = one([for behavior in aws_cloudfront_distribution.weblog.ordered_cache_behavior : behavior if behavior.path_pattern == "/feed.xml"]).cache_policy_id == aws_cloudfront_cache_policy.public_html.id
+    error_message = "the public Atom feed must use the origin-controlled shared cache"
   }
 
   assert {

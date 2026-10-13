@@ -41,19 +41,19 @@ module WeblogAuthoring
                  end
       if response.fetch(:statusCode) == 404
         route = URI::DEFAULT_PARSER.unescape(path.delete_prefix("/"))
-        if @reader.list_pages.any? { |page| page.links.any? { |link| link.name == route } }
-          renderer = WebmentionSitePublisher.new(database: @reader, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
+        renderer = WebmentionSitePublisher.new(database: @reader, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
+        release = nil
+        html = renderer.render_linked_page(route) do
           release = display_release if @dynamic_article_routes.include?("*")
-          shell = release ? release.fetch(:shell) : object("static/authoring/public.html", "text/html; charset=utf-8").fetch(:body)
-          html = renderer.render_linked_page(route, shell:)
-          if html
-            response = if release
-                         public_html(html, release.fetch(:id), event)
-                       else
-                         { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => "no-store" }, body: html }
-                       end
-          end
-          OperationMetrics.delivery("linked", release: release&.fetch(:id)) if html
+          release ? release.fetch(:shell) : object("static/authoring/public.html", "text/html; charset=utf-8").fetch(:body)
+        end
+        if html
+          response = if release
+                       public_html(html, release.fetch(:id), event)
+                     else
+                       { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => "no-store" }, body: html }
+                     end
+          OperationMetrics.delivery("linked", release: release&.fetch(:id))
         end
         response = response.merge(headers: response.fetch(:headers, {}).merge("cache-control" => "no-store")) if response.fetch(:statusCode) == 404
       end

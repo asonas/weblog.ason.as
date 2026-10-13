@@ -34,6 +34,9 @@ UTC 09-25〜10-01の全Lambdaの最大値は22,744回/日、authoringの最大�
 
 ## ログの意味
 
+2026-10-13の費用対策では、公開RSSの共有キャッシュを60分（`s-maxage=3600`）、ブラウザ側を5分に設定する。RSSの公開反映が遅れることは許容する。公開記事の共有TTLは180秒のままにする。
+下書きの定期更新確認は60秒とし、入力の保存とフォーカス復帰時の確認は維持する。リンク関連ページは、存在確認と描画を同じ一覧取得で行い、見つからない場合はshellを取得しない。リンク元の専用索引は追加しない。
+
 `workload` はpublic_html / public_api / authoring / publication / scheduled_maintenance、
 およびinbox・webmention・draft workerの固定分類。
 `delivery` はdynamic / stored / linked。dynamicの場合は `display_release` も記録する。

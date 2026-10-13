@@ -39,7 +39,9 @@ class DraftSiteTest < Minitest::Test
       assert_includes html, "href=\"/#{WeblogAuthoring.encoded_route('紹介記事')}\""
       assert_includes html, '/frontend/authoring/publicArticle.ts'
       assert_equal "static/authoring/public.html", s3.api_requests.last.fetch(:params).fetch(:key)
+      requests_before_missing = s3.api_requests.length
       assert_equal 404, site.call(event.merge("rawPath" => "/unknown")).fetch(:statusCode)
+      assert_equal requests_before_missing, s3.api_requests.length
       assert_equal "", site.call(event.merge("requestContext" => { "http" => { "method" => "HEAD" } })).fetch(:body)
     end
   end
@@ -149,7 +151,15 @@ class DraftSiteTest < Minitest::Test
       root = Pathname(directory)
       database = WeblogAuthoring::DevelopmentDatabase.new(root.join("articles.sqlite3"), content_dir: root.join("content"))
       database.setup!
-      store = WeblogAuthoring::DraftStore.sqlite(root.join("drafts.sqlite3"))
+      queries = []
+      store = WeblogAuthoring::DraftStore.new do |&block|
+        connection = SQLite3::Database.new(root.join("drafts.sqlite3").to_s)
+        connection.results_as_hash = true
+        connection.trace { |sql| queries << sql }
+        block.call(WeblogAuthoring::DraftStore::SqliteConnection.new(connection))
+      ensure
+        connection&.close
+      end
       store.setup!
       article = { "id" => "dc802ad0b89946aeb6b7623c2ba7bc79", "page_type" => "named", "route" => "紹介記事", "title" => "紹介記事",
         "body" => "[[KORG multi/poly]]", "cover_mode" => "none", "cover_image_url" => nil,
@@ -168,7 +178,9 @@ class DraftSiteTest < Minitest::Test
         store:, site_url: "https://example.com", dynamic_article_routes: ["*"])
       event = { "rawPath" => "/KORG%20multi%2Fpoly", "requestContext" => { "http" => { "method" => "GET" } } }
       objects.put_object(bucket: "site", key: "display-releases/current.json", body: JSON.generate("id" => "a" * 40))
+      queries.clear
       first = site.call(event)
+      assert_operator queries.count { |sql| sql.include?("FROM article_publication_heads h") && !sql.include?(" WHERE ") }, :<=, 1
       assert_equal 200, first.fetch(:statusCode)
       assert_includes first.fetch(:body), '<h1 class="p-name">KORG multi/poly</h1>'
       assert_includes first.fetch(:body), WeblogAuthoring.encoded_route("紹介記事")

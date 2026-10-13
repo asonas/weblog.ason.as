@@ -654,7 +654,7 @@ module WeblogAuthoring
       html = if page && page.status == "published" && (resolution["snapshot"] || !page.empty?)
                renderer.render_document(page, shell:, source_url: "#{FRONTEND_ORIGIN}/#{WeblogAuthoring.encoded_route(route)}")
              else
-               renderer.render_linked_page(route, shell:)
+               renderer.render_linked_page(route) { shell }
              end
       content_type "text/html", charset: "utf-8"
       headers "Cache-Control" => "no-store"

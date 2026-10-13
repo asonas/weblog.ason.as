@@ -83,10 +83,12 @@ module WeblogAuthoring
       render_mentions(@database.approved_webmentions_for_page(id))
     end
 
-    def render_linked_page(route, shell:)
+    def render_linked_page(route)
       WeblogAuthoring.validate_page_name(route)
       pages = @database.list_pages.select { |page| page.links.any? { |link| link.name == route } }
       return nil if pages.empty?
+
+      shell = yield
 
       title = CGI.escapeHTML(route)
       links = pages.map do |page|

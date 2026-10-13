@@ -168,7 +168,7 @@ module WeblogAuthoring
       return draft_response(event, method, path) if path == "/api/authoring/drafts" || path.start_with?("/api/authoring/drafts/")
       outputs = @draft_outputs
       if method == "GET" && path == "/feed.xml" && outputs
-        return { statusCode: 200, headers: { "content-type" => "application/atom+xml; charset=utf-8", "cache-control" => "public, max-age=300" }, body: outputs.feed }
+        return { statusCode: 200, headers: { "content-type" => "application/atom+xml; charset=utf-8", "cache-control" => "public, max-age=300, s-maxage=3600" }, body: outputs.feed }
       end
       return health_response if method == "GET" && path == "/health"
       return auth_session_response(event) if method == "GET" && path == "/api/auth/session"

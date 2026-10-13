@@ -138,6 +138,7 @@ class DraftOutputsTest < Minitest::Test
     assert_equal "completed", JSON.parse(scheduled.fetch(:body)).fetch("status")
     feed = api.call({ "requestContext" => { "http" => { "method" => "GET" } }, "rawPath" => "/feed.xml" })
     assert_equal 200, feed.fetch(:statusCode)
+    assert_equal "public, max-age=300, s-maxage=3600", feed.dig(:headers, "cache-control")
     assert_includes feed.fetch(:body), "urn:uuid:#{@id}"
     refute_includes feed.fetch(:body), "Legacy article"
     search = api.call({ "requestContext" => { "http" => { "method" => "GET" } }, "rawPath" => "/api/search", "queryStringParameters" => { "q" => "Public" } })

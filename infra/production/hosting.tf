@@ -19,7 +19,7 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host_header" {
 
 resource "aws_cloudfront_cache_policy" "public_html" {
   name        = "weblog-public-html-production"
-  comment     = "Origin opt-in for published HTML; 180s fresh and up to 24h stale on error"
+  comment     = "Origin opt-in for public responses; freshness set by the origin"
   min_ttl     = 0
   default_ttl = 0
   max_ttl     = 86580
@@ -225,7 +225,7 @@ resource "aws_cloudfront_distribution" "weblog" {
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD"]
     compress                 = true
-    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    cache_policy_id          = aws_cloudfront_cache_policy.public_html.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
   }
 
