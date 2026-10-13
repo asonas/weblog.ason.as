@@ -6,3 +6,16 @@ Disallow: /oauth/
 
 User-agent: MJ12bot
 Disallow: /
+
+User-agent: Cotoyogi
+Crawl-delay: 600
+Disallow: /api/
+Disallow: /authoring/
+Disallow: /draft-editor
+Disallow: /oauth/
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: Reflectionbot
+Disallow: /
