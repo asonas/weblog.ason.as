@@ -48,6 +48,8 @@ module WeblogAuthoring
     def dispatch: (lambda_event) -> lambda_response
     def proofreading_response: (lambda_event) -> lambda_response
     def draft_response: (lambda_event, String, String) -> lambda_response
+    def draft_publication_response: (lambda_event, String, DraftStore, MatchData) -> lambda_response
+    def draft_upload_response: (lambda_event, String, DraftStore, MatchData) -> lambda_response
     def health_response: () -> lambda_response
     def publish_feed: () -> lambda_response
     def run_scheduled_maintenance: () -> lambda_response

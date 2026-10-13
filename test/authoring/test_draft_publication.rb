@@ -123,6 +123,17 @@ class DraftPublicationTest < Minitest::Test
         "headers" => { "x-csrf-token" => "csrf", "content-type" => "application/json" }, "cookies" => authenticated ? ["weblog_authoring_session=#{cookie}"] : [], "body" => JSON.generate(payload), })
     end
     base = "/api/authoring/drafts/#{ID}/publications"
+    [
+      ["GET", base],
+      ["DELETE", "#{base}/prepare"],
+      ["GET", "#{base}/version/run"],
+      ["POST", "#{base}/version"],
+      ["POST", "#{base}/version/run/extra"],
+    ].each do |method, path|
+      response = request.call(method, path)
+      assert_equal 404, response[:statusCode], "#{method} #{path}"
+      assert_equal "Not Found", JSON.parse(response[:body]).fetch("error")
+    end
     assert_equal 401, request.call("POST", "#{base}/prepare", {}, false)[:statusCode]
     assert_equal 404, request.call("GET", "/api/pages/#{ID}", {}, false)[:statusCode]
     confirmation = JSON.parse(request.call("POST", "#{base}/prepare")[:body])

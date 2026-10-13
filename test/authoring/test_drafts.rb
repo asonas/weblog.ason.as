@@ -70,6 +70,60 @@ class DraftsTest < Minitest::Test
     assert_equal 404, call("PUT", "", { "protocol" => 1, "generation" => 1 })[:statusCode]
   end
 
+  def test_publication_and_upload_routes_require_authorization_before_processing
+    routes = [
+      ["POST", "/publications"],
+      ["POST", "/publications/prepare"],
+      ["POST", "/publications/version/run"],
+      ["POST", "/uploads"],
+      ["PUT", "/uploads/update/chunks/0"],
+      ["POST", "/uploads/update/commit"],
+    ]
+    routes.each do |method, path|
+      response = call(method, path, {}, authenticated: false)
+      assert_equal 401, response[:statusCode], path
+      assert_equal "private, no-store", response[:headers]["cache-control"], path
+      assert_equal 403, call(method, path, {}, csrf: "wrong")[:statusCode], path
+    end
+    @cookie = @codec.issue(kind: "session", attributes: { "github_user_id" => 1, "csrf_token" => "csrf" }, ttl: 3600)
+    routes.each do |method, path|
+      assert_equal 403, call(method, path, {})[:statusCode], path
+    end
+  end
+
+  def test_unsupported_upload_routes_do_not_change_the_draft
+    call("PUT", "", { "protocol" => 1, "generation" => 1 })
+    routes = [
+      ["GET", "/uploads"],
+      ["PUT", "/uploads"],
+      ["POST", "/uploads/update"],
+      ["POST", "/uploads/update/chunks/0"],
+      ["PUT", "/uploads/update/chunks/-1"],
+      ["PUT", "/uploads/update/chunks/0/extra"],
+      ["GET", "/uploads/update/commit"],
+      ["POST", "/uploads/update/commit/extra"],
+    ]
+    routes.each do |method, path|
+      response = call(method, path, {})
+      assert_equal 404, response[:statusCode], "#{method} #{path}"
+      assert_equal "Not Found", JSON.parse(response[:body]).fetch("error")
+    end
+    assert_equal 0, JSON.parse(call("GET")[:body]).fetch("head")
+  end
+
+  def test_publication_routes_are_unavailable_without_publication_dependencies
+    [
+      ["POST", "/publications"],
+      ["POST", "/publications/prepare"],
+      ["POST", "/publications/version/run"],
+      ["GET", "/publications/version"],
+    ].each do |method, path|
+      response = call(method, path, {})
+      assert_equal 404, response[:statusCode], path
+      assert_equal "Not Found", JSON.parse(response[:body]).fetch("error")
+    end
+  end
+
   def test_legacy_article_identity_survives_draft_storage_and_reopening
     @article_id = "dc802ad0b89946aeb6b7623c2ba7bc79"
     assert_equal 200, call("PUT", "", { "protocol" => 1, "generation" => 1 })[:statusCode]

@@ -568,43 +568,57 @@ module WeblogAuthoring
         return json_response(404, error: "Not Found")
       end
       publication = %r{\A/api/authoring/drafts/([^/]+)/publications(?:/([^/]+)(?:/(run))?)?\z}.match(path)
-      if publication
-        service = @draft_publication
-        publisher = @draft_publisher
-        return json_response(404, error: "Not Found") unless service && publisher
-        id = publication[1].to_s
-        version_id, action = publication.captures.drop(1)
-        if method == "POST" && version_id.nil?
-          return json_response(202, service.accept(id, parse_json(event)))
-        elsif method == "POST" && version_id == "prepare" && action.nil?
-          return json_response(200, service.prepare(id))
-        elsif method == "POST" && action == "run" && version_id
-          jobs = @draft_jobs
-          return json_response(200, jobs ? jobs.run(id, version_id, retry_now: true) : publisher.run(id, version_id))
-        elsif method == "GET" && version_id && action.nil?
-          job = store.publication_job(id, version_id).merge("stages" => store.publication_stages(id, version_id))
-          dispatch_id = event.dig("queryStringParameters", "dispatch_id")
-          job["dispatch"] = store.publication_dispatch(id, version_id, dispatch_id) if dispatch_id
-          return json_response(200, job)
-        end
-        return json_response(404, error: "Not Found")
-      end
+      return draft_publication_response(event, method, store, publication) if publication
+
       match = %r{\A/api/authoring/drafts/([^/]+)(?:/(uploads)(?:/([^/]+)(?:(?:/(chunks)/(\d+))|(?:/(commit)))?)?)?\z}.match(path)
       return json_response(404, error: "Not Found") unless match
+      return draft_upload_response(event, method, store, match) if match[2] == "uploads"
+
       id = match[1].to_s
-      resource, update_id, chunks, position, commit = match.captures.drop(1)
-      payload = if method == "PUT" && resource.nil?
+      payload = if method == "PUT"
                   store.create(id, parse_json(event))
-                elsif method == "POST" && resource == "uploads" && update_id.nil?
-                  store.begin_upload(id, parse_json(event))
-                elsif method == "PUT" && resource == "uploads" && update_id && chunks == "chunks"
-                  store.upload_chunk(id, update_id, position.to_s, parse_json(event))
-                elsif method == "POST" && resource == "uploads" && update_id && commit == "commit"
-                  store.commit_upload(id, update_id, parse_json(event))
-                elsif method == "GET" && resource.nil?
+                elsif method == "GET"
                   store.read(id, event["queryStringParameters"] || {})
-                elsif method == "DELETE" && resource.nil?
+                elsif method == "DELETE"
                   store.delete_piece_draft(id, parse_json(event))
+                else
+                  return json_response(404, error: "Not Found")
+                end
+      json_response(200, payload)
+    end
+
+    def draft_publication_response(event, method, store, match)
+      service = @draft_publication
+      publisher = @draft_publisher
+      return json_response(404, error: "Not Found") unless service && publisher
+      id = match[1].to_s
+      version_id, action = match.captures.drop(1)
+      if method == "POST" && version_id.nil?
+        json_response(202, service.accept(id, parse_json(event)))
+      elsif method == "POST" && version_id == "prepare" && action.nil?
+        json_response(200, service.prepare(id))
+      elsif method == "POST" && action == "run" && version_id
+        jobs = @draft_jobs
+        json_response(200, jobs ? jobs.run(id, version_id, retry_now: true) : publisher.run(id, version_id))
+      elsif method == "GET" && version_id && action.nil?
+        job = store.publication_job(id, version_id).merge("stages" => store.publication_stages(id, version_id))
+        dispatch_id = event.dig("queryStringParameters", "dispatch_id")
+        job["dispatch"] = store.publication_dispatch(id, version_id, dispatch_id) if dispatch_id
+        json_response(200, job)
+      else
+        json_response(404, error: "Not Found")
+      end
+    end
+
+    def draft_upload_response(event, method, store, match)
+      id = match[1].to_s
+      update_id, chunks, position, commit = match.captures.drop(2)
+      payload = if method == "POST" && update_id.nil?
+                  store.begin_upload(id, parse_json(event))
+                elsif method == "PUT" && update_id && chunks == "chunks"
+                  store.upload_chunk(id, update_id, position.to_s, parse_json(event))
+                elsif method == "POST" && update_id && commit == "commit"
+                  store.commit_upload(id, update_id, parse_json(event))
                 else
                   return json_response(404, error: "Not Found")
                 end
