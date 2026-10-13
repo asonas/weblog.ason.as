@@ -3,3 +3,6 @@ Disallow: /api/
 Disallow: /authoring/
 Disallow: /draft-editor
 Disallow: /oauth/
+
+User-agent: MJ12bot
+Disallow: /
