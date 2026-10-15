@@ -8,6 +8,7 @@ import {
   groupPreviewImageText,
 } from "./ArticleImageTextGroup";
 import { groupPublicImageText } from "./articleImageTextGroups";
+import { markdownForEditor } from "./markdown";
 
 test("public images keep only their following paragraphs across image and piece boundaries", () => {
   const dom = new JSDOM(`<article><div class="public-article-body">
@@ -99,3 +100,76 @@ test("reading preview groups image prose while preserving Markdown and rebuildin
     dom.window.close();
   }
 });
+
+for (const [position, body] of [
+  ["at the start", "VIDEO\n\n![写真](/photo.webp)\n\n本文"],
+  ["after an image", "![写真](/photo.webp)\n\nVIDEO\n\n本文"],
+  ["after prose", "本文\n\nVIDEO"],
+  [
+    "after a piece boundary",
+    "![写真](/photo.webp)\n\n本文\n\n---\n\nVIDEO\n\n本文",
+  ],
+]) {
+  test(`reading preview embeds YouTube ${position} on creation and content updates`, async () => {
+    const dom = new JSDOM("<!doctype html><div id='editor'></div>");
+    Object.assign(globalThis, {
+      document: dom.window.document,
+      window: dom.window,
+      HTMLElement: dom.window.HTMLElement,
+      Element: dom.window.Element,
+      Node: dom.window.Node,
+      getComputedStyle: dom.window.getComputedStyle,
+    });
+    const { ARTICLE_PREVIEW_EXTENSIONS } = await import(
+      "./articlePreviewEditor"
+    );
+    const extensions = [...ARTICLE_PREVIEW_EXTENSIONS, ArticleImageTextGroup];
+    const markdown = new MarkdownManager({ extensions });
+    const element = document.getElementById("editor");
+    assert.ok(element);
+    const initialId = "EB-dWe5iJ58";
+    const initialSource = body.replace(
+      "VIDEO",
+      `https://www.youtube.com/watch?v=${initialId}`,
+    );
+    const editor = new Editor({
+      element,
+      editable: false,
+      extensions,
+      content: groupPreviewImageText(
+        markdown.parse(markdownForEditor(initialSource)),
+      ),
+    });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal(
+        element.querySelectorAll(".youtube-player iframe").length,
+        1,
+      );
+      assert.equal(
+        element.querySelector(".youtube-player iframe")?.getAttribute("src"),
+        `https://www.youtube.com/embed/${initialId}?enablejsapi=1`,
+      );
+      assert.equal(editor.getMarkdown().trimEnd(), initialSource);
+
+      const updatedId = "szxn42peP3M";
+      const updatedSource = initialSource.replace(initialId, updatedId);
+      editor.commands.setContent(
+        groupPreviewImageText(markdown.parse(markdownForEditor(updatedSource))),
+        { emitUpdate: false },
+      );
+      assert.equal(
+        element.querySelectorAll(".youtube-player iframe").length,
+        1,
+      );
+      assert.equal(
+        element.querySelector(".youtube-player iframe")?.getAttribute("src"),
+        `https://www.youtube.com/embed/${updatedId}?enablejsapi=1`,
+      );
+      assert.equal(editor.getMarkdown().trimEnd(), updatedSource);
+    } finally {
+      editor.destroy();
+      dom.window.close();
+    }
+  });
+}

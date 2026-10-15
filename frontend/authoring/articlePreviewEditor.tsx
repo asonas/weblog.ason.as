@@ -619,11 +619,14 @@ window.addEventListener("message", resizeBlueskyEmbed);
 
 function replaceYouTubeParagraphs(state: EditorState, nodeType: NodeType) {
   const replacements: Array<{ from: number; to: number; url: string }> = [];
-  state.doc.forEach((node, offset, index) => {
+  state.doc.descendants((node, offset) => {
+    if (node.type.name === "articleImageTextGroup") return true;
+    if (node.type.name !== "paragraph") return false;
     const url = node.textContent.trim();
-    if (index > 0 && node.type.name === "paragraph" && youtubeVideoId(url)) {
+    if (youtubeVideoId(url)) {
       replacements.push({ from: offset, to: offset + node.nodeSize, url });
     }
+    return false;
   });
   if (replacements.length === 0) return null;
 
