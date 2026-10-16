@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Photo Inbox</string>
+    <string name="app_name">weblog</string>
     <string name="recent_photos">直近7日分の写真</string>
     <string name="settings">設定</string>
     <string name="photo_permission_required">写真へのアクセスを許可してください</string>

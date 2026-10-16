@@ -9,6 +9,17 @@ struct LibraryPhoto: Identifiable, Sendable {
   fileprivate let asset: PHAsset
 }
 
+struct PhotoDay: Identifiable {
+  let id: Date
+  let photos: [LibraryPhoto]
+
+  static func sections(for photos: [LibraryPhoto], calendar: Calendar = .current) -> [PhotoDay] {
+    Dictionary(grouping: photos) { calendar.startOfDay(for: $0.capturedAt) }
+      .map { PhotoDay(id: $0.key, photos: $0.value.sorted { $0.capturedAt > $1.capturedAt }) }
+      .sorted { $0.id > $1.id }
+  }
+}
+
 @MainActor
 @Observable
 final class PhotoLibrary {

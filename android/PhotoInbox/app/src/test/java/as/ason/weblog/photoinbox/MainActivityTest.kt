@@ -149,12 +149,12 @@ class MainActivityTest {
             shadowOf(Looper.getMainLooper()).idle()
             assertTrue((grid.layoutManager as GridLayoutManager).spanCount > 3)
             until { grid.childCount > 0 }
-            assertTrue(kotlin.math.abs(grid.getChildAt(0).width - grid.getChildAt(0).height) <= 2)
+            assertTrue(kotlin.math.abs(grid.getChildAt(1).width - grid.getChildAt(1).height) <= 2)
             grid.measure(android.view.View.MeasureSpec.makeMeasureSpec(810, android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.makeMeasureSpec(600, android.view.View.MeasureSpec.EXACTLY))
             grid.layout(0, 0, 810, 600)
             shadowOf(Looper.getMainLooper()).idle()
-            assertTrue(kotlin.math.abs(grid.getChildAt(0).width - grid.getChildAt(0).height) <= 2)
-            assertTrue(grid.getChildAt(0).contentDescription.toString().contains("写真データの確認"))
+            assertTrue(kotlin.math.abs(grid.getChildAt(1).width - grid.getChildAt(1).height) <= 2)
+            assertTrue(grid.getChildAt(1).contentDescription.toString().contains("写真データの確認"))
             failures.performClick()
             shadowOf(ShadowAlertDialog.getLatestAlertDialog()).clickOnItem(0)
             ShadowAlertDialog.getLatestAlertDialog().getButton(android.app.AlertDialog.BUTTON_NEUTRAL).performClick()
@@ -170,6 +170,49 @@ class MainActivityTest {
             Thread.sleep(10)
         }
         fail("Timed out waiting for activity state")
+    }
+
+    @Test
+    fun `photos use local date headers across midnight and keep selection attached to photos`() {
+        val previousZone = java.util.TimeZone.getDefault()
+        val previousLocale = java.util.Locale.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Tokyo"))
+        java.util.Locale.setDefault(java.util.Locale.JAPAN)
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup().visible()
+        try {
+            val activity = controller.get()
+            until { activity.findViewById<Button>(R.id.failureButton).isEnabled }
+            val grid = activity.findViewById<RecyclerView>(R.id.photoGrid)
+            val adapter = grid.adapter as PhotoAdapter
+            val photos = listOf(
+                LibraryPhoto(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, 2), Instant.parse("2026-10-15T14:59:59Z"), "photos"),
+                LibraryPhoto(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, 3), Instant.parse("2026-10-15T15:00:00Z"), "photos"),
+                LibraryPhoto(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, 4), Instant.parse("2026-10-16T01:00:00Z"), "photos"),
+            )
+            adapter.submitList(photos)
+            grid.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1200, View.MeasureSpec.EXACTLY))
+            grid.layout(0, 0, 400, 1200)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(5, adapter.itemCount)
+            assertEquals("2026年10月16日", (grid.findViewHolderForAdapterPosition(0)!!.itemView as TextView).text.toString())
+            assertEquals("2026年10月15日", (grid.findViewHolderForAdapterPosition(3)!!.itemView as TextView).text.toString())
+            val layout = grid.layoutManager as GridLayoutManager
+            assertEquals(layout.spanCount, layout.spanSizeLookup.getSpanSize(0))
+            assertEquals(layout.spanCount, layout.spanSizeLookup.getSpanSize(3))
+            assertEquals(1, layout.spanSizeLookup.getSpanSize(2))
+            assertTrue(ViewCompat.isAccessibilityHeading(grid.findViewHolderForAdapterPosition(0)!!.itemView))
+            grid.findViewHolderForAdapterPosition(2)!!.itemView.performClick()
+            grid.findViewHolderForAdapterPosition(2)!!.itemView.performClick()
+            val selection = PhotoSelectionStore(application).apply { updatePhotos(photos) }
+            assertEquals(PhotoSelectionStatus.EXCLUDED, selection.status(photos[1].uri.toString()))
+            assertEquals(PhotoSelectionStatus.SELECTED, selection.status(photos[0].uri.toString()))
+            adapter.submitList(emptyList())
+            assertEquals(0, adapter.itemCount)
+        } finally {
+            controller.pause().stop().destroy()
+            java.util.TimeZone.setDefault(previousZone)
+            java.util.Locale.setDefault(previousLocale)
+        }
     }
 
     @Test

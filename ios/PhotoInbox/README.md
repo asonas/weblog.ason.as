@@ -1,6 +1,6 @@
-# Photo Inbox for iOS
+# weblog for iOS
 
-直近7日分の写真を選び、weblog.ason.as の写真インボックスへ送るiOS / iPadOSアプリです。
+直近7日分の写真を撮影日ごとの一覧から選び、weblog.ason.as の写真インボックスへ送るiOS / iPadOSアプリです。
 iOS 27およびiPadOS 27以降に対応しています。
 
 「メモ」タブでは本文だけのメモを作成・編集できます。変更は端末へ自動保存し、接続中はInboxへ同期します。

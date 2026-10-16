@@ -90,7 +90,11 @@ class MainActivity : ComponentActivity() {
                 renderSelectionCount()
             }
         }
-        binding.photoGrid.layoutManager = GridLayoutManager(this, 3)
+        binding.photoGrid.layoutManager = GridLayoutManager(this, 3).apply {
+            spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                override fun getSpanSize(position: Int): Int = if (adapter.isDayHeader(position)) spanCount else 1
+            }
+        }
         binding.photoGrid.adapter = adapter
         binding.photoGrid.addOnLayoutChangeListener { view, _, _, _, _, oldLeft, _, oldRight, _ ->
             val grid = binding.photoGrid.layoutManager as GridLayoutManager

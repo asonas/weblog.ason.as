@@ -11,16 +11,24 @@ struct PhotoGridView: View {
   private let columns = [GridItem(.adaptive(minimum: 112, maximum: 180), spacing: 2)]
 
   var body: some View {
-    ZStack(alignment: .topTrailing) {
+    ZStack {
       Color.black.ignoresSafeArea()
       content
-      Button("A") { showingSettings = true }
-        .font(.headline)
-        .foregroundStyle(.primary)
-        .frame(width: 44, height: 44)
-        .background(.regularMaterial, in: Circle())
-        .padding()
+    }
+    .safeAreaInset(edge: .top, spacing: 0) {
+      HStack {
+        Text("直近7日分の写真").font(.headline)
+        Spacer()
+        Button {
+          showingSettings = true
+        } label: {
+          Image(systemName: "gearshape")
+            .frame(width: 44, height: 44)
+        }
         .accessibilityLabel("設定")
+      }
+      .padding(.horizontal)
+      .background(.regularMaterial)
     }
     .safeAreaInset(edge: .bottom) { sendBar }
     .sheet(isPresented: $showingSettings) { SettingsView() }
@@ -58,20 +66,35 @@ struct PhotoGridView: View {
   @ViewBuilder private var content: some View {
     if library.canRead {
       ScrollView {
-        LazyVGrid(columns: columns, spacing: 2) {
-          ForEach(library.photos) { photo in
-            PhotoCell(
-              photo: photo,
-              library: library,
-              status: selection.status(of: photo.id),
-              failure: uploads.failuresByAssetID[photo.id],
-              failureActionsDisabled: uploads.isSending
-            ) {
-              if let failure = uploads.failuresByAssetID[photo.id] {
-                presentedFailure = PresentedUploadFailure(assetID: photo.id, failure: failure)
-              } else {
-                selection.toggle(photo.id)
+        LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+          ForEach(PhotoDay.sections(for: library.photos)) { day in
+            Section {
+              LazyVGrid(columns: columns, spacing: 2) {
+                ForEach(day.photos) { photo in
+                  PhotoCell(
+                    photo: photo,
+                    library: library,
+                    status: selection.status(of: photo.id),
+                    failure: uploads.failuresByAssetID[photo.id],
+                    failureActionsDisabled: uploads.isSending
+                  ) {
+                    if let failure = uploads.failuresByAssetID[photo.id] {
+                      presentedFailure = PresentedUploadFailure(assetID: photo.id, failure: failure)
+                    } else {
+                      selection.toggle(photo.id)
+                    }
+                  }
+                }
               }
+            } header: {
+              Text(day.id, format: .dateTime.year().month().day())
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color(white: 0.12))
+                .accessibilityAddTraits(.isHeader)
             }
           }
         }
