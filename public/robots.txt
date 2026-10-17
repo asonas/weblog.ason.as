@@ -19,3 +19,8 @@ Disallow: /
 
 User-agent: Reflectionbot
 Disallow: /
+
+User-agent: AwarioBot
+User-agent: AwarioSmartBot
+User-agent: AwarioRssBot
+Disallow: /
