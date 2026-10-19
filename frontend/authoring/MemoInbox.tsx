@@ -209,6 +209,7 @@ export function MemoInbox({
       );
     }
   };
+  if (memos.length === 0) return error ? <p role="alert">{error}</p> : null;
   return (
     <section className="draft-inbox__column memo-inbox" aria-label="メモ">
       <header className="draft-inbox__column-header">

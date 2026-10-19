@@ -67,6 +67,7 @@ try {
       id: "video-1",
       source: "video",
       kind: "video",
+      ingested_at: new Date().toISOString(),
       payload: {
         avc: "/assets/uploads/2026/09/00000000-0000-4000-8000-000000000001.mp4",
         width: 1280,

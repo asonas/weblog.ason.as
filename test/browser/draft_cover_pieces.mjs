@@ -26,6 +26,10 @@ try {
   assert.ok(ready, "Isolated test server is ready");
   browser = await chromium.launch({ channel: "chrome", headless: true });
   const page = await browser.newPage();
+  let inboxItems = [];
+  let memos = [];
+  await page.route("**/api/inbox", route => route.fulfill({ json: { items: inboxItems } }));
+  await page.route("**/api/inbox/memos", route => route.fulfill({ json: { memos } }));
   await page.goto("http://127.0.0.1:15182/draft-editor");
   const title = page.getByRole("textbox", { name: "タイトル", exact: true });
   await title.waitFor();
@@ -103,6 +107,35 @@ try {
   await page.getByRole("textbox", { name: "4番目のかけら", exact: true }).waitFor();
   assert.equal(await page.locator(".draft-piece-editor textarea").count(), 4);
   assert.equal(await third.inputValue(), "3番目のかけらの加筆");
+  await page.getByRole("button", { name: "かけらを追加", exact: true }).click();
+  const fifth = page.getByRole("textbox", { name: "5番目のかけら", exact: true });
+  await fifth.waitFor();
+  assert.equal(await fifth.inputValue(), "");
+  assert.equal(await fifth.evaluate(field => document.activeElement === field && field.selectionStart === 0), true);
+  await page.keyboard.insertText("プラスで追加したかけら");
+  assert.equal(await third.inputValue(), "3番目のかけらの加筆");
+  await page.waitForFunction(() => document.querySelector(".draft-editor__sync-status")?.textContent.includes("サーバーに保存済み"));
+  await page.reload();
+  await fifth.waitFor();
+  assert.equal(await fifth.inputValue(), "プラスで追加したかけら");
+  const inbox = page.getByRole("region", { name: "素材", exact: true });
+  assert.equal(await inbox.locator(".draft-inbox__column").count(), 0);
+  inboxItems = [
+    { id: "photo", source: "photo", kind: "photo", payload: {} },
+    { id: "video", source: "video", kind: "video", payload: {} },
+    { id: "bookmark", source: "raindrop", kind: "bookmark", payload: {} },
+    { id: "post", source: "bluesky", kind: "post", payload: {} },
+    { id: "like", source: "bluesky", kind: "like", payload: {} },
+  ];
+  memos = [{ id: crypto.randomUUID(), body: "表示確認のメモ", revision: 1, updated_at: new Date().toISOString() }];
+  await page.reload();
+  await page.getByRole("textbox", { name: "メモ本文", exact: true }).waitFor();
+  assert.equal(await inbox.locator(".draft-inbox__column").count(), 6);
+  inboxItems = [];
+  memos = [];
+  await page.reload();
+  await fifth.waitFor();
+  await page.waitForFunction(() => document.querySelectorAll(".draft-inbox__column").length === 0);
   const draftId = new URL(page.url()).searchParams.get("id");
   await open.click();
   deleteApproved = true;
@@ -111,6 +144,8 @@ try {
   assert.equal(await page.evaluate(async id => (await fetch(`/api/authoring/drafts/${id}`)).status, draftId), 404);
   console.log("PASS: cover candidates include all pieces in article order, deduplicate images, exclude code, and remain unchanged when changing the active piece");
   console.log("PASS: a named article displays four editable pieces and preserves later-piece edits after reload");
+  console.log("PASS: the plus button appends an empty focused piece and saves its input across reloads");
+  console.log("PASS: all six inbox columns appear with items and disappear when empty");
   console.log("PASS: article settings contains download and guarded deletion, exports all pieces, fits 1280/390/320px, and restores focus on Escape");
 } finally {
   await browser?.close();

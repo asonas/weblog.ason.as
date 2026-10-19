@@ -340,6 +340,41 @@ html[data-draft-workspace="true"] body {
   box-shadow: inset 0 2px var(--authoring-nav-selected);
 }
 
+.draft-piece-add {
+  display: grid;
+  place-items: center;
+  inline-size: calc(100% - 32px);
+  min-block-size: 44px;
+  margin-block: 8px;
+  margin-inline: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-ink);
+  cursor: pointer;
+}
+
+.draft-piece-add svg {
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .draft-piece-add:hover:enabled {
+    background: var(--authoring-linen);
+  }
+}
+
+.draft-piece-add:active:enabled {
+  background: var(--authoring-linen);
+}
+
+.draft-piece-add:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .draft-editor__source:not(.draft-editor__source--pieces):has(.draft-pieces) {
   display: flex;
   flex-direction: column;
@@ -552,7 +587,7 @@ html[data-draft-workspace="true"] body {
   display: grid;
   flex: 1;
   min-block-size: 0;
-  grid-auto-columns: 23rem;
+  grid-auto-columns: max-content;
   grid-auto-flow: column;
   gap: 0;
   overflow-x: auto;
@@ -562,6 +597,7 @@ html[data-draft-workspace="true"] body {
 }
 
 .draft-inbox__column {
+  inline-size: 23rem;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-inline-size: 0;
@@ -586,6 +622,42 @@ html[data-draft-workspace="true"] body {
 .draft-inbox__column h2 {
   margin: 0;
   font-size: var(--text-ui);
+}
+
+.draft-inbox__column--collapsed {
+  inline-size: 44px;
+  grid-template-rows: 1fr;
+}
+
+.draft-inbox__toggle {
+  min-block-size: 44px;
+  padding-block: 8px;
+  padding-inline: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.draft-inbox__column--collapsed .draft-inbox__toggle {
+  writing-mode: vertical-rl;
+  text-align: start;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .draft-inbox__toggle:hover {
+    background: var(--authoring-linen);
+  }
+}
+
+.draft-inbox__toggle:active {
+  background: var(--authoring-linen);
+}
+
+.draft-inbox__toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .draft-inbox__reload {
@@ -712,8 +784,8 @@ html[data-draft-workspace="true"] body {
 }
 
 @media (max-width: 52rem) {
-  .draft-inbox__columns {
-    grid-auto-columns: min(23rem, calc(100vw - 2rem));
+  .draft-inbox__column:not(.draft-inbox__column--collapsed) {
+    inline-size: min(23rem, calc(100vw - 2rem));
   }
   .draft-editor__titlebar {
     padding-inline: var(--space-3);

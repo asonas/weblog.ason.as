@@ -10,6 +10,7 @@ type InboxItem = {
   id: string;
   source: InboxSource | "c4p";
   kind: "photo" | "video" | "post" | "like" | "bookmark" | "track";
+  ingested_at: string;
   payload: Record<string, unknown>;
 };
 
@@ -99,6 +100,7 @@ export function DraftInbox({
   const [error, setError] = useState("");
   const [busyItem, setBusyItem] = useState<string>();
   const [syncingSource, setSyncingSource] = useState<InboxSource>();
+  const [videoExpanded, setVideoExpanded] = useState<boolean>();
 
   const load = useCallback(async () => {
     try {
@@ -107,6 +109,7 @@ export function DraftInbox({
       });
       const result = await responseJson<InboxResponse>(response);
       setItems(result.items);
+      setVideoExpanded(undefined);
       setError("");
     } catch (cause) {
       setError(
@@ -243,7 +246,34 @@ export function DraftInbox({
           const columnItems = items.filter(
             (item) => item.source === source && (!kind || item.kind === kind),
           );
-          if (source === "video" && columnItems.length === 0) return null;
+          if (columnItems.length === 0) return null;
+          const isVideo = source === "video";
+          const isExpanded =
+            !isVideo ||
+            (videoExpanded ??
+              columnItems.some(
+                (item) =>
+                  Date.parse(item.ingested_at) >=
+                  Date.now() - 7 * 24 * 60 * 60 * 1000,
+              ));
+          if (!isExpanded)
+            return (
+              <section
+                className="draft-inbox__column draft-inbox__column--collapsed"
+                aria-label={label}
+                key={`${source}-${kind || "all"}`}
+              >
+                <button
+                  type="button"
+                  className="draft-inbox__toggle"
+                  aria-label="動画を開く"
+                  aria-expanded={false}
+                  onClick={() => setVideoExpanded(true)}
+                >
+                  動画 <span>{columnItems.length}</span>
+                </button>
+              </section>
+            );
           return (
             <section
               className="draft-inbox__column"
@@ -252,10 +282,27 @@ export function DraftInbox({
             >
               <header>
                 <h2>
-                  {label}{" "}
-                  <span className="draft-inbox__count">
-                    {columnItems.length}
-                  </span>
+                  {isVideo ? (
+                    <button
+                      type="button"
+                      className="draft-inbox__toggle"
+                      aria-label="動画を折りたたむ"
+                      aria-expanded={true}
+                      onClick={() => setVideoExpanded(false)}
+                    >
+                      {label}{" "}
+                      <span className="draft-inbox__count">
+                        {columnItems.length}
+                      </span>
+                    </button>
+                  ) : (
+                    <>
+                      {label}{" "}
+                      <span className="draft-inbox__count">
+                        {columnItems.length}
+                      </span>
+                    </>
+                  )}
                 </h2>
                 <button
                   className="draft-inbox__reload"

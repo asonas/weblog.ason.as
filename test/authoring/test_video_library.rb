@@ -61,7 +61,7 @@ class VideoLibraryTest < Minitest::Test
   def test_registers_through_authenticated_api_and_lists_only_for_matching_inbox_filters
     codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
     token = codec.issue(kind: "session", attributes: { "github_user_id" => 630_181, "login" => "asonas", "csrf_token" => "csrf" }, ttl: 600)
-    api = WeblogAuthoring::LambdaApi.new(database: @database, session_codec: codec, allowed_github_user_id: 630_181, s3_client: @s3, asset_bucket: "assets")
+    api = WeblogAuthoring::LambdaApi.new(database: @database, session_codec: codec, allowed_github_user_id: 630_181, s3_client: @s3, asset_bucket: "assets", clock: -> { @time })
     event = { "requestContext" => { "http" => { "method" => "POST" } }, "rawPath" => "/api/uploads",
               "body" => JSON.generate(@payload.merge("action" => "register_video")), "headers" => {}, }
     assert_equal 401, api.call(event).fetch(:statusCode)
@@ -79,5 +79,16 @@ class VideoLibraryTest < Minitest::Test
       assert_equal 200, response.fetch(:statusCode), response.fetch(:body)
       assert_equal(source == "photo" ? [] : [registered], JSON.parse(response.fetch(:body)).fetch("items"))
     end
+    event["queryStringParameters"] = { "source" => "video" }
+    registered_at = @time
+    @time = registered_at + (7 * 24 * 60 * 60)
+    assert_equal [registered], JSON.parse(api.call(event).fetch(:body)).fetch("items")
+    @time = registered_at + (30 * 24 * 60 * 60)
+    assert_equal [registered], JSON.parse(api.call(event).fetch(:body)).fetch("items")
+    event["queryStringParameters"] = {}
+    assert_equal [registered], JSON.parse(api.call(event).fetch(:body)).fetch("items")
+    assert_equal [registered], @database.list_video_materials
+    assert_equal registered, @library.register(@payload)
+    assert_equal(0, @s3.api_requests.count { |request| [:copy_object, :delete_object, :delete_objects].include?(request.fetch(:operation_name)) })
   end
 end
