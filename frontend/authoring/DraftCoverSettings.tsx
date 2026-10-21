@@ -17,6 +17,7 @@ export function bodyCoverImages(
 ): Array<{ src: string; alt: string }> {
   const images = new Map<string, { src: string; alt: string }>();
   const visit = (node: JSONContent) => {
+    if (node.type === "spoiler" || node.type === "spoilerBlock") return;
     if (node.type === "image" && typeof node.attrs?.src === "string") {
       const src = node.attrs.src;
       if (!images.has(src)) images.set(src, { src, alt: node.attrs.alt || "" });

@@ -11,6 +11,7 @@ import {
   LineUpdateRail,
 } from "./articlePreviewEditor";
 import type { DraftMetadata } from "./draftSession";
+import { installSpoilers } from "./installSpoilers";
 import { markdownForEditor } from "./markdown";
 
 const READING_PREVIEW_EXTENSIONS = [
@@ -60,6 +61,9 @@ export function DraftPreview({
   sourceBlockIndex,
 }: DraftPreviewProps) {
   const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (root.current) return installSpoilers(root.current);
+  }, []);
   const navigation = useRef<HTMLDivElement>(null);
   const isOnline = useOnlineStatus();
   useEffect(() => {

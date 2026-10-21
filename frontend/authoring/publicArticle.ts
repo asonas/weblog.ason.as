@@ -1,5 +1,6 @@
 import { groupPublicImageText } from "./articleImageTextGroups";
 import { hydrateEmbedCard } from "./EmbedCard";
+import { installSpoilers } from "./installSpoilers";
 import { mountMentionedByDays } from "./mentionedByDays";
 import { installMobileArticleSheet } from "./mobileArticleSheet";
 import { hydrateXPost } from "./XPost";
@@ -210,6 +211,7 @@ function enhanceArticleImages(root: HTMLElement) {
 }
 
 export function enhancePublicArticle(root: HTMLElement) {
+  installSpoilers(root);
   groupPublicImageText(root);
   window.addEventListener("message", (event) => {
     if (event.origin !== "https://embed.bsky.app") return;

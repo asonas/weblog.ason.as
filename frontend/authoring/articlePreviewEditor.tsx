@@ -1,7 +1,8 @@
+import type { JSONContent } from "@tiptap/core";
 import { type Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import { TableKit } from "@tiptap/extension-table";
-import { Markdown } from "@tiptap/markdown";
+import { Markdown, MarkdownManager } from "@tiptap/markdown";
 import type { NodeType } from "@tiptap/pm/model";
 import {
   type EditorState,
@@ -27,7 +28,9 @@ import { createLowlight } from "lowlight";
 import { type CSSProperties, useLayoutEffect, useState } from "react";
 import { EmbedCard } from "./EmbedCard";
 import { MarkdownClipboard } from "./MarkdownClipboard";
+import { markdownForEditor } from "./markdown";
 import { SelectableImage } from "./SelectableImage";
+import { Spoiler, SpoilerBlock } from "./SpoilerNodes";
 import { SpeakerDeckPlayer } from "./speakerDeck";
 import { Video } from "./Video";
 import { VideoUploadCards } from "./VideoUploadCard";
@@ -546,9 +549,24 @@ export function LineUpdateRail({
 }
 
 export function autoCoverImageUrl(body: string): string | null {
-  return (
-    /!\[[^\]]*\]\((\/assets\/[^\s)]+)(?:\s+[^)]*)?\)/.exec(body)?.[1] || null
-  );
+  const document = new MarkdownManager({
+    extensions: ARTICLE_PREVIEW_EXTENSIONS,
+  }).parse(markdownForEditor(body));
+  const visit = (node: JSONContent): string | null => {
+    if (node.type === "spoiler" || node.type === "spoilerBlock") return null;
+    if (
+      node.type === "image" &&
+      typeof node.attrs?.src === "string" &&
+      /^\/assets\/[^\s]+$/.test(node.attrs.src)
+    )
+      return node.attrs.src;
+    for (const child of node.content || []) {
+      const image = visit(child);
+      if (image) return image;
+    }
+    return null;
+  };
+  return visit(document);
 }
 
 export function youtubeVideoId(rawUrl: string): string | null {
@@ -931,6 +949,8 @@ export const ARTICLE_PREVIEW_EXTENSIONS = [
   CodeLineNavigation,
   WikiLinks,
   SelectableImage.configure({ allowBase64: false }),
+  Spoiler,
+  SpoilerBlock,
   Video,
   VideoUploadCards,
   EmbedCard,

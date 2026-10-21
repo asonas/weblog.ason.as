@@ -5,6 +5,7 @@ require "fileutils"
 require "json"
 require "sqlite3"
 require "aws-sdk-s3"
+require_relative "markdown"
 
 module WeblogAuthoring
   class SearchIndex
@@ -108,7 +109,7 @@ module WeblogAuthoring
     end
 
     def excerpt(body, query)
-      text = body.gsub(/\s+/, " ").strip
+      text = MarkdownRenderer.excerpt_source(body).gsub(/\s+/, " ").strip
       match = text.downcase.index(query.downcase) || 0
       start = [match - 60, 0].max
       value = text.slice(start, 160).to_s

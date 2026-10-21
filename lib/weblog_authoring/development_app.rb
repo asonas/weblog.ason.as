@@ -1446,7 +1446,7 @@ module WeblogAuthoring
     end
 
     def page_excerpt(page)
-      lines = page.body.to_s.lines.map(&:strip)
+      lines = MarkdownRenderer.excerpt_source(page.body).lines.map(&:strip)
       lines.shift if lines.first == page.display_title
       lines.reject! { |line| line.empty? || line.match?(/\A\[https?:\/\//) }
       lines.join(" ")

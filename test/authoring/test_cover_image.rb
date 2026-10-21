@@ -5,6 +5,12 @@ require "weblog_authoring/cover_image"
 require "weblog_authoring/models"
 
 class CoverImageTest < Minitest::Test
+  def test_auto_skips_spoiler_images
+    body = "||![隠す](/assets/hidden.jpg)||\n\n||\n![隠す](/assets/also-hidden.jpg)\n||\n\n![表紙](/assets/visible.jpg)"
+    assert_equal "/assets/visible.jpg", WeblogAuthoring::CoverImage.resolve(page_document(body))
+    assert_nil WeblogAuthoring::CoverImage.resolve(page_document("||![隠す](/assets/hidden.jpg)||"))
+  end
+
   def test_auto_uses_the_first_local_image_in_document_order
     page = page_document(<<~MARKDOWN)
       ![external](https://example.com/external.jpg)

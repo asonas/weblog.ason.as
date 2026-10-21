@@ -1369,7 +1369,7 @@ module WeblogAuthoring
     end
 
     def page_excerpt(page)
-      page.body.to_s.lines.map(&:strip)
+      MarkdownRenderer.excerpt_source(page.body).lines.map(&:strip)
         .reject { |line| line.empty? || line.match?(/\A!\[/) }
         .join(" ")
         .gsub(/\[\[([^\]]+)\]\]/, "\\1")

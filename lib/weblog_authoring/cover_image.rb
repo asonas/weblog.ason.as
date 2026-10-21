@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
+require_relative "markdown_parser"
+
 module WeblogAuthoring
   module CoverImage
     MODES = %w[auto explicit none].freeze
     LOCAL_IMAGE = %r{\A/assets/[^\s]+\z}
-    MARKDOWN_IMAGE = /!\[[^\]]*\]\((\/assets\/[^\s)]+)(?:\s+[^)]*)?\)/
     LEGACY_IMAGE = /\[(https?:\/\/[^\]\s]+)(?:\s+[^\]]+)?\]/
 
     module_function
@@ -24,17 +25,29 @@ module WeblogAuthoring
       return nil if page.cover_mode == "none"
       return page.cover_image_url if page.cover_mode == "explicit" && local?(page.cover_image_url)
 
-      candidates = []
-      page.body.to_s.to_enum(:scan, MARKDOWN_IMAGE).each do
-        match = Regexp.last_match
-        candidates << [match.begin(0), match[1].gsub(/\\([[:punct:]])/, '\1')]
+      document = Kramdown::Document.new(page.body.to_s, input: "WeblogGFM")
+      legacy_urls = page.body.to_s.scan(LEGACY_IMAGE).flatten
+      find_visible_image(document.root, asset_image_paths.slice(*legacy_urls))
+    end
+
+    def find_visible_image(node, asset_image_paths)
+      return nil if %i[spoiler spoiler_block codespan codeblock].include?(node.type)
+      return node.attr["src"].gsub(/\\([[:punct:]])/, '\1') if node.type == :img && local?(node.attr["src"])
+      path = asset_image_paths[node.attr["href"]] if node.type == :a
+      if path
+        return "/assets/#{path}"
       end
-      page.body.to_s.to_enum(:scan, LEGACY_IMAGE).each do
-        match = Regexp.last_match
-        local_path = asset_image_paths[match[1]]
-        candidates << [match.begin(0), "/assets/#{local_path}"] if local_path
+      if node.type == :text
+        node.value.to_s.scan(LEGACY_IMAGE).each do |url|
+          path = asset_image_paths[url.first]
+          return "/assets/#{path}" if path
+        end
       end
-      candidates.min_by(&:first)&.last
+      node.children.each do |child|
+        image = find_visible_image(child, asset_image_paths)
+        return image if image
+      end
+      nil
     end
 
     def local?(url)

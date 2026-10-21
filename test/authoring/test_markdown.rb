@@ -4,6 +4,30 @@ require_relative "../test_helper"
 require_relative "../../lib/weblog_authoring/markdown"
 
 class TestMarkdown < Minitest::Test
+  def test_spoilers_hide_inline_text_and_media_but_leave_code_and_escaped_markers_literal
+    renderer = WeblogAuthoring::MarkdownRenderer.new
+    body = "前 ||秘密 **強調**|| 後\n\n||![写真](/assets/hidden.webp)||\n\n||\n[動画](/assets/uploads/2026/10/abc-123.mp4)\n||"
+    html = renderer.render(body, mode: "public", progressive: true).html
+    assert_equal 3, html.scan('class="article-spoiler"').length
+    assert_equal 3, html.scan('aria-expanded="false"').length
+    assert_equal 3, html.scan('aria-hidden="true" inert').length
+    assert_includes html, "<strong>強調</strong>"
+    assert_includes html, 'src="/assets/hidden.webp"'
+    assert_includes html, "<video controls"
+    assert_empty renderer.render(body, mode: "public").problems
+    literal = renderer.render("`||code||`\n\n```\n||fenced||\n```\n\n\\|\\|escaped||\n\n||unclosed", mode: "public").html
+    refute_includes literal, 'class="article-spoiler"'
+    feed = renderer.render(body, mode: "public", feed: true).html
+    refute_includes feed, "秘密"
+    refute_includes feed, "hidden.webp"
+    refute_includes feed, "abc-123.mp4"
+    excerpt = WeblogAuthoring::MarkdownRenderer.excerpt_source(body)
+    refute_includes excerpt, "秘密"
+    refute_includes excerpt, "hidden.webp"
+    assert_includes excerpt, "前"
+    assert_equal "普通の **本文**", WeblogAuthoring::MarkdownRenderer.excerpt_source("普通の **本文**")
+  end
+
   FIXED_TIME = Time.iso8601("2026-01-01T00:00:00+09:00")
 
   def test_uploaded_video_links_render_as_players_without_changing_inline_links_or_code

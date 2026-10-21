@@ -21,6 +21,14 @@ module WeblogAuthoring
   end
 
   class MarkdownRenderer
+    def self.excerpt_source(body)
+      source = body.to_s
+      return source unless source.include?("||")
+
+      html = new.render(source, mode: "public", feed: true).html
+      CGI.unescapeHTML(html.gsub(/<[^>]*>/, " "))
+    end
+
     WIKI_SENTINEL_PREFIX = "weblog-authoring-wiki://".freeze
     INTERNAL_REL = "noopener noreferrer".freeze
     MODES = %w[local public].freeze
@@ -217,6 +225,11 @@ module WeblogAuthoring
       end
 
       def convert_p(el, indent)
+        if el.children.one? && el.children.first.type == :spoiler
+          paragraph = Kramdown::Element.new(:p)
+          paragraph.children = el.children.first.children
+          return spoiler_html(convert_p(paragraph, indent), block: true)
+        end
         standalone_url = standalone_url(el)
         embed_url = explicit_embed_url(standalone_url)
         video = /\A:::video (\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4)(?: (\/assets\/uploads\/\d{4}\/\d{2}\/[a-f0-9-]+\.mp4))?(?: ([1-9]\d{0,4})x([1-9]\d{0,4}))? :::\z/.match(standalone_url.to_s)
@@ -253,6 +266,21 @@ module WeblogAuthoring
         else
           format_as_block_html("p", el.attr, inner(el, indent), indent)
         end
+      end
+
+      def convert_spoiler(el, indent)
+        spoiler_html(inner(el, indent), block: false)
+      end
+
+      def convert_spoiler_block(el, indent)
+        spoiler_html(inner(el, indent), block: true)
+      end
+
+      def spoiler_html(content, block:)
+        return "[スポイラー]" if self.class.context[:feed]
+
+        tag = block ? "div" : "span"
+        %(<#{tag} class="article-spoiler" data-spoiler-open="false"><#{tag} class="article-spoiler__content" aria-hidden="true" inert>#{content}</#{tag}><button type="button" class="article-spoiler__toggle" aria-expanded="false" aria-label="スポイラーを表示">クリックして表示</button></#{tag}>)
       end
 
       def convert_a(el, indent)

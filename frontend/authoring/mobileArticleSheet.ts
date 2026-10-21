@@ -108,7 +108,7 @@ export function installMobileArticleSheet() {
         const textBody = body.cloneNode(true) as HTMLElement;
         textBody
           .querySelectorAll(
-            "script, style, iframe, video, audio, figure, .speakerdeck-player, .youtube-player, .bluesky-player, .x-post",
+            "script, style, iframe, video, audio, figure, .article-spoiler, .speakerdeck-player, .youtube-player, .bluesky-player, .x-post",
           )
           .forEach((element) => {
             element.remove();
@@ -129,6 +129,7 @@ export function installMobileArticleSheet() {
       for (const anchor of body?.querySelectorAll<HTMLAnchorElement>(
         "a[href]",
       ) || []) {
+        if (anchor.closest(".article-spoiler")) continue;
         const href = anchor.getAttribute("href") || "";
         const base = response.url || url.href;
         if (!URL.canParse(href, base)) continue;

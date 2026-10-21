@@ -24,6 +24,7 @@ module WeblogAuthoring
   def self.page_name_entries: (Array[ArticleDocument]) -> Array[Hash[String, String]]
 
   class MarkdownRenderer
+    def self.excerpt_source: (String?) -> String
     def initialize: (pages: Array[ArticleDocument]) -> void
     def render: (String, mode: String, ?progressive: bool, ?image_dimensions: ^(String) -> [Integer, Integer]?, ?feed: bool) -> RenderedMarkdown
   end
