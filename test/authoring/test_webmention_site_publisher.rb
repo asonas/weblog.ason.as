@@ -280,7 +280,7 @@ class WebmentionSitePublisherTest < Minitest::Test
     ).render_document(page, shell: services.get_object(bucket: "site", key: "static/authoring/public.html").body.read,
       source_url: "https://weblog.ason.as/Source")
     assert_equal baseline_html, html
-    assert_match(%r{<a href="/%4B%4F%52%47%20multi%2Fpoly" class="wiki-link wiki-link--existing">KORG multi/poly</a>}, html)
+    assert_match(%r{<a href="/KORG%20multi%2Fpoly" class="wiki-link wiki-link--existing">KORG multi/poly</a>}, html)
     assert_match(%r{<a href="/%E6%9C%AA%E4%BD%9C%E6%88%90" class="wiki-link wiki-link--missing">未作成</a>}, html)
     assert_includes html, '<meta property="og:title" content="Source" />'
   end

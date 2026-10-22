@@ -558,7 +558,7 @@ class TestDevelopmentApp < Minitest::Test
     assert_includes body, "<h1 class=\"p-name\">KORG multi/poly</h1>"
     assert_includes body, "関連する記事"
     assert_includes body, "href=\"/#{WeblogAuthoring.encoded_route('記事')}\""
-    assert_includes body, '/draft-editor?title=%4B%4F%52%47%20multi%2Fpoly'
+    assert_includes body, '/draft-editor?title=KORG%20multi%2Fpoly'
 
     status, _headers, body = request("GET", "/unknown-topic")
     assert_equal 404, status

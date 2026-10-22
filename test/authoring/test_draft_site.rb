@@ -79,7 +79,7 @@ class DraftSiteTest < Minitest::Test
         site_bucket: "site", site_url: "https://example.com", shell_key: "static/authoring/public.html")
       api = WeblogAuthoring::LambdaApi.new(database:, reader_database: reader, draft_store: store, draft_publisher: publisher)
       site = WeblogAuthoring::DraftSite.new(api:, reader:, s3_client: objects, bucket: "site", published: true,
-        store:, site_url: "https://example.com", dynamic_article_routes: ["選定記事"])
+        store:, site_url: "https://example.com", dynamic_article_routes: ["選定記事"], public_cache_enabled: true)
       get = ->(route, method = "GET") { site.call("rawPath" => "/#{WeblogAuthoring.encoded_route(route)}", "requestContext" => { "http" => { "method" => method } }) }
 
       first = get.call("選定記事")
@@ -123,7 +123,7 @@ class DraftSiteTest < Minitest::Test
       assert_equal first, get.call("選定記事")
 
       all_pages = WeblogAuthoring::DraftSite.new(api:, reader:, s3_client: objects, bucket: "site", published: true,
-        store:, site_url: "https://example.com", dynamic_article_routes: ["*"])
+        store:, site_url: "https://example.com", dynamic_article_routes: ["*"], public_cache_enabled: true)
       %w[選定記事 従来記事 about].each do |route|
         response = all_pages.call("rawPath" => "/#{WeblogAuthoring.encoded_route(route)}", "requestContext" => { "http" => { "method" => "GET" } })
         assert_equal 200, response.fetch(:statusCode)
@@ -175,7 +175,7 @@ class DraftSiteTest < Minitest::Test
       end
       api = WeblogAuthoring::LambdaApi.new(database:, reader_database: reader, draft_store: store)
       site = WeblogAuthoring::DraftSite.new(api:, reader:, s3_client: objects, bucket: "site", published: true,
-        store:, site_url: "https://example.com", dynamic_article_routes: ["*"])
+        store:, site_url: "https://example.com", dynamic_article_routes: ["*"], public_cache_enabled: true)
       event = { "rawPath" => "/KORG%20multi%2Fpoly", "requestContext" => { "http" => { "method" => "GET" } } }
       objects.put_object(bucket: "site", key: "display-releases/current.json", body: JSON.generate("id" => "a" * 40))
       queries.clear

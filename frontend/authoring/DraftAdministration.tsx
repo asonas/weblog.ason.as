@@ -10,6 +10,7 @@ import {
   type LocalDraftSummary,
   readLocalDraftSummaries,
 } from "./draftSession";
+import { PublicCacheUsage } from "./PublicCacheUsage";
 import "./draftEditor.css";
 import "./draftAdministration.css";
 import "./authoringTheme.css";
@@ -52,6 +53,7 @@ const STAGES: Record<string, string> = {
   html: "ページ",
   atom: "フィード",
   search: "検索",
+  cache: "公開キャッシュ",
 };
 type ArticlePage = { articles: Article[]; cursor: string | null };
 function needsAttention(row: Row) {
@@ -380,6 +382,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
             再読み込み
           </button>
         </div>
+        <PublicCacheUsage csrf={csrf} />
         <nav className="draft-admin-filters" aria-label="記事の状態">
           {FILTERS.map(([value, label]) => (
             <button

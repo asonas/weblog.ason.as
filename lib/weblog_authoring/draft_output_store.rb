@@ -86,7 +86,7 @@ module WeblogAuthoring
     end
 
     def begin_publication_stage(id, version_id, stage, now:, retry_now: false, rebuild: false)
-      raise DraftStore::Error, "Unknown publication stage" unless %w[html atom search memos].include?(stage)
+      raise DraftStore::Error, "Unknown publication stage" unless %w[html atom search memos cache].include?(stage)
       @connect.call do |db|
         db.transaction do
           job = db.query("SELECT * FROM #{db.prefix}article_publication_jobs WHERE article_id = $1 AND id = $2", [id, version_id]).first
@@ -153,6 +153,7 @@ module WeblogAuthoring
       @connect.call do |db|
         db.query("DELETE FROM #{db.prefix}article_publication_jobs WHERE status IN ('completed', 'superseded') AND id IN (SELECT id FROM #{db.prefix}article_published_versions WHERE created_at < $1) AND id NOT IN (SELECT latest_id FROM #{db.prefix}article_publication_heads) AND id NOT IN (SELECT active_id FROM #{db.prefix}article_publication_heads WHERE active_id IS NOT NULL) AND id NOT IN (SELECT version_id FROM #{db.prefix}article_publication_stages WHERE status NOT IN ('completed', 'superseded') OR completed_at >= $1)", [(now - (30 * 86400)).iso8601(6)])
         db.query("DELETE FROM #{db.prefix}article_publication_stages WHERE status IN ('completed', 'superseded') AND completed_at < $1 AND version_id NOT IN (SELECT latest_id FROM #{db.prefix}article_publication_heads) AND version_id NOT IN (SELECT active_id FROM #{db.prefix}article_publication_heads WHERE active_id IS NOT NULL) AND version_id NOT IN (SELECT version_id FROM #{db.prefix}article_publication_stages WHERE status NOT IN ('completed', 'superseded'))", [(now - (30 * 86400)).iso8601(6)])
+        db.query("DELETE FROM #{db.prefix}article_cache_requests WHERE version_id NOT IN (SELECT id FROM #{db.prefix}article_publication_jobs)")
       end
     end
   end

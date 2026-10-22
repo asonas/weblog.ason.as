@@ -6,12 +6,13 @@ module WeblogAuthoring
   class DraftJobs
     REPAIR_BATCH_SIZE = 50
 
-    def initialize(store:, publisher:, outputs:, webmentions: nil, clock: Time.method(:now))
+    def initialize(store:, publisher:, outputs:, webmentions: nil, public_cache: nil, clock: Time.method(:now))
       @store = store
       @publisher = publisher
       @outputs = outputs
       @clock = clock
       @webmentions = webmentions
+      @public_cache = public_cache
     end
 
     def run(id, version_id, retry_now: false)
@@ -33,6 +34,13 @@ module WeblogAuthoring
       end
       job = @store.publication_job(id, version_id)
       if job.fetch("status") == "completed" && @store.published_snapshot(id)&.fetch("id") == version_id
+        request = @public_cache && @store.cache_request(id, version_id)
+        if request
+          perform(id, version_id, "cache", retry_now:) do
+            @public_cache.refresh(request)
+            nil
+          end
+        end
         if @store.published_memos_pending?(id, version_id)
           perform(id, version_id, "memos", retry_now:, rebuild: true) { @store.delete_published_memo_bodies(id, version_id); nil }
         end
@@ -65,7 +73,7 @@ module WeblogAuthoring
         versions = [head.fetch("latest_id"), head["active_id"]].compact.uniq
         versions.each do |version|
           stages = @store.publication_stages(id, version)
-          unfinished = stages.length < 3 || stages.any? { |stage| !%w[completed superseded].include?(stage.fetch("status")) }
+          unfinished = %w[html atom search].any? { |name| stages.none? { |stage| stage["stage"] == name } } || stages.any? { |stage| !%w[completed superseded].include?(stage.fetch("status")) }
           active = version == head["active_id"]
           unfinished ||= active && @store.published_memos_pending?(id, version)
           begin
@@ -107,6 +115,8 @@ module WeblogAuthoring
       return unless claim
       output = yield
       @store.complete_publication_stage(claim, now: @clock.call, output:)
+    rescue PublicCache::Pending
+      @store.wait_publication_cache(claim, now: @clock.call) if claim
     rescue StandardError => error
       raise unless claim
       @store.fail_publication_stage(claim, error.message, now: @clock.call)

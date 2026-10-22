@@ -280,6 +280,7 @@ module WeblogAuthoring
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_clock (id INTEGER PRIMARY KEY, revision INTEGER NOT NULL)")
       connection.exec("INSERT INTO #{SCHEMA}.article_publication_clock (id, revision) VALUES (1, 0) ON CONFLICT (id) DO NOTHING")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_stages (article_id TEXT NOT NULL, version_id TEXT NOT NULL, stage TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL, token TEXT NOT NULL, next_attempt_at TEXT, error TEXT, completed_at TEXT, PRIMARY KEY (article_id, version_id, stage))")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_cache_requests (article_id TEXT NOT NULL, version_id TEXT PRIMARY KEY, routes TEXT NOT NULL, paths TEXT NOT NULL)")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_output_heads (stage TEXT PRIMARY KEY, revision INTEGER NOT NULL, object_key TEXT NOT NULL, digest TEXT NOT NULL)")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_html_outputs (article_id TEXT PRIMARY KEY, version_id TEXT NOT NULL, html_key TEXT NOT NULL, html_digest TEXT NOT NULL)")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_route_reservations (route TEXT PRIMARY KEY, article_id TEXT NOT NULL)")

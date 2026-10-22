@@ -11,7 +11,7 @@ class TestNames < Minitest::Test
 
   def test_page_names_are_trimmed_but_case_sensitive
     assert_equal "KORG multi/poly", WeblogAuthoring.validate_page_name("KORG multi/poly")
-    assert_equal "%4B%4F%52%47%20multi%2Fpoly", WeblogAuthoring.encoded_route("KORG multi/poly")
+    assert_equal "KORG%20multi%2Fpoly", WeblogAuthoring.encoded_route("KORG multi/poly")
     assert_equal "page-a", WeblogAuthoring.validate_page_name(" page-a ")
     assert_equal "Page-A", WeblogAuthoring.validate_page_name("Page-A")
     assert_equal "日本語 page", WeblogAuthoring.validate_page_name(" 日本語 page ")
@@ -25,7 +25,7 @@ class TestNames < Minitest::Test
     assert_equal "%50age-%41", WeblogAuthoring.encoded_page_name("Page-A")
     assert_equal "%E6%97%A5%E6%9C%AC%E8%AA%9E%20page", WeblogAuthoring.encoded_page_name("日本語 page")
     assert_equal "page-a", WeblogAuthoring.encoded_route("page-a")
-    assert_equal "%50age-%41", WeblogAuthoring.encoded_route("Page-A")
+    assert_equal "Page-A", WeblogAuthoring.encoded_route("Page-A")
     assert_equal "2026-01-01", WeblogAuthoring.encoded_route("2026-01-01")
     assert_equal root.join("page-a.md"), WeblogAuthoring.page_path(root, "named", name: "page-a", page_date: nil)
     assert_equal root.join("%50age-%41.md"), WeblogAuthoring.page_path(root, "named", name: "Page-A", page_date: nil)
@@ -36,6 +36,12 @@ class TestNames < Minitest::Test
     ["[[page-a]]", "---"].each do |name|
       assert_raises(ArgumentError) { WeblogAuthoring.validate_page_name(name) }
     end
+  end
+
+  def test_public_url_preserves_ascii_case_and_encodes_japanese_spaces_and_literal_percent_once
+    assert_equal "%E3%80%8CWhere%20the%20tracks%20go%20next%E3%80%8D%E3%82%92%E7%8F%BE%E5%9C%B0%E3%81%A7%E8%A6%8B%E3%81%9F%E3%80%82", WeblogAuthoring.encoded_route("「Where the tracks go next」を現地で見た。")
+    assert_equal "literal%2557", WeblogAuthoring.encoded_route("literal%57")
+    assert_equal "%57here", WeblogAuthoring.encoded_page_name("Where")
   end
 
   def test_page_name_allows_normal_punctuation

@@ -345,7 +345,7 @@ class TestMarkdown < Minitest::Test
     assert_includes rendered.html, 'href="/page-a"'
     refute_includes rendered.html, 'target="_blank"'
     assert_includes rendered.html, 'href="/draft%20page"'
-    assert_includes rendered.html, 'href="/%4B%4F%52%47%20multi%2Fpoly"'
+    assert_includes rendered.html, 'href="/KORG%20multi%2Fpoly"'
     assert_includes rendered.html, "draft page"
     assert_empty rendered.problems
   end
@@ -359,10 +359,10 @@ class TestMarkdown < Minitest::Test
     local_rendered = renderer.render("[[Page-A]]", mode: "local")
     page_html = renderer.render_page(named_page("page-b"), backlinks: [named, date], mode: "public")
 
-    assert_includes rendered.html, 'href="/%50age-%41"'
-    refute_includes rendered.html, 'href="/Page-A"'
-    assert_includes local_rendered.html, 'href="/%50age-%41"'
-    assert_includes page_html, 'href="/%50age-%41"'
+    assert_includes rendered.html, 'href="/Page-A"'
+    refute_includes rendered.html, 'href="/%50age-%41"'
+    assert_includes local_rendered.html, 'href="/Page-A"'
+    assert_includes page_html, 'href="/Page-A"'
     assert_includes page_html, 'href="/2026-01-01"'
     refute_includes page_html, 'target="_blank"'
   end

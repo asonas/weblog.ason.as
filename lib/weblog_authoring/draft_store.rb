@@ -17,6 +17,7 @@ require_relative "draft_migration_store"
 require_relative "draft_cutover_store"
 require_relative "draft_dispatches"
 require_relative "draft_webmentions"
+require_relative "draft_cache_store"
 
 module WeblogAuthoring
   class DraftStore
@@ -30,6 +31,7 @@ module WeblogAuthoring
     include DraftCutoverStore
     include DraftDispatches
     include DraftWebmentionStore
+    include DraftCacheStore
     class Error < StandardError
       attr_reader :status
 
@@ -96,6 +98,7 @@ module WeblogAuthoring
         db.query(PieceMentions.schema(db.prefix))
         setup_publications(db)
         setup_outputs(db)
+        setup_cache(db)
         setup_renames(db)
         setup_migration(db)
         setup_dispatches(db)

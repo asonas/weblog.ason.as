@@ -21,6 +21,7 @@ module WeblogAuthoring
   def self.replace_wiki_links: (String, old_name: String, new_name: String) -> String
   def self.extract_external_urls: (String) -> Array[String]
   def self.encoded_route: (String) -> String
+  def self.encoded_page_name: (String) -> String
   def self.page_name_entries: (Array[ArticleDocument]) -> Array[Hash[String, String]]
 
   class MarkdownRenderer
@@ -87,6 +88,12 @@ module WeblogAuthoring
 end
 
 module Aws
+  module CloudFront
+    module Errors
+      class ServiceError < StandardError
+      end
+    end
+  end
   module SQS
     module Errors
       class ServiceError < StandardError
@@ -95,6 +102,8 @@ module Aws
   end
   module S3
     module Errors
+      class ServiceError < StandardError
+      end
       class NoSuchKey < StandardError
       end
       class NotFound < StandardError

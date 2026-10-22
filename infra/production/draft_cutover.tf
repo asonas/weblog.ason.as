@@ -4,6 +4,7 @@ locals {
     ARTICLE_PIECES_ENABLED          = tostring(var.article_pieces_enabled)
     DRAFT_WORKER_FUNCTION_NAME      = aws_lambda_function.draft_worker.function_name
     DRAFT_PUBLICATION_FUNCTION_NAME = "weblog-search-indexer-production"
+    PUBLIC_CACHE_DISTRIBUTION_ID    = var.public_cache_enabled ? var.public_cache_distribution_id : ""
   })
 }
 

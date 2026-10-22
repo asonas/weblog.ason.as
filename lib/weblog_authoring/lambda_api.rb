@@ -74,7 +74,7 @@ module WeblogAuthoring
                    bluesky_oauth_function_name: nil, proofreader: nil, webmention_queue_url: nil,
                    webmention_publish_queue_url: nil, webmention_dead_letter_arn: nil,
                    webmention_queue_arn: nil, webmention_publish_dead_letter_arn: nil,
-                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, draft_store: nil, draft_publication: nil, draft_publisher: nil, draft_jobs: nil, draft_outputs: nil, draft_webmentions: nil, clock: Time.method(:now))
+                   webmention_publish_queue_arn: nil, inbox_thumbnail: nil, draft_store: nil, draft_publication: nil, draft_publisher: nil, draft_jobs: nil, draft_outputs: nil, draft_webmentions: nil, public_cache_usage: nil, clock: Time.method(:now))
       @draft_store = draft_store
       @proofreader = proofreader
       @draft_publication = draft_publication
@@ -82,6 +82,7 @@ module WeblogAuthoring
       @draft_jobs = draft_jobs
       @draft_outputs = draft_outputs
       @draft_webmentions = draft_webmentions
+      @public_cache_usage = public_cache_usage
       @database = database
       @published_reader = reader_database
       @reader_database = reader_database || database
@@ -529,6 +530,16 @@ module WeblogAuthoring
       return json_response(403, error: "Editing is not allowed") unless allowed_session?(session)
       if method != "GET" && !secure_equal?(session.fetch("csrf_token", ""), csrf_token_from(event))
         return json_response(403, error: "CSRF token mismatch")
+      end
+      if path == "/api/authoring/drafts/cache-usage"
+        return json_response(503, error: "キャッシュ使用数の確認は有効になっていません。") unless @public_cache_usage
+        return json_response(404, error: "Not Found") unless %w[GET POST].include?(method)
+        begin
+          usage = method == "POST" ? @public_cache_usage.update : @public_cache_usage.read
+          return json_response(200, usage.except("batches"))
+        rescue Aws::CloudFront::Errors::ServiceError, Aws::S3::Errors::ServiceError
+          return json_response(503, error: "使用数を取得できませんでした。前回の確認結果をご利用ください。")
+        end
       end
       if path == "/api/authoring/drafts" || path == "/api/authoring/drafts/daily"
         service = @draft_publication

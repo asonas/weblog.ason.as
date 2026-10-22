@@ -5,6 +5,11 @@ require_relative "../../lib/weblog_authoring/atom_feed"
 require "rexml/document"
 
 class AtomFeedTest < Minitest::Test
+  def test_public_link_preserves_uppercase_without_changing_legacy_entry_identity
+    feed = WeblogAuthoring::AtomFeed.new(site_url: "https://weblog.ason.as").render([page(name: "Where next", body: "本文")])
+    assert_includes feed, '<id>https://weblog.ason.as/%57here%20next</id>'
+    assert_includes feed, 'href="https://weblog.ason.as/Where%20next"'
+  end
   def test_uses_asonas_as_feed_and_entry_author
     feed = WeblogAuthoring::AtomFeed.new(site_url: "https://weblog.ason.as").render(
       [page(name: "日記", body: "本文")]

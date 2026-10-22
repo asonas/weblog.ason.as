@@ -69,7 +69,8 @@ class DraftRuntimeTest < Minitest::Test
       assert_includes request.call("GET", "/#{page.route}").fetch(:body), "Public original"
       assert_equal request.call("GET", "/#{page.route}"), request.call("GET", "/#{page.route}/")
       assert_includes request.call("GET", "/#{page.route}").fetch(:body), "/draft-editor?id=#{page.id}"
-      assert_includes request.call("GET", "/feed.xml").fetch(:body), "https://example.com/%4Digrated%20article"
+      assert_includes request.call("GET", "/feed.xml").fetch(:body), "https://example.com/Migrated%20article"
+      assert_includes request.call("GET", "/feed.xml").fetch(:body), "<id>https://example.com/%4Digrated%20article</id>"
       assert_equal "", request.call("HEAD", "/#{page.route}").fetch(:body)
       store.transition_cutover(expected: "verifying", to: "legacy", evidence: { "legacy_state_verified" => true, "record" => "isolated rollback" })
       assert_equal "Legacy article HTML", request.call("GET", "/#{page.route}").fetch(:body)

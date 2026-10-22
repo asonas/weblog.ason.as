@@ -707,3 +707,14 @@ body:has(.draft-admin) .page-shell {
     block-size: 2.75rem;
   }
 }
+.draft-admin-cache-usage {
+  margin-block: 16px;
+  padding: 12px;
+  border: 1px solid var(--separator);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.draft-admin-cache-usage p {
+  margin: 0 0 8px;
+}

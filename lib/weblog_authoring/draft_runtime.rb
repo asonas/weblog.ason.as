@@ -2,6 +2,8 @@
 
 require "aws-sdk-lambda"
 require "aws-sdk-sqs"
+require "aws-sdk-cloudfront"
+require_relative "public_cache"
 require_relative "dsql_database"
 require_relative "draft_cutover_api"
 require_relative "published_article_reader"
@@ -27,19 +29,20 @@ module WeblogAuthoring
       database = DsqlDatabase.new(host: ENV.fetch("DSQL_HOST"), content_dir: Pathname("/tmp/content"), pool:)
       lambda_client = LazyService.new { Aws::Lambda::Client.new }
       publication = LazyService.new do
-        DraftPublication.remote(store:, lambda_client:, function_name: ENV.fetch("DRAFT_WORKER_FUNCTION_NAME"))
+        DraftPublication.remote(store:, lambda_client:, function_name: ENV.fetch("DRAFT_WORKER_FUNCTION_NAME"), invalidate_cache: !ENV.fetch("PUBLIC_CACHE_DISTRIBUTION_ID", "").empty?)
       end
       new(store:, database:, publication:, s3_client: LazyService.new { Aws::S3::Client.new },
         bucket: ENV.fetch("SITE_BUCKET"), site_url: ENV.fetch("FRONTEND_URL", "https://weblog.ason.as"),
         lambda_client:, worker_function: ENV.fetch("DRAFT_PUBLICATION_FUNCTION_NAME"), defer_services: true,
         sqs_client: LazyService.new { Aws::SQS::Client.new }, webmention_queue_url: ENV["WEBMENTION_QUEUE_URL"],
         sender_enabled: ENV.fetch("WEBMENTION_SENDER_ENABLED", "false") == "true",
-        dynamic_article_routes: ENV.fetch("DYNAMIC_PUBLIC_ARTICLE_ROUTES", "").split(","))
+        dynamic_article_routes: ENV.fetch("DYNAMIC_PUBLIC_ARTICLE_ROUTES", "").split(","),
+        cache_distribution_id: ENV["PUBLIC_CACHE_DISTRIBUTION_ID"])
     end
 
     def initialize(store:, database:, publication:, s3_client:, bucket:, site_url:, lambda_client:, worker_function:,
       search_runner: nil, defer_services: false, sqs_client: nil, webmention_queue_url: nil, sender_enabled: false,
-      dynamic_article_routes: [])
+      dynamic_article_routes: [], cache_distribution_id: nil)
       @store = store
       @database = database
       @publication = publication
@@ -47,6 +50,11 @@ module WeblogAuthoring
       @bucket = bucket
       @site_url = site_url
       @dynamic_article_routes = dynamic_article_routes
+      unless cache_distribution_id.to_s.empty?
+        client = LazyService.new { Aws::CloudFront::Client.new(region: "us-east-1") }
+        @public_cache = PublicCache.new(client:, distribution_id: cache_distribution_id)
+        @cache_usage = PublicCacheUsage.new(client:, s3_client:, bucket:, distribution_id: cache_distribution_id)
+      end
       @reader = PublishedArticleReader.new(store:, database:)
       @webmentions = DraftWebmentions.new(store:, sqs_client:, queue_url: webmention_queue_url, site_url:, enabled: sender_enabled)
       services = lambda do
@@ -55,7 +63,7 @@ module WeblogAuthoring
         runner = search_runner || SearchIndexer::QmdRunner.new
         publisher = DraftPublisher.s3(publication:, database: @reader, s3_client:, site_bucket: bucket, site_url:, shell_key: "static/authoring/public.html")
         outputs = DraftOutputs.new(store:, s3_client:, bucket:, site_url:, search_runner: runner)
-        { publisher:, outputs:, jobs: DraftJobs.new(store:, publisher:, outputs:, webmentions: @webmentions),
+        { publisher:, outputs:, jobs: DraftJobs.new(store:, publisher:, outputs:, webmentions: @webmentions, public_cache: @public_cache),
           remote_jobs: RemoteDraftJobs.new(store:, lambda_client:, function_name: worker_function), }
       end
       resolved = nil
@@ -69,10 +77,10 @@ module WeblogAuthoring
     def api(options)
       legacy = LambdaApi.new(**options)
       published = LambdaApi.new(**options, reader_database: @reader, draft_store: @store, draft_publication: @publication,
-        draft_publisher: @publisher, draft_outputs: @outputs, draft_jobs: @remote_jobs, draft_webmentions: @webmentions)
+        draft_publisher: @publisher, draft_outputs: @outputs, draft_jobs: @remote_jobs, draft_webmentions: @webmentions, public_cache_usage: @cache_usage)
       legacy = DraftSite.new(api: legacy, reader: @database, s3_client: @s3, bucket: @bucket, published: false)
       published = DraftSite.new(api: published, reader: @reader, s3_client: @s3, bucket: @bucket, published: true,
-        store: @store, site_url: @site_url, dynamic_article_routes: @dynamic_article_routes)
+        store: @store, site_url: @site_url, dynamic_article_routes: @dynamic_article_routes, public_cache_enabled: !@public_cache.nil?)
       DraftCutoverApi.new(store: @store, legacy:, published:)
     end
 

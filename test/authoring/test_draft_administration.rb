@@ -160,6 +160,23 @@ class DraftAdministrationTest < Minitest::Test
     assert_equal 1, @admin.list.fetch("articles").length
   end
 
+  def test_cache_usage_is_private_and_refresh_requires_csrf
+    codec = WeblogAuthoring::LambdaSession.new(secret: "s" * 64)
+    cookie = codec.issue(kind: "session", attributes: { "github_user_id" => 630_181, "csrf_token" => "csrf" }, ttl: 3600)
+    s3 = Aws::S3::Client.new(stub_responses: true)
+    s3.stub_responses(:get_object, body: JSON.generate("used_paths" => 4, "batches" => { "internal-id" => 4 }))
+    usage = WeblogAuthoring::PublicCacheUsage.new(client: Aws::CloudFront::Client.new(stub_responses: true), s3_client: s3, bucket: "site", distribution_id: "site")
+    api = WeblogAuthoring::LambdaApi.new(database: @database, draft_store: @store, session_codec: codec, allowed_github_user_id: 630_181, public_cache_usage: usage)
+    event = { "rawPath" => "/api/authoring/drafts/cache-usage", "requestContext" => { "http" => { "method" => "GET" } } }
+    assert_equal 401, api.call(event)[:statusCode]
+    event["cookies"] = ["#{WeblogAuthoring::LambdaApi::AUTH_COOKIE}=#{cookie}"]
+    response = api.call(event)
+    assert_equal "private, no-store", response[:headers].fetch("cache-control")
+    assert_equal({ "used_paths" => 4 }, JSON.parse(response.fetch(:body)))
+    event["requestContext"]["http"]["method"] = "POST"
+    assert_equal 403, api.call(event)[:statusCode]
+  end
+
   def test_renamed_unpublished_diary_does_not_capture_the_original_date
     first = @admin.daily("2026-09-20").fetch("id")
     @store.append(first, { "protocol" => 1, "generation" => 1, "update_id" => "rename-date", "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,

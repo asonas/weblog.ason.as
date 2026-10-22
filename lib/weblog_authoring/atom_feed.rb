@@ -46,7 +46,7 @@ module WeblogAuthoring
         content = absolute_internal_urls(renderer.render(page.body, mode: "public", feed: true).html)
         <<~XML.chomp
             <entry>
-              <id>#{xml(ids.fetch(page.id, url))}</id>
+              <id>#{xml(ids.fetch(page.id) { "#{@site_url}/#{WeblogAuthoring.encoded_page_name(page.route)}" })}</id>
               <title>#{xml(page.display_title)}</title>
               <link rel="alternate" type="text/html" href="#{xml(url)}" />
               <published>#{atom_time(page.published_at || page.created_at)}</published>

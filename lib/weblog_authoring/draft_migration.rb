@@ -106,7 +106,7 @@ module WeblogAuthoring
       content << route if type == "date"
       { "id" => id, "route" => route, "body" => body, "metadata" => metadata,
         "created_at" => created, "updated_at" => updated, "published_at" => published,
-        "atom_id" => "#{origin}/#{WeblogAuthoring.encoded_route(route)}", "content_hash" => Digest::SHA256.hexdigest(JSON.generate(content)), }
+        "atom_id" => "#{origin}/#{WeblogAuthoring.encoded_page_name(route)}", "content_hash" => Digest::SHA256.hexdigest(JSON.generate(content)), }
     end
   end
 end

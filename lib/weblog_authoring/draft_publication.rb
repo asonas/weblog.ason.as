@@ -8,7 +8,7 @@ require_relative "names"
 
 module WeblogAuthoring
   class DraftPublication
-    def self.remote(store:, lambda_client:, function_name:)
+    def self.remote(store:, lambda_client:, function_name:, invalidate_cache: false)
       invoke = lambda do |payload|
         response = lambda_client.invoke(function_name:, invocation_type: "RequestResponse", payload: JSON.generate(payload))
         raise DraftStore::Error.new("公開版の復元に失敗しました。", 503) if response.function_error
@@ -21,12 +21,12 @@ module WeblogAuthoring
       end
       seed_piece = ->(piece_id, body) { invoke.call("operation" => "seed_piece", "piece_id" => piece_id, "body" => body) }
       migrate_article = ->(job, diary) { invoke.call("operation" => "migration", "article_id" => job.fetch("article_id"), "diary" => diary) }
-      new(store:, reconstruct_many:, seed_piece:, migrate_article:) do |job|
+      new(store:, reconstruct_many:, seed_piece:, migrate_article:, invalidate_cache:) do |job|
         invoke.call("operation" => "publication", "article_id" => job.fetch("article_id"))
       end
     end
 
-    def self.local(store:)
+    def self.local(store:, invalidate_cache: false)
       root = File.expand_path("../..", __dir__)
       tsx = resolve_local_dependency(root, "node_modules/tsx/dist/cli.mjs")
       invoke = lambda do |job|
@@ -36,7 +36,7 @@ module WeblogAuthoring
       end
       seed_piece = ->(piece_id, body) { invoke.call("operation" => "seed_piece", "piece_id" => piece_id, "body" => body) }
       migrate_article = ->(job, diary) { invoke.call(job.merge("operation" => "migration", "diary" => diary)) }
-      new(store:, seed_piece:, migrate_article:, &invoke)
+      new(store:, seed_piece:, migrate_article:, invalidate_cache:, &invoke)
     end
 
     def self.resolve_local_dependency(root, relative_path)
@@ -47,12 +47,13 @@ module WeblogAuthoring
       File.join(root, relative_path)
     end
 
-    def initialize(store:, reconstruct_many: nil, seed_piece: nil, migrate_article: nil, &reconstruct)
+    def initialize(store:, reconstruct_many: nil, seed_piece: nil, migrate_article: nil, invalidate_cache: false, &reconstruct)
       @store = store
       @reconstruct = reconstruct
       @reconstruct_many = reconstruct_many
       @seed_piece = seed_piece
       @migrate_article = migrate_article
+      @invalidate_cache = invalidate_cache
     end
 
     def migrate_article(id, request)
@@ -145,7 +146,7 @@ module WeblogAuthoring
       impact = @store.rename_impact(id, verified.fetch("route"))
       raise DraftStore::Error.new("名前変更の影響範囲を再確認してください。", 409) unless request["rename"] == impact
       batch_id = @store.stage_rename_versions(impact) if impact
-      @store.accept_verified_publication(id, request, verified.merge("rename" => impact, "batch_id" => batch_id))
+      @store.accept_verified_publication(id, request, verified.merge("rename" => impact, "batch_id" => batch_id, "invalidate_cache" => @invalidate_cache))
     end
 
     def complete(id, version_id)

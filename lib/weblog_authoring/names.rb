@@ -39,7 +39,10 @@ module WeblogAuthoring
     normalized = route.to_s
     return normalized if DATE_NAME.match?(normalized)
 
-    encoded_page_name(normalized)
+    validate_page_name(normalized).bytes.map do |byte|
+      character = byte.chr
+      character.match?(/[A-Za-z0-9\-._~]/) ? character : format("%%%02X", byte)
+    end.join
   end
 
   def page_path(content_dir, page_type, name:, page_date:)

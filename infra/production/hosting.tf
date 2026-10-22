@@ -22,7 +22,7 @@ resource "aws_cloudfront_cache_policy" "public_html" {
   comment     = "Origin opt-in for public responses; freshness set by the origin"
   min_ttl     = 0
   default_ttl = 0
-  max_ttl     = 86580
+  max_ttl     = 90000
 
   parameters_in_cache_key_and_forwarded_to_origin {
     enable_accept_encoding_brotli = true

@@ -1294,7 +1294,7 @@ export class DraftSession extends EventTarget {
           this.pendingOutputs = job.id;
           sessionStorage.setItem(`draft-outputs:${this.id}`, job.id);
           this.publicationStatus =
-            "記事の公開が完了しました。フィード・検索の更新を再試行してください。";
+            "記事は公開済みです。公開キャッシュ・フィード・検索の更新状況を確認してください。";
         } else {
           this.pendingOutputs = undefined;
           sessionStorage.removeItem(`draft-outputs:${this.id}`);
@@ -1347,7 +1347,7 @@ export class DraftSession extends EventTarget {
         )
       )
         throw new Error(
-          "記事は公開済みです。フィード・検索の更新を完了できませんでした。",
+          "記事は公開済みです。公開キャッシュ・フィード・検索の更新を完了できませんでした。",
         );
       this.pendingOutputs = undefined;
       sessionStorage.removeItem(`draft-outputs:${this.id}`);

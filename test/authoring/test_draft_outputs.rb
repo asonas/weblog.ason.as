@@ -6,6 +6,44 @@ require "weblog_authoring/development_database"
 require "weblog_authoring/lambda_api"
 
 class DraftOutputsTest < Minitest::Test
+  def test_only_requested_publication_is_purged_after_activation_and_can_resume_after_interruption
+    publication = WeblogAuthoring::DraftPublication.local(store: @store, invalidate_cache: true)
+    version = publication.accept(@id, publication.prepare(@id).merge("request_id" => "publish-cache")).fetch("id")
+    request = @store.cache_request(@id, version)
+    assert_equal ["/Public%20article", "/Public%20article/"], JSON.parse(request.fetch("paths"))
+    assert_nil @store.published_snapshot(@id)
+    client = Aws::CloudFront::Client.new(stub_responses: true)
+    client.stub_responses(:create_invalidation, lambda do |_context|
+      assert_equal version, @store.published_snapshot(@id).fetch("id")
+      { invalidation: { id: "cache", status: "InProgress", create_time: Time.now, invalidation_batch: { caller_reference: "ref", paths: { quantity: 2 } } } }
+    end)
+    client.stub_responses(:get_invalidation, invalidation: { id: "cache", status: "Completed", create_time: Time.now, invalidation_batch: { caller_reference: "ref", paths: { quantity: 2 } } })
+    cache = WeblogAuthoring::PublicCache.new(client:, distribution_id: "site")
+    jobs = WeblogAuthoring::DraftJobs.new(store: @store, publisher: @publisher, outputs: @outputs, public_cache: cache, clock: -> { @now })
+    # The accepted request survives before the worker starts.
+    jobs.repair
+    assert_equal "completed", @store.publication_stages(@id, version).find { |s| s["stage"] == "cache" }.fetch("status")
+    jobs.run(@id, version, retry_now: true)
+    assert_equal "unchanged", publication.accept(@id, publication.prepare(@id).merge("request_id" => "unchanged-cache")).fetch("status")
+    assert_equal(1, client.api_requests.count { |r| r[:operation_name] == :create_invalidation })
+  end
+
+  def test_maintenance_publication_does_not_schedule_invalidation
+    version = @publication.accept(@id, @publication.prepare(@id).merge("request_id" => "maintenance")).fetch("id")
+    @jobs.run(@id, version)
+    assert_nil @store.cache_request(@id, version)
+    refute(@store.publication_stages(@id, version).any? { |s| s["stage"] == "cache" })
+  end
+
+  def test_rename_invalidates_only_the_old_and_new_article_routes
+    publication = WeblogAuthoring::DraftPublication.local(store: @store, invalidate_cache: true)
+    original = publication.accept(@id, publication.prepare(@id).merge("request_id" => "before-rename")).fetch("id")
+    @jobs.run(@id, original)
+    append_title("Where 日本語", 1)
+    version = publication.accept(@id, publication.prepare(@id).merge("request_id" => "rename-cache")).fetch("id")
+    request = @store.cache_request(@id, version)
+    assert_equal ["/Public%20article", "/Public%20article/", "/Where%20%E6%97%A5%E6%9C%AC%E8%AA%9E", "/Where%20%E6%97%A5%E6%9C%AC%E8%AA%9E/"], JSON.parse(request.fetch("paths"))
+  end
   class SearchProcess
     attr_accessor :failure
     attr_accessor :before_build

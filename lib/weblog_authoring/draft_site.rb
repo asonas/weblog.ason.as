@@ -9,9 +9,9 @@ require_relative "operation_metrics"
 
 module WeblogAuthoring
   class DraftSite
-    PUBLIC_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=180, stale-if-error=86400"
+    PUBLIC_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=3600, stale-while-revalidate=300, stale-if-error=86400"
 
-    def initialize(api:, reader:, s3_client:, bucket:, published:, store: nil, site_url: nil, dynamic_article_routes: [])
+    def initialize(api:, reader:, s3_client:, bucket:, published:, store: nil, site_url: nil, dynamic_article_routes: [], public_cache_enabled: false)
       @api = api
       @reader = reader
       @s3 = s3_client
@@ -20,6 +20,7 @@ module WeblogAuthoring
       @store = store
       @site_url = site_url&.delete_suffix("/")
       @dynamic_article_routes = dynamic_article_routes.freeze
+      @public_cache_control = public_cache_enabled ? PUBLIC_HTML_CACHE_CONTROL : "public, max-age=0, s-maxage=180, stale-if-error=86400"
     end
 
     def call(event)
@@ -99,9 +100,9 @@ module WeblogAuthoring
     def public_html(html, id, event)
       etag = %("#{Digest::SHA256.hexdigest("#{id}\0#{html}")}")
       if event.fetch("headers", {})["if-none-match"] == etag
-        return { statusCode: 304, headers: { "cache-control" => PUBLIC_HTML_CACHE_CONTROL, "etag" => etag }, body: "" }
+        return { statusCode: 304, headers: { "cache-control" => @public_cache_control, "etag" => etag }, body: "" }
       end
-      { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => PUBLIC_HTML_CACHE_CONTROL, "etag" => etag }, body: html }
+      { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => @public_cache_control, "etag" => etag }, body: html }
     end
 
     def object(key, content_type)
