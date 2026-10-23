@@ -548,10 +548,14 @@ export function LineUpdateRail({
   );
 }
 
+// MarkdownManager registers tokenizers in shared marked state.
+let coverMarkdown: MarkdownManager | undefined;
+
 export function autoCoverImageUrl(body: string): string | null {
-  const document = new MarkdownManager({
+  coverMarkdown ??= new MarkdownManager({
     extensions: ARTICLE_PREVIEW_EXTENSIONS,
-  }).parse(markdownForEditor(body));
+  });
+  const document = coverMarkdown.parse(markdownForEditor(body));
   const visit = (node: JSONContent): string | null => {
     if (node.type === "spoiler" || node.type === "spoilerBlock") return null;
     if (

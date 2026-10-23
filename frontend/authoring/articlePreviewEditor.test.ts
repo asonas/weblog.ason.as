@@ -1,7 +1,42 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Editor } from "@tiptap/core";
+import { MarkdownManager } from "@tiptap/markdown";
 import { JSDOM } from "jsdom";
+
+test("repeated cover detection keeps shared Markdown rules bounded", async () => {
+  const dom = new JSDOM("<!doctype html>");
+  Object.assign(globalThis, {
+    document: dom.window.document,
+    window: dom.window,
+  });
+  const { autoCoverImageUrl } = await import("./articlePreviewEditor");
+  const markdown = new MarkdownManager({ extensions: [] });
+  const ruleCounts = () => {
+    const rules = markdown.instance.defaults.extensions;
+    return [
+      rules?.block?.length || 0,
+      rules?.inline?.length || 0,
+      rules?.startBlock?.length || 0,
+      rules?.startInline?.length || 0,
+    ];
+  };
+  try {
+    autoCoverImageUrl("画像のない本文");
+    const initial = ruleCounts();
+    for (let index = 0; index < 100; index++) {
+      assert.equal(
+        autoCoverImageUrl(
+          `追記${index}\n\n||\n![隠す](/assets/hidden.webp)\n||\n\n![表紙](/assets/cover.webp)`,
+        ),
+        "/assets/cover.webp",
+      );
+    }
+    assert.deepEqual(ruleCounts(), initial);
+  } finally {
+    dom.window.close();
+  }
+});
 
 test("keeps preview extensions and resolves internal cover images", async () => {
   const dom = new JSDOM("<!doctype html>");
