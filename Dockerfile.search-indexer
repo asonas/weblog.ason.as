@@ -5,9 +5,13 @@ RUN apt-get update \
     && command rm -rf /var/lib/apt/lists/*
 RUN npm install --global @tobilu/qmd@2.5.3
 
-FROM public.ecr.aws/lambda/ruby:4.0
+FROM rubylang/ruby:4.0.9
 
-RUN dnf install -y gcc make && dnf clean all
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LAMBDA_TASK_ROOT=/var/task
+WORKDIR ${LAMBDA_TASK_ROOT}
 
 COPY --from=qmd /usr/local/ /usr/local/
 COPY Gemfile Gemfile.lock ./
@@ -20,4 +24,6 @@ ENV RUBYLIB=${LAMBDA_TASK_ROOT}/lib
 ARG BUILD_CONTENT_HASH=unknown
 ENV BUILD_CONTENT_HASH=${BUILD_CONTENT_HASH}
 
+COPY --chmod=755 scripts/lambda-ruby-entrypoint.sh /usr/local/bin/lambda-ruby-entrypoint
+ENTRYPOINT ["/usr/local/bin/lambda-ruby-entrypoint"]
 CMD ["lambda_function.WeblogAuthoring::SearchIndexerHandler.call"]

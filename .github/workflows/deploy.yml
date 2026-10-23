@@ -78,7 +78,7 @@ jobs:
       repository: weblog-authoring-production
       function_name: weblog-authoring-production
       dockerfile: Dockerfile.lambda
-      build_inputs: '[".dockerignore","Dockerfile.lambda","Gemfile","Gemfile.lock","lib","lambda","scripts/prepare-parameter-extension.py"]'
+      build_inputs: '[".dockerignore","Dockerfile.lambda","Gemfile","Gemfile.lock","lib","lambda","scripts/prepare-parameter-extension.py","scripts/lambda-ruby-entrypoint.sh"]'
 
   build-search:
     needs: gate
@@ -90,7 +90,7 @@ jobs:
       repository: weblog-search-indexer-production
       function_name: weblog-search-indexer-production
       dockerfile: Dockerfile.search-indexer
-      build_inputs: '[".dockerignore","Dockerfile.search-indexer","Gemfile","Gemfile.lock","lib","lambda/search_indexer.rb"]'
+      build_inputs: '[".dockerignore","Dockerfile.search-indexer","Gemfile","Gemfile.lock","lib","lambda/search_indexer.rb","scripts/lambda-ruby-entrypoint.sh"]'
 
   build-inbox:
     needs: gate
@@ -102,7 +102,7 @@ jobs:
       repository: weblog-inbox-sync-production
       function_name: weblog-inbox-sync-production
       dockerfile: Dockerfile.inbox-sync
-      build_inputs: '[".dockerignore","Dockerfile.inbox-sync","Gemfile","Gemfile.lock","lib","lambda/inbox_sync.rb","lambda/matrix_notifier.rb"]'
+      build_inputs: '[".dockerignore","Dockerfile.inbox-sync","Gemfile","Gemfile.lock","lib","lambda/inbox_sync.rb","lambda/matrix_notifier.rb","scripts/lambda-ruby-entrypoint.sh"]'
 
   build-oauth:
     needs: gate
@@ -222,7 +222,7 @@ jobs:
 
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # master
         with:
-          ruby-version: 4.0.6
+          ruby-version: 4.0.9
           bundler-cache: true
 
       - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4

@@ -1,9 +1,9 @@
-FROM public.ecr.aws/lambda/ruby:4.0 AS libvips-build
+FROM rubylang/ruby:4.0.9 AS libvips-build
 
-RUN dnf install -y \
-      gcc gcc-c++ make meson ninja-build pkgconf-pkg-config tar xz gettext \
-      glib2-devel expat-devel libjpeg-turbo-devel libpng-devel libwebp-devel \
-    && dnf clean all
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential meson ninja-build pkg-config xz-utils gettext \
+      libglib2.0-dev libexpat1-dev libjpeg-dev libpng-dev libwebp-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 ADD https://github.com/libvips/libvips/releases/download/v8.18.2/vips-8.18.2.tar.xz /tmp/vips.tar.xz
 RUN echo "a30d4aede16f1c2899c1a2241870f8a7409feafa38484bcdcdac113d6d6f8ff5  /tmp/vips.tar.xz" | sha256sum -c - \
@@ -15,9 +15,14 @@ RUN echo "a30d4aede16f1c2899c1a2241870f8a7409feafa38484bcdcdac113d6d6f8ff5  /tmp
     && meson compile -C /tmp/vips-8.18.2/build \
     && meson install -C /tmp/vips-8.18.2/build
 
-FROM public.ecr.aws/lambda/ruby:4.0
+FROM rubylang/ruby:4.0.9
 
-RUN dnf install -y gcc make glib2 expat libjpeg-turbo libpng libwebp && dnf clean all
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential libglib2.0-0t64 libexpat1 libjpeg-turbo8 libpng16-16t64 libwebp7 libwebpmux3 libwebpdemux2 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LAMBDA_TASK_ROOT=/var/task
+WORKDIR ${LAMBDA_TASK_ROOT}
 
 COPY --from=libvips-build /opt/vips/ /opt/vips/
 COPY dist/parameter-extension/ /opt/
@@ -34,4 +39,6 @@ ENV RUBYLIB=${LAMBDA_TASK_ROOT}/lib
 ARG BUILD_CONTENT_HASH=unknown
 ENV BUILD_CONTENT_HASH=${BUILD_CONTENT_HASH}
 
+COPY --chmod=755 scripts/lambda-ruby-entrypoint.sh /usr/local/bin/lambda-ruby-entrypoint
+ENTRYPOINT ["/usr/local/bin/lambda-ruby-entrypoint"]
 CMD ["authoring.WeblogAuthoring::LambdaHandler.call"]
