@@ -4,7 +4,7 @@
 
 ### Issue tracker
 
-Issues are tracked in this repository's GitHub Issues. See `docs/agents/issue-tracker.md`.
+Issues and specs are tracked in the `weblog.ason.as` Linear project under the Asonas team. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
