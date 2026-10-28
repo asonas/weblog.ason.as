@@ -516,6 +516,8 @@ html[data-draft-workspace="true"] body {
   font-weight: 400;
   line-height: 1.5;
   tab-size: 2;
+  text-autospace: normal;
+  line-break: strict;
 }
 
 .draft-editor__source textarea:focus-visible {
