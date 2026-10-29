@@ -153,7 +153,8 @@ export function DraftPreview({
     const target = blocks[Math.min(sourceBlockIndex, blocks.length - 1)];
     const scrollerRect = scroller.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
-    scroller.scrollTop += targetRect.top - scrollerRect.top - 24;
+    scroller.scrollTop +=
+      targetRect.top - scrollerRect.top - scroller.clientHeight / 2;
   }, [body, editor, sourceBlockIndex]);
 
   useEffect(() => {
