@@ -14,7 +14,7 @@ class DraftOutputsTest < Minitest::Test
     refute(@store.publication_stages(@id, original).any? { |stage| stage["stage"] == "cache" })
     @store.append(@id, { "protocol" => 1, "generation" => 1, "update_id" => SecureRandom.uuid,
       "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
-      "metadata" => { "cover_mode" => { "value" => "none", "expected_revision" => 0 } } })
+      "metadata" => { "cover_mode" => { "value" => "none", "expected_revision" => 0 } }, })
     version = publication.accept(@id, publication.prepare(@id).merge("request_id" => "publish-cache")).fetch("id")
     request = @store.cache_request(@id, version)
     assert_equal ["/Public%20article", "/Public%20article/"], JSON.parse(request.fetch("paths"))
