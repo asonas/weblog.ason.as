@@ -84,7 +84,7 @@ class DraftSiteTest < Minitest::Test
 
       first = get.call("選定記事")
       assert_equal 200, first.fetch(:statusCode)
-      assert_equal WeblogAuthoring::DraftSite::PUBLIC_HTML_CACHE_CONTROL, first.dig(:headers, "cache-control")
+      assert_equal "public, max-age=0, s-maxage=86400, stale-while-revalidate=300, stale-if-error=86400", first.dig(:headers, "cache-control")
       assert_includes first.fetch(:body), "公開本文"
       assert_includes first.fetch(:body), '<meta property="og:title" content="選定記事"'
       assert_includes first.fetch(:body), 'src="/assets/photo.jpg"'

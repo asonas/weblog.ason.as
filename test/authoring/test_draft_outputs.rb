@@ -8,10 +8,17 @@ require "weblog_authoring/lambda_api"
 class DraftOutputsTest < Minitest::Test
   def test_only_requested_publication_is_purged_after_activation_and_can_resume_after_interruption
     publication = WeblogAuthoring::DraftPublication.local(store: @store, invalidate_cache: true)
+    original = publication.accept(@id, publication.prepare(@id).merge("request_id" => "create-cache")).fetch("id")
+    assert_nil @store.cache_request(@id, original)
+    @jobs.run(@id, original)
+    refute(@store.publication_stages(@id, original).any? { |stage| stage["stage"] == "cache" })
+    @store.append(@id, { "protocol" => 1, "generation" => 1, "update_id" => SecureRandom.uuid,
+      "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
+      "metadata" => { "cover_mode" => { "value" => "none", "expected_revision" => 0 } } })
     version = publication.accept(@id, publication.prepare(@id).merge("request_id" => "publish-cache")).fetch("id")
     request = @store.cache_request(@id, version)
     assert_equal ["/Public%20article", "/Public%20article/"], JSON.parse(request.fetch("paths"))
-    assert_nil @store.published_snapshot(@id)
+    assert_equal original, @store.published_snapshot(@id).fetch("id")
     client = Aws::CloudFront::Client.new(stub_responses: true)
     client.stub_responses(:create_invalidation, lambda do |_context|
       assert_equal version, @store.published_snapshot(@id).fetch("id")
