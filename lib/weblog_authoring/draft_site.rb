@@ -9,7 +9,7 @@ require_relative "operation_metrics"
 
 module WeblogAuthoring
   class DraftSite
-    PUBLIC_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=3600, stale-while-revalidate=300, stale-if-error=86400"
+    PUBLIC_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=86400, stale-while-revalidate=300, stale-if-error=86400"
 
     def initialize(api:, reader:, s3_client:, bucket:, published:, store: nil, site_url: nil, dynamic_article_routes: [], public_cache_enabled: false)
       @api = api
