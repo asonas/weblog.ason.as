@@ -54,6 +54,7 @@ try {
         const image = el.querySelector("img").getBoundingClientRect();
         const header = document.querySelector(".site-header").getBoundingClientRect();
         return {
+          portraitClass: el.closest(".article-image").classList.contains("article-image--portrait"),
           width: Math.round(image.width * 10) / 10, height: Math.round(image.height * 10) / 10,
           top: Math.round(image.top * 10) / 10, bottom: Math.round(image.bottom * 10) / 10,
           headerBottom: Math.round(header.bottom * 10) / 10,
@@ -85,11 +86,14 @@ try {
   }
   assert.ok(phone.landscape.expanded.width >= phone.landscape.expanded.viewportWidth - 0.5, "phone landscape uses the full width");
   assert.ok(phone.portrait.expanded.height >= available(phone.portrait.expanded) - 1, "phone portrait uses the full available height");
-  for (const kind of ["landscape", "portrait"]) {
-    const r = desktop[kind].expanded;
-    assert.ok(r.height <= available(r) * 0.75 + 0.5, `desktop ${kind} keeps the 75% height cap`);
-  }
-  console.log("PASS: phone zoom uses the full width and available height; desktop zoom keeps the 75% cap");
+  assert.equal(desktop.landscape.expanded.height <= available(desktop.landscape.expanded) * 0.75 + 0.5, true, "desktop landscape keeps the 75% height cap");
+  assert.equal(desktop.landscape.collapsed.portraitClass, false, "landscape fixture is not portrait");
+  const portrait = desktop.portrait;
+  assert.equal(portrait.collapsed.portraitClass, true, "portrait fixture gets article-image--portrait");
+  assert.ok(Math.abs(portrait.expanded.height - available(portrait.expanded)) <= 2, "desktop portrait uses the full available height");
+  assert.ok(portrait.expanded.height > portrait.collapsed.height, "desktop portrait grows when expanded");
+  assert.ok(Math.abs(portrait.expanded.width / portrait.expanded.height - sizes.portrait[0] / sizes.portrait[1]) < 0.01, "desktop portrait keeps its aspect ratio");
+  console.log("PASS: phone zoom uses the full width and available height; desktop portrait uses the full height and other images keep the 75% cap");
 } finally {
   await browser?.close();
   server.kill("SIGTERM");
