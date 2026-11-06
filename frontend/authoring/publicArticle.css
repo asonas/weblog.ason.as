@@ -44,6 +44,9 @@
   max-inline-size: none;
   transform: translateX(-50%);
 }
+.article-image--portrait.article-image--expanded {
+  --expanded-image-height: var(--available-image-height);
+}
 .article-image--expanded .article-image__zoom {
   display: grid;
   place-items: center;
