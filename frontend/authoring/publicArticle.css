@@ -38,6 +38,7 @@
   outline-offset: 3px;
 }
 .article-image--expanded {
+  --expanded-image-height: calc(var(--available-image-height) * 0.75);
   inset-inline-start: 50%;
   inline-size: calc(100vw - 2 * var(--space-4));
   max-inline-size: none;
@@ -57,6 +58,10 @@
   );
 }
 @media (max-width: 767px) {
+  .article-image--expanded {
+    --expanded-image-height: var(--available-image-height);
+    inline-size: 100vw;
+  }
   .article-image--expanded .article-image__zoom img {
     width: min(
       100%,

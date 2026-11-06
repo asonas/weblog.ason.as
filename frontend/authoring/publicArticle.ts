@@ -118,10 +118,7 @@ function enhanceArticleImages(root: HTMLElement) {
   const updateViewport = () => {
     headerHeight = header?.getBoundingClientRect().height ?? 0;
     availableHeight = Math.max(0, window.innerHeight - headerHeight);
-    root.style.setProperty(
-      "--expanded-image-height",
-      `${availableHeight * 0.75}px`,
-    );
+    root.style.setProperty("--available-image-height", `${availableHeight}px`);
   };
   updateViewport();
   window.addEventListener("resize", updateViewport);

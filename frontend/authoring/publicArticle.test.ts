@@ -77,14 +77,14 @@ test("article photos use source width and Escape collapses inline expansion", as
     assert.ok(article);
     enhancePublicArticle(article);
     assert.equal(
-      article.style.getPropertyValue("--expanded-image-height"),
-      "624px",
+      article.style.getPropertyValue("--available-image-height"),
+      "832px",
     );
     Object.defineProperty(dom.window, "innerHeight", { value: 600 });
     window.dispatchEvent(new dom.window.Event("resize"));
     assert.equal(
-      article.style.getPropertyValue("--expanded-image-height"),
-      "399px",
+      article.style.getPropertyValue("--available-image-height"),
+      "532px",
     );
     const buttons = article.querySelectorAll<HTMLButtonElement>(
       ".article-image__zoom",
