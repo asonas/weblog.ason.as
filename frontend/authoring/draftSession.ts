@@ -375,8 +375,6 @@ export class DraftSession extends EventTarget {
   isPublishing = false;
   publicationStatus = "";
   pendingPublication?: PublicationRequest;
-  pendingOutputs?: string;
-  isRetryingOutputs = false;
   private isClosed = false;
   private isComposing = false;
   private isBackgroundPaused = false;
@@ -426,8 +424,6 @@ export class DraftSession extends EventTarget {
         recovery: [],
       };
     }
-    session.pendingOutputs =
-      sessionStorage.getItem(`draft-outputs:${id}`) || undefined;
     const pendingPublication = sessionStorage.getItem(
       `draft-publication:${id}`,
     );
@@ -1276,30 +1272,8 @@ export class DraftSession extends EventTarget {
       this.publicationStatus =
         accepted.status === "unchanged"
           ? "公開版と同じ内容です"
-          : "公開を受け付けました。HTMLを配置中";
+          : "公開を受け付けました。";
       this.emit();
-      if (accepted.status !== "unchanged" || this.pieces) {
-        const job = await this.runPublication(accepted.id);
-        if (job.status !== "completed" && job.status !== "superseded")
-          throw new Error(job.error || "公開処理を再試行してください。");
-        this.publicationStatus =
-          job.status === "completed"
-            ? "公開が完了しました"
-            : "新しい公開操作が優先されました";
-        if (
-          job.stages?.some(
-            (stage) => !["completed", "superseded"].includes(stage.status),
-          )
-        ) {
-          this.pendingOutputs = job.id;
-          sessionStorage.setItem(`draft-outputs:${this.id}`, job.id);
-          this.publicationStatus =
-            "記事は公開済みです。公開キャッシュ・フィード・検索の更新状況を確認してください。";
-        } else {
-          this.pendingOutputs = undefined;
-          sessionStorage.removeItem(`draft-outputs:${this.id}`);
-        }
-      }
       this.pendingPublication = undefined;
       sessionStorage.removeItem(`draft-publication:${this.id}`);
     } catch (error) {
@@ -1315,82 +1289,6 @@ export class DraftSession extends EventTarget {
     } finally {
       this.cancelPublication();
     }
-  }
-
-  async webmentionStatus() {
-    return this.request<{
-      version_id: string;
-      targets: string[];
-      pending: boolean;
-      enabled: boolean;
-    }>("/webmentions");
-  }
-
-  async sendWebmentions(versionId: string) {
-    return this.request<{
-      version_id: string;
-      targets: string[];
-      pending: boolean;
-      enabled: boolean;
-    }>("/webmentions", "POST", { version_id: versionId });
-  }
-
-  async retryOutputs() {
-    if (!this.pendingOutputs || this.isRetryingOutputs) return;
-    this.isRetryingOutputs = true;
-    this.emit();
-    try {
-      const job = await this.runPublication(this.pendingOutputs);
-      if (
-        job.stages?.some(
-          (stage) => !["completed", "superseded"].includes(stage.status),
-        )
-      )
-        throw new Error(
-          "記事は公開済みです。公開キャッシュ・フィード・検索の更新を完了できませんでした。",
-        );
-      this.pendingOutputs = undefined;
-      sessionStorage.removeItem(`draft-outputs:${this.id}`);
-      this.publicationStatus = "公開後の更新が完了しました";
-    } catch (error) {
-      this.publicationStatus =
-        error instanceof Error
-          ? error.message
-          : "公開後の更新を再試行してください";
-    } finally {
-      this.isRetryingOutputs = false;
-      this.emit();
-    }
-  }
-
-  private async runPublication(versionId: string) {
-    let job = await this.request<PublicationJob>(
-      `/publications/${versionId}/run`,
-      "POST",
-      {},
-    );
-    const dispatchId = job.dispatch?.id;
-    if (!dispatchId) return job;
-    const deadline = Date.now() + 300_000;
-    while (
-      job.dispatch?.status === "queued" ||
-      job.dispatch?.status === "running"
-    ) {
-      if (Date.now() >= deadline)
-        throw new Error(
-          "公開処理は継続中です。しばらくしてから結果を再確認してください。",
-        );
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      job = await this.request<PublicationJob>(
-        `/publications/${versionId}?dispatch_id=${encodeURIComponent(dispatchId)}`,
-        "GET",
-      );
-    }
-    if (job.dispatch?.status !== "completed")
-      throw new Error(
-        job.dispatch?.error || "公開結果を確認できません。再試行してください。",
-      );
-    return job;
   }
 
   private async syncLocked() {

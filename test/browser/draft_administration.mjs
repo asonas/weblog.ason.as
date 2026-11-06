@@ -131,7 +131,7 @@ try {
   await page.getByLabel("タイトル", { exact: true }).fill("管理画面の実データ");
   const body = page.getByRole("textbox", { name: "本文", exact: true });
   await body.fill("検索と再開を確認する本文");
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   const article = page.url();
   let releaseList;
   const listGate = new Promise(resolve => { releaseList = resolve; });
@@ -155,7 +155,7 @@ try {
   const detail = ledger.locator("tbody tr").filter({ has: page.getByRole("link", { name: "管理画面の実データ", exact: true }) });
   async function editRow() {
     await detail.getByRole("button", { name: "管理画面の実データの操作", exact: true }).click();
-    await page.getByRole("menuitem", { name: "編集", exact: true }).click();
+    await page.getByRole("menuitem", { name: /編集$/ }).click();
   }
   await until(async () => await ledger.locator("tbody tr").count() === 1);
   await page.screenshot({ path: "/tmp/weblog-170-wide.png" });
@@ -164,9 +164,7 @@ try {
   assert.equal(page.url(), article);
   await fetch("http://127.0.0.1:18082/api/draft-test-search-failure", { method: "POST", headers: { "X-Draft-Test-Token": token } });
   await page.getByRole("button", { name: "公開する", exact: true }).click();
-  await until(async () => (await page.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
-  await page.getByRole("button", { name: "編集を続ける", exact: true }).click();
-  await page.getByRole("link", { name: /記事一覧/ }).click();
+  await page.waitForURL("**/authoring/articles");
   await search.fill("管理画面");
   await detail.getByRole("button", { name: "管理画面の実データの操作", exact: true }).click();
   await page.getByRole("menuitem", { name: "公開処理を再試行" }).click();
@@ -189,13 +187,13 @@ try {
   assert.equal(await page.locator(".draft-preview__document").evaluate(element => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   await page.screenshot({ path: "/tmp/weblog-authoring-editor-parchment.png" });
   await body.fill("公開後に追記した本文");
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await page.getByRole("link", { name: /記事一覧/ }).click();
   await page.getByRole("navigation", { name: "記事の状態" }).getByRole("button", { name: "未公開の変更あり" }).click();
   await until(async () => await ledger.locator("tbody tr").count() === 1);
   await editRow();
   await body.fill("検索と再開を確認する本文");
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await page.getByRole("link", { name: /記事一覧/ }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("navigation", { name: "記事の状態" }).getByRole("button", { name: "公開中" }).click();
@@ -207,7 +205,7 @@ try {
   await until(async () => await body.inputValue() === "検索と再開を確認する本文");
   await context.setOffline(true);
   await body.fill("端末にだけ保存した本文");
-  await until(async () => (await page.getByRole("status").textContent()).includes("端末に保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("端末に保存済み"));
   await page.route("**/api/authoring/drafts/**", route => route.abort());
   await context.setOffline(false);
   await page.getByRole("link", { name: /記事一覧/ }).click();
@@ -217,7 +215,7 @@ try {
   await page.screenshot({ path: "/tmp/weblog-authoring-pending-badge.png", fullPage: true });
   await editRow();
   await body.fill("検索と再開を確認する本文");
-  await until(async () => (await page.getByRole("status").textContent()).includes("端末に保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("端末に保存済み"));
   await page.getByRole("link", { name: /記事一覧/ }).click();
   await search.fill("管理画面");
   await until(async () => (await detail.textContent()).includes("未送信あり"));
@@ -238,13 +236,14 @@ try {
   await page.unroute("**/api/authoring/drafts/**");
   await page.goto(renamedArticle);
   await page.getByRole("button", { name: "公開する", exact: true }).click();
-  await until(async () => (await page.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
+  await page.waitForURL("**/authoring/articles");
   const publishedArticle = await fetch(
     `http://127.0.0.1:18082/${encodeURIComponent("日付とは別の日記タイトル")}`,
   );
   assert.equal(publishedArticle.status, 200);
   assert.ok((await publishedArticle.text()).includes("今日の日記の本文"));
-  await page.getByRole("button", { name: "編集を続ける", exact: true }).click();
+  await page.getByRole("row").filter({ has: page.getByRole("link", { name: "日付とは別の日記タイトル", exact: true }) }).getByText("公開中", { exact: true }).waitFor();
+  await ledger.getByRole("link", { name: "日付とは別の日記タイトル", exact: true }).click();
   let sentMentions = 0;
   await page.route("**/api/authoring/drafts/*/webmentions", async route => {
     if (route.request().method() === "POST") {
@@ -256,10 +255,11 @@ try {
   });
   await page.getByRole("textbox", { name: "本文", exact: true }).fill("今日の日記の本文\n\n[追加リンク](https://example.net/new)");
   await page.getByRole("button", { name: "更新する", exact: true }).click();
-  const sendMention = page.getByRole("dialog").getByRole("button", { name: "Webmentionを送る", exact: true });
+  await page.waitForURL("**/authoring/articles");
+  const sendMention = page.getByRole("row").filter({ has: page.getByRole("link", { name: "日付とは別の日記タイトル", exact: true }) }).getByRole("button", { name: "Webmentionを送る", exact: true });
   await sendMention.waitFor();
   assert.equal(sentMentions, 0);
-  await page.screenshot({ path: "/tmp/weblog-webmention-save-dialog.png" });
+  await page.screenshot({ path: "/tmp/weblog-webmention-article-list.png" });
   await sendMention.click();
   await page.getByText("Webmentionの送信を受け付けました。", { exact: false }).waitFor();
   assert.equal(sentMentions, 1);
