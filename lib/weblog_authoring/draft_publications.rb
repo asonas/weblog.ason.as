@@ -55,7 +55,7 @@ module WeblogAuthoring
             db.query("INSERT INTO #{db.prefix}article_publication_jobs (id, article_id, status) VALUES ($1, $2, 'accepted')", [version_id, id])
             db.query("INSERT INTO #{db.prefix}article_publication_heads (article_id, latest_id) VALUES ($1, $2) ON CONFLICT (article_id) DO UPDATE SET latest_id = $2", [id, version_id])
             accept_rename_batch(db, id, version_id, active, verified.fetch("rename")) if verified["rename"]
-            if active && verified["invalidate_cache"]
+            if verified["invalidate_cache"]
               routes = [route]
               routes << active.fetch("route") if active && active.fetch("route") != route
               prepare_cache_request(db, id, version_id, routes)

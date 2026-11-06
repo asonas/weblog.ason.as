@@ -8,10 +8,24 @@ require "weblog_authoring/lambda_api"
 class DraftOutputsTest < Minitest::Test
   def test_only_requested_publication_is_purged_after_activation_and_can_resume_after_interruption
     publication = WeblogAuthoring::DraftPublication.local(store: @store, invalidate_cache: true)
+    expected = nil
+    client = Aws::CloudFront::Client.new(stub_responses: true)
+    client.stub_responses(:create_invalidation, lambda do |_context|
+      assert_equal expected, @store.published_snapshot(@id).fetch("id")
+      { invalidation: { id: "cache", status: "InProgress", create_time: Time.now, invalidation_batch: { caller_reference: "ref", paths: { quantity: 2 } } } }
+    end)
+    client.stub_responses(:get_invalidation, invalidation: { id: "cache", status: "Completed", create_time: Time.now, invalidation_batch: { caller_reference: "ref", paths: { quantity: 2 } } })
+    cache = WeblogAuthoring::PublicCache.new(client:, distribution_id: "site")
+    jobs = WeblogAuthoring::DraftJobs.new(store: @store, publisher: @publisher, outputs: @outputs, public_cache: cache, clock: -> { @now })
+    # A first publication also purges its route: the related-articles page
+    # served there before publication may still be cached at the edge.
     original = publication.accept(@id, publication.prepare(@id).merge("request_id" => "create-cache")).fetch("id")
-    assert_nil @store.cache_request(@id, original)
-    @jobs.run(@id, original)
-    refute(@store.publication_stages(@id, original).any? { |stage| stage["stage"] == "cache" })
+    assert_equal ["/Public%20article", "/Public%20article/"], JSON.parse(@store.cache_request(@id, original).fetch("paths"))
+    assert_nil @store.published_snapshot(@id)
+    expected = original
+    jobs.run(@id, original)
+    jobs.repair
+    assert_equal "completed", @store.publication_stages(@id, original).find { |s| s["stage"] == "cache" }.fetch("status")
     @store.append(@id, { "protocol" => 1, "generation" => 1, "update_id" => SecureRandom.uuid,
       "data" => "AAA=", "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
       "metadata" => { "cover_mode" => { "value" => "none", "expected_revision" => 0 } }, })
@@ -19,20 +33,13 @@ class DraftOutputsTest < Minitest::Test
     request = @store.cache_request(@id, version)
     assert_equal ["/Public%20article", "/Public%20article/"], JSON.parse(request.fetch("paths"))
     assert_equal original, @store.published_snapshot(@id).fetch("id")
-    client = Aws::CloudFront::Client.new(stub_responses: true)
-    client.stub_responses(:create_invalidation, lambda do |_context|
-      assert_equal version, @store.published_snapshot(@id).fetch("id")
-      { invalidation: { id: "cache", status: "InProgress", create_time: Time.now, invalidation_batch: { caller_reference: "ref", paths: { quantity: 2 } } } }
-    end)
-    client.stub_responses(:get_invalidation, invalidation: { id: "cache", status: "Completed", create_time: Time.now, invalidation_batch: { caller_reference: "ref", paths: { quantity: 2 } } })
-    cache = WeblogAuthoring::PublicCache.new(client:, distribution_id: "site")
-    jobs = WeblogAuthoring::DraftJobs.new(store: @store, publisher: @publisher, outputs: @outputs, public_cache: cache, clock: -> { @now })
+    expected = version
     # The accepted request survives before the worker starts.
     jobs.repair
     assert_equal "completed", @store.publication_stages(@id, version).find { |s| s["stage"] == "cache" }.fetch("status")
     jobs.run(@id, version, retry_now: true)
     assert_equal "unchanged", publication.accept(@id, publication.prepare(@id).merge("request_id" => "unchanged-cache")).fetch("status")
-    assert_equal(1, client.api_requests.count { |r| r[:operation_name] == :create_invalidation })
+    assert_equal(2, client.api_requests.count { |r| r[:operation_name] == :create_invalidation })
   end
 
   def test_maintenance_publication_does_not_schedule_invalidation
