@@ -422,7 +422,16 @@ module WeblogAuthoring
     end
 
     post "/api/authoring/drafts/:id/publications" do
-      api_response(202) { |payload| settings.draft_publication.accept(params.fetch("id"), payload) }
+      api_response(202) do |payload|
+        id = params.fetch("id")
+        accepted = settings.draft_publication.accept(id, payload)
+        begin
+          settings.draft_jobs.run(id, accepted.fetch("id"))
+        rescue StandardError => error
+          warn JSON.generate("event" => "draft_publication_dispatch_failed", "article_id" => id, "version_id" => accepted.fetch("id"), "error" => error.class.name)
+        end
+        accepted
+      end
     end
 
     get "/api/authoring/drafts/:id/publications/:version_id" do

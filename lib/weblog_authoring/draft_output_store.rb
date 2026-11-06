@@ -95,7 +95,7 @@ module WeblogAuthoring
           if previous
             next nil if previous.fetch("status") == "completed" && !rebuild
             next nil if previous.fetch("status") == "needs_attention" && !retry_now
-            next nil if previous["next_attempt_at"] && Time.iso8601(previous.fetch("next_attempt_at")) > now && !retry_now
+            next nil if previous["next_attempt_at"] && Time.iso8601(previous.fetch("next_attempt_at")) > now && (previous.fetch("status") == "running" || !retry_now)
           end
           attempts = previous && previous.fetch("status") != "completed" ? previous.fetch("attempts").to_i + 1 : 1
           token = SecureRandom.uuid

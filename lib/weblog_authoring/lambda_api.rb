@@ -605,7 +605,14 @@ module WeblogAuthoring
       id = match[1].to_s
       version_id, action = match.captures.drop(1)
       if method == "POST" && version_id.nil?
-        json_response(202, service.accept(id, parse_json(event)))
+        accepted = service.accept(id, parse_json(event))
+        begin
+          job = @draft_jobs&.run(id, accepted.fetch("id"))
+          accepted["dispatch"] = job.fetch("dispatch") if job && job["dispatch"]
+        rescue StandardError => error
+          warn JSON.generate("event" => "draft_publication_dispatch_failed", "article_id" => id, "version_id" => accepted.fetch("id"), "error" => error.class.name)
+        end
+        json_response(202, accepted)
       elsif method == "POST" && version_id == "prepare" && action.nil?
         json_response(200, service.prepare(id))
       elsif method == "POST" && action == "run" && version_id

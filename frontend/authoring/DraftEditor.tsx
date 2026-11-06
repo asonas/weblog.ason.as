@@ -31,7 +31,6 @@ import {
   DRAFT_BODY_LIMIT,
   type DraftMetadata,
   DraftSession,
-  draftRoute,
 } from "./draftSession";
 import { draftMetadataForTitle, hasCustomDiaryTitle } from "./draftTitle";
 import { prefetchEmbedMetadata } from "./EmbedCard";
@@ -252,16 +251,12 @@ export function DraftEditor({
   const [loadError, setLoadError] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [publicationError, setPublicationError] = useState("");
-  const [webmentions, setWebmentions] =
-    useState<Awaited<ReturnType<DraftSession["webmentionStatus"]>>>();
-  const [webmentionStatus, setWebmentionStatus] = useState("");
-  const [isSendingWebmentions, setIsSendingWebmentions] = useState(false);
   const [imageUploadError, setImageUploadError] = useState("");
   const [imageUploadStatus, setImageUploadStatus] = useState("");
   const videoUpload = useRef<AbortController | null>(null);
   useEffect(() => () => videoUpload.current?.abort(), []);
   const [publicationFlow, setPublicationFlow] = useState<
-    "idle" | "running" | "success" | "error"
+    "idle" | "running" | "error"
   >("idle");
   const [publicationIntent, setPublicationIntent] = useState<
     "publish" | "update"
@@ -559,7 +554,11 @@ export function DraftEditor({
       }
     };
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (isComposing || session.localStatus !== "端末に保存済み")
+      if (
+        isComposing ||
+        session.localStatus !== "端末に保存済み" ||
+        session.isPublishing
+      )
         event.preventDefault();
     };
     session.doc.on("beforeTransaction", remember);
@@ -893,8 +892,6 @@ export function DraftEditor({
   async function publish() {
     if (!session || session.isPublishing) return;
     setPublicationError("");
-    setWebmentions(undefined);
-    setWebmentionStatus("");
     setPublicationIntent(articleState === "draft" ? "publish" : "update");
     setPublicationFlow("running");
     publicationDialog.current?.showModal();
@@ -912,18 +909,8 @@ export function DraftEditor({
         );
       }
       await session.publish(prepared);
-      setArticleState("public");
-      setPublicationFlow("success");
-      try {
-        const mentions = await session.webmentionStatus();
-        setWebmentions(mentions);
-        if (mentions.pending)
-          setWebmentionStatus("Webmentionの送信を待っています。");
-        if (!mentions.enabled)
-          setWebmentionStatus("Webmentionの送信は停止中です。");
-      } catch {
-        setWebmentionStatus("Webmentionの送信状況を取得できませんでした。");
-      }
+      publicationDialog.current?.close();
+      window.location.assign("/authoring/articles");
     } catch (error) {
       setPublicationError(
         error instanceof Error ? error.message : "公開に失敗しました",
@@ -1111,18 +1098,6 @@ export function DraftEditor({
             />
           </details>
         )}
-        {session?.pendingOutputs && (
-          <button
-            type="button"
-            disabled={session.isRetryingOutputs}
-            onClick={() => void session.retryOutputs()}
-          >
-            {session.isRetryingOutputs
-              ? "公開後の更新を再試行中"
-              : "公開後の更新を再試行"}
-          </button>
-        )}
-
         {session?.metadataConflicts.map(({ field, local, remote, source }) => (
           <fieldset key={field} className="draft-editor__conflict">
             <legend>{FIELD_LABELS[field]}の競合</legend>
@@ -1601,75 +1576,19 @@ export function DraftEditor({
         }}
       >
         <h2 id="draft-publication-title">
-          {publicationFlow === "success"
-            ? publicationIntent === "update"
-              ? "記事を更新しました"
-              : "記事を公開しました"
-            : publicationFlow === "error"
-              ? "処理を完了できませんでした"
-              : publicationIntent === "publish"
-                ? "記事を公開しています"
-                : "記事を更新しています"}
+          {publicationFlow === "error"
+            ? "処理を完了できませんでした"
+            : publicationIntent === "publish"
+              ? "公開を受け付けています"
+              : "更新を受け付けています"}
         </h2>
         <p role="status" aria-live="polite">
           {publicationFlow === "running"
             ? session?.publicationStatus ||
               "本文と設定をサーバーへ保存しています。"
-            : publicationFlow === "success"
-              ? session?.publicationStatus ||
-                "公開ページへの反映が完了しました。"
-              : publicationError}
-          {publicationFlow === "success" && webmentionStatus && (
-            <>
-              <br />
-              {webmentionStatus}
-            </>
-          )}
+            : publicationError}
         </p>
         <div className="draft-publication-dialog__actions">
-          {publicationFlow === "success" && session && (
-            <>
-              <a href={`/${encodeURIComponent(draftRoute(session.metadata))}`}>
-                記事を見る
-              </a>
-              <a href="/authoring/articles">記事一覧に戻る</a>
-              {webmentions?.enabled &&
-                (webmentions.targets.length > 0 || webmentions.pending) && (
-                  <button
-                    type="button"
-                    disabled={isSendingWebmentions}
-                    onClick={async () => {
-                      if (isSendingWebmentions) return;
-                      setIsSendingWebmentions(true);
-                      try {
-                        setWebmentions(
-                          await session.sendWebmentions(webmentions.version_id),
-                        );
-                        setWebmentionStatus(
-                          "Webmentionの送信を受け付けました。送信失敗はWebmention管理画面で確認できます。",
-                        );
-                      } catch (error) {
-                        setWebmentionStatus(
-                          error instanceof Error
-                            ? error.message
-                            : "Webmentionを送信できませんでした。再試行してください。",
-                        );
-                      } finally {
-                        setIsSendingWebmentions(false);
-                      }
-                    }}
-                  >
-                    {isSendingWebmentions ? "送信を依頼中" : "Webmentionを送る"}
-                  </button>
-                )}
-              <button
-                type="button"
-                onClick={() => publicationDialog.current?.close()}
-              >
-                編集を続ける
-              </button>
-            </>
-          )}
           {publicationFlow === "error" && (
             <button
               type="button"

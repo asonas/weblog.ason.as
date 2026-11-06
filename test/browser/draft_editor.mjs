@@ -35,6 +35,9 @@ try {
   await ready("http://127.0.0.1:18082/api/draft-test-health", apiLog);
   await ready("http://127.0.0.1:15182/api/draft-test-health", viteLog);
   browser = await chromium.launch({ channel: "chrome", headless: true });
+  const errors = [];
+  browser.on("page", page => page.on("pageerror", error => errors.push(error.message)));
+  if (!process.argv.includes("--publication-only")) {
   const missingArticle = await browser.newPage();
   await missingArticle.route("**/hoge-piyo", async (route) => route.fulfill({
     status: 404,
@@ -45,7 +48,7 @@ try {
   await missingArticle.waitForURL("**/draft-editor?**");
   await until(async () => await missingArticle.getByLabel("タイトル", { exact: true }).inputValue() === "hoge-piyo");
   await missingArticle.getByLabel("タイトル", { exact: true }).fill("書き換えたタイトル");
-  await until(async () => (await missingArticle.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await missingArticle.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await missingArticle.reload();
   await until(async () => await missingArticle.getByLabel("タイトル", { exact: true }).inputValue() === "書き換えたタイトル");
   await missingArticle.close();
@@ -54,8 +57,6 @@ try {
     path: "test/fixtures/article_comparison/assets/rubykaigi-follow-up.webp",
     contentType: "image/webp",
   }));
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(error.message));
   const inboxItems = [
     ...Array.from({ length: 8 }, (_, index) => ({
       id: index === 0 ? "photo-ok" : index === 1 ? "photo-fail" : `photo-${index}`,
@@ -160,7 +161,7 @@ try {
   await page.getByLabel("タイトル", { exact: true }).fill("保存と公開は別");
   const body = page.getByRole("textbox", { name: "本文", exact: true });
   await body.fill("# 日本語の下書き\n\nclass User\nend\n");
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   const url = page.url();
   await page.reload();
   await until(async () => await body.inputValue() === "# 日本語の下書き\n\nclass User\nend\n");
@@ -349,12 +350,12 @@ try {
   assert.equal(await body.inputValue(), beforeFailedAdoption);
 
   await page.getByLabel("タイトル", { exact: true }).fill("2026-09-20");
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   const diaryDocument = await (await page.request.get(new URL("/api/authoring/drafts/" + legacyId, page.url()).href)).json();
   assert.equal(diaryDocument.metadata.page_type.value, "date");
   assert.equal(diaryDocument.metadata.page_date.value, "2026-09-20");
   await page.getByLabel("タイトル", { exact: true }).fill("日記ではない記事");
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   const namedDocument = await (await page.request.get(new URL("/api/authoring/drafts/" + legacyId, page.url()).href)).json();
   assert.equal(namedDocument.metadata.page_type.value, "named");
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -552,12 +553,12 @@ end
   }, { times: 1 });
   await body.fill("保存の応答を待っている本文");
   await until(() => received);
-  assert.ok((await page.getByRole("status").textContent()).includes("端末に保存済み"));
-  assert.ok(!(await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  assert.ok((await page.locator(".draft-editor__sync-status").textContent()).includes("端末に保存済み"));
+  assert.ok(!(await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await body.fill("保存の応答を待つ間に追記した本文");
   await setTimeout(1200);
   release();
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   const fresh = await browser.newContext();
   const freshPage = await fresh.newPage();
   await freshPage.goto(url);
@@ -567,12 +568,12 @@ end
   // API disconnection keeps the application shell available for an offline reload.
   await page.route("**/api/authoring/drafts/**", (route) => route.abort("internetdisconnected"));
   await body.fill("通信断の間に書いた本文");
-  await until(async () => (await page.getByRole("status").textContent()).includes("端末に保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("端末に保存済み"));
   await page.reload();
   await until(async () => await body.inputValue() === "通信断の間に書いた本文");
   await page.unroute("**/api/authoring/drafts/**");
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
 
   const sentIds = [];
   await page.route("**/uploads", async (route) => {
@@ -585,7 +586,7 @@ end
   }, { times: 1 });
   await body.fill("応答を失っても一度だけ保存する本文");
   await until(() => sentIds.length >= 2);
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   assert.equal(new Set(sentIds).size, 1);
   await page.unroute("**/uploads");
   await page.unroute("**/uploads/*/commit");
@@ -597,7 +598,7 @@ end
   }, { times: 1 });
   await body.fill("デプロイ中のエラーから自動復旧した本文");
   await until(() => failedDuringDeploy);
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
 
   let unauthorizedSends = 0;
   await page.route("**/uploads/*/commit", async (route) => {
@@ -611,13 +612,13 @@ end
   assert.equal(await body.inputValue(), "ログイン切れでも保持する本文");
   await page.unroute("**/uploads/*/commit");
   await page.getByRole("button", { name: "サーバー保存を再試行" }).click();
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
 
   const remote = await browser.newContext();
   const remotePage = await remote.newPage();
   await remotePage.goto(url);
   await remotePage.getByRole("textbox", { name: "本文", exact: true }).fill("別端末からの追記");
-  await until(async () => (await remotePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await remotePage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await page.bringToFront();
   await until(async () => await body.inputValue() === "別端末からの追記");
   await body.evaluate((field) => {
@@ -625,7 +626,7 @@ end
     field.value += "ローカル変換";
   });
   await remotePage.getByRole("textbox", { name: "本文", exact: true }).fill("別端末からの追記リモート追記");
-  await until(async () => (await remotePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await remotePage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await setTimeout(300);
   assert.equal(await body.inputValue(), "別端末からの追記ローカル変換");
@@ -646,17 +647,17 @@ end
   await body.press("ControlOrMeta+End");
   await body.pressSequentially("abcdefghijklmnopqrstuvwx", { delay: 250 });
   assert.ok(savedDuringTyping, "continuous input must start saving without waiting for idle");
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
 
   const competing = await browser.newContext();
   const competingPage = await competing.newPage();
   await competingPage.goto(url);
-  await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await competingPage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await page.route("**/api/authoring/drafts/**", (route) => route.abort("internetdisconnected"));
   await page.getByLabel("タイトル", { exact: true }).fill("端末側のタイトル");
   await body.fill("競合解決を待つ本文");
   await competingPage.getByLabel("タイトル", { exact: true }).fill("別端末側のタイトル");
-  await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await competingPage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await page.unroute("**/api/authoring/drafts/**");
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   const conflict = page.getByRole("group", { name: "タイトルの競合" });
@@ -668,7 +669,7 @@ end
   assert.equal(await body.inputValue(), "競合解決を待つ本文");
   await conflict.getByRole("button", { name: "この端末の値を使う" }).focus();
   await page.keyboard.press("Enter");
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await competingPage.reload();
   await until(async () => await competingPage.getByLabel("タイトル", { exact: true }).inputValue() === "端末側のタイトル");
 
@@ -683,11 +684,11 @@ end
   await page.getByLabel("タイトル", { exact: true }).fill("送信中に競合するタイトル");
   await until(() => flightStarted);
   await competingPage.getByLabel("タイトル", { exact: true }).fill("先に保存されたタイトル");
-  await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await competingPage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   releaseConflict();
   await conflict.waitFor();
   await conflict.getByRole("button", { name: "サーバーの値を使う" }).click();
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   assert.equal(await page.getByLabel("タイトル", { exact: true }).inputValue(), "先に保存されたタイトル");
 
   await page.route("**/api/authoring/drafts/**", (route) => route.abort("internetdisconnected"));
@@ -695,10 +696,10 @@ end
   await competingPage.getByRole("button", { name: "記事の設定", exact: true }).click();
   await competingPage.getByRole("radio", { name: "なし", exact: false }).check();
   await competingPage.getByRole("button", { name: "記事の設定を閉じる" }).click();
-  await until(async () => (await competingPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await competingPage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await page.unroute("**/api/authoring/drafts/**");
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await until(async () => (await page.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await page.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   assert.equal(await conflict.count(), 0);
   assert.equal(await page.locator("button[title='記事の設定']").count(), 1);
   await competingPage.reload();
@@ -712,7 +713,7 @@ end
   await tabA.goto("http://127.0.0.1:15182/draft-editor");
   const tabABody = tabA.getByRole("textbox", { name: "本文", exact: true });
   await tabABody.fill("共通の本文\n");
-  await until(async () => (await tabA.getByRole("status").textContent()).includes("端末に保存済み"));
+  await until(async () => (await tabA.locator(".draft-editor__sync-status").textContent()).includes("端末に保存済み"));
   const tabsUrl = tabA.url();
   const tabB = await tabs.newPage();
   await tabB.goto(tabsUrl);
@@ -764,7 +765,7 @@ end
   await tabA.close();
   const handoffTab = await tabs.newPage();
   await handoffTab.goto(tabsUrl);
-  await until(async () => (await handoffTab.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await handoffTab.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   assert.ok(handoffIds.length >= 2);
   assert.equal(handoffIds[0], handoffIds[1]);
   await tabs.close();
@@ -781,7 +782,7 @@ end
   await storageBody.waitFor();
   await until(async () => await storageBody.isEnabled());
   await storageBody.fill("容量不足になる前の本文");
-  await until(async () => (await storagePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await storagePage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await storagePage.evaluate(() => {
     const original = IDBObjectStore.prototype.put;
     globalThis.restoreDraftStorage = () => { IDBObjectStore.prototype.put = original; };
@@ -797,7 +798,7 @@ end
   });
   const retainedText = "# 保存容量不足でも失わない本文\n\n日本語と `code` を退避する。\n";
   await storageBody.fill(retainedText);
-  await until(async () => (await storagePage.getByRole("status").textContent()).includes("端末に保存できません"));
+  await until(async () => (await storagePage.locator(".draft-editor__sync-status").textContent()).includes("端末に保存できません"));
   assert.equal(await storageBody.inputValue(), retainedText);
   const downloadPromise = storagePage.waitForEvent("download");
   await storagePage.getByRole("button", { name: "記事の設定", exact: true }).click();
@@ -810,7 +811,7 @@ end
   await storagePage.getByRole("button", { name: "記事の設定を閉じる" }).click();
   await storagePage.evaluate(() => globalThis.restoreDraftStorage());
   await storagePage.getByRole("button", { name: "サーバー保存を再試行" }).click();
-  await until(async () => (await storagePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await storagePage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await storagePage.reload();
   await until(async () => await storageBody.inputValue() === retainedText);
   const storageUrl = storagePage.url();
@@ -830,7 +831,7 @@ end
   });
   await recoveryBody.fill("復旧前に保存された本文");
   await until(async () =>
-    (await recoveryPage.getByRole("status").textContent()).includes(
+    (await recoveryPage.locator(".draft-editor__sync-status").textContent()).includes(
       "サーバーに保存済み",
     ),
   );
@@ -854,7 +855,7 @@ end
   await recoveryPage.unroute("**/api/authoring/drafts/**");
   await recoveryPage.evaluate(() => window.dispatchEvent(new Event("online")));
   await until(async () =>
-    (await recoveryPage.getByRole("status").textContent()).includes(
+    (await recoveryPage.locator(".draft-editor__sync-status").textContent()).includes(
       "サーバーに保存済み",
     ),
   );
@@ -880,6 +881,7 @@ end
   assert.equal((await body.inputValue()).length, 174_763);
   await page.reload();
   await until(async () => (await body.inputValue()).length === 174_763);
+  }
   const publicPages = await (await fetch("http://127.0.0.1:18082/api/pages")).json();
   assert.deepEqual(publicPages.pages, []);
   const publicationPage = await browser.newPage();
@@ -902,32 +904,20 @@ end
   assert.equal(await publicationPage.getByRole("region", { name: "公開内容の確認" }).count(), 0);
   await until(async () => (await publicationPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("通信できません"));
   await publicationPage.reload();
-  let dispatchPolls = 0;
-  await publicationPage.route("**/publications/*/run", async (route) => {
-    const response = await route.fetch();
-    const result = await response.json();
-    await route.fulfill({ response, json: { ...result, dispatch: { id: "browser-dispatch", status: "queued" } } });
+  let runRequests = 0;
+  publicationPage.on("request", request => {
+    if (/\/publications\/[^/]+\/run$/.test(new URL(request.url()).pathname)) runRequests++;
   });
-  await publicationPage.route("**/publications/*?dispatch_id=browser-dispatch", async (route) => {
-    dispatchPolls++;
-    const response = await route.fetch();
-    const result = await response.json();
-    await route.fulfill({ response, json: { ...result, dispatch: { id: "browser-dispatch", status: dispatchPolls < 2 ? "running" : "completed" } } });
-  });
-  await fetch("http://127.0.0.1:18082/api/draft-test-search-failure", { method: "POST", headers: { "X-Draft-Test-Token": token } });
   await publicationPage.getByRole("button", { name: "公開を再試行", exact: true }).click();
-  await until(async () => (await publicationPage.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
-  await publicationPage.getByRole("button", { name: "編集を続ける", exact: true }).click();
-  assert.ok(dispatchPolls >= 2, "Publication waits for asynchronous worker completion");
+  await publicationPage.waitForURL("**/authoring/articles");
+  assert.equal(runRequests, 0, "Acceptance starts the worker without a second browser request");
   assert.ok((await (await fetch(readerUrl)).text()).includes("読者向けの内容"));
   assert.ok((await (await fetch("http://127.0.0.1:18082/feed.xml")).text()).includes(`urn:uuid:${publicationId}`));
-  await publicationPage.unroute("**/publications/*/run");
-  await publicationPage.unroute("**/publications/*?dispatch_id=browser-dispatch");
-  await publicationPage.getByRole("button", { name: "公開後の更新を再試行", exact: true }).click();
-  await until(async () => (await publicationPage.getByRole("status").textContent()).includes("公開後の更新が完了しました"));
   assert.equal((await fetch(`http://127.0.0.1:18082/api/search?q=${encodeURIComponent("読者")}`)).status, 200);
+  await publicationPage.goto(`http://127.0.0.1:15182/draft-editor?id=${publicationId}&state=public`);
+  await publicationBody.waitFor();
   await publicationBody.fill("まだ見せない追記");
-  await until(async () => (await publicationPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await publicationPage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   assert.ok(!(await (await fetch(readerUrl)).text()).includes("まだ見せない追記"));
   assert.ok((await (await fetch(`http://127.0.0.1:18082/${encodeURIComponent("確認して公開する記事")}`)).text()).includes("読者向けの内容"));
   let requestStarted = false;
@@ -947,7 +937,7 @@ end
   const concurrentBody = concurrentPage.getByRole("textbox", { name: "本文", exact: true });
   await until(async () => (await concurrentBody.inputValue()) === "まだ見せない追記");
   await concurrentBody.fill("別のタブで追記した内容");
-  await until(async () => (await concurrentPage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await concurrentPage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   releasePublication();
   await until(async () => (await publicationPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("再確認してください"));
   await publicationPage.getByRole("button", { name: "エディタに戻る", exact: true }).click();
@@ -957,8 +947,9 @@ end
   await until(async () => (await publicationPage.locator(".draft-editor__status > [role=alert]").textContent()).includes("合流しました"));
   await publicationPage.getByRole("button", { name: "エディタに戻る", exact: true }).click();
   await publicationPage.getByRole("button", { name: "更新する", exact: true }).click();
-  await until(async () => (await publicationPage.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
-  await publicationPage.getByRole("button", { name: "編集を続ける", exact: true }).click();
+  await publicationPage.waitForURL("**/authoring/articles");
+  await publicationPage.goto(`http://127.0.0.1:15182/draft-editor?id=${publicationId}&state=public`);
+  await publicationBody.waitFor();
   assert.ok((await (await fetch(readerUrl)).text()).includes("別のタブで追記した内容"));
   await concurrentContext.close();
   const referencePage = await browser.newPage();
@@ -966,16 +957,18 @@ end
   await referencePage.getByLabel("タイトル", { exact: true }).fill("名前変更の参照元");
   const referenceBody = referencePage.getByRole("textbox", { name: "本文", exact: true });
   await referenceBody.fill("公開リンク [[確認して公開する記事]]");
-  await referencePage.getByRole("button", { name: "公開する", exact: true }).click();
-  await until(async () => (await referencePage.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
-  await referencePage.getByRole("button", { name: "編集を続ける", exact: true }).click();
   const referenceId = new URL(referencePage.url()).searchParams.get("id");
+  await referencePage.getByRole("button", { name: "公開する", exact: true }).click();
+  await referencePage.waitForURL("**/authoring/articles");
+  await referencePage.goto(`http://127.0.0.1:15182/draft-editor?id=${referenceId}`);
+  await referenceBody.waitFor();
   await referenceBody.fill("非公開で編集中の参照元");
-  await until(async () => (await referencePage.getByRole("status").textContent()).includes("サーバーに保存済み"));
+  await until(async () => (await referencePage.locator(".draft-editor__sync-status").textContent()).includes("サーバーに保存済み"));
   await publicationPage.getByLabel("タイトル", { exact: true }).fill("名前変更した記事");
   await publicationPage.getByRole("button", { name: "更新する", exact: true }).click();
-  await until(async () => (await publicationPage.getByRole("dialog").getByRole("status").textContent()).includes("公開が完了しました"));
-  await publicationPage.getByRole("button", { name: "編集を続ける", exact: true }).click();
+  await publicationPage.waitForURL("**/authoring/articles");
+  await publicationPage.goto(`http://127.0.0.1:15182/draft-editor?id=${publicationId}&state=public`);
+  await publicationBody.waitFor();
   const oldRouteUrl = `http://127.0.0.1:18082/${encodeURIComponent("確認して公開する記事")}`;
   await until(async () => (await fetch(oldRouteUrl, { redirect: "manual" })).status === 301);
   const oldRoute = await fetch(oldRouteUrl, { redirect: "manual" });
@@ -988,7 +981,9 @@ end
   await referencePage.close();
   await publicationPage.close();
   assert.deepEqual(errors, []);
-  console.log("PASS: reopen, shared public preview wide/narrow/offline, Undo/Redo, API-offline reload/reconnect, lost response retry, deployment failure recovery, remote refresh, continuous-input save, metadata conflicts/reload/choice/send race, independent metadata merge, same-browser offline tabs/reload/conflict/flight handoff, storage quota warning/export/recovery, explicit generation recovery, oversized retention, public isolation");
+  console.log(process.argv.includes("--publication-only")
+    ? "PASS: publication acceptance, lost response retry, concurrent edit rejection, update, rename & public isolation"
+    : "PASS: reopen, shared public preview wide/narrow/offline, Undo/Redo, API-offline reload/reconnect, lost response retry, deployment failure recovery, remote refresh, continuous-input save, metadata conflicts/reload/choice/send race, independent metadata merge, same-browser offline tabs/reload/conflict/flight handoff, storage quota warning/export/recovery, explicit generation recovery, oversized retention, public isolation");
 } finally {
   await browser?.close();
   for (const child of children) child.kill("SIGTERM");

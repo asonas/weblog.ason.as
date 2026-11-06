@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AuthoringIcon } from "./AuthoringIcon";
 import { DraftArticleMenu } from "./DraftArticleMenu";
 import { DraftNavigation } from "./DraftNavigation";
+import { DraftWebmentionStatus } from "./DraftWebmentionStatus";
 import { storeDraftInitialBody } from "./draftInitialBody";
 import {
   type DraftMetadata,
@@ -31,7 +32,12 @@ type Article = {
     id: string;
     status: string;
     error?: string;
-    stages: { stage: string; status: string; error?: string }[];
+    stages: {
+      stage: string;
+      status: string;
+      error?: string;
+      next_attempt_at?: string | null;
+    }[];
   } | null;
 };
 type Row = Article & { local?: LocalDraftSummary; localOnly?: boolean };
@@ -105,20 +111,26 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
   const [localError, setLocalError] = useState("");
   const [busy, setBusy] = useState(false);
   const request = useRef<AbortController | null>(null);
+  const loadedCount = useRef(0);
+  const [dispatches, setDispatches] = useState<
+    Record<string, { version: string; id: string }>
+  >({});
 
   const load = useCallback(
-    async (nextCursor: string | null = null) => {
+    async (nextCursor: string | null = null, background = false) => {
       const isReload = nextCursor === null;
       request.current?.abort();
       const controller = new AbortController();
       request.current = controller;
-      if (isReload) {
-        setLoading(true);
-        setLoadingMore(false);
-      } else setLoadingMore(true);
+      if (!background) {
+        if (isReload) {
+          setLoading(true);
+          setLoadingMore(false);
+        } else setLoadingMore(true);
+      }
       setError("");
-      if (isReload) setAvailable(false);
-      if (isReload)
+      if (isReload && !background) setAvailable(false);
+      if (isReload && !background)
         void readLocalDraftSummaries()
           .then((value) => {
             if (!controller.signal.aborted) {
@@ -133,19 +145,33 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
               );
           });
       try {
-        const params = new URLSearchParams({ q: debouncedQuery });
-        if (nextCursor) params.set("cursor", nextCursor);
-        const response = await fetch(`/api/authoring/drafts?${params}`, {
-          signal: controller.signal,
-        });
-        if (!response.ok)
-          throw new Error(
-            "サーバーの記事一覧を取得できません。通信やログイン状態を確認してください。",
-          );
-        const page: ArticlePage = await response.json();
-        setArticles((current) =>
-          isReload ? page.articles : [...current, ...page.articles],
+        let page: ArticlePage;
+        const refreshed: Article[] = [];
+        let pageCursor = nextCursor;
+        do {
+          const params = new URLSearchParams({ q: debouncedQuery });
+          if (pageCursor) params.set("cursor", pageCursor);
+          const response = await fetch(`/api/authoring/drafts?${params}`, {
+            signal: controller.signal,
+          });
+          if (!response.ok)
+            throw new Error(
+              "サーバーの記事一覧を取得できません。通信やログイン状態を確認してください。",
+            );
+          page = await response.json();
+          refreshed.push(...page.articles);
+          pageCursor = page.cursor;
+        } while (
+          background &&
+          pageCursor &&
+          refreshed.length < loadedCount.current
         );
+        if (controller.signal.aborted) return;
+        setArticles((current) => {
+          const next = isReload ? refreshed : [...current, ...refreshed];
+          loadedCount.current = next.length;
+          return next;
+        });
         setCursor(page.cursor);
         setAvailable(true);
       } catch (failure) {
@@ -182,6 +208,95 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
       window.removeEventListener("online", refresh);
     };
   }, [reload]);
+
+  useEffect(() => {
+    const pending = articles.filter(
+      (row) =>
+        row.publication?.status === "accepted" ||
+        row.publication?.stages.some((stage) =>
+          ["queued", "running", "retry_wait"].includes(stage.status),
+        ),
+    );
+    if (
+      (!pending.length && !Object.keys(dispatches).length) ||
+      loading ||
+      loadingMore ||
+      busy
+    )
+      return;
+    const controller = new AbortController();
+    let timer: number;
+    const refresh = async () => {
+      let failureMessage = "";
+      const finished: string[] = [];
+      try {
+        for (const [id, dispatch] of Object.entries(dispatches)) {
+          const response = await fetch(
+            `/api/authoring/drafts/${id}/publications/${dispatch.version}?dispatch_id=${encodeURIComponent(dispatch.id)}`,
+            { signal: controller.signal },
+          );
+          if (!response.ok)
+            throw new Error("公開処理の再試行結果を取得できません。");
+          const job = await response.json();
+          if (!["queued", "running"].includes(job.dispatch?.status)) {
+            finished.push(id);
+            if (job.dispatch?.status === "failed")
+              failureMessage =
+                "公開処理の起動に失敗しました。再試行してください。";
+          }
+        }
+        for (const row of pending) {
+          const cache = row.publication?.stages.find(
+            (stage) => stage.stage === "cache",
+          );
+          if (
+            cache?.status !== "retry_wait" ||
+            (cache.next_attempt_at &&
+              Date.parse(cache.next_attempt_at) > Date.now())
+          )
+            continue;
+          const response = await fetch(
+            `/api/authoring/drafts/${row.id}/publications/${row.publication?.id}/run`,
+            {
+              method: "POST",
+              signal: controller.signal,
+              headers: {
+                "content-type": "application/json",
+                "x-csrf-token": await csrf(),
+              },
+              body: "{}",
+            },
+          );
+          if (!response.ok)
+            throw new Error(
+              "公開キャッシュの更新状況を確認できません。再試行してください。",
+            );
+        }
+      } catch (failure) {
+        failureMessage =
+          failure instanceof Error
+            ? failure.message
+            : "公開結果を確認できません。";
+      }
+      if (controller.signal.aborted) return;
+      await load(null, true);
+      if (!controller.signal.aborted && finished.length)
+        setDispatches((current) => {
+          const next = { ...current };
+          for (const id of finished)
+            if (next[id]?.id === dispatches[id]?.id) delete next[id];
+          return next;
+        });
+      if (!controller.signal.aborted && failureMessage)
+        setError(failureMessage);
+      if (!controller.signal.aborted) timer = window.setTimeout(refresh, 3000);
+    };
+    timer = window.setTimeout(refresh, 3000);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [articles, busy, csrf, dispatches, load, loading, loadingMore]);
 
   const byId = new Map(local.map((row) => [row.id, row]));
   const rows: Row[] = articles.map((row) => ({
@@ -291,6 +406,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
   }, [create]);
   async function retry(row: Row) {
     if (!row.publication) return;
+    const version = row.publication.id;
     setBusy(true);
     setError("");
     try {
@@ -309,6 +425,12 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
         throw new Error(
           "公開処理を再試行できませんでした。保存済みの本文は保持されています。",
         );
+      const job = await response.json();
+      if (job.dispatch && ["queued", "running"].includes(job.dispatch.status))
+        setDispatches((current) => ({
+          ...current,
+          [row.id]: { version, id: job.dispatch.id },
+        }));
       await reload();
     } catch (failure) {
       setError(
@@ -599,6 +721,17 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                     data-label="Webmention（承認済み）"
                   >
                     {row.webmention_count ?? "—"}
+                    {row.public_route && row.publication && (
+                      <DraftWebmentionStatus
+                        id={row.id}
+                        version={
+                          row.publication.status === "completed"
+                            ? row.publication.id
+                            : row.public_hash || ""
+                        }
+                        csrf={csrf}
+                      />
+                    )}
                   </td>
                   <td className="draft-admin-date" data-label="投稿日">
                     <ArticleDate
