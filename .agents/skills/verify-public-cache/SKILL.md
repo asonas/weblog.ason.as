@@ -27,7 +27,7 @@ description: 記事の初回公開・更新・改名のあと、CloudFrontの公
    mise exec -- bundle exec ruby .agents/skills/verify-public-cache/check.rb
    ```
 
-3. 最終行の `要約:` を下の基準値と比べる。終了コードは不一致か例外が1件でもあれば1になるため、c76da44 では既知の発見2件により1になる。
+3. 最終行の `要約:` を下の基準値と比べる。終了コードは不一致か例外が1件でもあれば1になるため、既知の発見 `rename_old_route` が残る間は1になる。
 4. 反例を1件だけ詳しく見るときは、要約の括弧内の `<初期状態>:<操作列>` を渡して再生する。
 
    ```sh
@@ -38,25 +38,27 @@ description: 記事の初回公開・更新・改名のあと、CloudFrontの公
 
 ## 結果を読む
 
-c76da44 の基準値:
+基準値（初回公開でもパージする修正の後）:
 
 ```text
-要約: first_publication_hub=162(S0:E) rename_new_route=0 rename_old_route=6(S1:RFNE) same_route_update=0 other=0
+要約: first_publication_hub=0 rename_new_route=0 rename_old_route=6(S1:RFNE) same_route_update=0 other=0
 ```
+
+`rename_old_route` の件数は、同じコードでも実行ごとに4か6になることがある。失敗する操作列の集合（`S1:` の `FRLE` `FRNE` `FRPE` `RFLE` `RFNE` `RFPE`）と最短の反例は変わらない。件数が4か6で、種類と最短の反例が基準値と同じなら、基準値と同じとみなす。この揺れの原因はまだ特定していない。
 
 - `[成功]` の種類は、探索した全操作列で不一致がなかった。`[失敗]` の種類には、操作数が最も少ない反例を手順として表示する。各手順の `-` 行は、その操作中に実コードで起きたこと（`DraftPublication#accept` の受付とキャッシュ要求、`finish_publication`・`finish_rename` による有効版の切替、CreateInvalidationの結果、読者のGETでCDNが保存した版）である。
 - 要約が基準値と同じなら、既知の発見だけが残っている。種類が増えた、`[成功]` が `[失敗]` になった、件数や最短の反例が変わった場合は、変更が性質に影響している。その反例を `--replay` で再生し、手順をコードと照らして説明できるか確かめる。
 - 表示された `article:vN` は記事の公開版（受付順の番号）、`hub` は未作成routeの関連ページ（`WebmentionSitePublisher#render_linked_page`）、`redirect:<route>` は改名元routeの転送、`status:404` は存在しないrouteを表す。
 
-### 既知の発見（c76da44）
+### 既知の発見
 
-1. `first_publication_hub`: 初回公開でパージ要求を作らないため、公開前に保存された関連ページが残る。
+1. `first_publication_hub`（修正済み）: 初回公開でパージ要求を作らないため、公開前に保存された関連ページが残っていた。2026-11-06 にユーザーが `docs/public-cache-policy-proposal.md` を正と決め、`accept_verified_publication` の条件を `if verified["invalidate_cache"]` に戻し、runbookも合わせた。以下は c76da44 での手順で、再発したときの読み方として残す。
    1. 公開記事 Index が `[[Topic]]` を含むので、未公開の `/Topic` には `DraftSite#call` が関連ページを `PUBLIC_HTML_CACHE_CONTROL`（`s-maxage=86400`）で返し、CDNが保存する。
    2. 作者が記事 Topic を初めて公開する。`DraftStore#accept_verified_publication` は `active` がないため `prepare_cache_request` を呼ばない。
    3. `DraftJobs#run` が `finish_publication` で v1 を有効にする。cache stageは作られない。
    4. CDNの `/Topic` と `/Topic/` は関連ページのまま、originは記事 v1 を返す。
 
-   1c0bf08 で条件が `if active && verified["invalidate_cache"]` になり、`docs/runbooks/public-delivery-cost.md` も「初回公開ではパージ要求を作成しない」に変わった。一方 `docs/public-cache-policy-proposal.md` のパージ対象表は「記事の初回公開」も当該routeをパージするとしている。どちらが意図かはユーザーが決める。
+   1c0bf08 で条件が `if active && verified["invalidate_cache"]` になり、`docs/runbooks/public-delivery-cost.md` も「初回公開ではパージ要求を作成しない」に変わった。一方 `docs/public-cache-policy-proposal.md` のパージ対象表は「記事の初回公開」も当該routeをパージするとしていた。提案書を正としたので、この種類が `[失敗]` に戻ったら回帰として扱う。
 2. `rename_old_route`: 改名のパージがAWSの一時失敗で再試行待ちの間に次の公開が有効になると、旧routeのパージが失われる。
    1. 公開済みの記事 Topic（v1）を Renamed へ改名して公開する。v2 のキャッシュ要求は `/Renamed` `/Renamed/` `/Topic` `/Topic/`。
    2. `DraftJobs#run(v2)` が `finish_rename` で v2 を有効にしたあと、CreateInvalidationが失敗し、cache stageは `retry_wait` になる。
