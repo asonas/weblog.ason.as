@@ -141,7 +141,14 @@ class ArticlePiecesTest < Minitest::Test
     accepted = @publication.accept(@id, @publication.prepare(@id).merge("request_id" => SecureRandom.uuid))
     assert_equal "unchanged", accepted.fetch("status")
     assert @store.published_memos_pending?(@id, accepted.fetch("id"))
-    @store.delete_published_memo_bodies(@id, accepted.fetch("id"))
+    publisher = Object.new
+    publisher.define_singleton_method(:current?) { |_snapshot| true }
+    publisher.define_singleton_method(:run) { |_id, _version| nil }
+    outputs = Object.new
+    outputs.define_singleton_method(:current?) { |_stage| true }
+    jobs = WeblogAuthoring::DraftJobs.new(store: @store, publisher:, outputs:)
+    result = jobs.run(@id, accepted.fetch("id"))
+    assert_equal "completed", result.fetch("stages").find { |stage| stage.fetch("stage") == "memos" }.fetch("status")
     refute @store.published_memos_pending?(@id, accepted.fetch("id"))
   end
 

@@ -86,14 +86,40 @@ class DraftRuntimeTest < Minitest::Test
       assert_equal 200, request.call("PUT", "/api/authoring/drafts/#{page.id}/uploads/new-cover/chunks/0", update).fetch(:statusCode)
       assert_equal 200, request.call("POST", "/api/authoring/drafts/#{page.id}/uploads/new-cover/commit", update).fetch(:statusCode)
       assert_equal original.fetch("id"), store.published_snapshot(page.id).fetch("id")
-      version = publication.accept(page.id, publication.prepare(page.id).merge("request_id" => "explicit-publication")).fetch("id")
-      queued = request.call("POST", "/api/authoring/drafts/#{page.id}/publications/#{version}/run")
-      assert_equal 200, queued.fetch(:statusCode), queued.inspect
-      dispatch = JSON.parse(queued.fetch(:body)).fetch("dispatch")
+      acceptance = publication.prepare(page.id).merge("request_id" => "explicit-publication")
+      queued = request.call("POST", "/api/authoring/drafts/#{page.id}/publications", acceptance)
+      assert_equal 202, queued.fetch(:statusCode), queued.inspect
+      accepted = JSON.parse(queued.fetch(:body))
+      version = accepted.fetch("id")
+      dispatch = accepted.fetch("dispatch")
       assert_equal "queued", dispatch.fetch("status")
       assert_equal original.fetch("id"), store.published_snapshot(page.id).fetch("id")
-      result = runtime.work(JSON.parse(client.api_requests.last.fetch(:params).fetch(:payload)))
+      worker_event = JSON.parse(client.api_requests.last.fetch(:params).fetch(:payload))
+      replay = request.call("POST", "/api/authoring/drafts/#{page.id}/publications", acceptance)
+      assert_equal 202, replay.fetch(:statusCode)
+      assert_equal version, JSON.parse(replay.fetch(:body)).fetch("id")
+      refute_equal dispatch.fetch("id"), JSON.parse(replay.fetch(:body)).dig("dispatch", "id")
+      client.stub_responses(:invoke, "ServiceException")
+      failed = nil
+      _stdout, stderr = capture_io do
+        failed = request.call("POST", "/api/authoring/drafts/#{page.id}/publications", acceptance)
+      end
+      assert_equal 202, failed.fetch(:statusCode)
+      assert_equal version, JSON.parse(failed.fetch(:body)).fetch("id")
+      assert_includes stderr, "draft_publication_dispatch_failed"
+      failed_event = JSON.parse(client.api_requests.last.fetch(:params).fetch(:payload))
+      assert_equal "failed", store.publication_dispatch(page.id, version, failed_event.fetch("dispatch_id")).fetch("status")
+      client.stub_responses(:invoke, status_code: 202)
+      runtime.work({ "operation" => "draft_repair" })
+      assert_equal version, store.published_snapshot(page.id).fetch("id")
+      revision = store.publication_revision
+      result = runtime.work(worker_event)
       assert(result.fetch("stages").all? { |stage| stage.fetch("status") == "completed" }, result.inspect)
+      assert_equal revision, store.publication_revision
+      unchanged = request.call("POST", "/api/authoring/drafts/#{page.id}/publications", publication.prepare(page.id).merge("request_id" => "unchanged-publication"))
+      assert_equal 202, unchanged.fetch(:statusCode)
+      assert_equal "unchanged", JSON.parse(unchanged.fetch(:body)).fetch("status")
+      assert_equal "queued", JSON.parse(unchanged.fetch(:body)).dig("dispatch", "status")
       polled = request.call("GET", "/api/authoring/drafts/#{page.id}/publications/#{version}", {}, { "dispatch_id" => dispatch.fetch("id") })
       assert_equal "completed", JSON.parse(polled.fetch(:body)).dig("dispatch", "status")
       assert_equal version, store.published_snapshot(page.id).fetch("id")
