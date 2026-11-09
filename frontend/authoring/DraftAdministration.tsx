@@ -111,6 +111,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
   const [error, setError] = useState("");
   const [localError, setLocalError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [webmentionRefresh, setWebmentionRefresh] = useState(0);
   const request = useRef<AbortController | null>(null);
   const loadedCount = useRef(0);
   const [dispatches, setDispatches] = useState<
@@ -499,7 +500,10 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
           <button
             type="button"
             disabled={loading || busy}
-            onClick={() => void reload()}
+            onClick={() => {
+              void reload();
+              setWebmentionRefresh((value) => value + 1);
+            }}
           >
             <AuthoringIcon name="refresh" />
             再読み込み
@@ -725,11 +729,7 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
                     {row.public_route && row.publication && (
                       <DraftWebmentionStatus
                         id={row.id}
-                        version={
-                          row.publication.status === "completed"
-                            ? row.publication.id
-                            : row.public_hash || ""
-                        }
+                        refresh={webmentionRefresh}
                         csrf={csrf}
                       />
                     )}

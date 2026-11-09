@@ -9,11 +9,11 @@ type Status = {
 
 export function DraftWebmentionStatus({
   id,
-  version,
+  refresh,
   csrf,
 }: {
   id: string;
-  version: string;
+  refresh: number;
   csrf: () => Promise<string>;
 }) {
   const [status, setStatus] = useState<Status>();
@@ -23,7 +23,6 @@ export function DraftWebmentionStatus({
   const [message, setMessage] = useState("");
   useEffect(() => {
     const controller = new AbortController();
-    let timer: number;
     const read = async () => {
       try {
         const response = await fetch(
@@ -38,20 +37,18 @@ export function DraftWebmentionStatus({
         if (controller.signal.aborted) return;
         setStatus(next);
         setError("");
-        if (next.pending) timer = window.setTimeout(read, 3000);
       } catch {
         if (!controller.signal.aborted)
           setError("Webmentionの送信状況を取得できません。");
       }
     };
-    void version;
+    void refresh;
     void revision;
     void read();
     return () => {
       controller.abort();
-      window.clearTimeout(timer);
     };
-  }, [id, version, revision]);
+  }, [id, refresh, revision]);
 
   async function send() {
     if (!status || busy) return;
@@ -74,7 +71,6 @@ export function DraftWebmentionStatus({
       setMessage(
         "Webmentionの送信を受け付けました。送信失敗はWebmention管理画面で確認できます。",
       );
-      setRevision((value) => value + 1);
     } catch (failure) {
       setError(
         failure instanceof Error
