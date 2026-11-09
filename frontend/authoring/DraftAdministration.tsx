@@ -3,6 +3,7 @@ import { AuthoringIcon } from "./AuthoringIcon";
 import { DraftArticleMenu } from "./DraftArticleMenu";
 import { DraftNavigation } from "./DraftNavigation";
 import { DraftWebmentionStatus } from "./DraftWebmentionStatus";
+import { localDiaryDate, requestedDiaryDate } from "./diaryDate";
 import { storeDraftInitialBody } from "./draftInitialBody";
 import {
   type DraftMetadata,
@@ -353,12 +354,10 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
     );
 
   const create = useCallback(
-    async (daily: boolean) => {
+    async (daily: boolean, date = localDiaryDate(new Date())) => {
       setBusy(true);
       setError("");
       try {
-        const now = new Date();
-        const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
         const id = crypto.randomUUID();
         const response = await fetch(
           daily ? "/api/authoring/drafts/daily" : `/api/authoring/drafts/${id}`,
@@ -400,9 +399,11 @@ export function DraftAdministration({ csrf }: { csrf: () => Promise<string> }) {
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.get("daily") !== "1") return;
+    const date = requestedDiaryDate(url.searchParams.get("date"), new Date());
     url.searchParams.delete("daily");
+    url.searchParams.delete("date");
     window.history.replaceState(null, "", url);
-    void create(true);
+    void create(true, date);
   }, [create]);
   async function retry(row: Row) {
     if (!row.publication) return;
