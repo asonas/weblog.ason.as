@@ -718,3 +718,108 @@ body:has(.draft-admin) .page-shell {
 .draft-admin-cache-usage p {
   margin: 0 0 8px;
 }
+/* The sidebar button mirrors the expanded navigation links as a Linen secondary action. */
+.draft-navigation button[data-action="past-diary"] {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-block-size: 2.75rem;
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+  border: 0;
+  border-radius: 4px;
+  background: var(--quiet-fill);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-align: start;
+  cursor: pointer;
+}
+.draft-navigation button[data-action="past-diary"] svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  flex-shrink: 0;
+}
+.draft-navigation button[data-action="past-diary"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+@media (max-width: 56rem) {
+  .draft-navigation button[data-action="past-diary"] {
+    gap: 0.375rem;
+    margin: 0;
+    padding-inline: 0.5rem;
+    font-size: 0.8125rem;
+  }
+}
+
+.past-diary-dialog {
+  inline-size: min(24rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border: 1px solid var(--separator);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 8px 32px oklch(0 0 0 / 0.15);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  overscroll-behavior: contain;
+}
+.past-diary-dialog::backdrop {
+  background: oklch(0 0 0 / 0.45);
+}
+.past-diary-dialog h2 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 400;
+}
+.past-diary-dialog label {
+  display: block;
+  margin-block-end: 0.25rem;
+  font-weight: 600;
+}
+.past-diary-dialog input {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-block-size: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--authoring-input-border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+.past-diary-dialog input:focus-visible,
+.past-diary-dialog button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.past-diary-dialog p {
+  margin: 0.5rem 0 0;
+  color: var(--muted-ink);
+  font-size: 0.8125rem;
+}
+.past-diary-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+}
+.past-diary-dialog__actions button {
+  min-block-size: 2.75rem;
+  padding-inline: 1rem;
+  border: 0;
+  border-radius: 4px;
+  background: var(--quiet-fill);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.past-diary-dialog__actions .past-diary-dialog__submit {
+  background: var(--accent);
+  color: var(--accent-ink);
+}

@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { PastDiaryAction } from "./PastDiaryAction";
 
 // Regen Icons, MIT: ./regen-icons-LICENSE.txt
 const licenseUrl = new URL("./regen-icons-LICENSE.txt", import.meta.url).href;
@@ -92,6 +93,7 @@ export function DraftNavigation({ children }: { children?: ReactNode }) {
             >
               {content}
             </a>
+            {link.key === "diary" && <PastDiaryAction />}
           </Fragment>
         );
       })}
