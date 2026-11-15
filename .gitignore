@@ -30,3 +30,4 @@ log/
 site/
 .fallow/
 gha-creds-*.json
+.claude/worktrees/
