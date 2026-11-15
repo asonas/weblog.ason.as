@@ -277,6 +277,7 @@ module WeblogAuthoring
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_heads (article_id TEXT PRIMARY KEY, latest_id TEXT NOT NULL, active_id TEXT, published_at TEXT, updated_at TEXT)")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_receipts (article_id TEXT NOT NULL, request_id TEXT NOT NULL, fingerprint TEXT NOT NULL, response TEXT NOT NULL, PRIMARY KEY (article_id, request_id))")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_routes (route TEXT PRIMARY KEY, article_id TEXT NOT NULL)")
+      connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_atom_ids (article_id TEXT PRIMARY KEY, atom_id TEXT NOT NULL)")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_clock (id INTEGER PRIMARY KEY, revision INTEGER NOT NULL)")
       connection.exec("INSERT INTO #{SCHEMA}.article_publication_clock (id, revision) VALUES (1, 0) ON CONFLICT (id) DO NOTHING")
       connection.exec("CREATE TABLE IF NOT EXISTS #{SCHEMA}.article_publication_stages (article_id TEXT NOT NULL, version_id TEXT NOT NULL, stage TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL, token TEXT NOT NULL, next_attempt_at TEXT, error TEXT, completed_at TEXT, PRIMARY KEY (article_id, version_id, stage))")

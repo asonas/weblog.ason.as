@@ -5,6 +5,7 @@ require "weblog_authoring/development_database"
 require "weblog_authoring/lambda_api"
 require "weblog_authoring/lambda_session"
 require "weblog_authoring/draft_store"
+require "weblog_authoring/external_article_import"
 
 class DraftsTest < Minitest::Test
   ID = "dc802ad0-b899-46ae-b6b7-623c2ba7bc79"
@@ -135,6 +136,22 @@ class DraftsTest < Minitest::Test
     assert_equal @article_id, reopened.fetch("id")
     assert_equal "移行した記事", reopened.dig("metadata", "title", "value")
     assert_equal 1, reopened.fetch("head")
+  end
+
+  def test_display_title_is_read_only_for_clients
+    manifest = { "format" => 1, "site_url" => "https://example.com", "source" => "other.example", "articles" => [{
+      "slug" => "imported-article", "display_title" => "取り込んだ記事", "body" => "本文",
+      "created_at" => "2026-06-15T00:00:00Z", "updated_at" => "2026-06-16T00:00:00Z", "published_at" => "2026-06-15T00:00:00Z",
+    }], }
+    @article_id = WeblogAuthoring::ExternalArticleImport.new(store: @store, cutover: false).import(manifest).first.fetch("id")
+    update = { "protocol" => 1, "generation" => 1, "update_id" => "retitle", "data" => "AAA=",
+               "digest" => Digest::SHA256.hexdigest("\0\0"), "body_bytes" => 0,
+               "metadata" => { "display_title" => { "value" => "別の見出し", "expected_revision" => 0 } }, }
+
+    assert_equal 422, upload(update)[:statusCode]
+    reopened = JSON.parse(call("GET")[:body])
+    assert_equal 1, reopened.fetch("head")
+    assert_equal "取り込んだ記事", reopened.dig("metadata", "display_title", "value")
   end
 
   def test_complete_binary_update_survives_storage_chunk_boundaries
