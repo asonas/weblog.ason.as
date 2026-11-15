@@ -1,0 +1,56 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "optparse"
+require "json"
+require_relative "../lib/weblog_authoring/external_article_import"
+
+options = {}
+parser = OptionParser.new do |arguments|
+  arguments.banner = "Usage: import-external-articles --manifest PATH (--host HOST | --database PATH) [--confirm-host HOST] [--apply]"
+  arguments.on("--manifest PATH", "Import manifest (format 1)") { |value| options[:manifest] = value }
+  arguments.on("--host HOST", "Aurora DSQL host") { |value| options[:host] = value }
+  arguments.on("--confirm-host HOST", "Repeat the exact host to allow --apply") { |value| options[:confirm_host] = value }
+  arguments.on("--database PATH", "Local SQLite draft database for development") { |value| options[:database] = value }
+  arguments.on("--apply", "Import the articles; without it only the plan is printed") { options[:apply] = true }
+end
+parser.parse!
+raise OptionParser::InvalidArgument, parser.banner unless ARGV.empty?
+manifest_path = options.fetch(:manifest) { raise OptionParser::MissingArgument, "--manifest" }
+raise OptionParser::InvalidArgument, "Choose exactly one of --host or --database" unless options.key?(:host) != options.key?(:database)
+host = options[:host]
+if host
+  raise "Expected an explicit Aurora DSQL hostname" unless /\A[a-z0-9]+\.dsql\.[a-z0-9-]+\.on\.aws\z/.match?(host)
+  raise "Confirm the exact host before importing articles into its draft tables" if options[:apply] && options[:confirm_host] != host
+end
+manifest = JSON.parse(File.read(manifest_path))
+
+if host
+  require "openssl"
+  ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
+  require "aurora_dsql_pg"
+  pool = AuroraDsql::Pg.create_pool(host:, user: "admin", application_name: "external-article-import", occ_max_retries: 3)
+  store = WeblogAuthoring::DraftStore.postgres(pool)
+else
+  path = File.expand_path(options.fetch(:database))
+  raise "Draft database does not exist: #{path}" unless File.file?(path)
+  store = WeblogAuthoring::DraftStore.sqlite(path)
+  store.setup!
+end
+# A development database has no cutover control tables, so only a host is gated.
+importer = WeblogAuthoring::ExternalArticleImport.new(store:, cutover: !host.nil?)
+
+begin
+  if options[:apply]
+    puts JSON.pretty_generate("mode" => "apply", "articles" => importer.import(manifest))
+  else
+    plan = importer.plan(manifest)
+    summary = { "mode" => "dry-run" }
+    summary["cutover_phase"] = store.cutover_status.fetch("phase") if host
+    puts JSON.pretty_generate(summary.merge("articles" => plan))
+    exit(1) if plan.any? { |entry| entry.fetch("status") == "conflict" }
+  end
+rescue WeblogAuthoring::DraftStore::Error => error
+  warn error.message
+  exit(1)
+end
