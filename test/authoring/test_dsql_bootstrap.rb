@@ -73,6 +73,7 @@ class DsqlBootstrapTest < Minitest::Test
       draft_checkpoint_heads
       draft_checkpoints
       draft_checkpoint_chunks
+      article_atom_ids
     ].each do |table|
       assert(connection.statements.any? { |statement| statement.to_s.include?("weblog_authoring.#{table}") })
     end

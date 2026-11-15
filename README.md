@@ -8,6 +8,7 @@ Scrapbox移行ツールと記事作成画面を管理するリポジトリです
 | --- | --- |
 | 記事編集・端末保存・同期 | [開発ガイド](docs/draft-authoring-development.md)、`frontend/authoring/DraftEditor.tsx`、`draftSession.ts` |
 | 公開版・HTML生成・旧記事の個別移行 | [運用入口](docs/runbooks/pieces-production-release.md)、`lib/weblog_authoring/draft_publication.rb`、`lambda/draft_worker/migrateArticle.ts` |
+| 他サイトの公開済み記事の取り込み | [取り込み手順](docs/runbooks/external-article-import.md)、`bin/import-external-articles`、`lib/weblog_authoring/external_article_import.rb` |
 | 管理画面の見た目 | [管理画面DESIGN](frontend/authoring/DESIGN.md) |
 | 公開ページ・エディタ内の公開プレビュー | [公開デザイン](docs/design-system.md)、`frontend/authoring/publicArticle.ts`、`DraftPreview.tsx` |
 | メモ・写真のモバイルアプリ | [iOS](ios/PhotoInbox/README.md)、[Android](android/PhotoInbox/README.md) |

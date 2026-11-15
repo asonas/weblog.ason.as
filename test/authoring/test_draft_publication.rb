@@ -9,6 +9,7 @@ require "weblog_authoring/development_database"
 require "weblog_authoring/lambda_api"
 require "weblog_authoring/lambda_session"
 require "weblog_authoring/draft_publisher"
+require "weblog_authoring/external_article_import"
 
 class DraftPublicationTest < Minitest::Test
   ID = "dc802ad0-b899-46ae-b6b7-623c2ba7bc79"
@@ -203,6 +204,40 @@ class DraftPublicationTest < Minitest::Test
     changed = @publication.prepare(ID)
     assert_equal %w[2026-09-20 2026-09-21], changed.fetch("rename").values_at("from", "to")
     assert_equal "2026-09-20", @store.published_snapshot(ID).fetch("route")
+  end
+
+  def test_display_title_of_an_imported_article_survives_edits_republication_and_pieces_conversion
+    manifest = { "format" => 1, "site_url" => "https://example.com", "source" => "other.example", "articles" => [{
+      "slug" => "imported-article", "display_title" => "取り込んだ記事", "body" => "前半\n---\n後半",
+      "created_at" => "2026-06-15T00:00:00Z", "updated_at" => "2026-06-16T00:00:00Z", "published_at" => "2026-06-15T00:00:00Z",
+    }], }
+    id = WeblogAuthoring::ExternalArticleImport.new(store: @store, cutover: false).import(manifest).first.fetch("id")
+    published = lambda do |request_id|
+      accepted = @publication.accept(id, @publication.prepare(id).merge("request_id" => request_id))
+      @publication.complete(id, accepted.fetch("id")) { "#{request_id}.html" }
+      @store.published_snapshot(id)
+    end
+    heading = -> { WeblogAuthoring::ArticleDocument.from_published_version(@store.published_snapshot(id)).display_title }
+    assert_equal "取り込んだ記事", heading.call
+    assert_equal "imported-article", @store.published_snapshot(id).fetch("route")
+
+    output, error, status = Open3.capture3("node", "node_modules/tsx/dist/cli.mjs", "test/fixtures/drafts/reconstruct.mjs", "history", "text", "追記")
+    assert status.success?, error
+    @store.append(id, SCOPE.merge(JSON.parse(output).first).merge("update_id" => "append", "body_bytes" => 20,
+      "metadata" => { "cover_mode" => { "value" => "none", "expected_revision" => 0 } }))
+    assert_equal "unpublished_changes", @publication.prepare(id).fetch("article_state")
+    edited = published.call("edited")
+    assert_includes edited.fetch("body"), "追記"
+    assert_equal "none", edited.dig("metadata", "cover_mode")
+    assert_equal "取り込んだ記事", edited.dig("metadata", "display_title")
+    assert_equal "取り込んだ記事", heading.call
+
+    head = @store.read(id, {}).fetch("head")
+    @publication.migrate_article(id, SCOPE.merge("head" => head))
+    converted = published.call("converted")
+    assert_equal "pieces", converted.dig("metadata", "content", "format")
+    assert_equal "取り込んだ記事", converted.dig("metadata", "display_title")
+    assert_equal "取り込んだ記事", heading.call
   end
 
   private

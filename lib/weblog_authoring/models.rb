@@ -30,6 +30,7 @@ module WeblogAuthoring
     :links,
     :cover_mode,
     :cover_image_url,
+    :heading,
     keyword_init: true
   )
     def initialize(**attributes)
@@ -42,6 +43,8 @@ module WeblogAuthoring
     def self.from_published_version(snapshot)
       return nil unless snapshot
       metadata = snapshot.fetch("metadata")
+      heading = metadata["display_title"]
+      heading = nil unless heading.is_a?(String) && !heading.empty?
       ArticleDocument.new(id: snapshot.fetch("article_id"), page_type: metadata.fetch("page_type"),
         name: snapshot.fetch("route"), page_date: metadata.fetch("page_type") == "date" ? Date.iso8601(snapshot.fetch("route")) : nil,
         title: metadata.fetch("title"), status: "published", body: snapshot.fetch("body"),
@@ -50,11 +53,12 @@ module WeblogAuthoring
         updated_at: Time.iso8601(snapshot.fetch("updated_at", snapshot.fetch("created_at"))),
         published_at: Time.iso8601(snapshot.fetch("published_at", snapshot.fetch("created_at"))),
         cover_mode: metadata.fetch("cover_mode"), cover_image_url: metadata["cover_image_url"],
-        links: WeblogAuthoring.extract_wiki_links(snapshot.fetch("body")))
+        heading:, links: WeblogAuthoring.extract_wiki_links(snapshot.fetch("body")))
     end
 
     def display_title
-      return name.to_s if page_type == "named"
+      # The route stays the slug; only the heading shown to readers differs.
+      return (heading.to_s.empty? ? name.to_s : heading.to_s) if page_type == "named"
       return title unless title.nil? || title.empty?
 
       page_date&.iso8601.to_s
