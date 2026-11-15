@@ -91,12 +91,12 @@
        --manifest ./manifest.json --apply
    ```
 
-6. 公開HTML・Atom・検索を作るため、draft workerの定期修復を実行する。毎時の定期実行を待ってもよい。
+6. 公開HTML・Atom・検索を作るため、定期修復（`draft_repair`）を実行する。処理するのは `DRAFT_PUBLICATION_FUNCTION_NAME` の検索インデクサーのLambda。毎時の定期実行を待ってもよい。
    結果が `partial` なら、もう一度実行する（1回に処理する版は50件まで）。
 
    ```sh
    mise exec -- mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
-     aws lambda invoke --region ap-northeast-1 --function-name weblog-draft-worker-production \
+     aws lambda invoke --region ap-northeast-1 --function-name weblog-search-indexer-production \
        --cli-binary-format raw-in-base64-out --payload '{"operation":"draft_repair"}' /tmp/draft-repair.json
    cat /tmp/draft-repair.json
    ```
