@@ -37,12 +37,14 @@ module WeblogAuthoring
         sqs_client: LazyService.new { Aws::SQS::Client.new }, webmention_queue_url: ENV["WEBMENTION_QUEUE_URL"],
         sender_enabled: ENV.fetch("WEBMENTION_SENDER_ENABLED", "false") == "true",
         dynamic_article_routes: ENV.fetch("DYNAMIC_PUBLIC_ARTICLE_ROUTES", "").split(","),
-        cache_distribution_id: ENV["PUBLIC_CACHE_DISTRIBUTION_ID"])
+        cache_distribution_id: ENV["PUBLIC_CACHE_DISTRIBUTION_ID"],
+        # The SDK defaults wait 60 seconds per read and retry. An image is not worth holding the worker that long.
+        og_image_s3_client: LazyService.new { Aws::S3::Client.new(http_open_timeout: 2, http_read_timeout: 5, retry_limit: 0) })
     end
 
     def initialize(store:, database:, publication:, s3_client:, bucket:, site_url:, lambda_client:, worker_function:,
       search_runner: nil, defer_services: false, sqs_client: nil, webmention_queue_url: nil, sender_enabled: false,
-      dynamic_article_routes: [], cache_distribution_id: nil)
+      dynamic_article_routes: [], cache_distribution_id: nil, og_image_s3_client: nil)
       @store = store
       @database = database
       @publication = publication
@@ -61,7 +63,8 @@ module WeblogAuthoring
         require_relative "draft_jobs"
         require_relative "remote_draft_jobs"
         runner = search_runner || SearchIndexer::QmdRunner.new
-        publisher = DraftPublisher.s3(publication:, database: @reader, s3_client:, site_bucket: bucket, site_url:, shell_key: "static/authoring/public.html")
+        publisher = DraftPublisher.s3(publication:, database: @reader, s3_client:, site_bucket: bucket, site_url:, shell_key: "static/authoring/public.html",
+          og_images: OgImage::Store.new(s3_client: og_image_s3_client || s3_client, bucket:))
         outputs = DraftOutputs.new(store:, s3_client:, bucket:, site_url:, search_runner: runner)
         { publisher:, outputs:, jobs: DraftJobs.new(store:, publisher:, outputs:, webmentions: @webmentions, public_cache: @public_cache),
           remote_jobs: RemoteDraftJobs.new(store:, lambda_client:, function_name: worker_function), }

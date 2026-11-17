@@ -1,0 +1,57 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Creates the Open Graph title images of published articles that have no cover.
+# Publication creates them from then on; this fills in articles published before, and any an attempt missed.
+# It only writes under assets/og/ and never invalidates the CDN.
+
+require "json"
+require "optparse"
+require "openssl"
+require "aurora_dsql_pg"
+require "aws-sdk-s3"
+require_relative "../lib/weblog_authoring/draft_store"
+require_relative "../lib/weblog_authoring/models"
+require_relative "../lib/weblog_authoring/og_image"
+
+options = { apply: false, home: false }
+OptionParser.new do |parser|
+  parser.banner = "Usage: backfill-og-images --host HOST --site-bucket BUCKET [--home] [--apply]"
+  parser.on("--host HOST", "Aurora DSQL host") { |value| options[:host] = value }
+  parser.on("--site-bucket BUCKET", "S3 bucket that serves /assets/") { |value| options[:bucket] = value }
+  parser.on("--home", "Also create the home page image") { options[:home] = true }
+  parser.on("--apply", "Write the missing images. Without it nothing is written") { options[:apply] = true }
+end.parse!
+host = options.fetch(:host) { raise OptionParser::MissingArgument, "--host" }
+bucket = options.fetch(:bucket) { raise OptionParser::MissingArgument, "--site-bucket" }
+raise "Expected an explicit Aurora DSQL hostname" unless /\A[a-z0-9]+\.dsql\.[a-z0-9-]+\.on\.aws\z/.match?(host)
+
+ENV["PGSSLROOTCERT"] ||= OpenSSL::X509::DEFAULT_CERT_FILE
+pool = AuroraDsql::Pg.create_pool(host:, user: "admin", application_name: "og-image-backfill")
+store = WeblogAuthoring::DraftStore.postgres(pool)
+pages = store.published_collection.fetch("snapshots").map { |snapshot| WeblogAuthoring::ArticleDocument.from_published_version(snapshot) }
+without_cover = pages.reject { |page| WeblogAuthoring::CoverImage.resolve(page) }
+titles = without_cover.to_h { |page| [WeblogAuthoring::OgImage.key(page.display_title), page.display_title] }
+titles[WeblogAuthoring::OgImage::HOME_KEY] = :home if options[:home]
+
+s3 = Aws::S3::Client.new(region: "ap-northeast-1")
+existing = s3.list_objects_v2(bucket:, prefix: "assets/og/").flat_map { |response| response.contents.map(&:key) }
+missing = titles.reject { |key, _title| existing.include?(key) }
+
+puts JSON.pretty_generate(
+  mode: options[:apply] ? "apply" : "dry-run", host:, bucket:, published: pages.length, with_cover: pages.length - without_cover.length,
+  without_cover: without_cover.length, images_needed: titles.length, already_present: titles.length - missing.length,
+  to_write: missing.length, sample: missing.values.reject { |title| title == :home }.first(10)
+)
+exit unless options[:apply]
+
+renderer = WeblogAuthoring::OgImage::Renderer.new
+failed = {}
+missing.each do |key, title|
+  body = title == :home ? renderer.home : renderer.article(title)
+  s3.put_object(bucket:, key:, body:, content_type: "image/png", cache_control: WeblogAuthoring::OgImage::CACHE_CONTROL)
+rescue StandardError => error
+  failed[title.to_s] = "#{error.class}: #{error.message}"
+end
+puts JSON.pretty_generate(written: missing.length - failed.length, failed:)
+exit 1 unless failed.empty?

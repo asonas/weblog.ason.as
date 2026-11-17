@@ -158,7 +158,8 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_equal "記事", head.elements["meta[@property='og:title']"].attributes["content"]
     assert_equal "Target", head.elements["meta[@name='description']"].attributes["content"]
     assert_equal "https://weblog.ason.as/%E8%A8%98%E4%BA%8B", head.elements["link[@rel='canonical']"].attributes["href"]
-    assert_nil head.elements["meta[@property='og:image']"]
+    assert_equal "https://weblog.ason.as/#{WeblogAuthoring::OgImage.key('記事')}", head.elements["meta[@property='og:image']"].attributes["content"]
+    assert_equal "summary_large_image", head.elements["meta[@name='twitter:card']"].attributes["content"]
     assert_includes html, 'data-public-article="1"'
     assert_includes html, 'data-editing-href="/draft-editor?id=page-id"'
     refute_includes html, "この記事を編集"

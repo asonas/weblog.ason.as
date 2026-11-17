@@ -49,6 +49,7 @@ data "aws_iam_policy_document" "draft_publication_worker" {
     resources = [
       "${aws_s3_bucket.site.arn}/published/*",
       "${aws_s3_bucket.site.arn}/published-outputs/*",
+      "${aws_s3_bucket.site.arn}/assets/og/*",
     ]
   }
 }

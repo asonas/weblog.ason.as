@@ -10,6 +10,7 @@ require "uri"
 require_relative "markdown"
 require_relative "cover_image"
 require_relative "cover_variants"
+require_relative "og_image"
 require_relative "names"
 
 module WeblogAuthoring
@@ -195,7 +196,9 @@ module WeblogAuthoring
       description = CGI.escapeHTML(CGI.unescapeHTML(rendered.html.gsub(/<[^>]*>/, " ")).gsub(/\s+/, " ").strip[0, 160])
       url = CGI.escapeHTML(source_url)
       cover = CoverImage.resolve(page)
-      image = cover ? %(<meta property="og:image" content="#{CGI.escapeHTML(URI.join(source_url, cover).to_s)}" />) : ""
+      image = URI.join(source_url, cover || "/#{OgImage.key(page.display_title)}").to_s
+      # The generated title image has a known size. A cover's size is not looked up here.
+      dimensions = cover ? "" : %(<meta property="og:image:width" content="#{OgImage::WIDTH}" />\n<meta property="og:image:height" content="#{OgImage::HEIGHT}" />)
       <<~HTML
         <title>#{title} | weblog.ason.as</title>
         <meta name="description" content="#{description}" />
@@ -205,20 +208,21 @@ module WeblogAuthoring
         <meta property="og:title" content="#{title}" />
         <meta property="og:description" content="#{description}" />
         <meta property="og:url" content="#{url}" />
-        #{image}
-        <meta name="twitter:card" content="#{cover ? 'summary_large_image' : 'summary'}" />
-        #{structured_data(page, source_url, CGI.unescapeHTML(description), cover)}
+        <meta property="og:image" content="#{CGI.escapeHTML(image)}" />
+        #{dimensions}
+        <meta name="twitter:card" content="summary_large_image" />
+        #{structured_data(page, source_url, CGI.unescapeHTML(description), image)}
       HTML
     end
 
-    def structured_data(page, source_url, description, cover)
+    def structured_data(page, source_url, description, image)
       data = {
         "@context" => "https://schema.org", "@type" => "BlogPosting",
         "headline" => page.display_title.to_s, "description" => description, "url" => source_url,
         "mainEntityOfPage" => source_url, "inLanguage" => "ja",
         "datePublished" => (page.published_at || page.created_at)&.iso8601,
         "dateModified" => (page.updated_at || page.published_at || page.created_at)&.iso8601,
-        "image" => cover && URI.join(source_url, cover).to_s,
+        "image" => image,
         "author" => { "@type" => "Person", "name" => "asonas", "url" => "https://ason.as" },
       }.compact
       # JSONの中の</script>でscript要素が閉じないよう、<をエスケープする
