@@ -16,12 +16,6 @@ variable "webmention_verification_enabled" {
   default     = false
 }
 
-variable "webmention_publisher_enabled" {
-  description = "Publish verifiable static article snapshots from saved-page outboxes."
-  type        = bool
-  default     = false
-}
-
 variable "webmention_sender_enabled" {
   description = "Send Webmentions for first draft publications and explicitly requested new links."
   type        = bool

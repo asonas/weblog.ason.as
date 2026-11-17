@@ -77,7 +77,7 @@ Secrets Managerからの切り替えは次の順序で行います。
 5. 新しい完全なplanを保存して確認し、旧secretと旧読み取り権限を削除する。旧secretの復旧猶予は7日間とする。
 
 本番のWebmention機能を維持するため、plan時には現在の有効化設定を渡します。
-2026-09-09時点では`webmention_receiver_enabled`、`webmention_verification_enabled`、`webmention_publisher_enabled`、`webmention_sender_enabled`、`webmention_alerting_enabled`がすべて`true`です。
+2026-09-09時点では`webmention_receiver_enabled`、`webmention_verification_enabled`、`webmention_sender_enabled`、`webmention_alerting_enabled`がすべて`true`です。
 各apply後のplanで、切り替えの残作業以外の差分がないことと、SecureStringの値がstateに保存されていないことを確認します。
 
 ## GitHub OAuth credentialの更新
