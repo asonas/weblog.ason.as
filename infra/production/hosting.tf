@@ -17,6 +17,7 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host_header" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
+# distributionからは参照していない。参照を外すapplyと同じapplyで消すと、Terraformがdistributionの更新より先に削除を試み、CachePolicyInUseで失敗する。public_pagesへの切り替えがDeployedになった後の、別のapplyで消す
 resource "aws_cloudfront_cache_policy" "public_html" {
   name        = "weblog-public-html-production"
   comment     = "Origin opt-in for public responses; freshness set by the origin"
@@ -40,6 +41,57 @@ resource "aws_cloudfront_cache_policy" "public_html" {
       query_string_behavior = "none"
     }
   }
+}
+
+# キーに含めるヘッダーを変える時は、このポリシーを書き換えず、別名の新しいポリシーを作ってdistributionを切り替える。書き換えると、viewer-request functionの関連付けより先にキーだけが変わる
+resource "aws_cloudfront_cache_policy" "public_pages" {
+  name        = "weblog-public-pages-production"
+  comment     = "Origin opt-in for public responses; freshness set by the origin"
+  min_ttl     = 0
+  default_ttl = 0
+  max_ttl     = 172800
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
+
+    cookies_config {
+      cookie_behavior = "none"
+    }
+
+    headers_config {
+      header_behavior = "whitelist"
+
+      headers {
+        items = ["x-weblog-format"]
+      }
+    }
+
+    query_strings_config {
+      query_string_behavior = "none"
+    }
+  }
+}
+
+resource "aws_cloudfront_function" "public_format" {
+  name    = "weblog-public-format-production"
+  runtime = "cloudfront-js-2.0"
+  comment = "Reduce Accept to markdown or html so the cache key has two variants"
+  publish = true
+  code    = replace(file("${path.module}/public_format.js"), "var markdownEnabled = false;", "var markdownEnabled = ${var.public_markdown_enabled};")
+
+  lifecycle {
+    precondition {
+      condition     = strcontains(file("${path.module}/public_format.js"), "var markdownEnabled = false;")
+      error_message = "public_format.js must declare `var markdownEnabled = false;` for public_markdown_enabled to take effect."
+    }
+  }
+}
+
+variable "public_markdown_enabled" {
+  description = "Serve Markdown to Accept: text/markdown. Enable only after the cache policy keyed by x-weblog-format and the runtime that reads it are both live, so neither format is cached under the other's key."
+  type        = bool
+  default     = false
 }
 
 resource "aws_s3_bucket" "site" {
@@ -202,9 +254,13 @@ resource "aws_cloudfront_distribution" "weblog" {
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD"]
     compress                 = true
-    cache_policy_id          = aws_cloudfront_cache_policy.public_html.id
+    cache_policy_id          = aws_cloudfront_cache_policy.public_pages.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
 
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.public_format.arn
+    }
   }
 
   ordered_cache_behavior {
@@ -225,8 +281,13 @@ resource "aws_cloudfront_distribution" "weblog" {
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD"]
     compress                 = true
-    cache_policy_id          = aws_cloudfront_cache_policy.public_html.id
+    cache_policy_id          = aws_cloudfront_cache_policy.public_pages.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.public_format.arn
+    }
   }
 
   dynamic "ordered_cache_behavior" {

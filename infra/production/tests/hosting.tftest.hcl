@@ -9,7 +9,7 @@ mock_provider "aws" {
 
   mock_resource "aws_cloudfront_function" {
     defaults = {
-      arn = "arn:aws:cloudfront::123456789012:function/weblog-site-routes-production"
+      arn = "arn:aws:cloudfront::123456789012:function/weblog-public-format-production"
     }
   }
 }
@@ -98,13 +98,31 @@ run "dynamic_api_caching_disabled" {
   }
 
   assert {
-    condition     = aws_cloudfront_distribution.weblog.default_cache_behavior[0].cache_policy_id == aws_cloudfront_cache_policy.public_html.id && aws_cloudfront_cache_policy.public_html.min_ttl == 0 && aws_cloudfront_cache_policy.public_html.default_ttl == 0 && aws_cloudfront_cache_policy.public_html.max_ttl >= 86580
+    condition     = aws_cloudfront_distribution.weblog.default_cache_behavior[0].cache_policy_id == aws_cloudfront_cache_policy.public_pages.id && aws_cloudfront_cache_policy.public_pages.min_ttl == 0 && aws_cloudfront_cache_policy.public_pages.default_ttl == 0 && aws_cloudfront_cache_policy.public_pages.max_ttl >= 86580
     error_message = "only origin-opted-in public HTML may be cached for 180 seconds and kept stale for 24 hours"
   }
 
   assert {
-    condition     = one([for behavior in aws_cloudfront_distribution.weblog.ordered_cache_behavior : behavior if behavior.path_pattern == "/feed.xml"]).cache_policy_id == aws_cloudfront_cache_policy.public_html.id
+    condition     = one([for behavior in aws_cloudfront_distribution.weblog.ordered_cache_behavior : behavior if behavior.path_pattern == "/feed.xml"]).cache_policy_id == aws_cloudfront_cache_policy.public_pages.id
     error_message = "the public Atom feed must use the origin-controlled shared cache"
+  }
+
+  assert {
+    condition     = one(aws_cloudfront_cache_policy.public_pages.parameters_in_cache_key_and_forwarded_to_origin[0].headers_config[0].headers[0].items) == "x-weblog-format"
+    error_message = "the public cache key may vary only by the format header the edge function normalizes"
+  }
+
+  assert {
+    condition = alltrue([
+      for behavior in concat(aws_cloudfront_distribution.weblog.default_cache_behavior, [for ordered in aws_cloudfront_distribution.weblog.ordered_cache_behavior : ordered if ordered.cache_policy_id == aws_cloudfront_cache_policy.public_pages.id]) :
+      one(behavior.function_association).function_arn == aws_cloudfront_function.public_format.arn
+    ])
+    error_message = "every behavior keyed by x-weblog-format must overwrite the viewer-supplied header at the edge"
+  }
+
+  assert {
+    condition     = strcontains(aws_cloudfront_function.public_format.code, "var markdownEnabled = false;")
+    error_message = "Markdown negotiation must stay off until it is enabled explicitly after the runtime is deployed"
   }
 
   assert {

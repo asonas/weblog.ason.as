@@ -146,6 +146,68 @@ class DraftSiteTest < Minitest::Test
     end
   end
 
+  def test_markdown_is_served_only_for_the_edge_normalized_format_header
+    Dir.mktmpdir("negotiated-draft-site") do |directory|
+      root = Pathname(directory)
+      database = WeblogAuthoring::DevelopmentDatabase.new(root.join("articles.sqlite3"), content_dir: root.join("content"))
+      database.setup!
+      store = WeblogAuthoring::DraftStore.sqlite(root.join("drafts.sqlite3"))
+      store.setup!
+      articles = { "紹介 記事" => "本文 [[関連/話題]]\n\n[embed:https://example.com/video]\n\n```\n[embed:https://example.com/code]\n```", "空の記事" => "" }.each_with_index.map do |(route, body), index|
+        { "id" => "#{index}c802ad0b89946aeb6b7623c2ba7bc79", "page_type" => "named", "route" => route, "title" => route, "body" => body,
+          "cover_mode" => "none", "cover_image_url" => nil, "created_at" => "2026-09-01T01:00:00Z",
+          "updated_at" => "2026-09-02T01:00:00Z", "published_at" => "2026-09-01T01:00:00Z", }
+      end
+      WeblogAuthoring::DraftMigration.new(store:).import("format" => 1, "site_url" => "https://example.com", "articles" => articles)
+      reader = WeblogAuthoring::PublishedArticleReader.new(store:, database:)
+      objects = WeblogAuthoring::LocalPublicationObjects.new(root.join("objects"))
+      objects.put_object(bucket: "site", key: "index.html", body: "Management and home shell")
+      objects.put_object(bucket: "site", key: "display-releases/#{'a' * 40}/public.html", body: '<html><head><title>サイト</title></head><body><div id="authoring-root"></div></body></html>')
+      objects.put_object(bucket: "site", key: "display-releases/current.json", body: JSON.generate("id" => "a" * 40))
+      api = WeblogAuthoring::LambdaApi.new(database:, reader_database: reader, draft_store: store)
+      site = WeblogAuthoring::DraftSite.new(api:, reader:, s3_client: objects, bucket: "site", published: true,
+        store:, site_url: "https://example.com", dynamic_article_routes: ["*"], public_cache_enabled: true)
+      get = ->(path, headers = {}) { site.call("rawPath" => path, "headers" => headers, "requestContext" => { "http" => { "method" => "GET" } }) }
+      article_path = "/#{WeblogAuthoring.encoded_route('紹介 記事')}"
+      markdown = { "x-weblog-format" => "markdown" }
+
+      # CloudFrontのキャッシュキーに入らないAcceptで出し分けると、HTMLのキーにMarkdownが保存される
+      html = get.call(article_path, "accept" => "text/markdown", "x-weblog-format" => "html")
+      assert_equal "text/html; charset=utf-8", html.dig(:headers, "content-type")
+      assert_equal "Accept", html.dig(:headers, "vary")
+      assert_equal %(</feed.xml>; rel="alternate"; type="application/atom+xml", <#{article_path}>; rel="alternate"; type="text/markdown"), html.dig(:headers, "link")
+      assert_includes html.fetch(:body), '<script type="application/ld+json">'
+
+      article = get.call(article_path, markdown)
+      assert_equal "text/markdown; charset=utf-8", article.dig(:headers, "content-type")
+      assert_equal html.dig(:headers, "cache-control"), article.dig(:headers, "cache-control")
+      assert_equal "Accept", article.dig(:headers, "vary")
+      assert_equal "# 紹介 記事\n\n本文 [関連/話題](https://example.com/#{WeblogAuthoring.encoded_route('関連/話題')})\n\n<https://example.com/video>\n\n```\n[embed:https://example.com/code]\n```\n", article.fetch(:body)
+      assert_equal 304, get.call(article_path, markdown.merge("if-none-match" => article.dig(:headers, "etag"))).fetch(:statusCode)
+      refute_equal html.dig(:headers, "etag"), article.dig(:headers, "etag")
+
+      home = get.call("/", markdown)
+      assert_equal "text/markdown; charset=utf-8", home.dig(:headers, "content-type")
+      assert_equal "no-store", home.dig(:headers, "cache-control")
+      assert_includes home.fetch(:body), "- [紹介 記事](https://example.com#{article_path}) (2026-09-02)"
+      refute_includes home.fetch(:body), "空の記事"
+      assert_equal "Management and home shell", get.call("/").fetch(:body)
+      assert_equal "Accept", get.call("/").dig(:headers, "vary")
+      %w[/search /draft-editor /authoring/articles].each do |path|
+        shell = get.call(path, markdown)
+        assert_equal "Management and home shell", shell.fetch(:body)
+        assert_equal "no-store", shell.dig(:headers, "cache-control")
+      end
+
+      sitemap = get.call("/sitemap.xml")
+      assert_equal "application/xml; charset=utf-8", sitemap.dig(:headers, "content-type")
+      assert_equal "public, max-age=300, s-maxage=3600", sitemap.dig(:headers, "cache-control")
+      locations = REXML::Document.new(sitemap.fetch(:body)).get_elements("//loc").map(&:text)
+      assert_equal ["https://example.com/", "https://example.com#{article_path}"], locations
+      assert_includes sitemap.fetch(:body), "<lastmod>2026-09-02T01:00:00Z</lastmod>"
+    end
+  end
+
   def test_linked_topics_follow_the_display_release_when_all_articles_are_enabled
     Dir.mktmpdir("dynamic-linked-site") do |directory|
       root = Pathname(directory)

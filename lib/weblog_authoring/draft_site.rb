@@ -6,10 +6,15 @@ require "json"
 require_relative "draft_publisher"
 require_relative "webmention_site_publisher"
 require_relative "operation_metrics"
+require_relative "sitemap"
+require_relative "markdown_export"
 
 module WeblogAuthoring
   class DraftSite
     PUBLIC_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=86400, stale-while-revalidate=300, stale-if-error=86400"
+    SITEMAP_CACHE_CONTROL = "public, max-age=300, s-maxage=3600"
+    HOME_PATHS = ["/", "/index.html"].freeze
+    HOME_MARKDOWN_LIMIT = 30
 
     def initialize(api:, reader:, s3_client:, bucket:, published:, store: nil, site_url: nil, dynamic_article_routes: [], public_cache_enabled: false)
       @api = api
@@ -30,8 +35,12 @@ module WeblogAuthoring
       return @api.call(event) unless %w[GET HEAD].include?(method) && !path.start_with?("/api/", "/oauth/")
       OperationMetrics.delivery("stored")
       read_event = event.merge("rawPath" => path, "requestContext" => event.fetch("requestContext").merge("http" => event.fetch("requestContext").fetch("http").merge("method" => "GET")))
-      response = if ["/", "/index.html", "/search", "/authoring/articles", "/authoring/webmentions", "/authoring/devices", "/draft-editor"].include?(path)
+      response = if HOME_PATHS.include?(path)
+                   home(event)
+                 elsif ["/search", "/authoring/articles", "/authoring/webmentions", "/authoring/devices", "/draft-editor"].include?(path)
                    object("index.html", "text/html; charset=utf-8")
+                 elsif path == "/sitemap.xml" && publishes_discovery?
+                   sitemap
                  elsif @published
                    dynamic_article(path, event) || @api.call(read_event)
                  elsif path == "/feed.xml"
@@ -69,6 +78,29 @@ module WeblogAuthoring
 
     private
 
+    def publishes_discovery?
+      @published && !@store.nil? && !@site_url.nil?
+    end
+
+    # Acceptは見ない。CloudFrontのキャッシュキーに入るのはx-weblog-formatだけで、Acceptで出し分けるとHTMLとMarkdownが同じキーに混ざる
+    def markdown?(event)
+      publishes_discovery? && event.fetch("headers", {})["x-weblog-format"] == "markdown"
+    end
+
+    def home(event)
+      response = if markdown?(event)
+                   markdown(MarkdownExport.new(site_url: @site_url).home(@reader.list_pages(limit: HOME_MARKDOWN_LIMIT)), "no-store", event)
+                 else
+                   object("index.html", "text/html; charset=utf-8")
+                 end
+      publishes_discovery? ? negotiable(response, "/") : response
+    end
+
+    def sitemap
+      { statusCode: 200, headers: { "content-type" => "application/xml; charset=utf-8", "cache-control" => SITEMAP_CACHE_CONTROL },
+        body: Sitemap.new(site_url: @site_url).render(@store.published_routes), }
+    end
+
     def dynamic_article(path, event)
       route = URI::DEFAULT_PARSER.unescape(path.delete_prefix("/"))
       return nil unless @dynamic_article_routes.include?("*") || @dynamic_article_routes.include?(route)
@@ -77,14 +109,19 @@ module WeblogAuthoring
       snapshot = resolution["snapshot"]
       return nil unless snapshot
 
+      page = ArticleDocument.from_published_version(snapshot)
+      article_path = "/#{WeblogAuthoring.encoded_route(page.route)}"
+      if markdown?(event)
+        OperationMetrics.delivery("markdown")
+        return negotiable(markdown(MarkdownExport.new(site_url: @site_url).article(page), @public_cache_control, event), article_path)
+      end
       release = display_release
       return nil unless release
       id, shell = release.values_at(:id, :shell)
       renderer = WebmentionSitePublisher.new(database: @reader, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
-      page = ArticleDocument.from_published_version(snapshot)
-      html = renderer.render_document(page, shell:, source_url: "#{@site_url}/#{WeblogAuthoring.encoded_route(page.route)}")
+      html = renderer.render_document(page, shell:, source_url: "#{@site_url}#{article_path}")
       OperationMetrics.delivery("dynamic", release: id)
-      public_html(html, id, event)
+      negotiable(public_html(html, id, event), article_path)
     end
 
     def display_release
@@ -103,6 +140,19 @@ module WeblogAuthoring
         return { statusCode: 304, headers: { "cache-control" => @public_cache_control, "etag" => etag }, body: "" }
       end
       { statusCode: 200, headers: { "content-type" => "text/html; charset=utf-8", "cache-control" => @public_cache_control, "etag" => etag }, body: html }
+    end
+
+    def markdown(body, cache_control, event)
+      etag = %("#{Digest::SHA256.hexdigest("markdown\0#{body}")}")
+      if event.fetch("headers", {})["if-none-match"] == etag
+        return { statusCode: 304, headers: { "cache-control" => cache_control, "etag" => etag }, body: "" }
+      end
+      { statusCode: 200, headers: { "content-type" => "text/markdown; charset=utf-8", "cache-control" => cache_control, "etag" => etag }, body: }
+    end
+
+    def negotiable(response, path)
+      links = %(</feed.xml>; rel="alternate"; type="application/atom+xml", <#{path}>; rel="alternate"; type="text/markdown")
+      response.merge(headers: response.fetch(:headers).merge("vary" => "Accept", "link" => links))
     end
 
     def object(key, content_type)
