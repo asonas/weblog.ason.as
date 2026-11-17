@@ -17,6 +17,32 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host_header" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
+# distributionからは参照していない。参照を外すapplyと同じapplyで消すと、Terraformがdistributionの更新より先に削除を試み、CachePolicyInUseで失敗する。public_pagesへの切り替えがDeployedになった後の、別のapplyで消す
+resource "aws_cloudfront_cache_policy" "public_html" {
+  name        = "weblog-public-html-production"
+  comment     = "Origin opt-in for public responses; freshness set by the origin"
+  min_ttl     = 0
+  default_ttl = 0
+  max_ttl     = 172800
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
+
+    cookies_config {
+      cookie_behavior = "none"
+    }
+
+    headers_config {
+      header_behavior = "none"
+    }
+
+    query_strings_config {
+      query_string_behavior = "none"
+    }
+  }
+}
+
 # キーに含めるヘッダーを変える時は、このポリシーを書き換えず、別名の新しいポリシーを作ってdistributionを切り替える。書き換えると、viewer-request functionの関連付けより先にキーだけが変わる
 resource "aws_cloudfront_cache_policy" "public_pages" {
   name        = "weblog-public-pages-production"

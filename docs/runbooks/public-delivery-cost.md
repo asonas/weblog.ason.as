@@ -109,6 +109,8 @@ CloudFront Function `weblog-public-format-production` が `Accept` を `x-weblog
 2. `x-weblog-format` を読む版のアプリをデプロイする。mainへのmergeで自動デプロイされるので、mergeは手順1の後にする。先にデプロイすると、閲覧者が `x-weblog-format: markdown` を直接送ってHTMLのキーにMarkdownを保存できる。
 3. `public_markdown_enabled=true` でTerraformをapplyする。この時点までMarkdown側のキーには何も保存されていない。
 
+4. `hosting.tf` から、参照されなくなった `aws_cloudfront_cache_policy.public_html` の定義を消してapplyする。手順1と同じapplyで消すと、distributionの更新より先に削除が実行され、`CachePolicyInUse` で失敗する。
+
 戻す時は `public_markdown_enabled=false` でapplyする。Markdown側のキーに残った応答は、参照されないままTTLで消える。
 
 - キーに `x-weblog-format` を含むキャッシュポリシーは、それまでのポリシーとは別のリソースである。distributionはポリシーの切り替えとFunctionの関連付けを1回の更新で受け取るので、キーだけが先に変わる状態は生じない。
