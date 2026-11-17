@@ -103,6 +103,8 @@ CloudFront Function `weblog-public-format-production` が `Accept` を `x-weblog
 1つのURLのキャッシュは最大2種類で、`Accept` の値の違いではキーが増えない。
 配信元は `x-weblog-format` だけで出し分ける。`Accept` を直接見る実装にすると、HTMLのキーにMarkdownが保存される。
 
+閲覧者への `Vary: Accept, Accept-Encoding` は、CloudFrontのresponse headers policyが付ける。配信元が返す `Vary: Accept` は、CloudFrontを通ると閲覧者に届かない（2026-11-17に本番で観測）。
+
 Markdownを止める時は `public_markdown_enabled=false` でapplyする。Functionは常に `html` を設定し、Markdown側のキーに残った応答は、参照されないままTTLで消える。
 
 キャッシュキーに含めるヘッダーを変える時は、次の順で行う。順序を変えると、片方の形式がもう片方のキーに最大24時間保存される。
@@ -119,19 +121,21 @@ Markdownを止める時は `public_markdown_enabled=false` でapplyする。Func
 
 ## キャッシュされないリクエストの上限
 
-CloudFrontにキャッシュが無いリクエストは、API GatewayとLambdaの料金が1件ごとにかかる。次の2つで量を抑える。料金の上限を保証する設定ではない。API Gatewayのスロットリングは、AWSの説明ではbest effortの目標値である。
+CloudFrontにキャッシュが無いリクエストは、API GatewayとLambdaの料金が1件ごとにかかる。次の設定で量を抑える。料金の上限を保証する設定ではない。API Gatewayのスロットリングは、AWSの説明ではbest effortの目標値である。
 
 - トップページと公開ページの404は、配信元が `s-maxage=60` を返し、同じURLへの繰り返しをCloudFrontが60秒受け止める。CloudFrontの `error_caching_min_ttl` は0のままにする。上げると、CachingDisabled以外のbehaviorの403と404すべてに同じ保持時間が付く。キャッシュしてよい404だけを、配信元のヘッダーで指定する。
-- 公開ページのルート（`GET /`、`HEAD /`、`GET /{path+}`、`HEAD /{path+}`、`GET /search`）は、API Gatewayでルートごとに毎秒2件、バースト10件に制限する。値は `public_page_throttling_rate_limit` と `public_page_throttling_burst_limit` で変える。
+- 公開ページのルート（`GET /`、`HEAD /`、`GET /{path+}`、`HEAD /{path+}`、`GET /search`）は、API Gatewayでルートごとに毎秒1件、バースト5件に制限する。値は `public_page_throttling_rate_limit` と `public_page_throttling_burst_limit` で変える。
+- 認証なしで届くGETのルート（`GET /api/pages`、`/api/tags`、`/api/search`、`/health` など12ルート）は、ルートごとに毎秒5件、バースト20件に制限する。値は `public_api_throttling_rate_limit` と `public_api_throttling_burst_limit` で変える。作者の管理画面も同じルートを使うので、公開ページより緩くしている。
 
-上限は閲覧者ごとではなくルートごとである。クローラーが存在しないURLを順に叩いて `GET /{path+}` の上限を使い切っている間は、キャッシュに無い記事を開いた閲覧者にも429が返る。記事の `stale-if-error` は429には働かない。キャッシュ済みのページは影響を受けない。
+上限は閲覧者ごとではなくルートごとである。クローラーが存在しないURLを順に叩いて `GET /{path+}` の上限を使い切っている間は、キャッシュに無い記事を開いた閲覧者にも429が返る。記事の `stale-if-error` は429には働かない。キャッシュ済みのページは影響を受けない。読み取りAPIの上限を使い切られている間は、作者の管理画面の一覧や検索にも429が返る。
 
-次のルートは、`GET /{path+}` の枠を使い切られても届くよう、個別のルートにして制限を掛けていない。
+次のルートは、他のルートの枠を使い切られても届くよう、制限を掛けていない。
 
-- `/api/*`、`GET /draft-editor`、`GET /authoring/{path+}`: 作者が編集を始められるようにする
-- `GET /feed.xml`、`GET /sitemap.xml`: 1時間キャッシュされ、期限切れの再取得が429になるとフィードリーダーやクローラーに届かなくなる
+- `GET /api/auth/session`、下書きと書き込みのAPI、`GET /draft-editor`、`GET /authoring/{path+}`: 作者がログイン状態を保ち、編集を始めて保存できるようにする。エディタと管理画面は、`GET /{path+}` に落ちないよう個別のルートにしている
+- `GET /api/embed`: 公開時と記事の表示時に、埋め込みの数だけ並列に呼ばれる。429になったカードは再試行されないので、制限すると埋め込みの多い記事でカードが欠ける
+- `GET /feed.xml`、`GET /sitemap.xml`: 1時間キャッシュされ、期限切れの再取得が429になるとフィードリーダーやクローラーに届かなくなる。これらも個別のルートにしている
 
-上限いっぱいまで30日間叩かれ続けた時の配信元の料金は、1ルートあたり約518万件、約15ドルになる。制限を掛けた5ルートすべてを使い切られると約73ドルになる。内訳は、API Gatewayが100万件あたり1.29ドル、Lambdaのリクエストが同0.20ドル、実行時間が512MB・0.2秒の仮定で同約1.33ドルである（東京リージョン、AWSの価格表の2026-11-12公開分）。実行時間は実測値ではない。CloudFront、DSQLの読み取り、S3、アクセスログの料金は含まない。
+公開ページの1ルートを上限いっぱいまで30日間叩かれ続けた時の配信元の料金は、約259万件、約17ドルになる。制限を掛けた公開ページの5ルートすべてを使い切られると約84ドルになる。内訳は、API Gatewayが100万件あたり1.29ドル、Lambdaのリクエストが同0.20ドル、実行時間が512MB・0.75秒で同約5.00ドルである（東京リージョン、AWSの価格表の2026-11-12公開分）。0.75秒は、2026-11-17に存在しないURLへの応答2件をAPI Gatewayのアクセスログで測った値で、請求上の実行時間そのものではない。読み取りAPIは1ルートあたり約1,296万件で、API GatewayとLambdaのリクエスト料金だけで約19ドルになり、実行時間の料金が加わる。CloudFront、DSQLの読み取り、S3、アクセスログの料金は含まない。
 
 429が増えていないかは、API Gatewayのアクセスログで `routeKey` と `status` を見る。
 

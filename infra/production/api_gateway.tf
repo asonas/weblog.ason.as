@@ -132,7 +132,7 @@ resource "aws_apigatewayv2_stage" "authoring" {
     throttling_rate_limit  = 2
   }
 
-  # 上限はルートごとで、閲覧者ごとではない。CloudFrontにキャッシュが無いリクエストだけがここへ届く。存在しないURLを叩かれて枠を使い切られても作者が編集を始められるよう、/api/*、/draft-editor、/authoring/* は対象にしない。フィードとsitemapは1時間キャッシュされるので対象にしない
+  # 上限はルートごとで、閲覧者ごとではない。CloudFrontにキャッシュが無いリクエストだけがここへ届く。存在しないURLを叩かれて枠を使い切られても作者が編集を始められるよう、/draft-editor と /authoring/* はこの上限に含めない。フィードとsitemapは1時間キャッシュされるので含めない。/api/* の上限は下の別の設定で決める
   dynamic "route_settings" {
     for_each = toset(["GET /", "HEAD /", "GET /{path+}", "HEAD /{path+}", "GET /search"])
 
@@ -142,18 +142,54 @@ resource "aws_apigatewayv2_stage" "authoring" {
       throttling_rate_limit  = var.public_page_throttling_rate_limit
     }
   }
+
+  # 認証なしで届くGETのルート。作者の管理画面も同じルートを使うので、公開ページより緩い上限にする。ログイン状態の取得、下書き、書き込みのルートは対象にしない。/api/embed も対象にしない。公開時と表示時に埋め込みの数だけ並列に呼ばれ、429になったカードは再試行されない
+  dynamic "route_settings" {
+    for_each = toset([
+      "GET /api/pages",
+      "GET /api/pages/{id}",
+      "GET /api/routes/{route+}",
+      "GET /api/tags",
+      "GET /api/archive",
+      "GET /api/page-names",
+      "GET /api/search",
+      "GET /api/related",
+      "GET /api/diary-navigation",
+      "GET /api/mentioned-by-days",
+      "GET /api/editor/new",
+      "GET /health",
+    ])
+
+    content {
+      route_key              = aws_apigatewayv2_route.authoring[route_settings.value].route_key
+      throttling_burst_limit = var.public_api_throttling_burst_limit
+      throttling_rate_limit  = var.public_api_throttling_rate_limit
+    }
+  }
 }
 
 variable "public_page_throttling_rate_limit" {
   description = "Sustained requests per second each public page route may send to the authoring Lambda after a CloudFront cache miss."
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "public_page_throttling_burst_limit" {
   description = "Burst of uncached public page requests each route accepts before API Gateway answers 429."
   type        = number
-  default     = 10
+  default     = 5
+}
+
+variable "public_api_throttling_rate_limit" {
+  description = "Sustained requests per second each unauthenticated read API route accepts. The administration screens share these routes."
+  type        = number
+  default     = 5
+}
+
+variable "public_api_throttling_burst_limit" {
+  description = "Burst each unauthenticated read API route accepts before API Gateway answers 429."
+  type        = number
+  default     = 20
 }
 
 resource "aws_lambda_permission" "authoring_api" {

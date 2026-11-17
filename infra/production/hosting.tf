@@ -47,6 +47,20 @@ resource "aws_cloudfront_cache_policy" "public_pages" {
   }
 }
 
+# 配信元が返す Vary: Accept は、CloudFrontを通ると閲覧者に届かない（2026-11-17に本番で観測）。Acceptをキャッシュキーに足すとAcceptの値ごとにキャッシュが割れるので、ここで付け直す
+resource "aws_cloudfront_response_headers_policy" "public_pages" {
+  name    = "weblog-public-pages-production"
+  comment = "Tell downstream caches that public pages vary by Accept"
+
+  custom_headers_config {
+    items {
+      header   = "Vary"
+      value    = "Accept, Accept-Encoding"
+      override = true
+    }
+  }
+}
+
 resource "aws_cloudfront_function" "public_format" {
   name    = "weblog-public-format-production"
   runtime = "cloudfront-js-2.0"
@@ -223,13 +237,14 @@ resource "aws_cloudfront_distribution" "weblog" {
   }
 
   default_cache_behavior {
-    target_origin_id         = "authoring-api"
-    viewer_protocol_policy   = "redirect-to-https"
-    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
-    cached_methods           = ["GET", "HEAD"]
-    compress                 = true
-    cache_policy_id          = aws_cloudfront_cache_policy.public_pages.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
+    target_origin_id           = "authoring-api"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    cache_policy_id            = aws_cloudfront_cache_policy.public_pages.id
+    origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.public_pages.id
 
     function_association {
       event_type   = "viewer-request"

@@ -84,13 +84,14 @@ run "webmention_receiver_guardrails" {
   }
 
   assert {
-    condition     = toset([for settings in aws_apigatewayv2_stage.authoring.route_settings : settings.route_key]) == toset(["POST /api/webmentions", "GET /", "HEAD /", "GET /{path+}", "HEAD /{path+}", "GET /search"])
-    error_message = "Only the webmention receiver and the public page routes may be throttled; the editor, the administration screens, and the authoring API must stay reachable while crawlers exhaust the public limit"
-  }
-
-  assert {
-    condition     = alltrue([for settings in aws_apigatewayv2_stage.authoring.route_settings : settings.throttling_rate_limit == 2 && settings.throttling_burst_limit == 10])
-    error_message = "Throttled routes accept two requests per second with a burst of ten"
+    condition = {
+      for settings in aws_apigatewayv2_stage.authoring.route_settings : settings.route_key => "${settings.throttling_rate_limit}/${settings.throttling_burst_limit}"
+      } == merge(
+      { "POST /api/webmentions" = "2/10" },
+      { for route in ["GET /", "HEAD /", "GET /{path+}", "HEAD /{path+}", "GET /search"] : route => "1/5" },
+      { for route in ["GET /api/pages", "GET /api/pages/{id}", "GET /api/routes/{route+}", "GET /api/tags", "GET /api/archive", "GET /api/page-names", "GET /api/search", "GET /api/related", "GET /api/diary-navigation", "GET /api/mentioned-by-days", "GET /api/editor/new", "GET /health"] : route => "5/20" },
+    )
+    error_message = "Only the webmention receiver, the public page routes, and the unauthenticated read API may be throttled. The editor, the session check, drafts, and writes must stay reachable while crawlers exhaust the public limits"
   }
 
   assert {
