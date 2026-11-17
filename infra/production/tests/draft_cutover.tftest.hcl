@@ -61,8 +61,7 @@ run "cutover_routes_published_reads_and_retires_legacy_generators" {
   command = plan
 
   variables {
-    webmention_publisher_enabled = true
-    webmention_sender_enabled    = true
+    webmention_sender_enabled = true
   }
 
   assert {
