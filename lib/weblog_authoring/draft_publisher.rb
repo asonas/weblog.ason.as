@@ -7,9 +7,12 @@ require_relative "webmention_site_publisher"
 
 module WeblogAuthoring
   class DraftPublisher
-    def self.s3(publication:, database:, s3_client:, site_bucket:, site_url:, shell_key: "index.html")
+    # Once a publication, linked articles included, has spent this long on Open Graph images, it starts no further step of them.
+    OG_IMAGE_SECONDS = 20
+
+    def self.s3(publication:, database:, s3_client:, site_bucket:, site_url:, shell_key: "index.html", og_images: nil)
       read = ->(key) { s3_client.get_object(bucket: site_bucket, key:).body.read }
-      new(publication:, database:, site_url:, shell: -> { read.call(shell_key) }, read:) do |key, html|
+      new(publication:, database:, site_url:, shell: -> { read.call(shell_key) }, read:, og_images:) do |key, html|
         s3_client.put_object(bucket: site_bucket, key:, body: html, content_type: "text/html; charset=utf-8", cache_control: "public, max-age=31536000, immutable", if_none_match: "*")
       rescue Aws::S3::Errors::PreconditionFailed
         # A previous attempt placed this version before its activation was recorded.
@@ -33,7 +36,8 @@ module WeblogAuthoring
       end
     end
 
-    def initialize(publication:, database:, site_url:, shell:, read:, &place)
+    def initialize(publication:, database:, site_url:, shell:, read:, og_images: nil, &place)
+      @og_images = og_images
       @publication = publication
       @database = database
       @shell = shell
@@ -76,18 +80,23 @@ module WeblogAuthoring
       { "html_key" => key, "html_digest" => Digest::SHA256.hexdigest(html) }
     end
 
-    def run(id, version_id)
+    def run(id, version_id, og_image_deadline: @og_images&.deadline(OG_IMAGE_SECONDS))
+      # A rename publishes every article that links to the renamed one, and the block runs once for each.
+      placed = []
       result = @publication.complete(id, version_id) do |snapshot|
         shell = @shell.call
         page = ArticleDocument.from_published_version(snapshot)
         html = @renderer.render_document(page, shell:, source_url: "#{@site_url}/#{URI::DEFAULT_PARSER.escape(page.route)}")
         key = "published/#{snapshot.fetch('article_id')}/#{snapshot.fetch('id')}.html"
         @place.call(key, html)
+        placed << page
         key
       end
       if result.fetch("status") == "completed"
+        # After the version went live: the image is not part of publishing and must not delay it.
+        placed.each { |page| @og_images&.ensure(page, deadline: og_image_deadline) }
         @publication.linked_article_publications(id, version_id, database: @database).each do |snapshot|
-          run(snapshot.fetch("article_id"), snapshot.fetch("id"))
+          run(snapshot.fetch("article_id"), snapshot.fetch("id"), og_image_deadline:)
         end
       end
       result

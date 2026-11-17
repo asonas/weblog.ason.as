@@ -144,6 +144,29 @@ aws logs filter-log-events --log-group-name /aws/apigateway/weblog-authoring-pro
   --filter-pattern '{ $.status = 429 }' --start-time "$(($(date +%s) - 3600))000"
 ```
 
+## 記事タイトル入りのOG画像
+
+カバー画像の無い記事は、タイトルを描いた画像（1200×630のPNG）を `og:image` に使う。カバー画像のある記事は、そのカバー画像を使う。判定は `CoverImage.resolve` による。
+
+- 画像は記事の公開時に、公開ワーカー（`weblog-search-indexer-production`）が1回だけ作って `assets/og/` に置く。リクエストのたびに画像を作る経路は無い。クローラーが画像のURLを叩いても、CloudFrontとS3の配信になるだけである。
+- キーは `assets/og/<タイトルとテンプレートの版から作ったハッシュ>.png`。記事HTMLはタイトルからこのURLを組み立てるので、画像の有無をデータベースに持たない。タイトルを変えるとURLも変わる。フォントやレイアウトを変える時は `OgImage::TEMPLATE` を上げる。
+- 生成は、記事の公開版が有効になった後に行う。失敗しても公開は止まらない。公開ワーカーのログに `Could not create the Open Graph image` が出て、その記事の `og:image` は404になる。
+- 1回の公開で画像の生成を始めてから20秒を過ぎると、リンク先の記事の分を含めて、以降の工程（存在確認、描画、書き込み）を始めない。進行中の工程は最後まで行うので、公開ワーカーが画像に使う時間は20秒を数秒超える事がある。
+- 生成されなかった画像は、同じ公開処理の再試行や毎時の修復では作られない。下の一括生成のコマンドで埋める。記事を取り込むコマンド（`bin/import-external-articles`）で公開した記事も同じである。
+- フォントファイルを読めなかった時は、別のフォントで描かずに生成を失敗させる。
+- トップページ用の画像は `assets/og/home-v1.png`。
+
+公開済みの記事への適用と、生成に失敗した記事の穴埋めは、手元から次のコマンドで行う。既定は予行で、何も書かない。書き込みは `assets/og/` へのPutObjectだけで、invalidationは発行しない。
+
+```sh
+mise exec -- mairu exec --no-login --server asonas-aws 282782318939/AdministratorAccess -- \
+  bundle exec bin/backfill-og-images --host "$DSQL_HOST" --site-bucket weblog-asonas-site-production-282782318939 --home
+```
+
+出力の `to_write` が書き込む枚数である。確かめてから `--apply` を付けて実行する。手元のlibvipsは文字を描ける構成（Homebrewの `vips`）である必要がある。
+
+`OgImage::TEMPLATE` を上げた時は、全記事の画像を作り直す事になる。先に予行で枚数を確かめる。記事HTMLの `og:image` は、CloudFrontのキャッシュの期限（最大24時間）で新しいURLに入れ替わる。
+
 ## 有効化と配信拡大
 
 1. 計測コードを配備する。初期値の有効期限0ではログは追加されない。

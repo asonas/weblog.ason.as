@@ -39,6 +39,27 @@ class DraftRenameTest < Minitest::Test
     FileUtils.remove_entry(@root)
   end
 
+  # A rename republishes the renamed article and every article linking to it in one batch.
+  # Each needs its image, and none may be drawn before the batch is live: drawing must not hold up the switch.
+  def test_rename_asks_for_the_image_of_every_republished_article_after_the_batch_is_live
+    store = @store
+    seen = []
+    images = Object.new
+    images.define_singleton_method(:deadline) { |_seconds| nil }
+    images.define_singleton_method(:ensure) do |page, deadline: nil| # rubocop:disable Lint/UnusedBlockArgument
+      seen << [page.route, store.published_snapshot(page.id).fetch("body")]
+      nil
+    end
+    publisher = WeblogAuthoring::DraftPublisher.s3(publication: @publication, database: @database, s3_client: @objects, site_bucket: "site",
+      site_url: "https://example.com", og_images: images)
+    title(@target, "New", 1)
+    batch = @publication.accept(@target, @publication.prepare(@target).merge("request_id" => "rename")).fetch("id")
+
+    assert_equal "completed", publisher.run(@target, batch).fetch("status")
+
+    assert_equal [["New", "target body"], ["Reference", "Published [[New]]"]], seen.sort
+  end
+
   def test_batch_keeps_old_reader_content_on_partial_failure_and_preserves_private_work
     before = @store.published_snapshot(@reference)
     target_before = @store.published_snapshot(@target)
