@@ -207,7 +207,22 @@ module WeblogAuthoring
         <meta property="og:url" content="#{url}" />
         #{image}
         <meta name="twitter:card" content="#{cover ? 'summary_large_image' : 'summary'}" />
+        #{structured_data(page, source_url, CGI.unescapeHTML(description), cover)}
       HTML
+    end
+
+    def structured_data(page, source_url, description, cover)
+      data = {
+        "@context" => "https://schema.org", "@type" => "BlogPosting",
+        "headline" => page.display_title.to_s, "description" => description, "url" => source_url,
+        "mainEntityOfPage" => source_url, "inLanguage" => "ja",
+        "datePublished" => (page.published_at || page.created_at)&.iso8601,
+        "dateModified" => (page.updated_at || page.published_at || page.created_at)&.iso8601,
+        "image" => cover && URI.join(source_url, cover).to_s,
+        "author" => { "@type" => "Person", "name" => "asonas", "url" => "https://ason.as" },
+      }.compact
+      # JSONの中の</script>でscript要素が閉じないよう、<をエスケープする
+      %(<script type="application/ld+json">#{JSON.generate(data).gsub("<") { "\\" + "u003c" }}</script>)
     end
 
     def render_mentions(mentions)

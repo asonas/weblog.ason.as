@@ -249,6 +249,29 @@ class WebmentionSitePublisherTest < Minitest::Test
     refute_includes html, "authoring-data"
   end
 
+  def test_structured_data_cannot_close_its_script_element
+    now = Time.iso8601("2026-09-01T00:00:00Z")
+    page = WeblogAuthoring::ArticleDocument.new(
+      id: "structured", page_type: "named", name: "Structured", title: nil,
+      status: "published", created_at: now, updated_at: now, published_at: now,
+      path: Pathname("content/pages/structured.md"),
+      body: "`</script><script>alert(1)</script>` と書く", links: []
+    )
+    outbox = { "id" => "structured", "page_id" => page.id, "payload" => { "source_url" => "https://weblog.ason.as/Structured" } }
+    services = Services.new
+    WeblogAuthoring::WebmentionSitePublisher.new(
+      database: Database.new(page:, outbox:), s3_client: services, sqs_client: services,
+      site_bucket: "site", delivery_queue_url: "queue", sender_enabled: false
+    ).publish(outbox)
+
+    json = services.puts.fetch(0).fetch(:body)[%r{<script type="application/ld\+json">(.*?)</script>}m, 1]
+    refute_includes json, "<"
+    data = JSON.parse(json)
+    assert_equal "BlogPosting", data.fetch("@type")
+    assert_includes data.fetch("description"), "</script><script>alert(1)</script>"
+    assert_equal "2026-09-01T00:00:00Z", data.fetch("datePublished")
+  end
+
   def test_public_article_resolves_existing_and_missing_wiki_links
     now = Time.iso8601("2026-09-01T00:00:00Z")
     page = WeblogAuthoring::ArticleDocument.new(
