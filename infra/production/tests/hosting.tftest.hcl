@@ -121,8 +121,8 @@ run "dynamic_api_caching_disabled" {
   }
 
   assert {
-    condition     = strcontains(aws_cloudfront_function.public_format.code, "var markdownEnabled = false;")
-    error_message = "Markdown negotiation must stay off until it is enabled explicitly after the runtime is deployed"
+    condition     = strcontains(aws_cloudfront_function.public_format.code, "var markdownEnabled = true;")
+    error_message = "the edge function must receive public_markdown_enabled, or Markdown negotiation silently stays off"
   }
 
   assert {
