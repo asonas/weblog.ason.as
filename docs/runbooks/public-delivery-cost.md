@@ -103,18 +103,16 @@ CloudFront Function `weblog-public-format-production` が `Accept` を `x-weblog
 1つのURLのキャッシュは最大2種類で、`Accept` の値の違いではキーが増えない。
 配信元は `x-weblog-format` だけで出し分ける。`Accept` を直接見る実装にすると、HTMLのキーにMarkdownが保存される。
 
-有効化は次の順で行う。順序を変えると、片方の形式がもう片方のキーに最大24時間保存される。
+Markdownを止める時は `public_markdown_enabled=false` でapplyする。Functionは常に `html` を設定し、Markdown側のキーに残った応答は、参照されないままTTLで消える。
 
-1. `public_markdown_enabled=false`（既定値）のままTerraformをapplyし、distributionが `Deployed` になるのを待つ。Functionは常に `html` を設定し、閲覧者が送った `x-weblog-format` を上書きする。
-2. `x-weblog-format` を読む版のアプリをデプロイする。mainへのmergeで自動デプロイされるので、mergeは手順1の後にする。先にデプロイすると、閲覧者が `x-weblog-format: markdown` を直接送ってHTMLのキーにMarkdownを保存できる。
-3. `public_markdown_enabled=true` でTerraformをapplyする。この時点までMarkdown側のキーには何も保存されていない。
+キャッシュキーに含めるヘッダーを変える時は、次の順で行う。順序を変えると、片方の形式がもう片方のキーに最大24時間保存される。
 
-4. `hosting.tf` から、参照されなくなった `aws_cloudfront_cache_policy.public_html` の定義を消してapplyする。手順1と同じapplyで消すと、distributionの更新より先に削除が実行され、`CachePolicyInUse` で失敗する。
+1. 新しいキーのキャッシュポリシーを別のリソースとして作り、それを読むFunctionの関連付けと一緒にdistributionを切り替えてapplyする。この時点のFunctionは、新しい形式を選ばない設定にしておく。既存のポリシーを書き換えると、Functionの関連付けより先にキーだけが変わる。
+2. distributionが `Deployed` になってから、新しいヘッダーを読む版のアプリをデプロイする。mainへのpushで自動デプロイされるので、pushは手順1の後にする。先にデプロイすると、閲覧者がそのヘッダーを直接送って、別の形式のキーに応答を保存できる。
+3. Functionで新しい形式を有効にしてapplyする。
+4. 使わなくなったポリシーの定義を消してapplyする。手順1と同じapplyで消すと、distributionの更新より先に削除が実行され、`CachePolicyInUse` で失敗する。
 
-戻す時は `public_markdown_enabled=false` でapplyする。Markdown側のキーに残った応答は、参照されないままTTLで消える。
-
-- キーに `x-weblog-format` を含むキャッシュポリシーは、それまでのポリシーとは別のリソースである。distributionはポリシーの切り替えとFunctionの関連付けを1回の更新で受け取るので、キーだけが先に変わる状態は生じない。
-- 手順1でポリシーが切り替わると、既存のキャッシュは新しいキーで取り直しになり、配信元へのリクエストが一時的に増える。invalidationは発行しない。
+- ポリシーが切り替わると、既存のキャッシュは新しいキーで取り直しになり、配信元へのリクエストが一時的に増える。invalidationは発行しない。
 - `/feed.xml` と `/sitemap.xml` は常に `html` に正規化し、同じ内容を2つのキーに持たない。
 - 記事の公開時のinvalidationはpath単位で、HTMLとMarkdownの両方が消える。[AWSのinvalidationの説明](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/invalidation-specifying-objects.html)
 - CloudFront Functionは月200万回まで無料で、公開HTML用のポリシーを使うbehaviorの全リクエストで実行される。
