@@ -96,6 +96,27 @@ mise exec -- python3 scripts/report-public-cost.py \
 少数サンプルしかない用途は参考値とし、前後で曜日・閲覧量・編集・移行の条件を併記する。
 CURには請求確定前の修正が入るため、取得日時・対象期間・manifestをローカルファイルと一緒に保存する。
 
+## Markdown応答とキャッシュキー
+
+記事とトップページは、`Accept: text/markdown` を含むリクエストにMarkdownを返す。
+CloudFront Function `weblog-public-format-production` が `Accept` を `x-weblog-format: markdown` か `html` に正規化し、公開HTML用のキャッシュポリシーはこのヘッダーだけをキーに含める。
+1つのURLのキャッシュは最大2種類で、`Accept` の値の違いではキーが増えない。
+配信元は `x-weblog-format` だけで出し分ける。`Accept` を直接見る実装にすると、HTMLのキーにMarkdownが保存される。
+
+有効化は次の順で行う。順序を変えると、片方の形式がもう片方のキーに最大24時間保存される。
+
+1. `public_markdown_enabled=false`（既定値）のままTerraformをapplyし、distributionが `Deployed` になるのを待つ。Functionは常に `html` を設定し、閲覧者が送った `x-weblog-format` を上書きする。
+2. `x-weblog-format` を読む版のアプリをデプロイする。mainへのmergeで自動デプロイされるので、mergeは手順1の後にする。先にデプロイすると、閲覧者が `x-weblog-format: markdown` を直接送ってHTMLのキーにMarkdownを保存できる。
+3. `public_markdown_enabled=true` でTerraformをapplyする。この時点までMarkdown側のキーには何も保存されていない。
+
+戻す時は `public_markdown_enabled=false` でapplyする。Markdown側のキーに残った応答は、参照されないままTTLで消える。
+
+- キーに `x-weblog-format` を含むキャッシュポリシーは、それまでのポリシーとは別のリソースである。distributionはポリシーの切り替えとFunctionの関連付けを1回の更新で受け取るので、キーだけが先に変わる状態は生じない。
+- 手順1でポリシーが切り替わると、既存のキャッシュは新しいキーで取り直しになり、配信元へのリクエストが一時的に増える。invalidationは発行しない。
+- `/feed.xml` と `/sitemap.xml` は常に `html` に正規化し、同じ内容を2つのキーに持たない。
+- 記事の公開時のinvalidationはpath単位で、HTMLとMarkdownの両方が消える。[AWSのinvalidationの説明](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/invalidation-specifying-objects.html)
+- CloudFront Functionは月200万回まで無料で、公開HTML用のポリシーを使うbehaviorの全リクエストで実行される。
+
 ## 有効化と配信拡大
 
 1. 計測コードを配備する。初期値の有効期限0ではログは追加されない。

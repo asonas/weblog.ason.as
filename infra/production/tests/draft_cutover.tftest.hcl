@@ -66,7 +66,7 @@ run "cutover_routes_published_reads_and_retires_legacy_generators" {
   }
 
   assert {
-    condition     = aws_cloudfront_distribution.weblog.default_cache_behavior[0].target_origin_id == "authoring-api" && aws_cloudfront_distribution.weblog.default_cache_behavior[0].cache_policy_id == aws_cloudfront_cache_policy.public_html.id
+    condition     = aws_cloudfront_distribution.weblog.default_cache_behavior[0].target_origin_id == "authoring-api" && aws_cloudfront_distribution.weblog.default_cache_behavior[0].cache_policy_id == aws_cloudfront_cache_policy.public_pages.id
     error_message = "Article routes must resolve the active published pointer with origin-controlled caching."
   }
 

@@ -88,7 +88,7 @@ description: 記事の初回公開・更新・改名のあと、CloudFrontの公
 | `P` 60秒後の定期修復 | `DraftJobs#repair`、`DraftOutputStore#publication_repair_jobs` |
 | settle | 失敗を止め、未処理の版を古い順に `DraftJobs#run`、3601秒ずつ進めて `DraftJobs#repair` を4回 |
 | 読者のGET | `DraftSite#call`（`draft_site.rb`）。未公開routeは `WebmentionSitePublisher#render_linked_page`、改名元routeは `LambdaApi` の301を返す |
-| CDNが保存するか | `infra/production/hosting.tf` の `public_html` cache policy（`min_ttl = 0`、`default_ttl = 0`）に合わせ、`cache-control` に `no-store`・`no-cache`・`private` がなく `s-maxage` か `max-age` が正のときだけ保存する |
+| CDNが保存するか | `infra/production/hosting.tf` の `public_pages` cache policy（`min_ttl = 0`、`default_ttl = 0`）に合わせ、`cache-control` に `no-store`・`no-cache`・`private` がなく `s-maxage` か `max-age` が正のときだけ保存する |
 | 応答がどの版か | `DraftRenames#resolve_published_route` |
 | パージ | `PublicCache#refresh` が送るCreateInvalidationのpathsをCDNから消す |
 
@@ -120,6 +120,7 @@ description: 記事の初回公開・更新・改名のあと、CloudFrontの公
 - 5回失敗して `needs_attention` になったcache stageと、管理画面からの再試行。
 - tildeや長すぎるpathで `PublicCache.paths` がキャッシュ要求を作らない場合。
 - 参照元記事、関連ハブ、RSS、トップ・検索のキャッシュ。
+- `x-weblog-format` で分かれるMarkdownのキャッシュ。探索するのはHTMLだけである。CloudFrontのinvalidationはpath単位でヘッダーの違う版もすべて消すので、パージの経路はHTMLと同じになる。
 
 ## 壊して確かめた記録（c76da44）
 
