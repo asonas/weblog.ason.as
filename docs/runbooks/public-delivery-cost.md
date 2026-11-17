@@ -117,6 +117,29 @@ Markdownを止める時は `public_markdown_enabled=false` でapplyする。Func
 - 記事の公開時のinvalidationはpath単位で、HTMLとMarkdownの両方が消える。[AWSのinvalidationの説明](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/invalidation-specifying-objects.html)
 - CloudFront Functionは月200万回まで無料で、公開HTML用のポリシーを使うbehaviorの全リクエストで実行される。
 
+## キャッシュされないリクエストの上限
+
+CloudFrontにキャッシュが無いリクエストは、API GatewayとLambdaの料金が1件ごとにかかる。次の2つで量を抑える。料金の上限を保証する設定ではない。API Gatewayのスロットリングは、AWSの説明ではbest effortの目標値である。
+
+- トップページと公開ページの404は、配信元が `s-maxage=60` を返し、同じURLへの繰り返しをCloudFrontが60秒受け止める。CloudFrontの `error_caching_min_ttl` は0のままにする。上げると、CachingDisabled以外のbehaviorの403と404すべてに同じ保持時間が付く。キャッシュしてよい404だけを、配信元のヘッダーで指定する。
+- 公開ページのルート（`GET /`、`HEAD /`、`GET /{path+}`、`HEAD /{path+}`、`GET /search`）は、API Gatewayでルートごとに毎秒2件、バースト10件に制限する。値は `public_page_throttling_rate_limit` と `public_page_throttling_burst_limit` で変える。
+
+上限は閲覧者ごとではなくルートごとである。クローラーが存在しないURLを順に叩いて `GET /{path+}` の上限を使い切っている間は、キャッシュに無い記事を開いた閲覧者にも429が返る。記事の `stale-if-error` は429には働かない。キャッシュ済みのページは影響を受けない。
+
+次のルートは、`GET /{path+}` の枠を使い切られても届くよう、個別のルートにして制限を掛けていない。
+
+- `/api/*`、`GET /draft-editor`、`GET /authoring/{path+}`: 作者が編集を始められるようにする
+- `GET /feed.xml`、`GET /sitemap.xml`: 1時間キャッシュされ、期限切れの再取得が429になるとフィードリーダーやクローラーに届かなくなる
+
+上限いっぱいまで30日間叩かれ続けた時の配信元の料金は、1ルートあたり約518万件、約15ドルになる。制限を掛けた5ルートすべてを使い切られると約73ドルになる。内訳は、API Gatewayが100万件あたり1.29ドル、Lambdaのリクエストが同0.20ドル、実行時間が512MB・0.2秒の仮定で同約1.33ドルである（東京リージョン、AWSの価格表の2026-11-12公開分）。実行時間は実測値ではない。CloudFront、DSQLの読み取り、S3、アクセスログの料金は含まない。
+
+429が増えていないかは、API Gatewayのアクセスログで `routeKey` と `status` を見る。
+
+```sh
+aws logs filter-log-events --log-group-name /aws/apigateway/weblog-authoring-production \
+  --filter-pattern '{ $.status = 429 }' --start-time "$(($(date +%s) - 3600))000"
+```
+
 ## 有効化と配信拡大
 
 1. 計測コードを配備する。初期値の有効期限0ではログは追加されない。
