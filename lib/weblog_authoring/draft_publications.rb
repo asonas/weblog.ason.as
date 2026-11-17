@@ -108,7 +108,7 @@ module WeblogAuthoring
         rescue ArgumentError
           next
         end
-        next if %w[draft-editor draft-offline.js published editor authoring oauth assets search index.html feed.xml 404.html].include?(route.split("/").first)
+        next if %w[draft-editor draft-offline.js published editor authoring oauth assets search index.html feed.xml sitemap.xml 404.html].include?(route.split("/").first)
         @connect.call do |db|
           db.transaction do
             owner = db.query("SELECT article_id FROM #{db.prefix}article_publication_routes WHERE route = $1", [route]).first

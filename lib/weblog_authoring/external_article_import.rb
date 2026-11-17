@@ -20,7 +20,7 @@ module WeblogAuthoring
     TIMESTAMP = /\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\z/
     SOURCE_NAME = /\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z/
     # The first path segment must not shadow a system route or a static file.
-    RESERVED_SEGMENTS = %w[draft-editor draft-offline.js published editor authoring oauth assets search index.html feed.xml 404.html].freeze
+    RESERVED_SEGMENTS = %w[draft-editor draft-offline.js published editor authoring oauth assets search index.html feed.xml sitemap.xml 404.html].freeze
     URL_NAMESPACE = "6ba7b811-9dad-11d1-80b4-00c04fd430c8"
     METADATA_LIMIT = 4096
 

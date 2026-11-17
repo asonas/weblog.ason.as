@@ -128,6 +128,9 @@ self.addEventListener("fetch", (event) => {
       "/feed.xml": {
         target: authoringApiOrigin
       },
+      "/sitemap.xml": {
+        target: authoringApiOrigin
+      },
       "/api": {
         target: authoringApiOrigin
       },

@@ -18,6 +18,8 @@ require "aws-sdk-ssm"
 require "base64"
 
 require_relative "development_database"
+require_relative "sitemap"
+require_relative "markdown_export"
 require_relative "embed_metadata"
 require_relative "github_oauth"
 require_relative "image_inbox"
@@ -267,6 +269,12 @@ module WeblogAuthoring
       else
         AtomFeed.new(site_url: frontend_url("/").sub(%r{/\z}, "")).render(settings.reader_database.list_pages)
       end
+    end
+
+    get "/sitemap.xml" do
+      halt 404 unless settings.draft_store
+      content_type "application/xml; charset=utf-8"
+      Sitemap.new(site_url: FRONTEND_ORIGIN).render(settings.draft_store.published_routes)
     end
 
     get "/api/search" do
@@ -658,6 +666,11 @@ module WeblogAuthoring
       headers "Cache-Control" => "no-cache" if destination
       redirect "/#{WeblogAuthoring.encoded_route(destination)}", 301 if destination
       page = settings.reader_database.find_route(route)
+      if request.env["HTTP_X_WEBLOG_FORMAT"] == "markdown" && page && page.status == "published" && !page.empty?
+        content_type "text/markdown", charset: "utf-8"
+        headers "Cache-Control" => "no-store"
+        halt MarkdownExport.new(site_url: FRONTEND_ORIGIN).article(page)
+      end
       renderer = WebmentionSitePublisher.new(database: settings.reader_database, s3_client: nil, sqs_client: nil, site_bucket: nil, delivery_queue_url: nil)
       shell = ROOT.join("public.html").read
       html = if page && page.status == "published" && (resolution["snapshot"] || !page.empty?)

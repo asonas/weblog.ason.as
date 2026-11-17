@@ -251,6 +251,7 @@ export function installMobileArticleSheet() {
         "editor",
         "assets",
         "feed.xml",
+        "sitemap.xml",
         "index.html",
         "public.html",
         "404.html",

@@ -44,6 +44,18 @@ module WeblogAuthoring
       end
     end
 
+    def published_routes
+      @connect.call do |db|
+        db.query(<<~SQL)
+          SELECT v.route, h.updated_at
+          FROM #{db.prefix}article_publication_heads h
+          JOIN #{db.prefix}article_published_versions v ON v.article_id = h.article_id AND v.id = h.active_id
+          WHERE trim(v.body) <> ''
+          ORDER BY h.updated_at DESC, v.article_id
+        SQL
+      end
+    end
+
     def published_pages_for_routes(routes)
       routes = routes.uniq
       return [] if routes.empty?
