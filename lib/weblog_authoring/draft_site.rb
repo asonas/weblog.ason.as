@@ -14,6 +14,7 @@ module WeblogAuthoring
     PUBLIC_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=86400, stale-while-revalidate=300, stale-if-error=86400"
     SITEMAP_CACHE_CONTROL = "public, max-age=300, s-maxage=3600"
     HOME_PATHS = ["/", "/index.html"].freeze
+    SHORT_CACHE_CONTROL = "public, max-age=0, s-maxage=60"
     HOME_MARKDOWN_LIMIT = 30
 
     def initialize(api:, reader:, s3_client:, bucket:, published:, store: nil, site_url: nil, dynamic_article_routes: [], public_cache_enabled: false)
@@ -65,11 +66,11 @@ module WeblogAuthoring
                      end
           OperationMetrics.delivery("linked", release: release&.fetch(:id))
         end
-        response = response.merge(headers: response.fetch(:headers, {}).merge("cache-control" => "no-store")) if response.fetch(:statusCode) == 404
+        response = response.merge(headers: response.fetch(:headers, {}).merge("cache-control" => SHORT_CACHE_CONTROL)) if response.fetch(:statusCode) == 404
       end
       method == "HEAD" ? response.merge(body: "") : response
     rescue Aws::S3::Errors::NoSuchKey
-      { statusCode: 404, headers: { "cache-control" => "no-store" }, body: "Not Found" }
+      { statusCode: 404, headers: { "cache-control" => SHORT_CACHE_CONTROL }, body: "Not Found" }
     end
 
     def backfill_inbox_thumbnails(limit: 100)
@@ -89,9 +90,10 @@ module WeblogAuthoring
 
     def home(event)
       response = if markdown?(event)
-                   markdown(MarkdownExport.new(site_url: @site_url).home(@reader.list_pages(limit: HOME_MARKDOWN_LIMIT)), "no-store", event)
+                   markdown(MarkdownExport.new(site_url: @site_url).home(@reader.list_pages(limit: HOME_MARKDOWN_LIMIT)), SHORT_CACHE_CONTROL, event)
                  else
-                   object("index.html", "text/html; charset=utf-8")
+                   shell = object("index.html", "text/html; charset=utf-8")
+                   shell.merge(headers: shell.fetch(:headers).merge("cache-control" => SHORT_CACHE_CONTROL))
                  end
       publishes_discovery? ? negotiable(response, "/") : response
     end

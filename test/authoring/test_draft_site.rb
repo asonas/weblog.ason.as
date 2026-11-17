@@ -96,7 +96,7 @@ class DraftSiteTest < Minitest::Test
       assert_equal "no-store", old_response.dig(:headers, "cache-control")
       missing = get.call("存在しない記事")
       assert_equal 404, missing.fetch(:statusCode)
-      assert_equal "no-store", missing.dig(:headers, "cache-control")
+      assert_equal "public, max-age=0, s-maxage=60", missing.dig(:headers, "cache-control")
       head = get.call("選定記事", "HEAD")
       assert_equal "", head.fetch(:body)
       assert_equal first.fetch(:headers), head.fetch(:headers)
@@ -133,10 +133,12 @@ class DraftSiteTest < Minitest::Test
         refute_includes response.fetch(:body), "Saved HTML"
       end
       objects.put_object(bucket: "site", key: "index.html", body: "Management and home shell")
-      %w[/ /search /draft-editor /authoring/devices].each do |path|
+      # 管理画面と検索のシェルは共有キャッシュに載せない。トップページと同じindex.htmlを返すが、キャッシュ可能にするのはトップページのパスだけ
+      { "/" => "public, max-age=0, s-maxage=60", "/index.html" => "public, max-age=0, s-maxage=60", "/search" => "no-store", "/draft-editor" => "no-store",
+        "/authoring/devices" => "no-store", "/authoring/articles" => "no-store", "/authoring/webmentions" => "no-store", }.each do |path, cache_control|
         response = all_pages.call("rawPath" => path, "requestContext" => { "http" => { "method" => "GET" } })
         assert_equal "Management and home shell", response.fetch(:body)
-        assert_equal "no-store", response.dig(:headers, "cache-control")
+        assert_equal cache_control, response.dig(:headers, "cache-control"), path
       end
       objects.put_object(bucket: "site", key: "display-releases/current.json", body: JSON.generate("id" => "c" * 40))
       assert_includes get.call("選定記事").fetch(:body), "Saved HTML 選定記事"
@@ -188,7 +190,7 @@ class DraftSiteTest < Minitest::Test
 
       home = get.call("/", markdown)
       assert_equal "text/markdown; charset=utf-8", home.dig(:headers, "content-type")
-      assert_equal "no-store", home.dig(:headers, "cache-control")
+      assert_equal "public, max-age=0, s-maxage=60", home.dig(:headers, "cache-control")
       assert_includes home.fetch(:body), "- [紹介 記事](https://example.com#{article_path}) (2026-09-02)"
       refute_includes home.fetch(:body), "空の記事"
       assert_equal "Management and home shell", get.call("/").fetch(:body)
@@ -256,7 +258,7 @@ class DraftSiteTest < Minitest::Test
       refute_equal first.dig(:headers, "etag"), second.dig(:headers, "etag")
       missing = site.call(event.merge("rawPath" => "/unknown"))
       assert_equal 404, missing.fetch(:statusCode)
-      assert_equal "no-store", missing.dig(:headers, "cache-control")
+      assert_equal "public, max-age=0, s-maxage=60", missing.dig(:headers, "cache-control")
       objects.put_object(bucket: "site", key: "display-releases/current.json", body: JSON.generate("id" => "c" * 40))
       fallback = site.call(event)
       assert_equal 200, fallback.fetch(:statusCode)
