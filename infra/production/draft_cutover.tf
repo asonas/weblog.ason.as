@@ -68,6 +68,12 @@ resource "aws_apigatewayv2_route" "draft_cutover" {
     "HEAD /",
     "GET /{path+}",
     "HEAD /{path+}",
+    # 以下はLambdaでの処理が GET /{path+} と同じ。スロットリングの枠を分けるためだけに個別のルートにしている
+    "GET /search",
+    "GET /draft-editor",
+    "GET /authoring/{path+}",
+    "GET /feed.xml",
+    "GET /sitemap.xml",
   ])
 
   api_id             = aws_apigatewayv2_api.authoring.id

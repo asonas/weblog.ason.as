@@ -131,6 +131,29 @@ resource "aws_apigatewayv2_stage" "authoring" {
     throttling_burst_limit = 10
     throttling_rate_limit  = 2
   }
+
+  # 上限はルートごとで、閲覧者ごとではない。CloudFrontにキャッシュが無いリクエストだけがここへ届く。存在しないURLを叩かれて枠を使い切られても作者が編集を始められるよう、/api/*、/draft-editor、/authoring/* は対象にしない。フィードとsitemapは1時間キャッシュされるので対象にしない
+  dynamic "route_settings" {
+    for_each = toset(["GET /", "HEAD /", "GET /{path+}", "HEAD /{path+}", "GET /search"])
+
+    content {
+      route_key              = aws_apigatewayv2_route.draft_cutover[route_settings.value].route_key
+      throttling_burst_limit = var.public_page_throttling_burst_limit
+      throttling_rate_limit  = var.public_page_throttling_rate_limit
+    }
+  }
+}
+
+variable "public_page_throttling_rate_limit" {
+  description = "Sustained requests per second each public page route may send to the authoring Lambda after a CloudFront cache miss."
+  type        = number
+  default     = 2
+}
+
+variable "public_page_throttling_burst_limit" {
+  description = "Burst of uncached public page requests each route accepts before API Gateway answers 429."
+  type        = number
+  default     = 10
 }
 
 resource "aws_lambda_permission" "authoring_api" {

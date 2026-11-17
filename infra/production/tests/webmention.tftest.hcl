@@ -82,6 +82,21 @@ run "webmention_receiver_guardrails" {
     ]) == 2
     error_message = "Webmention receiver route must be throttled to two requests per second"
   }
+
+  assert {
+    condition     = toset([for settings in aws_apigatewayv2_stage.authoring.route_settings : settings.route_key]) == toset(["POST /api/webmentions", "GET /", "HEAD /", "GET /{path+}", "HEAD /{path+}", "GET /search"])
+    error_message = "Only the webmention receiver and the public page routes may be throttled; the editor, the administration screens, and the authoring API must stay reachable while crawlers exhaust the public limit"
+  }
+
+  assert {
+    condition     = alltrue([for settings in aws_apigatewayv2_stage.authoring.route_settings : settings.throttling_rate_limit == 2 && settings.throttling_burst_limit == 10])
+    error_message = "Throttled routes accept two requests per second with a burst of ten"
+  }
+
+  assert {
+    condition     = alltrue([for route in ["GET /draft-editor", "GET /authoring/{path+}", "GET /feed.xml", "GET /sitemap.xml"] : contains(keys(aws_apigatewayv2_route.draft_cutover), route)])
+    error_message = "Routes that must not share the public page limit need their own route keys, or they fall into GET /{path+}"
+  }
 }
 
 run "webmention_cleanup_starts_in_dry_run" {
