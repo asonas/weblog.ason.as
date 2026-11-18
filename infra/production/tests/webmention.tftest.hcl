@@ -89,9 +89,9 @@ run "webmention_receiver_guardrails" {
       } == merge(
       { "POST /api/webmentions" = "2/10" },
       { for route in ["GET /", "HEAD /", "GET /{path+}", "HEAD /{path+}", "GET /search"] : route => "1/5" },
-      { for route in ["GET /api/pages", "GET /api/pages/{id}", "GET /api/routes/{route+}", "GET /api/tags", "GET /api/archive", "GET /api/page-names", "GET /api/search", "GET /api/related", "GET /api/diary-navigation", "GET /api/mentioned-by-days", "GET /api/editor/new", "GET /health"] : route => "5/20" },
+      { for route in ["GET /api/pages", "GET /api/pages/{id}", "GET /api/routes/{route+}", "GET /api/tags", "GET /api/archive", "GET /api/page-names", "GET /api/search", "GET /api/agents", "GET /api/mcp", "POST /api/mcp", "GET /api/related", "GET /api/diary-navigation", "GET /api/mentioned-by-days", "GET /api/editor/new", "GET /health"] : route => "5/20" },
     )
-    error_message = "Only the webmention receiver, the public page routes, and the unauthenticated read API may be throttled. The editor, the session check, drafts, and writes must stay reachable while crawlers exhaust the public limits"
+    error_message = "Only the webmention receiver, public pages, public read APIs and read-only MCP may be throttled. Authoring writes, drafts and session checks must stay reachable."
   }
 
   assert {

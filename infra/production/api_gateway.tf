@@ -55,6 +55,9 @@ resource "aws_apigatewayv2_route" "authoring" {
     "GET /api/archive"                                         = "NONE"
     "GET /api/page-names"                                      = "NONE"
     "GET /api/search"                                          = "NONE"
+    "GET /api/agents"                                          = "NONE"
+    "GET /api/mcp"                                             = "NONE"
+    "POST /api/mcp"                                            = "NONE"
     "GET /api/related"                                         = "NONE"
     "GET /api/diary-navigation"                                = "NONE"
     "GET /api/mentioned-by-days"                               = "NONE"
@@ -153,6 +156,9 @@ resource "aws_apigatewayv2_stage" "authoring" {
       "GET /api/archive",
       "GET /api/page-names",
       "GET /api/search",
+      "GET /api/agents",
+      "GET /api/mcp",
+      "POST /api/mcp",
       "GET /api/related",
       "GET /api/diary-navigation",
       "GET /api/mentioned-by-days",

@@ -14,6 +14,7 @@ Scrapbox移行ツールと記事作成画面を管理するリポジトリです
 | メモ・写真のモバイルアプリ | [iOS](ios/PhotoInbox/README.md)、[Android](android/PhotoInbox/README.md) |
 | Scrapboxの変換・修復 | [変換・修復手順](#scrapbox移行静的生成)、`package.json` の `convert:scrapbox:*` |
 | UIの検証 | [ブラウザテスト](docs/browser-testing.md)、`test/browser/`、`test/fixtures/drafts/` |
+| AIから公開記事を検索・読む | [MCP接続](docs/runbooks/mcp.md)、`lib/weblog_authoring/mcp.rb` |
 
 `frontend/authoring/` がフロントエンドの実装、`lib/weblog_authoring/` がRubyのAPI・公開処理、`lambda/` がサービスごとの実行入口です。
 Nodeの依存関係とコマンドはルートの `package.json`、実行環境と開発タスクは `mise.toml` を参照してください。

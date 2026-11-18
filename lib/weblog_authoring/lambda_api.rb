@@ -33,6 +33,7 @@ require_relative "draft_administration"
 require_relative "published_article_reader"
 require_relative "proofreading"
 require_relative "writing_suggestions"
+require_relative "mcp"
 
 module WeblogAuthoring
   class LambdaApi
@@ -161,6 +162,14 @@ module WeblogAuthoring
 
       method = event.dig("requestContext", "http", "method").to_s
       path = event.fetch("rawPath", "")
+      if path == "/api/mcp" || (method == "GET" && path == "/api/agents")
+        store = @draft_store
+        outputs = @draft_outputs
+        site_url = @frontend_url
+        return json_response(503, error: "Published articles are unavailable") unless store && outputs && site_url
+        mcp = Mcp.new(store:, outputs:, site_url:)
+        return path == "/api/agents" ? json_response(200, mcp.discovery) : mcp.call(event)
+      end
       if %r{\A/api/(?:inbox|mobile)/memos(?:/[^/]+)?\z}.match?(path)
         return memo_response(event, method, path)
       end

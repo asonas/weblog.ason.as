@@ -1,0 +1,7 @@
+module WeblogAuthoring
+  class Mcp
+    def initialize: (store: DraftStore, outputs: DraftOutputs, site_url: String) -> void
+    def discovery: () -> untyped
+    def call: (lambda_event) -> lambda_response
+  end
+end

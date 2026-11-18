@@ -44,6 +44,7 @@ require_relative "draft_jobs"
 require_relative "draft_administration"
 require_relative "proofreading"
 require_relative "writing_suggestions"
+require_relative "mcp"
 
 module WeblogAuthoring
   class DevelopmentRequestLog
@@ -125,7 +126,7 @@ module WeblogAuthoring
         halt 404 unless settings.draft_store
         require_authenticated! if settings.authentication_required
       end
-      if settings.authentication_required && mutation_request? && !mobile_device_request?
+      if settings.authentication_required && mutation_request? && !mobile_device_request? && request.path_info != "/api/mcp"
         require_authenticated!
       end
     end
@@ -287,6 +288,26 @@ module WeblogAuthoring
       json_error(422, "検索件数が不正です")
     rescue SearchIndex::Unavailable
       json_error(503, "検索の更新を待っています")
+    end
+
+    get "/api/agents" do
+      halt 503 unless settings.draft_store
+      json_response(Mcp.new(store: settings.draft_store, outputs: settings.draft_outputs, site_url: FRONTEND_ORIGIN).discovery)
+    end
+
+    %i[get post delete].each do |verb|
+      public_send(verb, "/api/mcp") do
+        halt 503 unless settings.draft_store
+        event = { "headers" => { "origin" => request.env["HTTP_ORIGIN"], "content-type" => request.content_type,
+                                  "mcp-protocol-version" => request.env["HTTP_MCP_PROTOCOL_VERSION"],
+                                  "mcp-method" => request.env["HTTP_MCP_METHOD"], "mcp-name" => request.env["HTTP_MCP_NAME"], }.compact,
+                  "body" => request.body.read((Mcp::MAX_BODY_BYTES * 2) + 1),
+                  "requestContext" => { "http" => { "method" => request.request_method } }, }
+        result = Mcp.new(store: settings.draft_store, outputs: settings.draft_outputs, site_url: FRONTEND_ORIGIN).call(event)
+        status result.fetch(:statusCode)
+        headers result.fetch(:headers)
+        body result.fetch(:body)
+      end
     end
 
     get "/assets/:filename" do
