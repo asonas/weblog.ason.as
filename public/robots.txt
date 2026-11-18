@@ -1,5 +1,6 @@
 User-agent: *
 Content-Signal: ai-train=yes, search=yes, ai-input=yes
+Allow: /api/agents$
 Disallow: /api/
 Disallow: /authoring/
 Disallow: /draft-editor
@@ -11,6 +12,7 @@ Disallow: /
 User-agent: Cotoyogi
 Content-Signal: ai-train=yes, search=yes, ai-input=yes
 Crawl-delay: 600
+Allow: /api/agents$
 Disallow: /api/
 Disallow: /authoring/
 Disallow: /draft-editor
