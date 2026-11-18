@@ -54,8 +54,16 @@ test("serves development samples and forwards public HTML without loading the ho
       fetch(new URL(path, origin), { headers: { Accept: "text/html" } });
     for (const path of ["/", "/index.html"]) {
       const html = await (await get(path)).text();
-      assert.match(html, /<h1>weblog\.ason\.as<\/h1>/);
-      assert.ok(html.includes('<div id="authoring-root"></div>'));
+      assert.ok(
+        html.includes(
+          '<h1 class="header-nav__title"><a href="/">weblog.ason.as</a></h1>',
+        ),
+      );
+      assert.ok(
+        html.includes(
+          '<div id="authoring-root"></div>\n<section class="home-guide"><h2>このサイトについて</h2>',
+        ),
+      );
     }
     assert.doesNotMatch(
       await (await get("/search")).text(),

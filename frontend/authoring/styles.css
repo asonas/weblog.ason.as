@@ -709,13 +709,20 @@ select {
   gap: 1rem;
 }
 
-.header-nav > a {
+.header-nav__title {
+  margin: 0;
+  font: inherit;
+}
+
+.header-nav > a,
+.header-nav__title > a {
   color: var(--ink);
   text-decoration: none;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .header-nav > a:hover {
+  .header-nav > a:hover,
+  .header-nav__title > a:hover {
     text-decoration: underline;
   }
 }
@@ -2284,11 +2291,11 @@ html[data-home="true"] #authoring-root:empty {
   line-height: 1.75;
 }
 
-.home-guide h1 {
+.home-guide h2 {
   font-size: var(--text-heading-lg);
 }
 
-.home-guide h2 {
+.home-guide h3 {
   margin-block-start: var(--space-8);
   font-size: var(--text-heading-md);
 }

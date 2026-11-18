@@ -23,7 +23,9 @@ class DraftSiteTest < Minitest::Test
     home = response.fetch(:body)
     main = home[/<main\b.*?<\/main>/m]
     assert_operator main.gsub(/<[^>]*>|\s+/, "").size, :>=, 500
-    assert_equal %w[1 2 2], main.scan(/<h([1-6])\b/).flatten
+    # JSを実行しないクライアントにも主見出しが1つだけ届き、紹介文はその下の階層から始まる
+    assert_equal ['<h1 class="header-nav__title"><a href="/">weblog.ason.as</a></h1>'], home.scan(/<h1\b.*?<\/h1>/m)
+    assert_equal %w[2 3 3], main.scan(/<h([1-6])\b/).flatten
     # rootに本文があるとcreateRootが置き換えて消すので、rootは空にして紹介文を外に置く
     assert_includes main, '<div id="authoring-root"></div>'
     assert_includes home, '<link rel="describedby" href="/llms.txt">'

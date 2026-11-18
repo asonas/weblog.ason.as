@@ -61,7 +61,9 @@ self.addEventListener("fetch", (event) => {
         const path = (context.originalUrl || context.path).split("?")[0];
         if (path !== "/" && path !== "/index.html") return html;
         const guide = readFileSync(resolve(projectRoot, "lib/weblog_authoring/site_content/home.html"), "utf8");
-        return html.replace('<div id="authoring-root"></div>', (root) => `${root}\n<section class="home-guide">${guide}</section>`);
+        return html
+          .replace('<a href="/">weblog.ason.as</a>', (name) => `<h1 class="header-nav__title">${name}</h1>`)
+          .replace('<div id="authoring-root"></div>', (root) => `${root}\n<section class="home-guide">${guide}</section>`);
       },
       configureServer(server) {
         server.middlewares.use((request, response, next) => {
