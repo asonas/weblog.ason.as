@@ -127,7 +127,12 @@ run "dynamic_api_caching_disabled" {
 
   assert {
     condition     = alltrue([for response in aws_cloudfront_distribution.weblog.custom_error_response : response.response_code == 404 && response.response_page_path == "/static/authoring/404.html"])
-    error_message = "Missing public objects must return an HTML 404 instead of the app shell"
+    error_message = "Origin 404s must return an HTML 404 instead of the app shell"
+  }
+
+  assert {
+    condition     = alltrue([for response in aws_cloudfront_distribution.weblog.custom_error_response : response.error_code != 403 || response.response_code == 403])
+    error_message = "CloudFront must preserve HTTP 403 for MCP Origin validation and other forbidden requests"
   }
 
   assert {
