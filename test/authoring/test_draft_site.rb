@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../test_helper"
+require "rexml/document"
 require "weblog_authoring/draft_site"
 require "weblog_authoring/lambda_api"
 require "weblog_authoring/development_database"
@@ -9,6 +10,47 @@ require "weblog_authoring/published_article_reader"
 require "weblog_authoring/local_publication_objects"
 
 class DraftSiteTest < Minitest::Test
+  def test_home_and_agent_guide_are_readable_in_the_initial_response
+    s3 = Aws::S3::Client.new(stub_responses: true)
+    s3.stub_responses(:get_object, body: File.binread(File.expand_path("../../index.html", __dir__)))
+    missing = ->(_event) { { statusCode: 404, body: "" } }
+    site = WeblogAuthoring::DraftSite.new(api: missing, reader: nil, s3_client: s3, bucket: "site", published: true)
+    request = ->(path, method = "GET") { site.call("rawPath" => path, "requestContext" => { "http" => { "method" => method } }) }
+
+    response = request.call("/")
+    assert_equal 200, response.fetch(:statusCode)
+    assert_equal "text/html; charset=utf-8", response.dig(:headers, "content-type")
+    home = response.fetch(:body)
+    main = home[/<main\b.*?<\/main>/m]
+    assert_operator main.gsub(/<[^>]*>|\s+/, "").size, :>=, 500
+    assert_equal %w[1 2 2], main.scan(/<h([1-6])\b/).flatten
+    # rootに本文があるとcreateRootが置き換えて消すので、rootは空にして紹介文を外に置く
+    assert_includes main, '<div id="authoring-root"></div>'
+    assert_includes home, '<link rel="describedby" href="/llms.txt">'
+    head = request.call("/", "HEAD")
+    assert_equal response.fetch(:headers), head.fetch(:headers)
+    assert_equal "", head.fetch(:body)
+    assert_equal home, request.call("/index.html").fetch(:body)
+    assert_includes home, '<html lang="ja"'
+    assert_includes home, '<link rel="canonical" href="https://weblog.ason.as/">'
+    assert_includes home, '<meta property="og:type" content="website">'
+    assert_includes home, '<meta property="og:image" content="https://weblog.ason.as/assets/og/home-v1.png">'
+    graph = JSON.parse(home[/<script type="application\/ld\+json">(.*?)<\/script>/m, 1]).fetch("@graph")
+    refute_empty graph.find { |entity| entity["@type"] == "Blog" }.fetch("description")
+    %w[/about /feed.xml /sitemap.xml /weblog.ason.asのしくみ].each { |path| assert_includes home, %(href="#{path}") }
+    refute_includes request.call("/search").fetch(:body), "このサイトができるまで"
+
+    guide = request.call("/llms.txt")
+    assert_equal 200, guide.fetch(:statusCode)
+    assert_equal "text/plain; charset=utf-8", guide.dig(:headers, "content-type")
+    assert_match(/\A# weblog\.ason\.as\n\n> /, guide.fetch(:body))
+    assert_includes guide.fetch(:body), "## When to use this"
+    assert_includes guide.fetch(:body), "Accept: text/markdown"
+    assert_includes guide.fetch(:body), "search_articles"
+    assert_empty request.call("/llms.txt", "HEAD").fetch(:body)
+    assert_equal "llms.txt", WeblogAuthoring.encoded_route("llms.txt")
+  end
+
   def test_mobile_device_settings_serves_the_application_shell
     s3 = Aws::S3::Client.new(stub_responses: true)
     s3.stub_responses(:get_object, body: "<html>management</html>")

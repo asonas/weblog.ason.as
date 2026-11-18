@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
@@ -55,6 +56,13 @@ self.addEventListener("fetch", (event) => {
     },
     {
       name: "development-page-routes",
+      apply: "serve",
+      transformIndexHtml(html, context) {
+        const path = (context.originalUrl || context.path).split("?")[0];
+        if (path !== "/" && path !== "/index.html") return html;
+        const guide = readFileSync(resolve(projectRoot, "lib/weblog_authoring/site_content/home.html"), "utf8");
+        return html.replace('<div id="authoring-root"></div>', (root) => `${root}\n<section class="home-guide">${guide}</section>`);
+      },
       configureServer(server) {
         server.middlewares.use((request, response, next) => {
           if (!request.headers.accept?.includes("text/html") || !request.url) return next();
@@ -76,7 +84,7 @@ self.addEventListener("fetch", (event) => {
 
           const route = rawPathname.slice(1).replace(/\/$/, "");
           if (mode !== "production" && ["/authoring/articles", "/authoring/webmentions", "/authoring/devices", "/design-system"].includes(rawPathname)) return next();
-          const appRoutes = ["", "search", "draft-editor"];
+          const appRoutes = ["", "index.html", "search", "draft-editor"];
           if (route.includes("/") || /[<>\\]/.test(pathname) || (mode === "production" && !appRoutes.includes(route))) {
             response.statusCode = 404;
             response.end("Not Found");
@@ -125,6 +133,7 @@ self.addEventListener("fetch", (event) => {
       interval: 150
     },
     proxy: {
+      "^/llms\\.txt(?:[?]|$)": { target: authoringApiOrigin },
       "/feed.xml": {
         target: authoringApiOrigin
       },

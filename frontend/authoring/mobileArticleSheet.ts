@@ -247,6 +247,7 @@ export function installMobileArticleSheet() {
       route.includes("/") ||
       [
         "search",
+        "llms.txt",
         "api",
         "editor",
         "assets",

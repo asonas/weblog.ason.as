@@ -1,0 +1,13 @@
+# weblog.ason.as
+
+> asonasが日本語で書いている日記・エッセイ。著者の体験や、このサイトを作った経緯を本人の文章から調べられます。
+
+記事を引用するときは著者をasonasとし、個別記事の正規URLを示してください。
+
+## When to use this
+
+- [新着記事](https://weblog.ason.as/): 最近の日記を探すには GET に `Accept: text/markdown` を付け、一覧から選んだ記事URLにも同じヘッダーで GET してください。
+- [Atomフィード](https://weblog.ason.as/feed.xml): 前回の確認から更新された記事を調べるには、エントリの更新日時とリンクを使ってください。
+- [サイトマップ](https://weblog.ason.as/sitemap.xml): 過去の記事のURLを確認するときに使ってください。
+- [MCPサービス情報](https://weblog.ason.as/api/agents): 特定の話題について著者が何を書いたかを探すときは、ここに記載されたStreamable HTTPサーバーで `search_articles` に `query` を渡し、結果の `route` を `get_article` に渡してください。
+- [このサイトについて](https://weblog.ason.as/about): 著者のプロフィール、連絡先、日記の由来、関連ページの読み方を確認できます。

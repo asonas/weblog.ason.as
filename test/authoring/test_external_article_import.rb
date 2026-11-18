@@ -138,6 +138,7 @@ class ExternalArticleImportTest < Minitest::Test
     invalid = [
       [{ "slug" => "published" }, "reserved"],
       [{ "slug" => "search" }, "reserved"],
+      [{ "slug" => "llms.txt" }, "reserved"],
       [{ "slug" => "2026-06-15" }, "date route"],
       [{ "slug" => "bad?slug" }, "forbidden character"],
       [{ "display_title" => "一行目\n二行目" }, "display_title"],

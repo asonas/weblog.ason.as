@@ -87,7 +87,7 @@ module WeblogAuthoring
       raise DraftStore::Error, "Invalid migration title" unless title.is_a?(String) && title.bytesize <= 4096
       raise DraftStore::Error, "Invalid migration body" unless body.is_a?(String) && body.valid_encoding? && body.bytesize <= DraftStore::BODY_LIMIT
       raise DraftStore::Error, "Migration route would change" unless WeblogAuthoring.validate_page_name(route) == route
-      raise DraftStore::Error, "Migration route is reserved" if %w[draft-editor draft-offline.js published sitemap.xml].include?(route.split("/").first)
+      raise DraftStore::Error, "Migration route is reserved" if route == "llms.txt" || %w[draft-editor draft-offline.js published sitemap.xml].include?(route.split("/").first)
       if type == "date"
         raise DraftStore::Error, "Invalid diary route" unless WeblogAuthoring::DATE_NAME.match?(route)
         raise DraftStore::Error, "Diary title must match route" unless title == route

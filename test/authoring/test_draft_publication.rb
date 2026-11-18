@@ -56,6 +56,14 @@ class DraftPublicationTest < Minitest::Test
     assert_equal accepted.fetch("id"), @publication.accept(ID, request).fetch("id")
   end
 
+  def test_agent_guide_route_does_not_become_an_empty_article_when_mentioned
+    content = { "format" => "pieces", "pieces" => [{ "body" => "[[llms.txt]]" }] }
+    snapshot = { "metadata" => { "page_type" => "date", "content" => content } }
+    assert_empty @store.linked_article_publications(snapshot)
+    append_title("llms.txt")
+    assert_raises(WeblogAuthoring::DraftStore::Error) { @publication.prepare(ID) }
+  end
+
   def test_remote_listing_does_not_read_updates_already_loaded_by_worker
     expected = @publication.working_content_hash(ID)
     client = Aws::Lambda::Client.new(stub_responses: true)

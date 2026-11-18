@@ -2272,6 +2272,27 @@ html[data-home="true"] #authoring-root {
   min-block-size: 100svh;
 }
 
+/* Reactの描画前やJSの読み込み失敗時に、rootの外の紹介文を一画面下へ押し出さない */
+html[data-home="true"] #authoring-root:empty {
+  min-block-size: 0;
+}
+
+.home-guide {
+  max-inline-size: var(--measure-content);
+  margin-inline: auto;
+  padding: var(--space-12) var(--space-4);
+  line-height: 1.75;
+}
+
+.home-guide h1 {
+  font-size: var(--text-heading-lg);
+}
+
+.home-guide h2 {
+  margin-block-start: var(--space-8);
+  font-size: var(--text-heading-md);
+}
+
 .cover-journal {
   inline-size: 100%;
   background: var(--canvas);

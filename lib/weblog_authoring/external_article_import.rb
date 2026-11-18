@@ -125,7 +125,7 @@ module WeblogAuthoring
       end
       problems = []
       problems << "slug is longer than #{METADATA_LIMIT} bytes" if slug.bytesize > METADATA_LIMIT
-      problems << "slug is reserved" if RESERVED_SEGMENTS.include?(slug.split("/").first)
+      problems << "slug is reserved" if slug == "llms.txt" || RESERVED_SEGMENTS.include?(slug.split("/").first)
       problems << "slug must not be a date route" if WeblogAuthoring::DATE_NAME.match?(slug)
       problems
     end

@@ -102,7 +102,7 @@ module WeblogAuthoring
       names = metadata.fetch("content").fetch("pieces").flat_map { |piece| PieceMentions.names(piece.fetch("body")) }.uniq
       names.filter_map do |name|
         next if PieceMentions.calendar_name?(name)
-        next if existing_routes.include?(name)
+        next if existing_routes.include?(name) || name == "llms.txt"
         begin
           route = WeblogAuthoring.validate_page_name(name)
         rescue ArgumentError

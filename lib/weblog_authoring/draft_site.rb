@@ -7,6 +7,7 @@ require_relative "draft_publisher"
 require_relative "webmention_site_publisher"
 require_relative "operation_metrics"
 require_relative "sitemap"
+require_relative "site_content"
 require_relative "markdown_export"
 
 module WeblogAuthoring
@@ -40,6 +41,8 @@ module WeblogAuthoring
                    home(event)
                  elsif ["/search", "/authoring/articles", "/authoring/webmentions", "/authoring/devices", "/draft-editor"].include?(path)
                    object("index.html", "text/html; charset=utf-8")
+                 elsif path == "/llms.txt"
+                   { statusCode: 200, headers: { "content-type" => "text/plain; charset=utf-8", "cache-control" => SHORT_CACHE_CONTROL }, body: SiteContent::GUIDE }
                  elsif path == "/sitemap.xml" && publishes_discovery?
                    sitemap
                  elsif @published
@@ -93,7 +96,7 @@ module WeblogAuthoring
                    markdown(MarkdownExport.new(site_url: @site_url).home(@reader.list_pages(limit: HOME_MARKDOWN_LIMIT)), SHORT_CACHE_CONTROL, event)
                  else
                    shell = object("index.html", "text/html; charset=utf-8")
-                   shell.merge(headers: shell.fetch(:headers).merge("cache-control" => SHORT_CACHE_CONTROL))
+                   shell.merge(body: SiteContent.home(shell.fetch(:body)), headers: shell.fetch(:headers).merge("cache-control" => SHORT_CACHE_CONTROL))
                  end
       publishes_discovery? ? negotiable(response, "/") : response
     end

@@ -543,6 +543,13 @@ class TestDevelopmentApp < Minitest::Test
     end
   end
 
+  def test_agent_guide_is_available_as_plain_text
+    status, headers, body = request("GET", "/llms.txt")
+    assert_equal 200, status
+    assert_includes headers.fetch("content-type"), "text/plain"
+    assert_includes body, "## When to use this"
+  end
+
   def test_serves_published_articles_and_linked_topics_with_the_public_reader
     json_request("POST", "/api/authoring/pages", page_type: "named", title: "記事", body: "公開された本文 [[KORG multi/poly]]")
 

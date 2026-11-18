@@ -5,7 +5,7 @@ import { installMobileArticleSheet } from "./mobileArticleSheet";
 
 test("mobile article links open details, preserve normal links, and recover from failed loading", async () => {
   const dom = new JSDOM(
-    '<article class="article-workspace--reading"><a id="internal" href="/next">次の記事</a><a id="external" href="https://example.com">外部</a><a id="anchor" href="#section">見出し</a><a id="search" href="/search">検索</a><a id="download" href="/file" download>保存</a><a id="blank" href="/next" target="_blank">別タブ</a></article>',
+    '<article class="article-workspace--reading"><a id="internal" href="/next">次の記事</a><a id="external" href="https://example.com">外部</a><a id="anchor" href="#section">見出し</a><a id="search" href="/search">検索</a><a id="guide" href="/llms.txt">ガイド</a><a id="download" href="/file" download>保存</a><a id="blank" href="/next" target="_blank">別タブ</a></article>',
     { url: "https://weblog.ason.as/start" },
   );
   const originalFetch = globalThis.fetch;
@@ -73,6 +73,7 @@ test("mobile article links open details, preserve normal links, and recover from
       "#external",
       "#anchor",
       "#search",
+      "#guide",
       "#download",
       "#blank",
     ])

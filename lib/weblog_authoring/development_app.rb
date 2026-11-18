@@ -19,6 +19,7 @@ require "base64"
 
 require_relative "development_database"
 require_relative "sitemap"
+require_relative "site_content"
 require_relative "markdown_export"
 require_relative "embed_metadata"
 require_relative "github_oauth"
@@ -270,6 +271,11 @@ module WeblogAuthoring
       else
         AtomFeed.new(site_url: frontend_url("/").sub(%r{/\z}, "")).render(settings.reader_database.list_pages)
       end
+    end
+
+    get "/llms.txt" do
+      content_type "text/plain", charset: "utf-8"
+      SiteContent::GUIDE
     end
 
     get "/sitemap.xml" do

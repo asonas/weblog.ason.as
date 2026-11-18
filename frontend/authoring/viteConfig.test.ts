@@ -52,6 +52,19 @@ test("serves development samples and forwards public HTML without loading the ho
     assert.ok(origin);
     const get = (path: string) =>
       fetch(new URL(path, origin), { headers: { Accept: "text/html" } });
+    for (const path of ["/", "/index.html"]) {
+      const html = await (await get(path)).text();
+      assert.match(html, /<h1>weblog\.ason\.as<\/h1>/);
+      assert.ok(html.includes('<div id="authoring-root"></div>'));
+    }
+    assert.doesNotMatch(
+      await (await get("/search")).text(),
+      /このサイトができるまで/,
+    );
+    await fetch(new URL("/llms.txt?check=1", origin));
+    assert.deepEqual(requests.splice(0), ["/llms.txt?check=1"]);
+    await fetch(new URL("/llms.txt-notes", origin));
+    assert.deepEqual(requests, []);
     assert.equal((await get("/design-system")).status, 200);
     for (const route of ["/%E8%A8%98%E4%BA%8B", "/KORG%20multi%2Fpoly"]) {
       const response = await get(route);

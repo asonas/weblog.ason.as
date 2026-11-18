@@ -68,6 +68,12 @@ class DraftMigrationTest < Minitest::Test
     assert_empty legacy.pending_webmention_outbox
   end
 
+  def test_migration_preserves_the_agent_guide_route
+    @source.fetch("articles").first.merge!("page_type" => "named", "title" => "llms.txt", "route" => "llms.txt")
+    error = assert_raises(WeblogAuthoring::DraftStore::Error) { WeblogAuthoring::DraftMigration.new(store: @store).prepare(@source) }
+    assert_equal "Migration route is reserved", error.message
+  end
+
   def test_restart_resumes_a_partial_import_without_replacing_committed_versions
     @source.fetch("articles") << @source.fetch("articles").first.merge("id" => "ff802ad0b89946aeb6b7623c2ba7bc79", "route" => "2026-09-02", "title" => "2026-09-02")
     plan = WeblogAuthoring::DraftMigration.new(store: @store).prepare(@source)
