@@ -26,7 +26,7 @@ run "discovery_and_signed_zone" {
   }
 
   assert {
-    condition     = aws_route53_record.agent_discovery_metadata["_index"].records == toset(["\"url=https://weblog.ason.as/api/agents\""]) && aws_route53_record.agent_discovery_metadata["_mcp"].records == toset(["\"url=https://weblog.ason.as/api/mcp\""])
+    condition     = aws_route53_record.agent_discovery_metadata["_index"].records == toset(["url=https://weblog.ason.as/api/agents"]) && aws_route53_record.agent_discovery_metadata["_mcp"].records == toset(["url=https://weblog.ason.as/api/mcp"])
     error_message = "Companion TXT records must advertise the descriptor and actual MCP endpoint."
   }
 

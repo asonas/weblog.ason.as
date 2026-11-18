@@ -16,7 +16,7 @@ resource "aws_route53_record" "agent_discovery_metadata" {
   name    = "${each.key}._agents.weblog.ason.as"
   type    = "TXT"
   ttl     = 300
-  records = ["\"url=https://weblog.ason.as/api/${each.value}\""]
+  records = ["url=https://weblog.ason.as/api/${each.value}"]
 }
 
 # ason.as is the authoritative zone for weblog.ason.as. Signing only a child
