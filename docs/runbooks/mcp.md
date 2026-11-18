@@ -15,7 +15,9 @@ MCP `2026-07-28`と、initializeを使う`2025-11-25`・`2025-06-18`・`2025-03-
 
 `GET https://weblog.ason.as/api/agents`が、MCPの接続URL・ツール名・認証方式をJSONで返します。
 
-`infra/production/agent_discovery.tf`は`_index._agents.weblog.ason.as`と`_mcp._agents.weblog.ason.as`にServiceModeのHTTPSレコードを配置します。`alpn`は実際のHTTPプロトコル、`port`は443です。実験用の`key65001`は`cap=`に続けて上記のJSONのURLを格納します。このキーの意味は未標準化のため、利用側との合意が必要です。[DNS-AIDドラフト](https://datatracker.ietf.org/doc/draft-mozleywilliams-dnsop-dnsaid/)、[RFC 9460](https://www.rfc-editor.org/rfc/rfc9460)を参照してください。
+`infra/production/agent_discovery.tf`は`_index._agents.weblog.ason.as`と`_mcp._agents.weblog.ason.as`にServiceModeのHTTPSレコードを配置します。`alpn`は実際のHTTPプロトコル、`port`は443です。同名のTXTレコードで`url=`に続けて、前者は案内JSON、後者はMCPの接続URLを公開します。このTXTの形式は、このサイトの取り決めです。
+
+Route 53は任意の`keyNNNNN`形式のSvcParamKeyに対応していないため、実験用のパラメータは使いません。同名TXTでの補足情報の提供は[DNS-AIDドラフト](https://datatracker.ietf.org/doc/draft-mozleywilliams-dnsop-dnsaid/)に沿っています。[Route 53の対応範囲](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/ResourceRecordTypes.html)、[RFC 9460](https://www.rfc-editor.org/rfc/rfc9460)を参照してください。
 
 ## DNSSECの信頼をつなぐ
 

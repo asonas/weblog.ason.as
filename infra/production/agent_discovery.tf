@@ -1,4 +1,4 @@
-# The discovery descriptor supplies the MCP URL; these private-use keys are experimental.
+# Route 53 does not support unknown SvcParamKeys. Advertise URLs in companion TXT records.
 resource "aws_route53_record" "agent_discovery" {
   for_each = toset(["_index", "_mcp"])
 
@@ -6,7 +6,17 @@ resource "aws_route53_record" "agent_discovery" {
   name    = "${each.value}._agents.weblog.ason.as"
   type    = "HTTPS"
   ttl     = 300
-  records = ["1 weblog.ason.as. mandatory=alpn,port alpn=\"h2,http/1.1\" port=443 key65001=\"cap=https://weblog.ason.as/api/agents\""]
+  records = ["1 weblog.ason.as. alpn=\"h2,http/1.1\" port=443"]
+}
+
+resource "aws_route53_record" "agent_discovery_metadata" {
+  for_each = { "_index" = "agents", "_mcp" = "mcp" }
+
+  zone_id = data.aws_route53_zone.ason_as.zone_id
+  name    = "${each.key}._agents.weblog.ason.as"
+  type    = "TXT"
+  ttl     = 300
+  records = ["\"url=https://weblog.ason.as/api/${each.value}\""]
 }
 
 # ason.as is the authoritative zone for weblog.ason.as. Signing only a child

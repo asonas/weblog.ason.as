@@ -12,7 +12,7 @@ run "discovery_and_signed_zone" {
   command = plan
 
   plan_options {
-    target = [aws_route53_record.agent_discovery, aws_route53_hosted_zone_dnssec.ason_as]
+    target = [aws_route53_record.agent_discovery, aws_route53_record.agent_discovery_metadata, aws_route53_hosted_zone_dnssec.ason_as]
   }
 
   assert {
@@ -21,8 +21,13 @@ run "discovery_and_signed_zone" {
   }
 
   assert {
-    condition     = aws_route53_record.agent_discovery["_index"].type == "HTTPS" && aws_route53_record.agent_discovery["_index"].records == toset(["1 weblog.ason.as. mandatory=alpn,port alpn=\"h2,http/1.1\" port=443 key65001=\"cap=https://weblog.ason.as/api/agents\""])
-    error_message = "Discovery must use ServiceMode HTTPS with real ALPNs, port and a numeric experimental descriptor key."
+    condition     = aws_route53_record.agent_discovery["_index"].type == "HTTPS" && aws_route53_record.agent_discovery["_index"].records == toset(["1 weblog.ason.as. alpn=\"h2,http/1.1\" port=443"])
+    error_message = "Discovery must use ServiceMode HTTPS with real ALPNs and port, using only Route 53 supported keys."
+  }
+
+  assert {
+    condition     = aws_route53_record.agent_discovery_metadata["_index"].records == toset(["\"url=https://weblog.ason.as/api/agents\""]) && aws_route53_record.agent_discovery_metadata["_mcp"].records == toset(["\"url=https://weblog.ason.as/api/mcp\""])
+    error_message = "Companion TXT records must advertise the descriptor and actual MCP endpoint."
   }
 
   assert {
