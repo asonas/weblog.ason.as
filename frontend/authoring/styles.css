@@ -2279,11 +2279,6 @@ html[data-home="true"] #authoring-root {
   min-block-size: 100svh;
 }
 
-/* Reactの描画前やJSの読み込み失敗時に、rootの外の紹介文を一画面下へ押し出さない */
-html[data-home="true"] #authoring-root:empty {
-  min-block-size: 0;
-}
-
 .home-guide {
   max-inline-size: var(--measure-content);
   margin-inline: auto;
