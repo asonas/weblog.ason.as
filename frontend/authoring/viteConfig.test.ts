@@ -7,7 +7,7 @@ import test from "node:test";
 
 import { createServer, type InlineConfig } from "vite";
 
-// 依存の事前変換が走っている最中にserver.close()すると、それを待つ変換が終わらずcloseが返らない
+// node_modules/.viteが空だと、HTMLを起点とする先行変換が依存の事前変換を待ち、server.close()が返らない
 const testServerConfig: InlineConfig = {
   server: {
     host: "127.0.0.1",
