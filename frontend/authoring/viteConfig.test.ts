@@ -5,12 +5,21 @@ import { once } from "node:events";
 import { createServer as createHttpServer } from "node:http";
 import test from "node:test";
 
-import { createServer } from "vite";
+import { createServer, type InlineConfig } from "vite";
+
+// 依存の事前変換が走っている最中にserver.close()すると、それを待つ変換が終わらずcloseが返らない
+const testServerConfig: InlineConfig = {
+  server: {
+    host: "127.0.0.1",
+    port: 0,
+    strictPort: false,
+    preTransformRequests: false,
+  },
+  optimizeDeps: { noDiscovery: true },
+};
 
 test("rejects removed editor routes", async () => {
-  const server = await createServer({
-    server: { host: "127.0.0.1", port: 0, strictPort: false },
-  });
+  const server = await createServer(testServerConfig);
 
   try {
     await server.listen();
@@ -43,9 +52,7 @@ test("serves development samples and forwards public HTML without loading the ho
   assert.ok(address && typeof address !== "string");
   const previousOrigin = process.env.AUTHORING_API_ORIGIN;
   process.env.AUTHORING_API_ORIGIN = `http://127.0.0.1:${address.port}`;
-  const server = await createServer({
-    server: { host: "127.0.0.1", port: 0, strictPort: false },
-  });
+  const server = await createServer(testServerConfig);
   try {
     await server.listen();
     const origin = server.resolvedUrls?.local[0];
