@@ -13,7 +13,7 @@
 
 ## Deploymentの確認
 
-RubyのLambda imageは`rubylang/ruby:4.0.9`と`aws_lambda_ric`を使います。AWS提供imageのRuby更新を待たずに、正規表現コンパイルの修正を含む版へ更新するためです。
+RubyのLambda imageは`rubylang/ruby:4.0.10`と`aws_lambda_ric`を使います。AWS提供imageのRuby更新を待たずに、正規表現コンパイルの修正を含む版へ更新するためです。
 `scripts/lambda-ruby-entrypoint.sh`がLambdaのcommandを`_HANDLER`へ渡します。Ruby更新時は、開発・CIの版と3つのRuby用Dockerfileを揃え、コンテナ内でRubyの版、ハンドラ起動、libvipsとqmdの読み込みを確認します。公開ワーカー（`Dockerfile.search-indexer`）では、`WeblogAuthoring::OgImage::Renderer.new.article("確認")` がPNGを返す事も確認します。このイメージのlibvipsは、文字を描くためにディストリビューションのパッケージを使っています。
 
 mainへのpush後、`Validate`が成功すると、同じSHAを対象に`Deploy production`が起動します。

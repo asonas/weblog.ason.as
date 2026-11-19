@@ -1,4 +1,4 @@
-FROM rubylang/ruby:4.0.9 AS libvips-build
+FROM rubylang/ruby:4.0.10 AS libvips-build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential meson ninja-build pkg-config xz-utils gettext \
@@ -15,7 +15,7 @@ RUN echo "a30d4aede16f1c2899c1a2241870f8a7409feafa38484bcdcdac113d6d6f8ff5  /tmp
     && meson compile -C /tmp/vips-8.18.2/build \
     && meson install -C /tmp/vips-8.18.2/build
 
-FROM rubylang/ruby:4.0.9
+FROM rubylang/ruby:4.0.10
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential libglib2.0-0t64 libexpat1 libjpeg-turbo8 libpng16-16t64 libwebp7 libwebpmux3 libwebpdemux2 \

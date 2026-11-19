@@ -5,7 +5,7 @@ RUN apt-get update \
     && command rm -rf /var/lib/apt/lists/*
 RUN npm install --global @tobilu/qmd@2.5.3
 
-FROM rubylang/ruby:4.0.9
+FROM rubylang/ruby:4.0.10
 
 # libvips42t64 draws the Open Graph title images. Unlike the libvips built in Dockerfile.lambda, the distribution's build includes Pango text rendering.
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential libvips42t64 fontconfig \
