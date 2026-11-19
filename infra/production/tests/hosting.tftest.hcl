@@ -103,6 +103,14 @@ run "dynamic_api_caching_disabled" {
   }
 
   assert {
+    condition = (
+      one([for behavior in aws_cloudfront_distribution.weblog.ordered_cache_behavior : behavior if behavior.path_pattern == "/api/agents"]).cache_policy_id == aws_cloudfront_cache_policy.public_pages.id &&
+      index(aws_cloudfront_distribution.weblog.ordered_cache_behavior[*].path_pattern, "/api/agents") < index(aws_cloudfront_distribution.weblog.ordered_cache_behavior[*].path_pattern, "/api/*")
+    )
+    error_message = "the crawlable MCP descriptor must be matched before /api/* and use the origin-controlled shared cache"
+  }
+
+  assert {
     condition     = one([for behavior in aws_cloudfront_distribution.weblog.ordered_cache_behavior : behavior if behavior.path_pattern == "/feed.xml"]).cache_policy_id == aws_cloudfront_cache_policy.public_pages.id
     error_message = "the public Atom feed must use the origin-controlled shared cache"
   }

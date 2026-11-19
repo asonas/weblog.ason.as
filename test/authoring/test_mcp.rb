@@ -108,12 +108,16 @@ class McpTest < Minitest::Test
   def test_discovery_and_unavailable_search
     response = @api.call(event.merge("rawPath" => "/api/agents", "requestContext" => { "http" => { "method" => "GET" } }))
     assert_equal "https://weblog.ason.as/api/mcp", parsed(response).fetch("services").first.fetch("url")
+    assert_equal "public, max-age=0, s-maxage=300", response.dig(:headers, "cache-control")
     @outputs.define_singleton_method(:search) { |**| raise WeblogAuthoring::SearchIndex::Unavailable }
     response = rpc("tools/call", { "name" => "search_articles", "arguments" => { "query" => "DNS" } }, modern: true)
     assert_equal true, parsed(response).dig("result", "isError")
     assert_equal "complete", parsed(response).dig("result", "resultType")
     legacy = WeblogAuthoring::LambdaApi.new(database: Object.new)
     assert_equal 503, legacy.call(event).fetch(:statusCode)
+    unavailable = legacy.call(event.merge("rawPath" => "/api/agents", "requestContext" => { "http" => { "method" => "GET" } }))
+    assert_equal 503, unavailable.fetch(:statusCode)
+    assert_nil unavailable.dig(:headers, "cache-control")
   end
 
   def test_development_mcp_is_public_but_authoring_remains_authenticated

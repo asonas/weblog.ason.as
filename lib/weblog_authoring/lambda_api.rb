@@ -51,6 +51,8 @@ module WeblogAuthoring
     end
 
     JSON_HEADERS = { "content-type" => "application/json; charset=utf-8" }.freeze
+    # robots.txtでクローラーに開けている。CloudFrontに5分持たせ、API GatewayとLambdaに届く数を抑える
+    AGENTS_HEADERS = JSON_HEADERS.merge("cache-control" => "public, max-age=0, s-maxage=300").freeze
     PROBLEM_HEADERS = { "content-type" => "application/problem+json; charset=utf-8" }.freeze
     EMPTY_HASH = {}.freeze # steep:ignore UnannotatedEmptyCollection
 
@@ -168,7 +170,9 @@ module WeblogAuthoring
         site_url = @frontend_url
         return json_response(503, error: "Published articles are unavailable") unless store && outputs && site_url
         mcp = Mcp.new(store:, outputs:, site_url:)
-        return path == "/api/agents" ? json_response(200, mcp.discovery) : mcp.call(event)
+        return mcp.call(event) unless path == "/api/agents"
+
+        return { statusCode: 200, headers: AGENTS_HEADERS, body: JSON.generate(mcp.discovery) }
       end
       if %r{\A/api/(?:inbox|mobile)/memos(?:/[^/]+)?\z}.match?(path)
         return memo_response(event, method, path)

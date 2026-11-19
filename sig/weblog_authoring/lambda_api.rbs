@@ -23,6 +23,7 @@ module WeblogAuthoring
     end
 
     JSON_HEADERS: Hash[String, String]
+    AGENTS_HEADERS: Hash[String, String]
     PROBLEM_HEADERS: Hash[String, String]
     EMPTY_HASH: Hash[String, untyped]
     AUTH_COOKIE: String

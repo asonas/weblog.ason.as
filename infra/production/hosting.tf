@@ -252,6 +252,23 @@ resource "aws_cloudfront_distribution" "weblog" {
     }
   }
 
+  # /api/* より前に置く。200は配信元の s-maxage で持たせる。503はCloudFront既定のエラーキャッシュで約10秒残る
+  ordered_cache_behavior {
+    path_pattern             = "/api/agents"
+    target_origin_id         = "authoring-api"
+    viewer_protocol_policy   = "https-only"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = aws_cloudfront_cache_policy.public_pages.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.public_format.arn
+    }
+  }
+
   ordered_cache_behavior {
     path_pattern             = "/api/*"
     target_origin_id         = "authoring-api"

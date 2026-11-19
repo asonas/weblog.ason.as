@@ -126,6 +126,7 @@ CloudFrontにキャッシュが無いリクエストは、API GatewayとLambda�
 - トップページと公開ページの404は、配信元が `s-maxage=60` を返し、同じURLへの繰り返しをCloudFrontが60秒受け止める。CloudFrontの `error_caching_min_ttl` は0のままにする。上げると、CachingDisabled以外のbehaviorの403と404すべてに同じ保持時間が付く。キャッシュしてよい404だけを、配信元のヘッダーで指定する。
 - 公開ページのルート（`GET /`、`HEAD /`、`GET /{path+}`、`HEAD /{path+}`、`GET /search`）は、API Gatewayでルートごとに毎秒1件、バースト5件に制限する。値は `public_page_throttling_rate_limit` と `public_page_throttling_burst_limit` で変える。
 - 認証なしで届くGETのルート（`GET /api/pages`、`/api/tags`、`/api/search`、`/health` など12ルート）は、ルートごとに毎秒5件、バースト20件に制限する。値は `public_api_throttling_rate_limit` と `public_api_throttling_burst_limit` で変える。作者の管理画面も同じルートを使うので、公開ページより緩くしている。
+- `GET /api/agents` はrobots.txtでクローラーに開けているので、`/api/*` より前の専用behaviorで公開HTMLと同じポリシーを使う。配信元は200に `s-maxage=300` を返し、CloudFrontが5分受け止める。503にはキャッシュ指定を付けないが、CloudFront既定のエラーキャッシュで約10秒は同じエッジに残る。
 
 上限は閲覧者ごとではなくルートごとである。クローラーが存在しないURLを順に叩いて `GET /{path+}` の上限を使い切っている間は、キャッシュに無い記事を開いた閲覧者にも429が返る。記事の `stale-if-error` は429には働かない。キャッシュ済みのページは影響を受けない。読み取りAPIの上限を使い切られている間は、作者の管理画面の一覧や検索にも429が返る。
 
