@@ -2,6 +2,7 @@
 
 require "cgi"
 require "digest"
+require "erb"
 require "json"
 require "securerandom"
 require "time"
@@ -15,6 +16,8 @@ require_relative "names"
 
 module WeblogAuthoring
   class WebmentionSitePublisher
+    FEEDBACK_ADDRESS = "asonas@muse.ai"
+
     def initialize(database:, s3_client:, sqs_client:, site_bucket:, delivery_queue_url:, sender_enabled: true)
       @database = database
       @s3_client = s3_client
@@ -186,6 +189,7 @@ module WeblogAuthoring
           </div>
           #{render_mentions(mentions)}
           <div data-public-universe="#{CGI.escapeHTML(JSON.generate({ route: page.route, id: page.id, wiki: rendered.links.map(&:name).uniq, urls: WeblogAuthoring.extract_external_urls(page.body.to_s) }))}"></div>
+          #{render_feedback(page, source_url)}
         </article>
       HTML
     end
@@ -227,6 +231,14 @@ module WeblogAuthoring
       }.compact
       # JSONの中の</script>でscript要素が閉じないよう、<をエスケープする
       %(<script type="application/ld+json">#{JSON.generate(data).gsub("<") { "\\" + "u003c" }}</script>)
+    end
+
+    # RFC 6068のmailtoは空白を+ではなく%20で、改行をCRLFで表す
+    def render_feedback(page, source_url)
+      subject = ERB::Util.url_encode("「#{page.display_title}」の感想")
+      body = ERB::Util.url_encode("#{source_url}\r\n\r\n")
+      href = CGI.escapeHTML("mailto:#{FEEDBACK_ADDRESS}?subject=#{subject}&body=#{body}")
+      %(<p class="article-feedback"><a href="#{href}">この記事の感想をメールで送る</a>。届いたメールはasonasと、AIアシスタントのmuseが読みます。</p>)
     end
 
     def render_mentions(mentions)

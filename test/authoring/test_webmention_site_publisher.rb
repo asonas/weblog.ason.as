@@ -248,6 +248,14 @@ class WebmentionSitePublisherTest < Minitest::Test
     assert_includes html, 'href="https://speakerdeck.com/asonas/example"'
     assert_includes html, "読むための本文。"
     refute_includes html, "authoring-data"
+    # メーラーは+を空白に戻さないので、件名の空白は%20でなければならない
+    href = REXML::Document.new(html[%r{<p class="article-feedback">.*?</p>}]).root.elements["a"].attributes["href"]
+    address, query = href.split("?", 2)
+    assert_equal "mailto:asonas@muse.ai", address
+    refute_includes query, "+"
+    fields = URI.decode_www_form(query).to_h
+    assert_equal "「画像 & \"動画\"」の感想", fields.fetch("subject")
+    assert_equal "https://weblog.ason.as/Media\r\n\r\n", fields.fetch("body")
   end
 
   def test_structured_data_cannot_close_its_script_element

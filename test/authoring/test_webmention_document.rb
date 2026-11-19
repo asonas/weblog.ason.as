@@ -30,6 +30,20 @@ class WebmentionDocumentTest < Minitest::Test
     refute document.links_to?("https://example.com/target")
   end
 
+  def test_mail_links_do_not_stop_a_missing_link_check
+    document = WeblogAuthoring::WebmentionDocument.new(
+      '<html><body><a href="mailto:asonas@muse.ai?subject=%E6%84%9F%E6%83%B3">感想</a></body></html>',
+      base_url: "https://example.com/post"
+    )
+
+    refute document.links_to?("https://example.com/target")
+    document = WeblogAuthoring::WebmentionDocument.new(
+      '<a href="mailto:a@b@c">壊れた宛先</a><a href="/target">Target</a>',
+      base_url: "https://example.com/post"
+    )
+    assert document.links_to?("https://example.com/target")
+  end
+
   def test_resolves_relative_links_against_the_html_base_element
     document = WeblogAuthoring::WebmentionDocument.new(
       '<base href="https://example.com/base/"><a href="target">Target</a>',

@@ -172,6 +172,7 @@
   min-block-size: 0;
 }
 .article-actions,
+.article-feedback,
 .external-mentions {
   max-inline-size: var(--measure-content);
   margin-inline: auto;

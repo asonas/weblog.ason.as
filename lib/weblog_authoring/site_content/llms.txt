@@ -11,3 +11,4 @@
 - [サイトマップ](https://weblog.ason.as/sitemap.xml): 過去の記事のURLを確認するときに使ってください。
 - [MCPサービス情報](https://weblog.ason.as/api/agents): 特定の話題について著者が何を書いたかを探すときは、ここに記載されたStreamable HTTPサーバーで `search_articles` に `query` を渡し、結果の `route` を `get_article` に渡してください。
 - [このサイトについて](https://weblog.ason.as/about): 著者のプロフィール、連絡先、日記の由来、関連ページの読み方を確認できます。
+- [感想・不具合の連絡先](mailto:asonas@muse.ai): 記事の感想や表示の不具合を著者に伝えるときのメールアドレスです。著者とAIアシスタントのmuseが読みます。

@@ -20,8 +20,9 @@ module WeblogAuthoring
     def anchor_urls
       base = document_base_url
       links.filter_map do |href|
-        URI.join(base, href)
-      rescue URI::InvalidURIError
+        uri = URI.join(base, href)
+        uri if uri.is_a?(URI::HTTP)
+      rescue URI::Error
         nil
       end
     end
