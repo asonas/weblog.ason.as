@@ -20,24 +20,43 @@ module WeblogAuthoring
     end
   end
 
-  HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]]+)/.freeze
-  HASHTAG_OPAQUE_TYPES = %i[codeblock codespan a img html_element].freeze
+  # 除いた箇所は、タグの文字にも区切りの空白にもならない文字に置き換える。空白にすると [リンク](/a)#続き が新しいタグになる
+  HASHTAG_BOUNDARY = "\u{E000}"
+  HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]\u{E000}]+)/.freeze
+  HASHTAG_SYMBOLS = { apos: "'", quot: '"', lsquo: "'", rsquo: "'", ldquo: '"', rdquo: '"', hellip: "...", mdash: "---", ndash: "--", laquo: "<<", raquo: ">>" }.freeze
 
-  # 平文の「 #タグ」だけを拾う。リンク・画像・コード・[[wiki]]は、タグの文字にも区切りの空白にもならない[]に置き換えてから走査する
+  # 平文の「 #タグ」だけを拾う。リンク・画像・コードと[[wiki]]の名前は対象にしない
   def self.extract_hashtags(body)
+    source = body.to_s
+    return [] unless source.include?("#")
+
+    WeblogAuthoring.extract_wiki_links(source).reverse_each do |link|
+      source = "#{source[0...link.start]}#{HASHTAG_BOUNDARY}#{source[link.end..]}"
+    end
     text = +""
     visit = lambda do |node|
-      if node.type == :text
-        text << node.value
-      elsif HASHTAG_OPAQUE_TYPES.include?(node.type) || node.children.empty?
-        text << "[]"
+      case node.type
+      when :text then text << node.value
+      when :smart_quote, :typographic_sym then text << HASHTAG_SYMBOLS.fetch(node.value, HASHTAG_BOUNDARY)
+      when :entity then text << node.options.fetch(:original, HASHTAG_BOUNDARY)
+      when :footnote then visit.call(node.value)
+      when :html_element
+        if node.value == "input" then text << "#{HASHTAG_BOUNDARY} " # GFMのタスクリストは「[ ] 」をまとめてinputにする
+        elsif %w[a img].include?(node.value) || node.children.empty? then text << HASHTAG_BOUNDARY
+        else node.children.each { |child| visit.call(child) }
+        end
+      when :root, :footnote_def then node.children.each { |child| visit.call(child) }
       else
-        node.children.each { |child| visit.call(child) }
+        if %i[codeblock codespan a img].include?(node.type) || node.children.empty?
+          text << HASHTAG_BOUNDARY
+        else
+          node.children.each { |child| visit.call(child) }
+        end
       end
       text << "\n" if Kramdown::Element.category(node) == :block
     end
-    visit.call(Kramdown::Document.new(body, input: "WeblogGFM").root)
-    text.gsub(LINK_PATTERN, "[]").scan(HASHTAG_PATTERN).flatten
+    visit.call(Kramdown::Document.new(source, input: "WeblogGFM", parse_block_html: false, parse_span_html: false, smart_quotes: %w[apos apos quot quot]).root)
+    text.scan(HASHTAG_PATTERN).flatten
   end
 
   class MarkdownRenderer
