@@ -63,7 +63,6 @@ module WeblogAuthoring
     SESSION_RENEWAL_WINDOW = 24 * 60 * 60
     OAUTH_TTL = 10 * 60
     TOKYO_OFFSET = "+09:00"
-    HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]]+)/
     JAPANESE_WEEKDAYS = %w[日曜日 月曜日 火曜日 水曜日 木曜日 金曜日 土曜日].freeze
     DIARY_DATE_TAG = /\A(?:\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])|\d{4}(?:0[1-9]|1[0-2])|(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))\z/
     RELATED_PAGE_LIMIT = 50
@@ -1375,7 +1374,7 @@ module WeblogAuthoring
     def recent_tags(pages)
       pages.sort_by(&:updated_at).reverse_each.each_with_object([]) do |page, tags|
         names = page.links.map(&:name)
-        names.concat(page.body.to_s.scan(HASHTAG_PATTERN).flatten)
+        names.concat(WeblogAuthoring.extract_hashtags(page.body.to_s))
         names.each do |name|
           tag = name.strip
           tags << tag unless tag.empty? || tag == "日記" || JAPANESE_WEEKDAYS.include?(tag) || DIARY_DATE_TAG.match?(tag) || tags.include?(tag)

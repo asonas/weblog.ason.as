@@ -33,7 +33,6 @@ module WeblogAuthoring
     SESSION_RENEWAL_WINDOW: Integer
     OAUTH_TTL: Integer
     TOKYO_OFFSET: String
-    HASHTAG_PATTERN: Regexp
     JAPANESE_WEEKDAYS: Array[String]
     DIARY_DATE_TAG: Regexp
     RELATED_PAGE_LIMIT: Integer

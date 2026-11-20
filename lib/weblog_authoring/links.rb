@@ -7,6 +7,8 @@ module WeblogAuthoring
   EXTERNAL_URL_PATTERN = %r{https?://[^\s<>\[\]\\"')]+}.freeze
   FENCE_PATTERN = /^\s*(`{3,}|~{3,})/.freeze
   INLINE_CODE_PATTERN = /(`+).*?\1/.freeze
+  MARKDOWN_LINK_PATTERN = /!?\[[^\[\]]*\]\([^()\s]*\)/.freeze
+  HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]]+)/.freeze
 
   module_function
 
@@ -36,6 +38,21 @@ module WeblogAuthoring
     end
 
     body
+  end
+
+  # リンクの文字列やコードの中の「 #」はハッシュタグとして扱わない。除いた箇所はタグの文字にも区切りの空白にもならない[]に置き換える
+  def extract_hashtags(body)
+    tags = []
+
+    each_segment(body) do |line, _offset, fenced|
+      next if fenced
+
+      line.gsub(INLINE_CODE_PATTERN, "[]").gsub(LINK_PATTERN, "[]").gsub(MARKDOWN_LINK_PATTERN, "[]").scan(HASHTAG_PATTERN) do |(tag)|
+        tags << tag
+      end
+    end
+
+    tags.freeze
   end
 
   def extract_external_urls(body)
