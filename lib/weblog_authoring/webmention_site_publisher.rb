@@ -187,9 +187,9 @@ module WeblogAuthoring
             #{body_html}
           </div>
           </div>
+          #{render_feedback(page, source_url)}
           #{render_mentions(mentions)}
           <div data-public-universe="#{CGI.escapeHTML(JSON.generate({ route: page.route, id: page.id, wiki: rendered.links.map(&:name).uniq, urls: WeblogAuthoring.extract_external_urls(page.body.to_s) }))}"></div>
-          #{render_feedback(page, source_url)}
         </article>
       HTML
     end
@@ -238,7 +238,7 @@ module WeblogAuthoring
       subject = ERB::Util.url_encode("「#{page.display_title}」の感想")
       body = ERB::Util.url_encode("#{source_url}\r\n\r\n")
       href = CGI.escapeHTML("mailto:#{FEEDBACK_ADDRESS}?subject=#{subject}&body=#{body}")
-      %(<p class="article-feedback"><a href="#{href}">この記事の感想をメールで送る</a>。届いたメールはasonasと、AIアシスタントのmuseが読みます。</p>)
+      %(<p class="article-feedback"><a href="#{href}">この記事の感想をメールで送る</a>。<small>届いたメールはasonasと、AIアシスタントのmuseが読みます。</small></p>)
     end
 
     def render_mentions(mentions)

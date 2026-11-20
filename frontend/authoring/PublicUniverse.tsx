@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { insertAfterArticleBody } from "./articleBodyEnd";
 import { DiaryNavigation } from "./DiaryNavigation";
 import { SiteSearch } from "./search";
 import { UniverseGraph } from "./UniverseGraph";
@@ -96,10 +97,9 @@ export function mountPublicReader() {
   if (!container?.dataset.publicUniverse) return;
   const article: Article = JSON.parse(container.dataset.publicUniverse);
   if (/^\d{4}-\d{2}-\d{2}$/.test(article.route)) {
-    const body = container.closest("article")?.querySelector(".editor-canvas");
-    if (body) {
-      const diaryNavigation = document.createElement("div");
-      body.after(diaryNavigation);
+    const page = container.closest("article");
+    const diaryNavigation = document.createElement("div");
+    if (page && insertAfterArticleBody(page, diaryNavigation)) {
       createRoot(diaryNavigation).render(
         <DiaryNavigation route={article.route} />,
       );

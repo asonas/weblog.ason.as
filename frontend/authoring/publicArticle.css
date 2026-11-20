@@ -178,6 +178,12 @@
   margin-inline: auto;
   padding: var(--space-6) clamp(var(--space-4), 5vw, var(--space-12));
 }
+.article-feedback {
+  text-align: center;
+}
+.article-feedback small {
+  color: var(--muted-ink);
+}
 .article-piece {
   scroll-margin-block-start: 5rem;
 }

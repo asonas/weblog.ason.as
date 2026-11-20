@@ -88,7 +88,7 @@ class DraftWebmentionsTest < Minitest::Test
     @database.moderate_webmention(id: mention.fetch("id"), decision: "approved")
     html = @publisher.read_with_webmentions(snapshot)
     assert_includes html, "Reader title"
-    assert_operator html.index("Reader title"), :<, html.index('class="article-feedback"')
+    assert_operator html.index(%(class="article-feedback")), :<, html.index("Reader title")
     @database.moderate_webmention(id: mention.fetch("id"), decision: "pending")
     refute_includes @publisher.read_with_webmentions(snapshot), "Reader title"
     assert_equal snapshot, @store.published_snapshot(ID)

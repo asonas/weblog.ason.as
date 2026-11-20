@@ -1,3 +1,4 @@
+import { insertAfterArticleBody } from "./articleBodyEnd";
 export type MentionedDays = {
   days: { day: string; pieces: { id: string; href: string; html: string }[] }[];
   cursor: string | null;
@@ -34,7 +35,7 @@ export function mountMentionedByDays(
   more.textContent = "もっと見る";
   more.hidden = true;
   section.append(heading, content, status, more);
-  article.querySelector(".editor-canvas")?.after(section);
+  insertAfterArticleBody(article, section);
   let cursor: string | undefined;
   const load = async () => {
     more.disabled = true;
