@@ -20,6 +20,26 @@ module WeblogAuthoring
     end
   end
 
+  HASHTAG_PATTERN = /(?:\A|\s)#([^\s#\[\]]+)/.freeze
+  HASHTAG_OPAQUE_TYPES = %i[codeblock codespan a img html_element].freeze
+
+  # 平文の「 #タグ」だけを拾う。リンク・画像・コード・[[wiki]]は、タグの文字にも区切りの空白にもならない[]に置き換えてから走査する
+  def self.extract_hashtags(body)
+    text = +""
+    visit = lambda do |node|
+      if node.type == :text
+        text << node.value
+      elsif HASHTAG_OPAQUE_TYPES.include?(node.type) || node.children.empty?
+        text << "[]"
+      else
+        node.children.each { |child| visit.call(child) }
+      end
+      text << "\n" if Kramdown::Element.category(node) == :block
+    end
+    visit.call(Kramdown::Document.new(body, input: "WeblogGFM").root)
+    text.gsub(LINK_PATTERN, "[]").scan(HASHTAG_PATTERN).flatten
+  end
+
   class MarkdownRenderer
     def self.excerpt_source(body)
       source = body.to_s

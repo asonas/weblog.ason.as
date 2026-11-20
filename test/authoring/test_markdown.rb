@@ -4,6 +4,28 @@ require_relative "../test_helper"
 require_relative "../../lib/weblog_authoring/markdown"
 
 class TestMarkdown < Minitest::Test
+  def test_hashtags_come_only_from_plain_text
+    body = <<~MARKDOWN
+      #開発 [[Wiki #見出し]] **#強調**
+      | [高専DJ部 #42でマシンライブをしてきた](https://weblog.ason.as/2026-06-15-kosendj-42) |
+      [設定 `flag` #内部](/settings) [公演 #42](/show "詳細") [公演 #43](/show_(live)) [公演 #44][ref]
+      ![写真 #画像](/assets/a.webp) `例 #コード` [リンク](/a)#続き \\[例 #公開](/x)
+
+      ```sample
+      #フェンス内
+      ```
+      #フェンス後
+
+          #字下げ
+
+      #末尾
+
+      [ref]: /ref
+    MARKDOWN
+
+    assert_equal %w[開発 強調 公開 フェンス後 末尾], WeblogAuthoring.extract_hashtags(body)
+  end
+
   def test_spoilers_hide_inline_text_and_media_but_leave_code_and_escaped_markers_literal
     renderer = WeblogAuthoring::MarkdownRenderer.new
     body = "前 ||秘密 **強調**|| 後\n\n||![写真](/assets/hidden.webp)||\n\n||\n[動画](/assets/uploads/2026/10/abc-123.mp4)\n||"

@@ -11,19 +11,6 @@ class TestLinks < Minitest::Test
     assert_equal %w[page-a page-b], links.map(&:name)
   end
 
-  def test_extract_hashtags_skips_link_text_and_code
-    body = <<~MARKDOWN
-      #開発 [[Wiki #見出し]] #音楽
-      | [高専DJ部 #42でマシンライブをしてきた](https://weblog.ason.as/2026-06-15-kosendj-42) |
-      ![写真 #画像](/assets/a.webp) `#コード` [リンク](/a)#続き #末尾
-      ```
-      #フェンス内
-      ```
-    MARKDOWN
-
-    assert_equal %w[開発 音楽 末尾], WeblogAuthoring.extract_hashtags(body)
-  end
-
   def test_replace_wiki_links_does_not_replace_prefix_matches
     result = WeblogAuthoring.replace_wiki_links("[[page-a]] [[page-ab]]", old_name: "page-a", new_name: "page-b")
 
