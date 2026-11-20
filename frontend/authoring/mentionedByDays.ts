@@ -35,7 +35,10 @@ export function mountMentionedByDays(
   more.textContent = "もっと見る";
   more.hidden = true;
   section.append(heading, content, status, more);
-  insertAfterArticleBody(article, section);
+  // 本文が空の記事では、引用を感想リンクより上、タイトルの直下に置く
+  const body = article.querySelector(".editor-canvas");
+  if (body?.hasAttribute("hidden")) body.after(section);
+  else insertAfterArticleBody(article, section);
   let cursor: string | undefined;
   const load = async () => {
     more.disabled = true;

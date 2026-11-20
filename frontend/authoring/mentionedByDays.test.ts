@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { insertAfterArticleBody } from "./articleBodyEnd";
 import { mountMentionedByDays } from "./mentionedByDays";
 
 test("diaries skip incoming mentions while ordinary articles still display them", async () => {
@@ -63,6 +64,39 @@ test("diaries skip incoming mentions while ordinary articles still display them"
       section.remove();
     }
     assert.equal(requests.length, 2);
+  } finally {
+    globalThis.document = originalDocument;
+    dom.window.close();
+  }
+});
+
+test("an empty body keeps quotations above the feedback link and diary navigation", () => {
+  const dom = new JSDOM(
+    "<article><div class='editor-canvas' hidden></div><p class='article-feedback'></p><div data-public-universe></div></article>",
+  );
+  const originalDocument = globalThis.document;
+  globalThis.document = dom.window.document;
+  try {
+    const article = document.querySelector<HTMLElement>("article");
+    const universe = document.querySelector<HTMLElement>(
+      "[data-public-universe]",
+    );
+    assert.ok(article && universe);
+    universe.dataset.publicUniverse = JSON.stringify({
+      route: "2026-10-02",
+      wiki: [],
+    });
+    mountMentionedByDays(
+      article,
+      () => {},
+      async () => new Response("{}"),
+    );
+    const navigation = document.createElement("nav");
+    insertAfterArticleBody(article, navigation);
+    assert.deepEqual(
+      Array.from(article.children, (child) => child.className || child.tagName),
+      ["editor-canvas", "mentioned-by-days", "article-feedback", "NAV", "DIV"],
+    );
   } finally {
     globalThis.document = originalDocument;
     dom.window.close();
