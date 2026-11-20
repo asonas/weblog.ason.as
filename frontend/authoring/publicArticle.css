@@ -182,6 +182,7 @@
   text-align: center;
 }
 .article-feedback small {
+  display: block;
   color: var(--muted-ink);
 }
 .article-piece {

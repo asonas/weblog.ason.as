@@ -44,6 +44,16 @@ test("places sections directly below the body when the feedback link sits elsewh
   );
 });
 
+test("keeps quotations directly below the title when the body is empty", () => {
+  assert.deepEqual(
+    order(
+      "<article><div class='editor-canvas' hidden></div><p class='article-feedback'></p><div data-public-universe></div></article>",
+      1,
+    ),
+    ["editor-canvas", "inserted-1", "article-feedback", ""],
+  );
+});
+
 test("reports pages without a body", () => {
   const { document } = new JSDOM("<article></article>").window;
   const article = document.querySelector("article");

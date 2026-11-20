@@ -238,7 +238,7 @@ module WeblogAuthoring
       subject = ERB::Util.url_encode("「#{page.display_title}」の感想")
       body = ERB::Util.url_encode("#{source_url}\r\n\r\n")
       href = CGI.escapeHTML("mailto:#{FEEDBACK_ADDRESS}?subject=#{subject}&body=#{body}")
-      %(<p class="article-feedback"><a href="#{href}">この記事の感想をメールで送る</a>。<small>届いたメールはasonasと、AIアシスタントのmuseが読みます。</small></p>)
+      %(<p class="article-feedback"><a href="#{href}">この記事の感想をメールで送る</a><small>届いたメールはasonasと、AIアシスタントのmuseが読みます。</small></p>)
     end
 
     def render_mentions(mentions)
