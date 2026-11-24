@@ -639,41 +639,20 @@ function resizeBlueskyEmbed(event: MessageEvent) {
 
 window.addEventListener("message", resizeBlueskyEmbed);
 
-function replaceYouTubeParagraphs(state: EditorState, nodeType: NodeType) {
+function replaceMediaParagraphs(
+  state: EditorState,
+  nodeType: NodeType,
+  identifyUrl: (url: string) => string | object | null,
+) {
   const replacements: Array<{ from: number; to: number; url: string }> = [];
   state.doc.descendants((node, offset) => {
     if (node.type.name === "articleImageTextGroup") return true;
     if (node.type.name !== "paragraph") return false;
     const url = node.textContent.trim();
-    if (youtubeVideoId(url)) {
+    if (identifyUrl(url)) {
       replacements.push({ from: offset, to: offset + node.nodeSize, url });
     }
     return false;
-  });
-  if (replacements.length === 0) return null;
-
-  const transaction = state.tr;
-  for (const replacement of replacements.reverse()) {
-    transaction.replaceWith(
-      replacement.from,
-      replacement.to,
-      nodeType.create({ url: replacement.url }),
-    );
-  }
-  return transaction;
-}
-
-function replaceBlueskyParagraphs(state: EditorState, nodeType: NodeType) {
-  const replacements: Array<{ from: number; to: number; url: string }> = [];
-  state.doc.forEach((node, offset, index) => {
-    const url = node.textContent.trim();
-    if (
-      index > 0 &&
-      node.type.name === "paragraph" &&
-      blueskyPostIdentity(url)
-    ) {
-      replacements.push({ from: offset, to: offset + node.nodeSize, url });
-    }
   });
   if (replacements.length === 0) return null;
 
@@ -744,7 +723,11 @@ const BlueskyPlayer = TiptapNode.create({
   renderMarkdown: (node) => node.attrs?.url || "",
 
   onCreate() {
-    const transaction = replaceBlueskyParagraphs(this.editor.state, this.type);
+    const transaction = replaceMediaParagraphs(
+      this.editor.state,
+      this.type,
+      blueskyPostIdentity,
+    );
     if (transaction) this.editor.view.dispatch(transaction);
   },
 
@@ -793,7 +776,7 @@ const BlueskyPlayer = TiptapNode.create({
               }
             }
           }
-          return replaceBlueskyParagraphs(state, this.type);
+          return replaceMediaParagraphs(state, this.type, blueskyPostIdentity);
         },
       }),
     ];
@@ -878,7 +861,11 @@ const YouTubePlayer = TiptapNode.create({
   renderMarkdown: (node) => node.attrs?.url || "",
 
   onCreate() {
-    const transaction = replaceYouTubeParagraphs(this.editor.state, this.type);
+    const transaction = replaceMediaParagraphs(
+      this.editor.state,
+      this.type,
+      youtubeVideoId,
+    );
     if (transaction) this.editor.view.dispatch(transaction);
   },
 
@@ -927,7 +914,7 @@ const YouTubePlayer = TiptapNode.create({
               }
             }
           }
-          return replaceYouTubeParagraphs(state, this.type);
+          return replaceMediaParagraphs(state, this.type, youtubeVideoId);
         },
       }),
     ];

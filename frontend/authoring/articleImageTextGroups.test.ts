@@ -101,16 +101,39 @@ test("reading preview groups image prose while preserving Markdown and rebuildin
   }
 });
 
-for (const [position, body] of [
+const embedPositions = [
   ["at the start", "VIDEO\n\n![写真](/photo.webp)\n\n本文"],
   ["after an image", "![写真](/photo.webp)\n\nVIDEO\n\n本文"],
   ["after prose", "本文\n\nVIDEO"],
+  ["at the end of an image group", "![写真](/photo.webp)\n\n本文\n\nVIDEO"],
   [
     "after a piece boundary",
     "![写真](/photo.webp)\n\n本文\n\n---\n\nVIDEO\n\n本文",
   ],
-]) {
-  test(`reading preview embeds YouTube ${position} on creation and content updates`, async () => {
+] as const;
+
+const embedProviders = [
+  {
+    name: "YouTube",
+    selector: ".youtube-player iframe",
+    ids: ["EB-dWe5iJ58", "szxn42peP3M"],
+    url: (id: string) => `https://www.youtube.com/watch?v=${id}`,
+    src: (id: string) => `https://www.youtube.com/embed/${id}?enablejsapi=1`,
+  },
+  {
+    name: "Bluesky",
+    selector: ".bluesky-player iframe",
+    ids: ["3n2svpx2o7n2t", "3mexample"],
+    url: (id: string) => `https://bsky.app/profile/did:plc:example/post/${id}`,
+    src: (id: string) =>
+      `https://embed.bsky.app/embed/did:plc:example/app.bsky.feed.post/${id}?id=did%3Aplc%3Aexample-${id}`,
+  },
+] as const;
+
+for (const { provider, position, body } of embedProviders.flatMap((provider) =>
+  embedPositions.map(([position, body]) => ({ provider, position, body })),
+)) {
+  test(`reading preview embeds ${provider.name} ${position} on creation and content updates`, async () => {
     const dom = new JSDOM("<!doctype html><div id='editor'></div>");
     Object.assign(globalThis, {
       document: dom.window.document,
@@ -127,11 +150,8 @@ for (const [position, body] of [
     const markdown = new MarkdownManager({ extensions });
     const element = document.getElementById("editor");
     assert.ok(element);
-    const initialId = "EB-dWe5iJ58";
-    const initialSource = body.replace(
-      "VIDEO",
-      `https://www.youtube.com/watch?v=${initialId}`,
-    );
+    const [initialId, updatedId] = provider.ids;
+    const initialSource = body.replace("VIDEO", provider.url(initialId));
     const editor = new Editor({
       element,
       editable: false,
@@ -142,29 +162,22 @@ for (const [position, body] of [
     });
     try {
       await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal(element.querySelectorAll(provider.selector).length, 1);
       assert.equal(
-        element.querySelectorAll(".youtube-player iframe").length,
-        1,
-      );
-      assert.equal(
-        element.querySelector(".youtube-player iframe")?.getAttribute("src"),
-        `https://www.youtube.com/embed/${initialId}?enablejsapi=1`,
+        element.querySelector(provider.selector)?.getAttribute("src"),
+        provider.src(initialId),
       );
       assert.equal(editor.getMarkdown().trimEnd(), initialSource);
 
-      const updatedId = "szxn42peP3M";
       const updatedSource = initialSource.replace(initialId, updatedId);
       editor.commands.setContent(
         groupPreviewImageText(markdown.parse(markdownForEditor(updatedSource))),
         { emitUpdate: false },
       );
+      assert.equal(element.querySelectorAll(provider.selector).length, 1);
       assert.equal(
-        element.querySelectorAll(".youtube-player iframe").length,
-        1,
-      );
-      assert.equal(
-        element.querySelector(".youtube-player iframe")?.getAttribute("src"),
-        `https://www.youtube.com/embed/${updatedId}?enablejsapi=1`,
+        element.querySelector(provider.selector)?.getAttribute("src"),
+        provider.src(updatedId),
       );
       assert.equal(editor.getMarkdown().trimEnd(), updatedSource);
     } finally {
