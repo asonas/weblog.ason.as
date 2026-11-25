@@ -253,17 +253,15 @@ try {
     "動画",
     "Raindrop",
     "Bsky（自分の投稿）",
-    "Bsky（いいね）",
   ])
     assert.equal(await inbox.getByRole("region", { name: label }).count(), 1);
   const blueskyPosts = inbox.getByRole("region", {
     name: "Bsky（自分の投稿）",
   });
-  const blueskyLikes = inbox.getByRole("region", { name: "Bsky（いいね）" });
   assert.equal(await blueskyPosts.getByText("投稿の本文", { exact: true }).count(), 1);
-  assert.equal(await blueskyPosts.getByText("いいねした投稿の本文").count(), 0);
-  assert.equal(await blueskyLikes.getByText("投稿の本文", { exact: true }).count(), 0);
-  assert.equal(await blueskyLikes.getByText("いいねした投稿の本文").count(), 1);
+  // 次のBluesky同期で消えるまで残る、以前のいいねの行は表示しない。
+  assert.equal(await inbox.getByRole("region", { name: "Bsky（いいね）" }).count(), 0);
+  assert.equal(await inbox.getByText("いいねした投稿の本文").count(), 0);
   const raindropCard = inbox
     .getByRole("region", { name: "Raindrop" })
     .getByRole("button", { name: "Raindropを本文へ追加" });

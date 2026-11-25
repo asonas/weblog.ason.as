@@ -81,10 +81,6 @@ async function main() {
         return json(response, {
           posts: await service.listPosts(await cutoff(request)),
         });
-      if (request.method === "POST" && url.pathname === "/likes")
-        return json(response, {
-          likes: await service.listLikes(await cutoff(request)),
-        });
       response.writeHead(404).end("Not Found");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";

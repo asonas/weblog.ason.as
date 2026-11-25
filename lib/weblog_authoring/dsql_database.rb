@@ -29,21 +29,19 @@ module WeblogAuthoring
     ADOPTION_RETENTION_SECONDS = 14 * 24 * 60 * 60
     INBOX_KINDS = {
       "photo" => ["photo"],
-      "bluesky" => %w[post like],
+      "bluesky" => ["post"],
       "raindrop" => ["bookmark"],
       "c4p" => ["track"],
     }.freeze
     INBOX_PAYLOAD_KEYS = {
       %w[photo photo] => %w[inbox_key preview_url captured_at_source],
       %w[bluesky post] => %w[record_uri record_cid canonical_url author_did],
-      %w[bluesky like] => %w[like_uri like_cid subject_uri subject_cid canonical_url author_did],
       %w[raindrop bookmark] => %w[raindrop_id url title],
       %w[c4p track] => %w[guid permalink title audio_url duration_seconds],
     }.freeze
     INBOX_PAYLOAD_TYPES = {
       %w[photo photo] => { "inbox_key" => String, "preview_url" => String, "captured_at_source" => String },
       %w[bluesky post] => %w[record_uri record_cid canonical_url author_did].to_h { |key| [key, String] },
-      %w[bluesky like] => %w[like_uri like_cid subject_uri subject_cid canonical_url author_did].to_h { |key| [key, String] },
       %w[raindrop bookmark] => { "raindrop_id" => Integer, "url" => String, "title" => String },
       %w[c4p track] => { "guid" => String, "permalink" => String, "title" => String, "audio_url" => String, "duration_seconds" => Integer },
     }.freeze

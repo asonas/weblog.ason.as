@@ -130,7 +130,6 @@ module WeblogAuthoring
           CHECK ((source, kind) IN (
             ('photo', 'photo'),
             ('bluesky', 'post'),
-            ('bluesky', 'like'),
             ('raindrop', 'bookmark'),
             ('c4p', 'track')
           ))

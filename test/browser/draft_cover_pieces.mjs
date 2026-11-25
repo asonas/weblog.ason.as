@@ -125,12 +125,11 @@ try {
     { id: "video", source: "video", kind: "video", payload: {} },
     { id: "bookmark", source: "raindrop", kind: "bookmark", payload: {} },
     { id: "post", source: "bluesky", kind: "post", payload: {} },
-    { id: "like", source: "bluesky", kind: "like", payload: {} },
   ];
   memos = [{ id: crypto.randomUUID(), body: "表示確認のメモ", revision: 1, updated_at: new Date().toISOString() }];
   await page.reload();
   await page.getByRole("textbox", { name: "メモ本文", exact: true }).waitFor();
-  assert.equal(await inbox.locator(".draft-inbox__column").count(), 6);
+  assert.equal(await inbox.locator(".draft-inbox__column").count(), 5);
   inboxItems = [];
   memos = [];
   await page.reload();

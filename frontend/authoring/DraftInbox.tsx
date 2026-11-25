@@ -9,7 +9,7 @@ type InboxSource = "photo" | "video" | "bluesky" | "raindrop";
 type InboxItem = {
   id: string;
   source: InboxSource | "c4p";
-  kind: "photo" | "video" | "post" | "like" | "bookmark" | "track";
+  kind: "photo" | "video" | "post" | "bookmark" | "track";
   ingested_at: string;
   payload: Record<string, unknown>;
 };
@@ -34,7 +34,6 @@ const COLUMNS: Array<{
   { source: "video", label: "動画" },
   { source: "raindrop", label: "Raindrop" },
   { source: "bluesky", kind: "post", label: "Bsky（自分の投稿）" },
-  { source: "bluesky", kind: "like", label: "Bsky（いいね）" },
 ];
 
 function payloadString(item: InboxItem, key: string): string | null {
@@ -340,16 +339,11 @@ export function DraftInbox({
                     const thumbnail =
                       source === "raindrop"
                         ? payloadString(item, "cover")
-                        : source === "bluesky"
-                          ? payloadString(item, "thumbnail_url")
-                          : null;
+                        : null;
                     const title =
                       source === "raindrop"
                         ? payloadString(item, "title")
-                        : source === "bluesky"
-                          ? payloadString(item, "author_display_name") ||
-                            payloadString(item, "author_handle")
-                          : null;
+                        : null;
                     const excerpt =
                       source === "raindrop"
                         ? payloadString(item, "excerpt")

@@ -52,7 +52,7 @@ try {
   await page.getByRole("textbox", { name: "本文", exact: true }).waitFor();
   const video = inbox.getByRole("region", { name: "動画", exact: true });
   assert.equal(await video.count(), 0, "Empty video column must be hidden");
-  for (const label of ["写真", "Raindrop", "Bsky（自分の投稿）", "Bsky（いいね）"]) {
+  for (const label of ["写真", "Raindrop", "Bsky（自分の投稿）"]) {
     assert.equal(await inbox.getByRole("region", { name: label, exact: true }).count(), 0);
   }
   items = [{ id: "video-1", source: "video", kind: "video", ingested_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(), payload: { avc: "/assets/uploads/inbox-video.mp4" } }];

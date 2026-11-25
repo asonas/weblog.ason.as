@@ -14,8 +14,7 @@ type InternalEvent = {
     | "status"
     | "refresh"
     | "disconnect"
-    | "list_posts"
-    | "list_likes";
+    | "list_posts";
   query?: string;
   since?: string;
 };
@@ -95,12 +94,6 @@ export const handler: Handler<
       if (!Number.isFinite(since.getTime()))
         throw new TypeError("Bluesky post cutoff is invalid");
       return { posts: await runtime.service.listPosts(since) };
-    }
-    case "list_likes": {
-      const since = new Date(event.since ?? "");
-      if (!Number.isFinite(since.getTime()))
-        throw new TypeError("Bluesky like cutoff is invalid");
-      return { likes: await runtime.service.listLikes(since) };
     }
   }
   throw new Error("Unsupported Bluesky OAuth action");
